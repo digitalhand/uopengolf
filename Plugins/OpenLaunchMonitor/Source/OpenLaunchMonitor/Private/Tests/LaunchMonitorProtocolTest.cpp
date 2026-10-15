@@ -60,11 +60,14 @@ bool FLaunchMonitorProtocolTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Wood side spin"), Shot.SideSpinRpm, -48);
     }
     {
-        // Device signs are positive-left; decoded values are GSPro positive-right.
+        // Device spin signs are positive-left; HLA is already positive-right.
         FSquareShotMetrics Shot;
         TestTrue(TEXT("Signed shot parses"), SquareProtocol::TryParseShot(ShotFrame(0x37, 5000, 1500, 200, 3000, -500, 2900, -261), Shot));
         TestEqual(TEXT("Signed axis"), Shot.SpinAxisDeg, 5.0f, Tolerance);
         TestEqual(TEXT("Signed side spin"), Shot.SideSpinRpm, 261);
+        TestEqual(TEXT("Positive HLA is preserved"), Shot.HorizontalAngleDeg, 2.0f, Tolerance);
+        TestTrue(TEXT("Negative HLA parses"), SquareProtocol::TryParseShot(ShotFrame(0x37, 5000, 1500, -97, 3000, -500, 2900, -261), Shot));
+        TestEqual(TEXT("Negative HLA is preserved"), Shot.HorizontalAngleDeg, -0.97f, Tolerance);
         TestTrue(TEXT("Measured back spin"), Shot.BackSpinSource == ESquareValueSource::Packet);
     }
     {

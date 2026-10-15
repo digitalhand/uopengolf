@@ -15,8 +15,8 @@ def validate_report(path, prefix=None):
         matched = [test for test in tests if test["fullTestPath"].startswith("UOpenGolf.Smoke.")]
         if not matched:
             raise ValueError("No UOpenGolf smoke tests were discovered.")
-        if not any(test["fullTestPath"] == "UOpenGolf.Smoke.HelloWorld" for test in matched):
-            raise ValueError("The required UOpenGolf.Smoke.HelloWorld test is missing.")
+        if not any(test["fullTestPath"] == "UOpenGolf.Smoke.UOpenGolf" for test in matched):
+            raise ValueError("The required UOpenGolf.Smoke.UOpenGolf test is missing.")
     else:
         matched = [test for test in tests if test["fullTestPath"] == prefix or test["fullTestPath"].startswith(prefix + ".")]
         if not matched:

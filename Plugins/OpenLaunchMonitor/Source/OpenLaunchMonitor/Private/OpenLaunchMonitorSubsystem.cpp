@@ -19,14 +19,22 @@ namespace
         const TCHAR* Name;
         const TCHAR* BallFrame;
         const TCHAR* ClubFrame;
+        const TCHAR* Note;
     };
 
     // Hardware captures come from open-lm-connector's Square Home test fixtures;
-    // the synthesized frame encodes a 114.5 mph wood shot used to compare simulators.
+    // synthesized presets exercise the same decoder and events as hardware shots.
+    // New frames omit back/side components so the decoder derives them from total/axis.
     const FReplayShot ReplayShots[] = {
-        {TEXT("Synthesized low wood, 114.5 mph"), TEXT("110237FD13B702C1FF8D078E008C073000"), TEXT("11070FA000C4FFCAFECA08")},
-        {TEXT("Square Home capture, 57.5 mph"), TEXT("1102370A0A9A09C8001A16E8FF7C15D0FF"), TEXT("11070FC0FB1A00A1FEFB0C")},
-        {TEXT("Square Home putt capture"), TEXT("1102138101E6FF91010000000000000000"), TEXT("110700FFFFFFFFFFFFFFFF")},
+        {TEXT("Low wood - 114.5 mph (23:05 screenshot)"), TEXT("110237FD13B702C1FF8D078E008C073000"), TEXT("11070FA000C4FFCAFECA08"), TEXT("FlightScope carry: 119.8 yd; apex: 14.6 ft. Synthetic replay of screenshot inputs.")},
+        {TEXT("Square Home capture - 57.5 mph"), TEXT("1102370A0A9A09C8001A16E8FF7C15D0FF"), TEXT("11070FC0FB1A00A1FEFB0C"), TEXT("Recorded Square Home ball and club frames.")},
+        {TEXT("Square Home putt capture"), TEXT("1102138101E6FF91010000000000000000"), TEXT("110700FFFFFFFFFFFFFFFF"), TEXT("Recorded putt with untracked club data.")},
+        {TEXT("Mid iron - 75.7 mph (22:05 screenshot)"), TEXT("110237380D1E089FFF6F11F2F700800080"), TEXT(""), TEXT("FlightScope carry: 87.6 yd; apex: 35.0 ft. Screenshot used HLA right; replay retains original left launch.")},
+        {TEXT("Driver - 150 mph"), TEXT("110237321AE20496001F09DE0300800080"), TEXT(""), TEXT("Synthetic driver with left spin axis; no FlightScope reference.")},
+        {TEXT("Iron - 102.1 mph"), TEXT("110237D411CC0696000F1532FB00800080"), TEXT(""), TEXT("Synthetic iron with right spin axis; no FlightScope reference.")},
+        {TEXT("Wedge - 66.4 mph"), TEXT("110237980B100974FF31193AFD00800080"), TEXT(""), TEXT("Synthetic wedge; no FlightScope reference.")},
+        {TEXT("Chip - 24.7 mph"), TEXT("1102374F0402070000840C000000800080"), TEXT(""), TEXT("Synthetic straight chip; no FlightScope reference.")},
+        {TEXT("High flop - 68.1 mph"), TEXT("110237E20B94112D00E02EACFF00800080"), TEXT(""), TEXT("Synthetic 45-degree, 12000 rpm flop; no FlightScope reference.")},
     };
 
     const TCHAR* ClubCode(ELaunchMonitorClub Club)
@@ -154,8 +162,46 @@ void UOpenLaunchMonitorSubsystem::SetLeftHanded(bool bNewLeftHanded)
 
 bool UOpenLaunchMonitorSubsystem::InjectReplayShot()
 {
-    const FReplayShot& Replay = ReplayShots[ReplayIndex];
+    const int32 Index = ReplayIndex;
     ReplayIndex = (ReplayIndex + 1) % UE_ARRAY_COUNT(ReplayShots);
+    return InjectReplayShotAt(Index);
+}
+
+TArray<FString> UOpenLaunchMonitorSubsystem::GetReplayShotNames()
+{
+    TArray<FString> Names;
+    for (const FReplayShot& Replay : ReplayShots)
+    {
+        Names.Add(Replay.Name);
+    }
+    return Names;
+}
+
+FString UOpenLaunchMonitorSubsystem::GetReplayShotDescription(int32 Index)
+{
+    if (Index < 0 || Index >= static_cast<int32>(UE_ARRAY_COUNT(ReplayShots)))
+    {
+        return FString();
+    }
+    const FReplayShot& Replay = ReplayShots[Index];
+    TArray<uint8> Bytes;
+    FSquareShotMetrics Metrics;
+    if (!SquareProtocol::FromHex(Replay.BallFrame, Bytes) || !SquareProtocol::TryParseShot(Bytes, Metrics))
+    {
+        return FString();
+    }
+    return FString::Printf(TEXT("%.2f mph   |   VLA %.2f deg   |   HLA %.2f deg\n%d rpm   |   Spin axis %.2f deg\nNegative HLA / axis = left; positive = right.\n\n%s"),
+        Metrics.BallSpeedMps / 0.44704f, Metrics.VerticalAngleDeg, Metrics.HorizontalAngleDeg,
+        Metrics.TotalSpinRpm, Metrics.SpinAxisDeg, Replay.Note);
+}
+
+bool UOpenLaunchMonitorSubsystem::InjectReplayShotAt(int32 Index)
+{
+    if (Index < 0 || Index >= static_cast<int32>(UE_ARRAY_COUNT(ReplayShots)))
+    {
+        return false;
+    }
+    const FReplayShot& Replay = ReplayShots[Index];
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Replaying: %s."), Replay.Name);
     return InjectReplayFrames(Replay.BallFrame, Replay.ClubFrame);
 }

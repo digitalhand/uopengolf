@@ -50,6 +50,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Launch Monitor|Replay")
     bool InjectReplayShot();
 
+    /** Stable catalog order; selecting a preset does not deliver a shot. */
+    UFUNCTION(BlueprintPure, Category = "Launch Monitor|Replay")
+    static TArray<FString> GetReplayShotNames();
+
+    UFUNCTION(BlueprintPure, Category = "Launch Monitor|Replay")
+    static FString GetReplayShotDescription(int32 Index);
+
+    /** Delivers the chosen preset without advancing the cycling replay cursor. */
+    UFUNCTION(BlueprintCallable, Category = "Launch Monitor|Replay")
+    bool InjectReplayShotAt(int32 Index);
+
     /** Decodes Square ball and optional club frames given as hex and delivers them as a replay shot. */
     UFUNCTION(BlueprintCallable, Category = "Launch Monitor|Replay")
     bool InjectReplayFrames(const FString& BallFrameHex, const FString& ClubFrameHex);

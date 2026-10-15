@@ -62,6 +62,29 @@ bool FLaunchMonitorReplayTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Malformed replay rejected"), Subsystem->InjectReplayFrames(TEXT("11023"), FString()));
     TestEqual(TEXT("No shot from malformed input"), Shots.Num(), 3);
     TestTrue(TEXT("Error recorded"), Subsystem->GetLastError().Contains(TEXT("not a plausible")));
+
+    const TArray<FString> Names = Subsystem->GetReplayShotNames();
+    TestEqual(TEXT("Replay catalog includes both screenshots and varied shots"), Names.Num(), 9);
+    TestFalse(TEXT("Negative preset rejected"), Subsystem->InjectReplayShotAt(-1));
+    TestFalse(TEXT("Past-end preset rejected"), Subsystem->InjectReplayShotAt(Names.Num()));
+    TestEqual(TEXT("Browsing and invalid selection do not fire shots"), Shots.Num(), 3);
+    for (int32 Index = 0; Index < Names.Num(); ++Index)
+    {
+        TestFalse(TEXT("Preset name present"), Names[Index].IsEmpty());
+        TestFalse(TEXT("Preset decodes for description"), Subsystem->GetReplayShotDescription(Index).IsEmpty());
+        TestTrue(TEXT("Each preset delivers"), Subsystem->InjectReplayShotAt(Index));
+    }
+    TestTrue(TEXT("Earlier screenshot selected"), Subsystem->InjectReplayShotAt(3));
+    const FLaunchMonitorShot Previous = Shots.Last();
+    TestEqual(TEXT("Earlier speed"), Previous.GetBallSpeedMph(), 75.7f, 0.02f);
+    TestEqual(TEXT("Earlier HLA remains left"), Previous.HorizontalLaunchDeg, -0.97f, 0.001f);
+    TestEqual(TEXT("Earlier spin"), Previous.TotalSpinRpm, 4463);
+    TestEqual(TEXT("Earlier axis"), Previous.SpinAxisDeg, 20.62f, 0.001f);
+    TestTrue(TEXT("Synthetic components derived"), Previous.BackSpinSource == ELaunchMonitorValueSource::Derived);
+    TestFalse(TEXT("No stale club data on preset without club frame"), Subsystem->GetLastClubData(LastClub));
+    TestTrue(TEXT("Preset can repeat"), Subsystem->InjectReplayShotAt(3));
+    TestEqual(TEXT("Repeat keeps input"), Shots.Last().BallSpeedMps, Previous.BallSpeedMps);
+    TestEqual(TEXT("Repeat gets new shot number"), Shots.Last().ShotNumber, Previous.ShotNumber + 1);
     return true;
 }
 

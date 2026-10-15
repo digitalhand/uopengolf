@@ -63,7 +63,7 @@ case "$action" in
     editor) exec "$editor" "$project" ;;
     run) exec "$editor" "$project" -game -windowed -ResX=1280 -ResY=720 ;;
     smoke|test)
-        # smoke runs the startup tests and requires HelloWorld; test runs any prefix.
+        # smoke runs the startup tests and requires UOpenGolf; test runs any prefix.
         tests=UOpenGolf.Smoke
         validation=()
         if [[ "$action" == test ]]; then tests="$filter"; validation=(--prefix "$filter"); fi

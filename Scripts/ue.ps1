@@ -58,7 +58,7 @@ try {
         'Editor' { & $editor $project }
         'Run' { & $editor $project -game -windowed -ResX=1280 -ResY=720 }
         { $_ -in 'Smoke', 'Test' } {
-            # Smoke runs the startup tests and requires HelloWorld; Test runs any prefix.
+            # Smoke runs the startup tests and requires UOpenGolf; Test runs any prefix.
             $tests = if ($Action -eq 'Smoke') { 'UOpenGolf.Smoke' } else { $Filter }
             $python = Join-Path $EngineRoot 'Engine\Binaries\ThirdParty\Python3\Win64\python.exe'
             if (-not (Test-Path -LiteralPath $python)) { throw "Bundled Python not found: $python" }

@@ -4,18 +4,18 @@
 #include "GameFramework/HUD.h"
 #include "UOpenGolfHUD.generated.h"
 
-/** Greeting and launch-monitor status panel, drawn without imported assets. */
+class SWidget;
+
+/** Range HUD: shot tiles and a launch-monitor status box, built in Slate without imported assets. */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfHUD : public AHUD
 {
     GENERATED_BODY()
 
-public:
-    virtual void DrawHUD() override;
-
-    UFUNCTION(BlueprintPure, Category = "UOpenGolf")
-    FText GetGreeting() const;
+protected:
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-    void DrawLaunchMonitorPanel();
+    TSharedPtr<SWidget> Widget;
 };

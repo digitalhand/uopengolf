@@ -7,6 +7,7 @@
 *.h text eol=lf
 *.ini text eol=lf
 *.json text eol=lf
+*.csv text eol=lf
 *.uproject text eol=lf
 *.umap binary
 *.uasset binary

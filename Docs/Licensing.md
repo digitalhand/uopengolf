@@ -22,8 +22,8 @@ Check the applicable engine terms when distributing builds or development tools.
 
 ## Upstream projects
 
-open-lm-connector, OpenFairway and ogolf are the maintainer's own `digitalhand`
-projects. Code ported from them is rewritten in C++ and covered by this
+open-lm-connector, ogolf-physics, OpenFairway and ogolf are the maintainer's own
+`digitalhand` projects. Code ported from them is rewritten in C++ and covered by this
 repository's MIT license, with no separate notice. Pin the reference revision in the
 relevant design note so behavior can be traced back.
 
