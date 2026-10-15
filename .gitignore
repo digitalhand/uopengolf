@@ -1,0 +1,29 @@
+# Unreal / IDE output (including future public plugins)
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+.idea/
+.vscode/
+*.sln
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.code-workspace
+*.xcworkspace/
+*.xcodeproj/
+*.slnx
+
+# Restricted assets must live outside public history, including Git LFS.
+/Plugins/PrivateContent/
+
+# Local tools and OS state
+__pycache__/
+*.pyc
+.env
+.env.*
+.DS_Store
+Thumbs.db

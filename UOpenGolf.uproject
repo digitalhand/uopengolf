@@ -1,0 +1,25 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Games",
+  "Description": "Unreal Open Golf: an open source golf game foundation.",
+  "Modules": [
+    {
+      "Name": "UOpenGolf",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "PythonScriptPlugin",
+      "Enabled": true,
+      "TargetAllowList": ["Editor"]
+    },
+    {
+      "Name": "OpenLaunchMonitor",
+      "Enabled": true
+    }
+  ],
+  "TargetPlatforms": ["Windows", "Linux"]
+}
