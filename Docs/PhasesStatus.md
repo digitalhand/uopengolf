@@ -12,7 +12,7 @@ Phases 1 and 2 are split into a **Windows track** (current) and a **Linux track*
 | --- | --- | --- |
 | 0 — Hello-world foundation | Complete | Commands provided; not run |
 | 1 — Linux baseline and integration design | Launch-monitor design done; OpenFairway fixtures not started | Not started |
-| 2 — Launch-monitor input | Implemented; hardware validation pending | Not started (no BlueZ transport) |
+| 2 — Launch-monitor input | Square Home verified on hardware; lifecycle checks remain | Not started (no BlueZ transport) |
 | 3 — Native OpenFairway | Not started | Not started |
 | 4 — Greens and surfaces | Not started | Not started |
 | 5 — End-to-end golf slice | Not started | Not started |
@@ -35,11 +35,15 @@ Linux baseline and the OpenFairway fixture work have not started.
 
 ## Phase 2 — Launch-monitor input
 
-**Status:** Windows implementation in place, hardware validation pending. The
+**Status:** Windows implementation working with a real Square Home. The
 `OpenLaunchMonitor` plugin ports the Square protocol/session to C++, adds a C++/WinRT
 Bluetooth LE transport, replay input, Blueprint events, a HUD status panel, and
-hardware-free protocol, session and replay tests (all passing, 2026-10-14). A real
-Square Home has not yet been connected. Linux BlueZ is not implemented.
+hardware-free protocol, session and replay tests (all passing, 2026-10-14).
+
+On 2026-10-14 the maintainer connected a real Square Home on Windows: the connection,
+battery and firmware readout, shot data and club data all worked. Still to verify on
+hardware: reconnect after link loss and club selection. The firmware version and
+Windows build tested have not been recorded yet. Linux BlueZ is not implemented.
 
 ## Phases 3–6
 

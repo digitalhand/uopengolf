@@ -60,13 +60,13 @@ presentation is the HUD panel); physics and course nodes are planned.
   no .NET runtime or bridge process is used.
 - `openfairway`: C# physics is the reference implementation. Some current classes
   depend on Godot types. Identify the numerical core and regression corpus before
-  migration; retain upstream notices and pin the reference revision.
+  migration and pin the reference revision.
 - `ogolf`: reference for contour/height data shared by rendering and collision, lie
   mapping, and resolving surfaces at actual contact points. Physics calculations
-  belong to OpenFairway. Verify licensing before copying implementation or assets.
+  belong to OpenFairway.
 
-The sibling repositories are not required, modified, or linked by the build. Ported
-connector code is recorded in the third-party notices.
+The sibling repositories are not required, modified, or linked by the build. The
+connector port is described in [launch-monitor integration](LaunchMonitorIntegration.md).
 
 ## Contracts to establish in Phase 1
 

@@ -27,7 +27,7 @@ describes what Phase 2 implemented. Linux decisions are listed but not yet valid
 
 | Platform | Transport | Build dependency | Status |
 | --- | --- | --- | --- |
-| Windows 10/11 x64 | WinRT `BluetoothLEAdvertisementWatcher`, `BluetoothLEDevice`, `GattSession` | Windows SDK C++/WinRT headers (`Include/<sdk>/cppwinrt`) and `WindowsApp.lib`, added only to the plugin module by its `Build.cs`; C++ exceptions enabled in that module | Builds; hardware validation pending |
+| Windows 10/11 x64 | WinRT `BluetoothLEAdvertisementWatcher`, `BluetoothLEDevice`, `GattSession` | Windows SDK C++/WinRT headers (`Include/<sdk>/cppwinrt`) and `WindowsApp.lib`, added only to the plugin module by its `Build.cs`; C++ exceptions enabled in that module | Square Home connection, battery/firmware, shot and club data verified (2026-10-14) |
 | Linux x86_64 | Planned: BlueZ over D-Bus (sd-bus or GDBus) against `Adapter1`, `Device1`, `GattCharacteristic1` | To be decided with the Linux track | Stub reports "not supported yet"; replay works |
 
 The Windows build does not change engine/target settings (`bUseCPPWinRT` stays off),
@@ -68,7 +68,8 @@ every 5 s. Duplicate notifications are ignored. See upstream `addons/square/PROT
 
 ## Remaining work
 
-- Verify connection, shots, club data, re-arm and link loss on a real Square Home
-  under Windows, and record firmware and Windows build in the README.
+- Verify reconnect after link loss and club selection on a real Square Home under
+  Windows (connection, battery/firmware, shots and club data are verified), and
+  record the tested firmware and Windows build in [phase status](PhasesStatus.md).
 - Linux track: BlueZ transport, permissions/dependencies, and hardware validation.
 - Phase 1 physics items (OpenFairway fixtures and tolerances) are unaffected by this note.

@@ -33,9 +33,11 @@ Working on Windows (Unreal 5.8.3, verified 2026-10-14 by headless automation):
   protocol and session, a C++/WinRT Bluetooth LE transport, built-in replay shots,
   and Blueprint/C++ events. Its protocol, session and replay tests pass.
 
-Not yet verified: a connection to a **real Square Home** (the Bluetooth path has
-been compiled but not run against hardware), the rendered HUD panel (check it in
-Play), and anything on Linux. Linux has no Bluetooth transport yet.
+Verified by the maintainer with a **real Square Home** on Windows (2026-10-14): the
+Bluetooth connection, battery and firmware readout, and captured shot and club data.
+
+Not yet verified: link-loss reconnect and club selection on hardware, and anything
+on Linux. Linux has no Bluetooth transport yet.
 
 No OpenFairway or ogolf code has been imported. Launch-monitor hardware and
 purchased content are optional; replay shots work without hardware.
@@ -44,7 +46,7 @@ purchased content are optional; replay shots work without hardware.
 
 | Platform | Intended support | Verification |
 | --- | --- | --- |
-| Windows x64 | Yes, from the foundation onward | Editor/game build, smoke and launch-monitor tests pass; Square Home hardware not yet tested |
+| Windows x64 | Yes, from the foundation onward | Editor/game build, smoke and launch-monitor tests pass; Square Home connection, shot and club data verified |
 | Linux x86_64 | Yes, deferred track | Build/run/test scripts provided; not yet executed on Linux; no Bluetooth transport yet |
 
 Keep paths case-correct and platform-specific integrations outside shared gameplay.
@@ -279,7 +281,7 @@ See [Architecture](Docs/Architecture.md) for future component boundaries and dat
 | --- | --- | --- |
 | `open-lm-connector` | Launch-monitor connection, initially **Square Home** | Protocol, session and Windows Bluetooth ported to C++ in `Plugins/OpenLaunchMonitor` (revision `92eb021`) |
 | `openfairway` | C# physics to migrate to native C++, exposed through Unreal and Blueprints | None |
-| `ogolf` | Reference for greens, lies, and course/surface usage | None; confirm licensing before copying |
+| `ogolf` | Reference for greens, lies, and course/surface usage | None |
 
 The local reference repositories are siblings under
 `C:\Users\futco\Code\Github\digitalhand` on the initial development machine.
@@ -316,8 +318,8 @@ Details are logged under `LogOpenLaunchMonitor` (Output Log or `Saved/Logs/`).
 
 Known limitations: Windows only; the first matching device found is used; scans stop
 after 30 s; automatic reconnect tries five times after a dropped link; Square Omni,
-alignment and spin-mode selection are not exposed in the UI; real-hardware behavior
-is not yet verified.
+alignment and spin-mode selection are not exposed in the UI; reconnect after link
+loss has not been tested on hardware.
 
 ## Roadmap
 
@@ -334,8 +336,8 @@ milestones are not implemented features or implicit migration tasks.
 - Format C++ with the repository [.clang-format](.clang-format) (Unreal-style, never reorders
   includes). Visual Studio 2022 ships `clang-format` under `VC\Tools\Llvm\x64\bin`.
 - Keep public builds usable without launch monitors, purchased packs, or local sibling repositories.
-- Contribute only content you have permission to release, and preserve upstream notices.
-- Record future imports in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Contribute only content you have permission to release.
+- Record code or assets from anyone other than the maintainer in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Licensing and third-party assets
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Derived from open-lm-connector (MIT) addons/square/SquareProtocol.cs,
 // SquareCommandBuilder.cs, SquareShotMetrics.cs and SquareConnectionOptions.cs
-// at 92eb021abe28d8eb1abe43f87767d3eb73e5939e. See THIRD_PARTY_NOTICES.md.
+// at 92eb021abe28d8eb1abe43f87767d3eb73e5939e.
 #pragma once
 
 #include "CoreMinimal.h"
