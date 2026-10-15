@@ -46,14 +46,15 @@ hardware-free protocol, session and replay tests (all passing, 2026-10-14).
 
 On 2026-10-14 the maintainer connected a real Square Home on Windows: the connection,
 battery and firmware readout, shot data and club data all worked. Still to verify on
-hardware: reconnect after link loss and club selection. The firmware version and
+hardware: reconnect after link loss. On 2026-10-15 the maintainer also verified club
+selection and the club toggle on the real Square Home. The firmware version and
 Windows build tested have not been recorded yet. Linux BlueZ is not implemented.
 
 Shot recording (2026-10-15): with a launch monitor connected, **F9** saves each real
 device shot as GSPro-shaped JSON with the selected club, club data and the engine result
 under `Documents/UOpenGolf/Saved/ShotRecordings/session_<timestamp>/club_<club>_shot_<n>.json` (README
 "Recording shots"). `UOpenGolf.Range.ShotRecording` passes headless
-(`Saved/Automation/20261015-134115-0067205c`); not yet run with a real Square Home.
+(`Saved/Automation/20261015-134115-0067205c`); the maintainer also validated recorded real Square Home shots on 2026-10-15.
 
 ## Phase 3 — Native OpenFairway
 
