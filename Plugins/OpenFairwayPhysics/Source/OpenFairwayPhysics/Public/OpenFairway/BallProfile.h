@@ -34,7 +34,7 @@ namespace OpenFairway
 
     namespace LandingBucket
     {
-        /** Launch spin first, launch angle second; impact spin has decayed too far to tell a wedge from an iron. */
+        /** Descriptive launch category; the resolved response is interpolated independently. */
         OPENFAIRWAYPHYSICS_API ELandingBucket Classify(float LaunchAngleDeg, float TotalSpinRpm);
 
         OPENFAIRWAYPHYSICS_API const TCHAR* GetName(ELandingBucket Bucket);
@@ -69,6 +69,9 @@ namespace OpenFairway
         /** Speed of every green as a stimp reading in feet; a course property that travels with the profile. */
         float GreenStimpFeet = GreenSpeed::DefaultStimpFeet;
 
+        /** Interpolate calibrated scales and landing responses across launch conditions. */
+        bool bInterpolateCalibration = true;
+
         TMap<FString, FRegimeScaleOverride> RegimeScaleOverrides;
         FLandingResponse LandingResponses[static_cast<int32>(ELandingBucket::Count)];
 
@@ -76,13 +79,17 @@ namespace OpenFairway
         FBounceProfile Bounce;
         FRolloutProfile Rollout;
 
-        /** The calibrated defaults (the C# BallPhysicsProfile constructor). */
+        /** Current defaults, with continuous calibration and speed-dependent spin decay. */
         FBallPhysicsProfile();
 
-        const FRegimeScaleOverride& ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm, FString& OutRegimeKey,
+        /** Pinned C# behavior for reference verification; not the gameplay default. */
+        static FBallPhysicsProfile HistoricalReference();
+
+        /** Matched key is "interpolated" for continuous calibration; regime key remains descriptive. */
+        FRegimeScaleOverride ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm, FString& OutRegimeKey,
             FString& OutMatchedKey) const;
 
-        const FLandingResponse& ResolveLandingResponse(float LaunchAngleDeg, float TotalSpinRpm, ELandingBucket& OutBucket) const;
+        FLandingResponse ResolveLandingResponse(float LaunchAngleDeg, float TotalSpinRpm, ELandingBucket& OutBucket) const;
     };
 
     /** Air conditions; defaults match the ogolf-physics headless simulator (75 F at sea level). */

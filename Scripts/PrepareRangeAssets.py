@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+"""Download pinned CC0 inputs; convert with Blender --background --python this_file.
+
+With ordinary Python this downloads/validates only. With Blender it also exports
+the game meshes. Outputs are scratch files under Saved/AssetImport/Prepared.
+"""
+from pathlib import Path
+import hashlib
+import math
+import random
+import tarfile
+import urllib.request
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+WORK = ROOT / "Saved/AssetImport"
+OUT = WORK / "Prepared"
+SOURCES = [
+    ("Grass004_2K-JPG.zip", "https://ambientcg.com/get?file=Grass004_2K-JPG.zip",
+     "d7d3f08e8bb1e59aed0c3dbb85ea0b46d5308481f89b6a3fd62c0ec9e862245b"),
+    ("golf_0.zip", "https://opengameart.org/sites/default/files/golf_0.zip",
+     "33358f1d9549e3b56f8826b65982dc1b5bafa701321425e7970971b7e4388d2e"),
+    ("game-golf.tar.gz", "https://opengameart.org/sites/default/files/game-golf.tar_6.gz",
+     "fd2ca23a434ec9c1131d2a8758ea2d24710fcc6c4c00eb73b9f193b45ea2e303"),
+]
+
+
+def prepare():
+    OUT.mkdir(parents=True, exist_ok=True)
+    for name, url, digest in SOURCES:
+        path = WORK / name
+        if not path.exists():
+            urllib.request.urlretrieve(url, path)
+        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise RuntimeError(f"Source checksum mismatch: {path}")
+    with zipfile.ZipFile(WORK / SOURCES[0][0]) as archive:
+        for suffix in ("Color", "NormalDX", "Roughness"):
+            name = f"Grass004_2K-JPG_{suffix}.jpg"
+            (OUT / name).write_bytes(archive.read(name))
+    with zipfile.ZipFile(WORK / "golf_0.zip") as archive:
+        for name in ("Golf_ball.obj", "Golf_ball.mtl"):
+            (OUT / name).write_bytes(archive.read(name))
+    with tarfile.open(WORK / "game-golf.tar.gz") as archive:
+        # Explicit members only: never extract arbitrary archive paths.
+        (OUT / "golf-flag.obj").write_bytes(archive.extractfile("bin/golf-flag.obj").read())
+
+
+def convert():
+    import bpy
+    from mathutils import Vector
+
+    def clear():
+        bpy.ops.object.select_all(action="SELECT")
+        bpy.ops.object.delete(use_global=False)
+
+    def export(name):
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+        bpy.ops.export_scene.fbx(filepath=str(OUT / (name + ".fbx")), use_selection=True,
+                                 object_types={"MESH"}, add_leaf_bones=False,
+                                 axis_forward="-Y", axis_up="Z", bake_anim=False)
+
+    clear()
+    bpy.ops.wm.obj_import(filepath=str(OUT / "Golf_ball.obj"), forward_axis="NEGATIVE_Z", up_axis="Y")
+    bpy.ops.object.join()
+    obj = bpy.context.object
+    points = [obj.matrix_world @ v.co for v in obj.data.vertices]
+    lower = Vector(tuple(min(v[i] for v in points) for i in range(3)))
+    upper = Vector(tuple(max(v[i] for v in points) for i in range(3)))
+    center = (lower + upper) * 0.5
+    diameter = max(upper - lower)
+    # Blender meters -> FBX centimeters: 1 m source diameter gives UE's 100 cm.
+    for v, p in zip(obj.data.vertices, points):
+        v.co = (p - center) / diameter
+    obj.matrix_world.identity()
+    obj.data.materials.clear()
+    for poly in obj.data.polygons:
+        poly.use_smooth = True
+    print("Ball triangles:", sum(len(p.vertices) - 2 for p in obj.data.polygons))
+    export("SM_GolfBall")
+
+    clear()
+    bpy.ops.wm.obj_import(filepath=str(OUT / "golf-flag.obj"), forward_axis="NEGATIVE_Z", up_axis="Y")
+    bpy.ops.object.join()
+    obj = bpy.context.object
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # The original includes a pole section below ground; keep that below ground.
+    # Turn its flag into the Y/Z plane so it is readable from the tee (+X view).
+    top = max(v.co.z for v in obj.data.vertices)
+    scale = 2.4 / top
+    for v in obj.data.vertices:
+        x, y, z = v.co
+        v.co = (-y * scale, x * scale, z * scale)
+    obj.data.materials.clear()
+    for name in ("Pole", "Flag"):
+        obj.data.materials.append(bpy.data.materials.new(name))
+    for poly in obj.data.polygons:
+        poly.material_index = int(any(obj.data.vertices[i].co.y > 0.07 for i in poly.vertices))
+        poly.use_smooth = poly.material_index == 0
+    export("SM_Flagstick")
+
+    clear()
+    rng = random.Random(20261015)
+    vertices, faces = [], []
+    for _ in range(32):
+        x, y = rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1)
+        angle = rng.uniform(0, 2 * math.pi)
+        width, height = rng.uniform(0.001, 0.002), rng.uniform(0.012, 0.020)
+        dx, dy = math.cos(angle) * width, math.sin(angle) * width
+        start = len(vertices)
+        vertices.extend([(x-dx, y-dy, 0), (x+dx, y+dy, 0),
+                         (x + dx*2, y + dy*2, height)])
+        faces.append((start, start+1, start+2))
+    mesh = bpy.data.meshes.new("GrassClump")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new("GrassClump", mesh)
+    bpy.context.collection.objects.link(obj)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    export("SM_GrassClump")
+
+
+if __name__ == "__main__":
+    prepare()
+    try:
+        import bpy
+    except ImportError:
+        print("Inputs verified. Run this script with Blender to export meshes.")
+    else:
+        convert()

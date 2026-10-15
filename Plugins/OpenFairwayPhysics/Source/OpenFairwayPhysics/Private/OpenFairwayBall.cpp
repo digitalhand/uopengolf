@@ -24,17 +24,27 @@ namespace
     constexpr float OutOfBoundsM = 1000.0f;
     constexpr float FallThroughM = 100.0f;
     constexpr float TracerSpacingCm = 25.0f;
-    const FVector3f Up(0.0f, 1.0f, 0.0f);
+    /** OpenFairway up (+Y). */
+    const FVector3f CoreUp(0.0f, 1.0f, 0.0f);
 
     /** Unreal (X forward, Y right, Z up) to OpenFairway (X forward, Y up, Z right) direction. */
-    FVector3f ToCore(const FVector& V) { return FVector3f(static_cast<float>(V.X), static_cast<float>(V.Z), static_cast<float>(V.Y)); }
-    FVector ToUnreal(const FVector3f& V) { return FVector(V.X, V.Z, V.Y); }
+    FVector3f ToCore(const FVector& V)
+    {
+        return FVector3f(static_cast<float>(V.X), static_cast<float>(V.Z), static_cast<float>(V.Y));
+    }
+    FVector ToUnreal(const FVector3f& V)
+    {
+        return FVector(V.X, V.Z, V.Y);
+    }
 
-    ESurface ToCoreSurface(EOpenFairwaySurface Surface) { return static_cast<ESurface>(Surface); }
+    ESurface ToCoreSurface(EOpenFairwaySurface Surface)
+    {
+        return static_cast<ESurface>(Surface);
+    }
 
     FVector3f RemoveVelocityAlongNormal(const FVector3f& Velocity, const FVector3f& Normal, bool bRemoveBothDirections)
     {
-        const FVector3f FloorNormal = Normal.SizeSquared() > 0.000001f ? Normal / Normal.Size() : Up;
+        const FVector3f FloorNormal = Normal.SizeSquared() > 0.000001f ? Normal / Normal.Size() : CoreUp;
         const float NormalComponent = FVector3f::DotProduct(Velocity, FloorNormal);
         if (!bRemoveBothDirections && NormalComponent >= 0.0f)
         {
@@ -171,9 +181,9 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     {
         // A clockwise yaw in Unreal turns toward +Z (right) in the OpenFairway frame.
         const float YawRadians = FMath::DegreesToRadians(-AimYawDeg);
-        Vectors.Velocity = ShotSetup::Rotate(Vectors.Velocity, Up, YawRadians);
-        Vectors.Omega = ShotSetup::Rotate(Vectors.Omega, Up, YawRadians);
-        Vectors.ShotDirection = ShotSetup::Rotate(Vectors.ShotDirection, Up, YawRadians);
+        Vectors.Velocity = ShotSetup::Rotate(Vectors.Velocity, CoreUp, YawRadians);
+        Vectors.Omega = ShotSetup::Rotate(Vectors.Omega, CoreUp, YawRadians);
+        Vectors.ShotDirection = ShotSetup::Rotate(Vectors.ShotDirection, CoreUp, YawRadians);
     }
 
     Velocity = Vectors.Velocity;
@@ -181,7 +191,7 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     ShotDirection = Vectors.ShotDirection;
     BallState = EOpenFairwayBallState::Flight;
     bOnGround = false;
-    FloorNormal = Up;
+    FloorNormal = CoreUp;
     SubstepAccumulator = 0.0f;
     RolloutImpactSpinRpm = 0.0f;
     ShotStart = GetActorLocation();
@@ -274,28 +284,42 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         return false;
     }
 
-    const FVector Delta = ToUnreal(Velocity * Dt) * CmPerM;
-    FHitResult Hit;
-    bool bHit = false;
-    if (!Delta.IsNearlyZero(1e-4))
+    auto MoveWithSweep = [this](const FVector& Delta, FHitResult& Hit)
     {
-        const FVector End = Start + Delta;
+        if (Delta.IsNearlyZero(1e-4))
+        {
+            return false;
+        }
+        const FVector MoveStart = GetActorLocation();
+        const FVector End = MoveStart + Delta;
         FCollisionQueryParams Params(SCENE_QUERY_STAT(OpenFairwayBallSweep), false, this);
-        bHit = GetWorld()->SweepSingleByChannel(
-            Hit, Start, End, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SafeMarginCm), Params);
+        const bool bHit = GetWorld()->SweepSingleByChannel(
+            Hit, MoveStart, End, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SafeMarginCm), Params);
         if (bHit && Hit.bBlockingHit)
         {
             // Rest the true sphere tangent to the contact (the sweep sphere was a margin smaller).
-            const FVector Contact = Hit.bStartPenetrating ? Start + Hit.Normal * (Hit.PenetrationDepth + SafeMarginCm) : Hit.Location + Hit.ImpactNormal * SafeMarginCm;
+            const FVector Contact = Hit.bStartPenetrating ? MoveStart + Hit.Normal * (Hit.PenetrationDepth + SafeMarginCm) : Hit.Location + Hit.ImpactNormal * SafeMarginCm;
             SetActorLocation(Contact, false, nullptr, ETeleportType::TeleportPhysics);
+            return true;
         }
-        else
-        {
-            bHit = false;
-            SetActorLocation(End, false, nullptr, ETeleportType::TeleportPhysics);
-        }
-    }
+        SetActorLocation(End, false, nullptr, ETeleportType::TeleportPhysics);
+        return false;
+    };
+    FHitResult Hit;
+    const bool bHit = MoveWithSweep(ToUnreal(Velocity * Dt) * CmPerM, Hit);
     HandleCollision(bHit ? &Hit : nullptr, bWasOnGround, PreviousVelocity);
+
+    // Match the headless contact step: move with the rebound for the unspent portion
+    // of this timestep. Dropping it changes the next bounce speed enough to cross
+    // the restitution cutoff, creating several yards of rollout disagreement.
+    if (bHit && !bWasOnGround && !Hit.bStartPenetrating && ToCore(Hit.ImpactNormal).Y > 0.7f)
+    {
+        const bool bSupportedAfterImpact = bOnGround;
+        const FVector3f ReboundVelocity = Velocity;
+        FHitResult RemainderHit;
+        const bool bRemainderHit = MoveWithSweep(ToUnreal(Velocity * Dt * (1.0f - Hit.Time)) * CmPerM, RemainderHit);
+        HandleCollision(bRemainderHit ? &RemainderHit : nullptr, bSupportedAfterImpact, ReboundVelocity);
+    }
 
     Result.ApexM = FMath::Max(Result.ApexM, static_cast<float>(GetActorLocation().Z - ShotStart.Z) / CmPerM);
     if (BallState != EOpenFairwayBallState::Rest && GolfPhysics::CanRest(FBallState{FVector3f::ZeroVector, Velocity, Omega}, bOnGround, FloorNormal, SurfaceSettings, ShotParams.Rollout))
@@ -310,14 +334,14 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
     if (Hit)
     {
         FVector3f Normal = ToCore(Hit->bStartPenetrating ? Hit->Normal : Hit->ImpactNormal);
-        Normal = Normal.SizeSquared() > 0.000001f ? Normal / Normal.Size() : Up;
+        Normal = Normal.SizeSquared() > 0.000001f ? Normal / Normal.Size() : CoreUp;
         if (Normal.Y > 0.7f)
         {
             FloorNormal = Normal;
             SetSurface(ResolveSurface(Hit->GetComponent()));
             const bool bLandedFromFlight = BallState == EOpenFairwayBallState::Flight;
             const bool bIsLanding = bLandedFromFlight || (!bWasOnGround && FVector3f::DotProduct(Velocity, Normal) < 0.0f) ||
-                FVector3f::DotProduct(PreviousVelocity, Normal) < -0.5f;
+                                    FVector3f::DotProduct(PreviousVelocity, Normal) < -0.5f;
             if (bIsLanding)
             {
                 if (bLandedFromFlight)
@@ -370,7 +394,7 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
         {
             // Wall: damped reflection.
             bOnGround = false;
-            FloorNormal = Up;
+            FloorNormal = CoreUp;
             Velocity = (Velocity - 2.0f * FVector3f::DotProduct(Velocity, Normal) * Normal) * 0.30f;
         }
         return;
@@ -387,7 +411,7 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
     else
     {
         bOnGround = false;
-        FloorNormal = Up;
+        FloorNormal = CoreUp;
     }
 }
 
@@ -409,7 +433,7 @@ bool AOpenFairwayBall::ProbeGround(FGroundHit& OutHit, float UpMeters, float Dow
 
     OutHit.Location = Hit.ImpactPoint;
     const FVector3f Normal = ToCore(Hit.ImpactNormal);
-    OutHit.Normal = Normal.SizeSquared() > 0.000001f ? Normal / Normal.Size() : Up;
+    OutHit.Normal = Normal.SizeSquared() > 0.000001f ? Normal / Normal.Size() : CoreUp;
     OutHit.Component = Hit.GetComponent();
     return true;
 }
@@ -458,7 +482,7 @@ void AOpenFairwayBall::UpdateResult()
     const FVector3f Offset = ToCore(GetActorLocation() - ShotStart) / CmPerM;
     Result.TotalM = FMath::Max(FVector3f::DotProduct(Offset, ShotDirection), 0.0f);
     // Offline from the aim line, positive to the right.
-    const FVector3f AimRight = ShotSetup::Rotate(FVector3f(0.0f, 0.0f, 1.0f), Up, FMath::DegreesToRadians(-AimYawDeg));
+    const FVector3f AimRight = ShotSetup::Rotate(FVector3f(0.0f, 0.0f, 1.0f), CoreUp, FMath::DegreesToRadians(-AimYawDeg));
     Result.LateralM = FVector3f::DotProduct(Offset, AimRight);
     Result.RollM = Result.bLanded ? Result.TotalM - Result.CarryM : 0.0f;
     Result.Surface = CurrentSurface;

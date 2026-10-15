@@ -24,6 +24,63 @@ namespace OpenFairway
             static const FRegimeScaleOverride Neutral;
             return Neutral;
         }
+
+        // Interior samples of the existing calibration regions, including the extra family
+        // splits at 110 mph and 30 degrees. Linear interpolation is continuous at every
+        // knot and avoids concentrating a large correction into a narrow boundary band.
+        constexpr float SpeedAnchors[] = {54.0f, 66.0f, 78.5f, 95.0f, 107.5f, 115.0f, 125.0f};
+        constexpr float LaunchAnchors[] = {5.0f, 14.0f, 21.5f, 27.5f, 31.5f, 36.5f};
+        constexpr float SpinAnchors[] = {1250.0f, 3250.0f, 4750.0f, 6500.0f, 8500.0f};
+
+        struct FBlendAxis
+        {
+            float Values[2];
+            float Weights[2];
+        };
+
+        template <int32 Count>
+        FBlendAxis Bracket(const float (&Anchors)[Count], float Value)
+        {
+            if (Value <= Anchors[0])
+            {
+                return {{Anchors[0], Anchors[0]}, {1.0f, 0.0f}};
+            }
+            for (int32 Index = 1; Index < Count; ++Index)
+            {
+                if (Value < Anchors[Index])
+                {
+                    const float T = (Value - Anchors[Index - 1]) / (Anchors[Index] - Anchors[Index - 1]);
+                    return {{Anchors[Index - 1], Anchors[Index]}, {1.0f - T, T}};
+                }
+            }
+            return {{Anchors[Count - 1], Anchors[Count - 1]}, {1.0f, 0.0f}};
+        }
+
+        const FRegimeScaleOverride& LookupRegime(const FBallPhysicsProfile& Profile, float SpeedMph,
+            float LaunchAngleDeg, float TotalSpinRpm, FString& Matched)
+        {
+            Matched.Reset();
+            for (const FString& Candidate : ShotRegimeKey::BuildLookupKeys(SpeedMph, LaunchAngleDeg, TotalSpinRpm))
+            {
+                if (const FRegimeScaleOverride* Found = Profile.RegimeScaleOverrides.Find(Candidate))
+                {
+                    Matched = Candidate;
+                    return *Found;
+                }
+            }
+            return NeutralRegime();
+        }
+
+        void Accumulate(FRegimeScaleOverride& Sum, const FRegimeScaleOverride& Value, float Weight)
+        {
+            Sum.DragScaleMultiplier += Value.DragScaleMultiplier * Weight;
+            Sum.LiftScaleMultiplier += Value.LiftScaleMultiplier * Weight;
+            Sum.KineticFrictionMultiplier += Value.KineticFrictionMultiplier * Weight;
+            Sum.RollingFrictionMultiplier += Value.RollingFrictionMultiplier * Weight;
+            Sum.GrassViscosityMultiplier += Value.GrassViscosityMultiplier * Weight;
+            Sum.CriticalAngleOffsetRadians += Value.CriticalAngleOffsetRadians * Weight;
+            Sum.SpinbackThetaBoostMultiplier += Value.SpinbackThetaBoostMultiplier * Weight;
+        }
     } // namespace
 
     FString ShotRegimeKey::Build(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm)
@@ -56,17 +113,27 @@ namespace OpenFairway
 
     const TCHAR* ShotRegimeKey::GetSpeedBin(float SpeedMph)
     {
-        return SpeedMph < 60.0f ? TEXT("S0") : SpeedMph < 72.0f ? TEXT("S1a") : SpeedMph < 85.0f ? TEXT("S1b") : SpeedMph < 105.0f ? TEXT("S2") : SpeedMph < 120.0f ? TEXT("S3") : TEXT("S4");
+        return SpeedMph < 60.0f ? TEXT("S0") : SpeedMph < 72.0f ? TEXT("S1a")
+                                           : SpeedMph < 85.0f   ? TEXT("S1b")
+                                           : SpeedMph < 105.0f  ? TEXT("S2")
+                                           : SpeedMph < 120.0f  ? TEXT("S3")
+                                                                : TEXT("S4");
     }
 
     const TCHAR* ShotRegimeKey::GetLaunchBin(float LaunchAngleDeg)
     {
-        return LaunchAngleDeg < 10.0f ? TEXT("V0") : LaunchAngleDeg < 18.0f ? TEXT("V1") : LaunchAngleDeg < 25.0f ? TEXT("V2") : LaunchAngleDeg < 33.0f ? TEXT("V3") : TEXT("V4");
+        return LaunchAngleDeg < 10.0f ? TEXT("V0") : LaunchAngleDeg < 18.0f ? TEXT("V1")
+                                                 : LaunchAngleDeg < 25.0f   ? TEXT("V2")
+                                                 : LaunchAngleDeg < 33.0f   ? TEXT("V3")
+                                                                            : TEXT("V4");
     }
 
     const TCHAR* ShotRegimeKey::GetSpinBin(float TotalSpinRpm)
     {
-        return TotalSpinRpm < 2500.0f ? TEXT("P0") : TotalSpinRpm < 4000.0f ? TEXT("P1") : TotalSpinRpm < 5500.0f ? TEXT("P2") : TotalSpinRpm < 7500.0f ? TEXT("P3") : TEXT("P4");
+        return TotalSpinRpm < 2500.0f ? TEXT("P0") : TotalSpinRpm < 4000.0f ? TEXT("P1")
+                                                 : TotalSpinRpm < 5500.0f   ? TEXT("P2")
+                                                 : TotalSpinRpm < 7500.0f   ? TEXT("P3")
+                                                                            : TEXT("P4");
     }
 
     ELandingBucket LandingBucket::Classify(float LaunchAngleDeg, float TotalSpinRpm)
@@ -156,26 +223,70 @@ namespace OpenFairway
         RegimeScaleOverrides.Add(TEXT("W-S2-V3-P4"), Scale(1.06f, 0.97f));
     }
 
-    const FRegimeScaleOverride& FBallPhysicsProfile::ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm,
+    FBallPhysicsProfile FBallPhysicsProfile::HistoricalReference()
+    {
+        FBallPhysicsProfile Profile;
+        Profile.bInterpolateCalibration = false;
+        Profile.Flight.SpinDecayCoefficient = 0.0f;
+        Profile.Flight.ConstantSpinDecayRatePerSecond = 0.2f;
+        Profile.Flight.LowLaunchLiftRecoveryMax = 1.08f;
+        return Profile;
+    }
+
+    FRegimeScaleOverride FBallPhysicsProfile::ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm,
         FString& OutRegimeKey, FString& OutMatchedKey) const
     {
         OutRegimeKey = ShotRegimeKey::Build(SpeedMph, LaunchAngleDeg, TotalSpinRpm);
-        OutMatchedKey.Reset();
-        for (const FString& Candidate : ShotRegimeKey::BuildLookupKeys(SpeedMph, LaunchAngleDeg, TotalSpinRpm))
+        if (!bInterpolateCalibration)
         {
-            if (const FRegimeScaleOverride* Matched = RegimeScaleOverrides.Find(Candidate))
+            return LookupRegime(*this, SpeedMph, LaunchAngleDeg, TotalSpinRpm, OutMatchedKey);
+        }
+        OutMatchedKey = TEXT("interpolated");
+        const FBlendAxis Speed = Bracket(SpeedAnchors, SpeedMph);
+        const FBlendAxis Launch = Bracket(LaunchAnchors, LaunchAngleDeg);
+        const FBlendAxis Spin = Bracket(SpinAnchors, TotalSpinRpm);
+        FRegimeScaleOverride Result{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        FString Ignored;
+        for (int32 S = 0; S < 2; ++S)
+        {
+            for (int32 V = 0; V < 2; ++V)
             {
-                OutMatchedKey = Candidate;
-                return *Matched;
+                for (int32 P = 0; P < 2; ++P)
+                {
+                    const float Weight = Speed.Weights[S] * Launch.Weights[V] * Spin.Weights[P];
+                    if (Weight > 0.0f)
+                    {
+                        Accumulate(Result, LookupRegime(*this, Speed.Values[S], Launch.Values[V], Spin.Values[P], Ignored), Weight);
+                    }
+                }
             }
         }
-        return NeutralRegime();
+        return Result;
     }
 
-    const FLandingResponse& FBallPhysicsProfile::ResolveLandingResponse(float LaunchAngleDeg, float TotalSpinRpm, ELandingBucket& OutBucket) const
+    FLandingResponse FBallPhysicsProfile::ResolveLandingResponse(float LaunchAngleDeg, float TotalSpinRpm, ELandingBucket& OutBucket) const
     {
         OutBucket = LandingBucket::Classify(LaunchAngleDeg, TotalSpinRpm);
-        return LandingResponses[static_cast<int32>(OutBucket)];
+        if (!bInterpolateCalibration)
+        {
+            return LandingResponses[static_cast<int32>(OutBucket)];
+        }
+        const FBlendAxis Launch = Bracket(LaunchAnchors, LaunchAngleDeg);
+        const FBlendAxis Spin = Bracket(SpinAnchors, TotalSpinRpm);
+        FLandingResponse Result;
+        for (int32 V = 0; V < 2; ++V)
+        {
+            for (int32 P = 0; P < 2; ++P)
+            {
+                const float Weight = Launch.Weights[V] * Spin.Weights[P];
+                const FLandingResponse& Value = LandingResponses[static_cast<int32>(LandingBucket::Classify(Launch.Values[V], Spin.Values[P]))];
+                Result.SpinBiteScale += Value.SpinBiteScale * Weight;
+                Result.MaxSpinbackMps += Value.MaxSpinbackMps * Weight;
+                Result.SpeedRampStartMps += Value.SpeedRampStartMps * Weight;
+                Result.SpeedRampEndMps += Value.SpeedRampEndMps * Weight;
+            }
+        }
+        return Result;
     }
 
     FResolvedShotParams FResolvedShotParams::Resolve(const FBallPhysicsProfile& Profile, const FAirConditions& Air, float SpeedMph,

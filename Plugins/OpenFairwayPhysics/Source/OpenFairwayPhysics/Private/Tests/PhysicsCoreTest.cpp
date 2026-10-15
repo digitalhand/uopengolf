@@ -60,7 +60,7 @@ bool FOpenFairwayPhysicsCoreTest::RunTest(const FString& Parameters)
 
     // Regime keys and landing buckets use the calibration bins.
     TestEqual(TEXT("Wood regime"), ShotRegimeKey::Build(114.46f, 6.95f, 1932.5f), FString(TEXT("D-S3-V0-P0")));
-    FBallPhysicsProfile Profile;
+    FBallPhysicsProfile Profile = FBallPhysicsProfile::HistoricalReference();
     FString Key;
     FString Matched;
     Profile.ResolveScaleOverride(24.68f, 17.94f, 3204.0f, Key, Matched);
@@ -80,15 +80,15 @@ bool FOpenFairwayPhysicsCoreTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("No spin, no extra friction"), GolfPhysics::SpinFrictionMultiplier(0.0f, 40.0f, Rollout), 1.0f, 1e-6f);
     TestEqual(TEXT("High spin friction"), GolfPhysics::SpinFrictionMultiplier(3000.0f, 40.0f, Rollout), 2.5f, 1e-5f);
     const FSurfaceSettings Fairway = FResolvedShotParams().ResolveSurface(ESurface::Fairway, Profile);
-    const FVector3f Up(0.0f, 1.0f, 0.0f);
-    TestTrue(TEXT("Slow ball rests on flat ground"), GolfPhysics::CanRest(FBallState{FVector3f::ZeroVector, FVector3f(0.01f, 0.0f, 0.0f), FVector3f::ZeroVector}, true, Up, Fairway));
-    TestFalse(TEXT("Unsupported ball does not rest"), GolfPhysics::CanRest(FBallState(), false, Up, Fairway));
+    const FVector3f LevelNormal(0.0f, 1.0f, 0.0f);
+    TestTrue(TEXT("Slow ball rests on flat ground"), GolfPhysics::CanRest(FBallState{FVector3f::ZeroVector, FVector3f(0.01f, 0.0f, 0.0f), FVector3f::ZeroVector}, true, LevelNormal, Fairway));
+    TestFalse(TEXT("Unsupported ball does not rest"), GolfPhysics::CanRest(FBallState(), false, LevelNormal, Fairway));
     const FVector3f Steep = FVector3f(0.5f, 0.866f, 0.0f).GetSafeNormal();
     TestFalse(TEXT("Steep slope keeps the ball moving"), GolfPhysics::CanRest(FBallState(), true, Steep, Fairway));
-    TestTrue(TEXT("Fast upward ball rebounds"), GolfPhysics::HasRebound(FVector3f(0.0f, 2.0f, 0.0f), Up, TOptional<FSurfaceBounceSettings>()));
-    TestFalse(TEXT("Slow upward ball settles"), GolfPhysics::HasRebound(FVector3f(0.0f, 0.2f, 0.0f), Up, TOptional<FSurfaceBounceSettings>()));
+    TestTrue(TEXT("Fast upward ball rebounds"), GolfPhysics::HasRebound(FVector3f(0.0f, 2.0f, 0.0f), LevelNormal, TOptional<FSurfaceBounceSettings>()));
+    TestFalse(TEXT("Slow upward ball settles"), GolfPhysics::HasRebound(FVector3f(0.0f, 0.2f, 0.0f), LevelNormal, TOptional<FSurfaceBounceSettings>()));
     const FBallState Leaving{FVector3f::ZeroVector, FVector3f(10.0f, 3.0f, 0.0f), FVector3f(0.0f, 0.0f, 100.0f)};
-    const FBallState Unchanged = GolfPhysics::ResolveImpact(Leaving, Up, Fairway, FBounceProfile());
+    const FBallState Unchanged = GolfPhysics::ResolveImpact(Leaving, LevelNormal, Fairway, FBounceProfile());
     TestTrue(TEXT("A ball leaving the surface is not bounced"), Unchanged.Velocity.Equals(Leaving.Velocity));
 
     // Green speed: a faster green rolls more freely; stimps are clamped to the supported range.

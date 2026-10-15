@@ -17,7 +17,10 @@ namespace OpenFairway
         /** Dynamic viscosity in kg/(m*s). */
         OPENFAIRWAYPHYSICS_API float DynamicViscosity(float TemperatureCelsius);
 
-        inline float FahrenheitToCelsius(float TemperatureF) { return (TemperatureF - 32.0f) * 5.0f / 9.0f; }
+        inline float FahrenheitToCelsius(float TemperatureF)
+        {
+            return (TemperatureF - 32.0f) * 5.0f / 9.0f;
+        }
     } // namespace Atmosphere
 
     /** Drag and lift coefficients for one instant of flight. */
@@ -30,6 +33,7 @@ namespace OpenFairway
         float LowLaunchLiftScale = 1.0f;
         float DragCoefficient = 0.0f;
         float LiftCoefficient = 0.0f;
+        float SpinDecayRatePerSecond = 0.0f;
 
         bool HasAerodynamics() const;
     };
@@ -60,7 +64,6 @@ namespace OpenFairway
         constexpr float CrossSection = 3.14159265f * Radius * Radius;
         constexpr float Inertia = 0.4f * Mass * Radius * Radius;
         constexpr float Gravity = 9.81f;
-        constexpr float SpinDecaySeconds = 5.0f;
         constexpr float RadPerRpm = 0.10472f;
 
         /** Simulation rate used by ogolf-physics and its calibration. */

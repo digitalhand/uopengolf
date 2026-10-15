@@ -3,6 +3,8 @@
 // at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
 #include "OpenFairway/GolfPhysics.h"
 
+#include "CoreMath.h"
+
 namespace OpenFairway
 {
     namespace
@@ -26,13 +28,23 @@ namespace OpenFairway
             return SmoothStep01((Value - Start) / Range);
         }
 
-        float Lerp(float A, float B, float T) { return A + (B - A) * T; }
-
         // Lift polynomial curves per Reynolds number; fixed fits, not profile values.
-        float ClRe50k(float S) { return 0.0472121f + 2.84795f * S - 23.4342f * S * S + 45.4849f * S * S * S; }
-        float ClRe60k(float S) { return 0.320524f - 4.7032f * S + 14.0613f * S * S; }
-        float ClRe65k(float S) { return 0.266667f - 4.0f * S + 13.3333f * S * S; }
-        float ClRe70k(float S) { return 0.0496189f + 0.00211396f * S + 2.34201f * S * S; }
+        float ClRe50k(float S)
+        {
+            return 0.0472121f + 2.84795f * S - 23.4342f * S * S + 45.4849f * S * S * S;
+        }
+        float ClRe60k(float S)
+        {
+            return 0.320524f - 4.7032f * S + 14.0613f * S * S;
+        }
+        float ClRe65k(float S)
+        {
+            return 0.266667f - 4.0f * S + 13.3333f * S * S;
+        }
+        float ClRe70k(float S)
+        {
+            return 0.0496189f + 0.00211396f * S + 2.34201f * S * S;
+        }
 
         float GetHighReSpinGain(float SpinRatio, const FFlightProfile& P)
         {
@@ -105,12 +117,14 @@ namespace OpenFairway
     {
         FFlightAerodynamicsSample Result;
         const float Speed = Velocity.Size();
+        Result.Speed = Speed;
+        Result.SpinDecayRatePerSecond = FMath::Max(0.0f, P.ConstantSpinDecayRatePerSecond) +
+                                        FMath::Max(0.0f, P.SpinDecayCoefficient) * Speed / GolfPhysics::Radius;
         if (Speed < MinAerodynamicSpeed)
         {
             return Result;
         }
 
-        Result.Speed = Speed;
         Result.SpinRatio = Omega.Size() * GolfPhysics::Radius / Speed;
         Result.Reynolds = AirDensity * Speed * GolfPhysics::Radius * 2.0f / AirViscosity;
         Result.SpinDragMultiplier = GetSpinDragMultiplier(Result.SpinRatio, Result.Reynolds, P);

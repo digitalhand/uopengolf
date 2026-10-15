@@ -5,12 +5,15 @@
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
 #include "OpenFairwayBall.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
+#include "ReplayShotPanel.h"
+#include "Framework/Application/SlateApplication.h"
 
 namespace
 {
@@ -32,6 +35,7 @@ namespace
     const FVector FollowOffset(-900.0f, 0.0f, 300.0f);
     const FVector RestOffset(-700.0f, 0.0f, 250.0f);
     constexpr float FollowSpeed = 2.5f;
+    constexpr float TeeReturnSeconds = 2.0f;
 } // namespace
 
 void AUOpenGolfPlayerController::BeginPlay()
@@ -54,16 +58,41 @@ void AUOpenGolfPlayerController::BeginPlay()
         UpdateShotCamera(0.0f, true);
         SetViewTarget(ShotCamera);
     }
+    if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+    {
+        ReplayPanel = SNew(SReplayShotPanel).Controller(this);
+        Viewport->AddViewportWidgetContent(ReplayPanel.ToSharedRef(), 10);
+        bShowMouseCursor = true;
+        FInputModeGameAndUI InputMode;
+        InputMode.SetHideCursorDuringCapture(false);
+        InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        SetInputMode(InputMode);
+    }
+}
+
+void AUOpenGolfPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (ReplayPanel.IsValid())
+    {
+        if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+        {
+            Viewport->RemoveViewportWidgetContent(ReplayPanel.ToSharedRef());
+        }
+        ReplayPanel.Reset();
+    }
+    Super::EndPlay(EndPlayReason);
 }
 
 void AUOpenGolfPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
     InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ThisClass::ConnectLaunchMonitor);
-    InputComponent->BindKey(EKeys::X, IE_Pressed, this, &ThisClass::DisconnectLaunchMonitor);
+    InputComponent->BindKey(EKeys::D, IE_Pressed, this, &ThisClass::DisconnectLaunchMonitor);
     InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ThisClass::InjectReplayShot);
+    InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ThisClass::ToggleReplayPanel);
     InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::SelectNextClub);
     InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ThisClass::ResetBallToTee);
+    InputComponent->BindKey(EKeys::F9, IE_Pressed, this, &ThisClass::ToggleRecordShots);
 }
 
 void AUOpenGolfPlayerController::PlayerTick(float DeltaTime)
@@ -83,24 +112,42 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
 
     const FVector BallLocation = Ball->GetActorLocation();
     const bool bAwayFromTee = Mode->GetRange() && FVector::Dist2D(BallLocation, Mode->GetRange()->GetTeeLocation()) > 200.0f;
-    FVector Desired;
-    FVector Target;
-    if (Ball->IsMoving())
+    const bool bAtTee = !Ball->IsMoving() && !bAwayFromTee;
+    if (bAtTee)
     {
-        Desired = BallLocation + FollowOffset;
-        Target = BallLocation;
-    }
-    else if (bAwayFromTee)
-    {
-        Desired = BallLocation + RestOffset;
-        Target = BallLocation;
-    }
-    else
-    {
-        Desired = BallLocation + TeeCameraOffset;
-        Target = BallLocation + TeeCameraTarget;
+        const FVector Desired = BallLocation + TeeCameraOffset;
+        // Aim from the final camera spot, never from the camera's path, so the view cannot flip
+        // while the camera passes over the aim point on its way back.
+        const FQuat TeeRotation = (BallLocation + TeeCameraTarget - Desired).Rotation().Quaternion();
+        if (bSnap)
+        {
+            bReturningToTee = false;
+        }
+        else if (!bCameraAtTee)
+        {
+            bReturningToTee = true;
+            ReturnElapsed = 0.0f;
+            ReturnStartLocation = ShotCamera->GetActorLocation();
+            ReturnStartRotation = ShotCamera->GetActorQuat();
+        }
+        bCameraAtTee = true;
+
+        if (!bReturningToTee)
+        {
+            ShotCamera->SetActorLocationAndRotation(bSnap ? Desired : FMath::VInterpTo(ShotCamera->GetActorLocation(), Desired, DeltaTime, FollowSpeed), TeeRotation);
+            return;
+        }
+        ReturnElapsed += DeltaTime;
+        const float Alpha = FMath::SmoothStep(0.0f, 1.0f, ReturnElapsed / TeeReturnSeconds);
+        bReturningToTee = Alpha < 1.0f;
+        ShotCamera->SetActorLocationAndRotation(FMath::Lerp(ReturnStartLocation, Desired, Alpha), FQuat::Slerp(ReturnStartRotation, TeeRotation, Alpha));
+        return;
     }
 
+    bCameraAtTee = false;
+    bReturningToTee = false;
+    const FVector Desired = BallLocation + (Ball->IsMoving() ? FollowOffset : RestOffset);
+    const FVector Target = BallLocation;
     const FVector Location = bSnap ? Desired : FMath::VInterpTo(ShotCamera->GetActorLocation(), Desired, DeltaTime, FollowSpeed);
     const FRotator DesiredRotation = (Target - Location).Rotation();
     const FRotator Rotation = bSnap ? DesiredRotation : FMath::RInterpTo(ShotCamera->GetActorRotation(), DesiredRotation, DeltaTime, FollowSpeed * 2.0f);
@@ -127,7 +174,32 @@ void AUOpenGolfPlayerController::InjectReplayShot()
 {
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetLaunchMonitor(*this))
     {
-        LaunchMonitor->InjectReplayShot();
+        LaunchMonitor->InjectReplayShotAt(SelectedReplayIndex);
+        SetReplayPanelOpen(false);
+    }
+}
+
+bool AUOpenGolfPlayerController::SelectReplayShot(int32 Index)
+{
+    if (!UOpenLaunchMonitorSubsystem::GetReplayShotNames().IsValidIndex(Index))
+    {
+        return false;
+    }
+    SelectedReplayIndex = Index;
+    return true;
+}
+
+void AUOpenGolfPlayerController::ToggleReplayPanel()
+{
+    SetReplayPanelOpen(!bReplayPanelOpen);
+}
+
+void AUOpenGolfPlayerController::SetReplayPanelOpen(bool bOpen)
+{
+    bReplayPanelOpen = bOpen;
+    if (!bOpen && FSlateApplication::IsInitialized())
+    {
+        FSlateApplication::Get().SetAllUserFocusToGameViewport();
     }
 }
 
@@ -145,5 +217,13 @@ void AUOpenGolfPlayerController::ResetBallToTee()
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
         Mode->ResetBallToTee();
+    }
+}
+
+void AUOpenGolfPlayerController::ToggleRecordShots()
+{
+    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
+    {
+        Mode->SetRecordShots(!Mode->IsRecordingShots());
     }
 }

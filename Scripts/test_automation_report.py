@@ -15,7 +15,7 @@ SUCCESS = {
     "failed": 0,
     "notRun": 0,
     "inProcess": 0,
-    "tests": [{"fullTestPath": "UOpenGolf.Smoke.HelloWorld", "state": "Success"}],
+    "tests": [{"fullTestPath": "UOpenGolf.Smoke.UOpenGolf", "state": "Success"}],
 }
 
 
@@ -66,7 +66,7 @@ class AutomationReportTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_report(self.path)
 
-    def test_prefix_accepts_matching_tests_without_hello_world(self):
+    def test_prefix_accepts_matching_tests_without_startup(self):
         report = copy.deepcopy(SUCCESS)
         report["succeeded"] = 2
         report["tests"] = [{"fullTestPath": "UOpenGolf.LaunchMonitor.Protocol", "state": "Success"},
@@ -75,7 +75,7 @@ class AutomationReportTests(unittest.TestCase):
         self.assertEqual(validate_report(self.path, "UOpenGolf.LaunchMonitor"), 2)
 
     def test_prefix_rejects_no_match_or_partial_name_match(self):
-        for path in ("UOpenGolf.Smoke.HelloWorld", "UOpenGolf.LaunchMonitorExtra"):
+        for path in ("UOpenGolf.Smoke.UOpenGolf", "UOpenGolf.LaunchMonitorExtra"):
             with self.subTest(path=path):
                 report = copy.deepcopy(SUCCESS)
                 report["tests"][0]["fullTestPath"] = path

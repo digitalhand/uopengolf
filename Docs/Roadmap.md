@@ -7,7 +7,7 @@ for each phase are tracked in [phase status](PhasesStatus.md).
 Phases 1 and 2 are split into a **Windows track** (current) and a **Linux track**
 (deferred, not blocking Windows work). Each phase's exit still requires both tracks.
 
-## Phase 0 — Hello-world foundation
+## Phase 0 — UOpenGolf foundation
 
 - Create an Unreal 5.8.3 native C++ game with a blank startup map and visible greeting.
 - Add original-work MIT licensing, third-party/asset policy, architecture, contributor
@@ -23,14 +23,15 @@ requires no sibling repositories, purchased assets, or hardware.
 ## Phase 1 — Linux baseline and integration design
 
 - Build and run the foundation with native Linux Unreal 5.8.3, and validate its smoke test.
-- Pin reference revisions of `open-lm-connector`, `openfairway`, and `ogolf`.
+- Pin reference revisions of `open-lm-connector`, `ogolf-physics` (which superseded
+  `openfairway`), and `ogolf`.
 - Evaluate reusing the connector through a bridge versus native adaptation on both
   platforms. Record the chosen approach and platform dependencies in a design note.
 - Establish shot units, axes, handedness, spin conventions, timestamps, optional
   measurements, late club-data association, threading, and connection ownership.
 - Identify C# physics regression fixtures, fixed-step behavior, and numerical tolerances.
 
-**Exit:** hello world works on Windows and Linux; a written integration design and
+**Exit:** UOpenGolf works on Windows and Linux; a written integration design and
 baseline fixtures are ready for the subsequent implementation phases. No bulk migration.
 
 ## Phase 2 — Launch-monitor input
@@ -48,7 +49,8 @@ hardware-free replay works. Physics and golf-course implementation are not requi
 
 ## Phase 3 — Native OpenFairway
 
-- Port the C# numerical calculations to a reusable C++ core in a physics plugin.
+- Port the C# numerical calculations (from `ogolf-physics`) to a reusable C++ core in a
+  physics plugin.
 - Add Unreal collision/surface adapters and Blueprint-callable controls and events.
 - Keep simulation ownership explicit; avoid competing Unreal/Chaos ball integration.
 - Compare flight, spin, impact, bounce, roll and rest to pinned C# fixtures. Validate

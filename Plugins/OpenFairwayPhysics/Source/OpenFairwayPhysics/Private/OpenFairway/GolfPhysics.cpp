@@ -5,6 +5,8 @@
 // normal falls back to up and callers validate launch data before simulating.
 #include "OpenFairway/GolfPhysics.h"
 
+#include "CoreMath.h"
+
 namespace OpenFairway
 {
     namespace
@@ -17,9 +19,14 @@ namespace OpenFairway
         constexpr float PuttSpeedRampStartMps = 12.0f;
         constexpr float PuttSpeedRampEndMps = 18.0f;
 
-        float Dot(const FVector3f& A, const FVector3f& B) { return FVector3f::DotProduct(A, B); }
-        FVector3f Cross(const FVector3f& A, const FVector3f& B) { return FVector3f::CrossProduct(A, B); }
-        float Lerp(float A, float B, float T) { return A + (B - A) * T; }
+        float Dot(const FVector3f& A, const FVector3f& B)
+        {
+            return FVector3f::DotProduct(A, B);
+        }
+        FVector3f Cross(const FVector3f& A, const FVector3f& B)
+        {
+            return FVector3f::CrossProduct(A, B);
+        }
 
         float SmoothRange(float Value, float Start, float End)
         {
@@ -57,26 +64,26 @@ namespace OpenFairway
         float FlightRetention(float NormalSpeed, float SpinRpm, const FBounceProfile& Profile)
         {
             const float Landing = Profile.FlightTangentialRetentionBase *
-                FMath::Clamp(1.0f - SpinRpm / Profile.FlightSpinFactorDivisor, Profile.FlightSpinFactorMin, 1.0f);
+                                  FMath::Clamp(1.0f - SpinRpm / Profile.FlightSpinFactorDivisor, Profile.FlightSpinFactorMin, 1.0f);
             const float Weight = LandingWeight(NormalSpeed, Profile);
             return Weight >= 1.0f ? Landing : Lerp(1.0f, Landing, Weight);
         }
 
         float Restitution(float NormalSpeed, float SpinRpm, const FBounceProfile& Profile, float MinimumSpeed)
         {
-            const float BaseCor = NormalSpeed < MinimumSpeed                   ? 0.0f
-                : NormalSpeed > Profile.CorHighSpeedThreshold                  ? Profile.CorHighSpeedCap
-                                                                               : Profile.CorBaseA + Profile.CorBaseB * NormalSpeed + Profile.CorBaseC * NormalSpeed * NormalSpeed;
+            const float BaseCor = NormalSpeed < MinimumSpeed                    ? 0.0f
+                                  : NormalSpeed > Profile.CorHighSpeedThreshold ? Profile.CorHighSpeedCap
+                                                                                : Profile.CorBaseA + Profile.CorBaseB * NormalSpeed + Profile.CorBaseC * NormalSpeed * NormalSpeed;
             const float SpeedFactor = NormalSpeed < Profile.CorVelocityLowThreshold
-                ? Profile.CorVelocityLowScale * NormalSpeed / Profile.CorVelocityLowThreshold
-                : NormalSpeed < Profile.CorVelocityMidThreshold
-                ? Lerp(Profile.CorVelocityLowScale, 1.0f,
-                      (NormalSpeed - Profile.CorVelocityLowThreshold) / (Profile.CorVelocityMidThreshold - Profile.CorVelocityLowThreshold))
-                : 1.0f;
+                                          ? Profile.CorVelocityLowScale * NormalSpeed / Profile.CorVelocityLowThreshold
+                                      : NormalSpeed < Profile.CorVelocityMidThreshold
+                                          ? Lerp(Profile.CorVelocityLowScale, 1.0f,
+                                                (NormalSpeed - Profile.CorVelocityLowThreshold) / (Profile.CorVelocityMidThreshold - Profile.CorVelocityLowThreshold))
+                                          : 1.0f;
             const float SpinFraction = SpinRpm < Profile.SpinCorLowSpinThreshold
-                ? Profile.SpinCorLowSpinMaxReduction * SpinRpm / Profile.SpinCorLowSpinThreshold
-                : Profile.SpinCorLowSpinMaxReduction + Profile.SpinCorHighSpinAdditionalReduction *
-                    FMath::Min((SpinRpm - Profile.SpinCorLowSpinThreshold) / Profile.SpinCorHighSpinRangeRpm, 1.0f);
+                                           ? Profile.SpinCorLowSpinMaxReduction * SpinRpm / Profile.SpinCorLowSpinThreshold
+                                           : Profile.SpinCorLowSpinMaxReduction + Profile.SpinCorHighSpinAdditionalReduction *
+                                                                                      FMath::Min((SpinRpm - Profile.SpinCorLowSpinThreshold) / Profile.SpinCorHighSpinRangeRpm, 1.0f);
             return FMath::Clamp(BaseCor * (1.0f - SpinFraction * SpeedFactor), 0.0f, 1.0f);
         }
 
@@ -113,8 +120,8 @@ namespace OpenFairway
             const float Backspin = Dot(Incoming.Spin, Cross(Direction, Normal));
             const float ImpactAngle = FMath::Atan2(-Dot(Incoming.Velocity, Normal), InTangentSpeed);
             const float Bite = Response.SpinBiteScale * Surface.SpinbackResponseScale * 2.0f / 7.0f * GolfPhysics::Radius * Backspin *
-                FMath::Clamp((ImpactAngle - Surface.CriticalAngle) / 0.1f, 0.0f, 1.0f) *
-                RampUp(Incoming.Velocity.Size(), Response.SpeedRampStartMps, Response.SpeedRampEndMps);
+                               FMath::Clamp((ImpactAngle - Surface.CriticalAngle) / 0.1f, 0.0f, 1.0f) *
+                               RampUp(Incoming.Velocity.Size(), Response.SpeedRampStartMps, Response.SpeedRampEndMps);
             if (Bite <= 0.0f)
             {
                 return Resolved;
@@ -157,7 +164,7 @@ namespace OpenFairway
     {
         const float TemperatureKelvin = FMath::Max(TemperatureCelsius + KelvinOffset, 1.0f);
         return 1.716e-5f * FMath::Pow(TemperatureKelvin / KelvinOffset, 1.5f) * (KelvinOffset + SutherlandKelvin) /
-            (TemperatureKelvin + SutherlandKelvin);
+               (TemperatureKelvin + SutherlandKelvin);
     }
 
     FBallState GolfPhysics::StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt)
@@ -182,7 +189,7 @@ namespace OpenFairway
 
         FBallState Next;
         Next.Velocity = State.Velocity + Force / Mass * Dt;
-        Next.Spin = State.Spin * FMath::Exp(-Dt / SpinDecaySeconds);
+        Next.Spin = State.Spin * FMath::Exp(-Sample.SpinDecayRatePerSecond * Dt);
         Next.Position = State.Position + Next.Velocity * Dt;
         return Next;
     }
@@ -200,9 +207,9 @@ namespace OpenFairway
         const float IncomingSpeed = -NormalSpeed;
         const float SpinRpm = State.Spin.Size() / RadPerRpm;
         const float MinimumSpeed = bFirstImpact
-            ? (Surface.SurfaceBounce ? Surface.SurfaceBounce->FirstImpactMinimumSpeed : Profile.CorKillThreshold)
-            : (Surface.SurfaceBounce ? Surface.SurfaceBounce->LaterImpactMinimumSpeed
-                                     : FMath::Max(Profile.CorKillThreshold, Profile.RolloutBounceCorKillThreshold));
+                                       ? (Surface.SurfaceBounce ? Surface.SurfaceBounce->FirstImpactMinimumSpeed : Profile.CorKillThreshold)
+                                       : (Surface.SurfaceBounce ? Surface.SurfaceBounce->LaterImpactMinimumSpeed
+                                                                : FMath::Max(Profile.CorKillThreshold, Profile.RolloutBounceCorKillThreshold));
         float RestitutionValue = Restitution(IncomingSpeed, SpinRpm, Profile, MinimumSpeed);
         if (!bFirstImpact)
         {
@@ -236,11 +243,11 @@ namespace OpenFairway
         FVector3f Velocity = State.Velocity + Normal * (NormalImpulse / Mass) + TangentialImpulse / Mass;
         FVector3f Spin = State.Spin + Cross(Arm, TangentialImpulse) / Inertia;
         float Retention = bFirstImpact
-            ? FlightRetention(IncomingSpeed, SpinRpm, Profile)
-            : State.Velocity.Size() > 0.1f && Profile.RolloutSpinRatioThreshold > 0.0f
-            ? Lerp(Profile.RolloutLowSpinRetention, Profile.RolloutHighSpinRetention,
-                  FMath::Min(State.Spin.Size() * Radius / State.Velocity.Size() / Profile.RolloutSpinRatioThreshold, 1.0f))
-            : Profile.RolloutHighSpinRetention;
+                              ? FlightRetention(IncomingSpeed, SpinRpm, Profile)
+                          : State.Velocity.Size() > 0.1f && Profile.RolloutSpinRatioThreshold > 0.0f
+                              ? Lerp(Profile.RolloutLowSpinRetention, Profile.RolloutHighSpinRetention,
+                                    FMath::Min(State.Spin.Size() * Radius / State.Velocity.Size() / Profile.RolloutSpinRatioThreshold, 1.0f))
+                              : Profile.RolloutHighSpinRetention;
         // A grazing contact spends little energy pushing into the surface.
         const float NormalEnergyShare = FMath::Clamp(IncomingSpeed * IncomingSpeed / FMath::Max(State.Velocity.SizeSquared(), 1e-12f), 0.0f, 1.0f);
         const float MaterialRetention = Lerp(1.0f, Surface.ImpactRetentionScale, NormalEnergyShare);
@@ -325,17 +332,17 @@ namespace OpenFairway
     float GolfPhysics::SpinFrictionMultiplier(float SpinRpm, float Speed, const FRolloutProfile& Profile)
     {
         const float SpeedScale = Speed < Profile.ChipSpeedThreshold
-            ? Lerp(Profile.ChipVelocityScaleMin, Profile.ChipVelocityScaleMax, Speed / Profile.ChipSpeedThreshold)
-            : Speed < Profile.PitchSpeedThreshold
-            ? Lerp(Profile.ChipVelocityScaleMax, 1.0f, (Speed - Profile.ChipSpeedThreshold) / (Profile.PitchSpeedThreshold - Profile.ChipSpeedThreshold))
-            : 1.0f;
+                                     ? Lerp(Profile.ChipVelocityScaleMin, Profile.ChipVelocityScaleMax, Speed / Profile.ChipSpeedThreshold)
+                                 : Speed < Profile.PitchSpeedThreshold
+                                     ? Lerp(Profile.ChipVelocityScaleMax, 1.0f, (Speed - Profile.ChipSpeedThreshold) / (Profile.PitchSpeedThreshold - Profile.ChipSpeedThreshold))
+                                     : 1.0f;
         const float SpinScale = SpinRpm < Profile.LowSpinThreshold
-            ? Lerp(1.0f, Profile.LowSpinMultiplierMax, SpinRpm / Profile.LowSpinThreshold)
-            : SpinRpm < Profile.MidSpinThreshold
-            ? Lerp(Profile.LowSpinMultiplierMax, Profile.MidSpinMultiplierMax,
-                  (SpinRpm - Profile.LowSpinThreshold) / (Profile.MidSpinThreshold - Profile.LowSpinThreshold))
-            : Lerp(Profile.MidSpinMultiplierMax, Profile.HighSpinMultiplierMax,
-                  FMath::Min((SpinRpm - Profile.MidSpinThreshold) / Profile.HighSpinRampRange, 1.0f));
+                                    ? Lerp(1.0f, Profile.LowSpinMultiplierMax, SpinRpm / Profile.LowSpinThreshold)
+                                : SpinRpm < Profile.MidSpinThreshold
+                                    ? Lerp(Profile.LowSpinMultiplierMax, Profile.MidSpinMultiplierMax,
+                                          (SpinRpm - Profile.LowSpinThreshold) / (Profile.MidSpinThreshold - Profile.LowSpinThreshold))
+                                    : Lerp(Profile.MidSpinMultiplierMax, Profile.HighSpinMultiplierMax,
+                                          FMath::Min((SpinRpm - Profile.MidSpinThreshold) / Profile.HighSpinRampRange, 1.0f));
         return 1.0f + (SpinScale - 1.0f) * SpeedScale;
     }
 
@@ -364,7 +371,7 @@ namespace OpenFairway
         const float NormalSpeed = Dot(Velocity, Normal);
         const FVector3f Tangent = Velocity - NormalSpeed * Normal;
         const float Rolling = (1.0f - LandingWeight(FMath::Abs(NormalSpeed), Profile)) *
-            (1.0f - RampUp(Tangent.Size(), PuttSpeedRampStartMps, PuttSpeedRampEndMps));
+                              (1.0f - RampUp(Tangent.Size(), PuttSpeedRampStartMps, PuttSpeedRampEndMps));
         return Rolling <= 0.0f ? FVector3f::ZeroVector : Rolling * Cross(Normal, Tangent) / Radius;
     }
 

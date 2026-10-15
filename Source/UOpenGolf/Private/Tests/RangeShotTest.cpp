@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
+#include "LaunchMonitorTypes.h"
 #include "OpenFairwayBall.h"
 #include "UOpenGolfGameMode.h"
 
@@ -101,7 +102,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUOpenGolfRangeShotTest, "UOpenGolf.Range.Shot"
 
 bool FUOpenGolfRangeShotTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/HelloWorld"), false, true))
+    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
     {
         AddError(TEXT("Could not load the startup map."));
         return false;
@@ -110,6 +111,44 @@ bool FUOpenGolfRangeShotTest::RunTest(const FString& Parameters)
     ADD_LATENT_AUTOMATION_COMMAND(FHitRangeShot(this));
     ADD_LATENT_AUTOMATION_COMMAND(FVerifyRangeShot(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUOpenGolfShotConversionTest, "UOpenGolf.Range.ShotConversion",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUOpenGolfShotConversionTest::RunTest(const FString& Parameters)
+{
+    FLaunchMonitorShot Shot;
+    Shot.BallSpeedMps = 51.17f;
+    Shot.BallSpeedSource = ELaunchMonitorValueSource::Measured;
+    Shot.VerticalLaunchDeg = 6.95f;
+    Shot.VerticalLaunchSource = ELaunchMonitorValueSource::Measured;
+    Shot.TotalSpinRpm = 1933;
+    Shot.TotalSpinSource = ELaunchMonitorValueSource::Measured;
+    Shot.SpinAxisDeg = -1.42f;
+    Shot.SpinAxisSource = ELaunchMonitorValueSource::Measured;
+    Shot.BackSpinRpm = 1932;
+    Shot.BackSpinSource = ELaunchMonitorValueSource::Derived;
+
+    FOpenFairwayLaunch Launch;
+    TestTrue(TEXT("Measured shot converts"), AUOpenGolfGameMode::ToLaunch(Shot, Launch));
+    TestEqual(TEXT("Speed in mph"), Launch.BallSpeedMph, Shot.GetBallSpeedMph(), 1e-4f);
+    TestEqual(TEXT("Missing HLA is straight"), Launch.HorizontalLaunchDeg, 0.0f);
+    TestTrue(TEXT("Derived backspin is used"), Launch.bHasBackSpin);
+    TestFalse(TEXT("Missing sidespin is left out"), Launch.bHasSideSpin);
+    TestTrue(TEXT("Total spin and axis are used"), Launch.bHasTotalSpin && Launch.bHasSpinAxis);
+
+    Shot.HorizontalLaunchSource = ELaunchMonitorValueSource::Measured;
+    for (float Hla : {-0.97f, 0.0f, 0.97f})
+    {
+        Shot.HorizontalLaunchDeg = Hla;
+        TestTrue(TEXT("Signed direction converts"), AUOpenGolfGameMode::ToLaunch(Shot, Launch));
+        TestEqual(TEXT("Signed direction preserved"), Launch.HorizontalLaunchDeg, Hla);
+    }
+
+    Shot.BallSpeedSource = ELaunchMonitorValueSource::Missing;
+    TestFalse(TEXT("A shot without ball speed is not hit"), AUOpenGolfGameMode::ToLaunch(Shot, Launch));
     return true;
 }
 

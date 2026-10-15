@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Golden values come from ogolf-physics at e6d793ae9477efaf55dc9078d7260f76bb532a7d: its
 // Godot-free core sources compiled into a .NET harness that mirrors PhysicsAdapter's headless
-// shot loop (flat ground, 75 F, sea level, default ball profile). Launch data is from its
+// shot loop (flat ground, 75 F, sea level, historical reference profile). Launch data is from its
 // assets/data test shots; "putt" is an added no-spin putt. See the plugin README to regenerate.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
@@ -69,7 +69,7 @@ bool FOpenFairwayPhysicsFixtureTest::RunTest(const FString& Parameters)
         Launch.TotalSpinRpm = Fixture.TotalSpin;
         Launch.SpinAxisDeg = Fixture.SpinAxis;
 
-        const FShotSimulationResult Result = ShotSimulator::Simulate(Launch, Fixture.Surface);
+        const FShotSimulationResult Result = ShotSimulator::Simulate(Launch, Fixture.Surface, FBallPhysicsProfile::HistoricalReference());
         const FString Label = FString::Printf(TEXT("%s on %s"), Fixture.Name, SurfaceCatalog::GetName(Fixture.Surface));
         AddInfo(FString::Printf(TEXT("%s: carry %.4f (golden %.4f), total %.4f (golden %.4f), apex %.4f ft, hang %.4f s, offline %.4f yd"), *Label,
             Result.CarryM * YardsPerMeter, Fixture.CarryYd, Result.TotalM * YardsPerMeter, Fixture.TotalYd, Result.ApexM * FeetPerMeter, Result.HangTimeS,
@@ -85,6 +85,23 @@ bool FOpenFairwayPhysicsFixtureTest::RunTest(const FString& Parameters)
         TestEqual(Label + TEXT(" apex ft"), Result.ApexM * FeetPerMeter, Fixture.ApexFt, ApexToleranceFt);
         TestEqual(Label + TEXT(" hang s"), Result.HangTimeS, Fixture.HangS, HangToleranceS);
         TestTrue(Label + TEXT(" landing bucket"), Result.LandingBucket == Fixture.Bucket);
+        const FShotSimulationResult Current = ShotSimulator::Simulate(Launch, Fixture.Surface);
+        FBallPhysicsProfile PriorLift;
+        PriorLift.Flight.LowLaunchLiftRecoveryMax = 1.08f;
+        const auto BeforeLift = ShotSimulator::Simulate(Launch, Fixture.Surface, PriorLift);
+        AddInfo(FString::Printf(TEXT("Lift correction %s: %.4f -> %.4f yd carry"), *Label,
+            BeforeLift.CarryM * YardsPerMeter, Current.CarryM * YardsPerMeter));
+        if (Launch.VerticalLaunchDeg >= 9.5f)
+        {
+            TestEqual(Label + TEXT(" normal launches unaffected by low-launch correction"), Current.CarryM, BeforeLift.CarryM, 0.00001f);
+            TestEqual(Label + TEXT(" normal rollout unaffected"), Current.TotalM, BeforeLift.TotalM, 0.00001f);
+        }
+        TestTrue(Label + TEXT(" current model completes"), Current.bValid && Current.bAtRest);
+        TestTrue(Label + TEXT(" current model finite"), FMath::IsFinite(Current.CarryM) && FMath::IsFinite(Current.TotalM) &&
+                                                            FMath::IsFinite(Current.LateralM) && FMath::IsFinite(Current.ApexM) && FMath::IsFinite(Current.HangTimeS));
+        AddInfo(FString::Printf(TEXT("Current %s: carry %.4f yd, total %.4f yd, apex %.4f ft, hang %.4f s, landing %.3f mph at %.3f deg"),
+            *Label, Current.CarryM * YardsPerMeter, Current.TotalM * YardsPerMeter, Current.ApexM * FeetPerMeter, Current.HangTimeS,
+            Current.LandingSpeedMps / MpsPerMph, Current.LandingAngleDeg));
     }
     return true;
 }

@@ -5,6 +5,8 @@
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "HAL/IConsoleManager.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -13,6 +15,8 @@
 
 namespace
 {
+    TAutoConsoleVariable<int32> CVarGrass3D(TEXT("uopengolf.Grass3D"), 1,
+        TEXT("Decorative grass near the tee: 0 releases instances, 1 enables them."), ECVF_Default);
     constexpr float CmPerM = 100.0f;
     constexpr float MetersPerYard = 0.9144f;
     constexpr float GroundThicknessM = 1.0f;
@@ -26,41 +30,56 @@ namespace
     constexpr float FringeWidthM = 2.0f;
 
     const FLinearColor FairwayColor(0.10f, 0.42f, 0.10f);
-    const FLinearColor RoughColor(0.07f, 0.25f, 0.06f);
-    const FLinearColor GreenColor(0.16f, 0.62f, 0.18f);
-    const FLinearColor FringeColor(0.12f, 0.50f, 0.13f);
-    const FLinearColor TeeColor(0.13f, 0.48f, 0.13f);
+    const FLinearColor TeeColor = FLinearColor::FromSRGBColor(FColor(0x40, 0x6B, 0x1F));
     const FLinearColor MarkerColor(0.95f, 0.95f, 0.95f);
 } // namespace
 
 AUOpenGolfRange::AUOpenGolfRange()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.TickInterval = 0.25f;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Tee"));
 
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
     CubeMesh = Cube.Object;
+
+    Grass = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("Grass3D"));
+    Grass->SetupAttachment(RootComponent);
+    Grass->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Grass->SetGenerateOverlapEvents(false);
+    Grass->SetCanEverAffectNavigation(false);
+    Grass->SetMobility(EComponentMobility::Movable);
+    Grass->CastShadow = false;
+    Grass->SetCullDistances(1200, 2200);
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> GrassMesh(TEXT("/Game/UOpenGolf/Art/SM_GrassClump.SM_GrassClump"));
+    Grass->SetStaticMesh(GrassMesh.Object);
 
     const float GreenStart = GreenDistanceM - GreenHalfSizeM;
     const float GreenEnd = GreenDistanceM + GreenHalfSizeM;
     const EOpenFairwaySurface Fairway = EOpenFairwaySurface::Fairway;
 
     // Ground pieces tile without overlapping, with their tops at the tee's height.
+    // Assign fairway to the scene ground for calibration shots, including the target
+    // and side strips. The ball still resolves each contacted mesh's surface tag.
     AddBox(TEXT("FairwayFront"), FVector(RangeStartM, -FairwayHalfWidthM, 0), FVector(GreenStart - FringeWidthM, FairwayHalfWidthM, 0), FairwayColor, true, Fairway);
     AddBox(TEXT("FairwayBack"), FVector(GreenEnd + FringeWidthM, -FairwayHalfWidthM, 0), FVector(RangeEndM, FairwayHalfWidthM, 0), FairwayColor, true, Fairway);
-    AddBox(TEXT("RoughLeft"), FVector(RangeStartM, -RoughHalfWidthM, 0), FVector(RangeEndM, -FairwayHalfWidthM, 0), RoughColor, true, EOpenFairwaySurface::Rough);
-    AddBox(TEXT("RoughRight"), FVector(RangeStartM, FairwayHalfWidthM, 0), FVector(RangeEndM, RoughHalfWidthM, 0), RoughColor, true, EOpenFairwaySurface::Rough);
-    AddBox(TEXT("Green"), FVector(GreenStart, -GreenHalfSizeM, 0), FVector(GreenEnd, GreenHalfSizeM, 0), GreenColor, true, EOpenFairwaySurface::Green);
-    const EOpenFairwaySurface Fringe = EOpenFairwaySurface::Fringe;
-    AddBox(TEXT("FringeFront"), FVector(GreenStart - FringeWidthM, -FairwayHalfWidthM, 0), FVector(GreenStart, FairwayHalfWidthM, 0), FringeColor, true, Fringe);
-    AddBox(TEXT("FringeBack"), FVector(GreenEnd, -FairwayHalfWidthM, 0), FVector(GreenEnd + FringeWidthM, FairwayHalfWidthM, 0), FringeColor, true, Fringe);
-    AddBox(TEXT("FringeLeft"), FVector(GreenStart, -FairwayHalfWidthM, 0), FVector(GreenEnd, -GreenHalfSizeM, 0), FringeColor, true, Fringe);
-    AddBox(TEXT("FringeRight"), FVector(GreenStart, GreenHalfSizeM, 0), FVector(GreenEnd, FairwayHalfWidthM, 0), FringeColor, true, Fringe);
+    AddBox(TEXT("RoughLeft"), FVector(RangeStartM, -RoughHalfWidthM, 0), FVector(RangeEndM, -FairwayHalfWidthM, 0), FairwayColor, true, Fairway);
+    AddBox(TEXT("RoughRight"), FVector(RangeStartM, FairwayHalfWidthM, 0), FVector(RangeEndM, RoughHalfWidthM, 0), FairwayColor, true, Fairway);
+    AddBox(TEXT("Green"), FVector(GreenStart, -GreenHalfSizeM, 0), FVector(GreenEnd, GreenHalfSizeM, 0), FairwayColor, true, Fairway);
+    AddBox(TEXT("FringeFront"), FVector(GreenStart - FringeWidthM, -FairwayHalfWidthM, 0), FVector(GreenStart, FairwayHalfWidthM, 0), FairwayColor, true, Fairway);
+    AddBox(TEXT("FringeBack"), FVector(GreenEnd, -FairwayHalfWidthM, 0), FVector(GreenEnd + FringeWidthM, FairwayHalfWidthM, 0), FairwayColor, true, Fairway);
+    AddBox(TEXT("FringeLeft"), FVector(GreenStart, -FairwayHalfWidthM, 0), FVector(GreenEnd, -GreenHalfSizeM, 0), FairwayColor, true, Fairway);
+    AddBox(TEXT("FringeRight"), FVector(GreenStart, GreenHalfSizeM, 0), FVector(GreenEnd, FairwayHalfWidthM, 0), FairwayColor, true, Fairway);
 
     // Presentation only (no collision): tee box paint, flag and yardage markers.
     AddBox(TEXT("TeeBox"), FVector(-2.5f, -2.5f, 0.0f), FVector(2.5f, 2.5f, 0.005f), TeeColor, false);
-    AddBox(TEXT("FlagPole"), FVector(GreenDistanceM - 0.015f, -0.015f, 0.0f), FVector(GreenDistanceM + 0.015f, 0.015f, 2.4f), MarkerColor, false);
-    AddBox(TEXT("Flag"), FVector(GreenDistanceM - 0.01f, 0.015f, 1.9f), FVector(GreenDistanceM + 0.01f, 0.55f, 2.35f), FLinearColor(0.85f, 0.08f, 0.06f), false);
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> FlagMesh(TEXT("/Game/UOpenGolf/Art/SM_Flagstick.SM_Flagstick"));
+    UStaticMeshComponent* Flag = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Flagstick"));
+    Flag->SetupAttachment(RootComponent);
+    Flag->SetStaticMesh(FlagMesh.Object);
+    Flag->SetRelativeLocation(FVector(GreenDistanceM * CmPerM, 0, 0));
+    Flag->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Flag->SetCanEverAffectNavigation(false);
     for (int32 Yards = 50; Yards <= 300; Yards += 50)
     {
         AddYardageMarker(Yards);
@@ -107,8 +126,13 @@ UStaticMeshComponent* AUOpenGolfRange::AddBox(FName Name, const FVector& MinM, c
     if (Surface.IsSet())
     {
         Box->ComponentTags.Add(AOpenFairwayBall::GetSurfaceTag(Surface.GetValue()));
+        static ConstructorHelpers::FObjectFinder<UMaterialInterface> FairwayMaterial(TEXT("/Game/UOpenGolf/Art/M_Fairway.M_Fairway"));
+        Box->SetMaterial(0, FairwayMaterial.Object);
     }
-    ColoredPieces.Emplace(Box, Color);
+    else
+    {
+        ColoredPieces.Emplace(Box, Color);
+    }
     return Box;
 }
 
@@ -137,6 +161,7 @@ void AUOpenGolfRange::AddYardageMarker(int32 Yards)
 void AUOpenGolfRange::BeginPlay()
 {
     Super::BeginPlay();
+    UpdateGrass();
     for (const TPair<TObjectPtr<UStaticMeshComponent>, FLinearColor>& Piece : ColoredPieces)
     {
         // The engine's basic shape material exposes a "Color" parameter.
@@ -145,4 +170,45 @@ void AUOpenGolfRange::BeginPlay()
             Material->SetVectorParameterValue(TEXT("Color"), Piece.Value);
         }
     }
+}
+
+void AUOpenGolfRange::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    UpdateGrass();
+}
+
+int32 AUOpenGolfRange::GetGrassInstanceCount() const
+{
+    return Grass->GetInstanceCount();
+}
+
+void AUOpenGolfRange::UpdateGrass()
+{
+    const bool bWanted = CVarGrass3D.GetValueOnGameThread() != 0;
+    if (bWanted == bGrassEnabled)
+        return;
+    bGrassEnabled = bWanted;
+    if (!bWanted)
+    {
+        Grass->ClearInstances();
+        return;
+    }
+
+    FRandomStream Random(20261015);
+    TArray<FTransform> Transforms;
+    // 25 clumps/m2, in a 20 m radius clipped to the range. Leave tee paint clear.
+    for (float X = -990; X < 2000; X += 20)
+    {
+        for (float Y = -1990; Y < 2000; Y += 20)
+        {
+            const float PX = X + Random.FRandRange(-8, 8);
+            const float PY = Y + Random.FRandRange(-8, 8);
+            if (PX * PX + PY * PY > 2000 * 2000 || (FMath::Abs(PX) < 255 && FMath::Abs(PY) < 255))
+                continue;
+            const float Scale = Random.FRandRange(0.75f, 1.15f);
+            Transforms.Emplace(FRotator(0, Random.FRandRange(0, 360), 0), FVector(PX, PY, 0.0f), FVector(Scale));
+        }
+    }
+    Grass->AddInstances(Transforms, false, false, false);
 }

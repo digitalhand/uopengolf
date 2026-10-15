@@ -34,6 +34,12 @@ namespace OpenFairway
     /** Aerodynamic constants: drag polynomial, lift caps and the calibrated spin/launch corrections. */
     struct FFlightProfile
     {
+        // Smits/Smith spin-down: d(omega)/dt = -coefficient * speed/radius * omega (SI).
+        // See Docs/FlightScopeAnalysis.md for the source and applicability limits.
+        float SpinDecayCoefficient = 2.0e-5f;
+        // Nonzero only for historical reference comparisons (the old 5-second decay).
+        float ConstantSpinDecayRatePerSecond = 0.0f;
+
         // Drag curve (Cd polynomial).
         float CdPolyA = 1.1948f;
         float CdPolyB = -0.0000209661f;
@@ -84,8 +90,10 @@ namespace OpenFairway
         float LowReHighSpinClAttenuationMax = 0.10f;
         float LowReUltraHighSpinClAttenuationMax = 0.06f;
 
-        // Low-launch lift recovery.
-        float LowLaunchLiftRecoveryMax = 1.08f;
+        // Optional legacy low-launch lift recovery. Neutral by default: retaining
+        // spin longer exposed excess lift in low-launch woods. HistoricalReference
+        // restores the original 1.08 for pinned C# fixture parity.
+        float LowLaunchLiftRecoveryMax = 1.0f;
         float LowLaunchVlaFullDeg = 6.5f;
         float LowLaunchVlaZeroDeg = 9.5f;
         float LowLaunchReStart = 85000.0f;

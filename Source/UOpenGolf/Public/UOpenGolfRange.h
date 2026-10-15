@@ -7,12 +7,14 @@
 
 class UStaticMesh;
 class UStaticMeshComponent;
+class UHierarchicalInstancedStaticMeshComponent;
 
 /**
- * Whitebox driving range built from engine basic shapes, so it needs no binary assets: a tee,
- * a fairway between rough strips, a green ringed by fringe with a flag, yardage markers every
- * 50 yards and simple daylight. Ground pieces block the ball and carry OpenFairway surface
- * tags. The tee is on the ground at the actor's origin and the target line is world +X.
+ * Driving range with distributable grass and golf assets: a tee,
+ * fairway ground, a target flag, yardage markers every 50 yards and simple daylight.
+ * All ground pieces have the Fairway surface tag and appearance for consistent test shots.
+ * Component names preserve the original green/fringe/rough layout. The tee is on the
+ * ground at the actor's origin and the target line is world +X.
  */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfRange : public AActor
@@ -21,6 +23,10 @@ class UOPENGOLF_API AUOpenGolfRange : public AActor
 
 public:
     AUOpenGolfRange();
+    virtual void Tick(float DeltaSeconds) override;
+
+    /** Number of decorative grass clumps, zero when disabled. */
+    int32 GetGrassInstanceCount() const;
 
     /** Where the ball is teed up. */
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Range")
@@ -33,6 +39,13 @@ protected:
     virtual void BeginPlay() override;
 
 private:
+    void UpdateGrass();
+
+    UPROPERTY()
+    TObjectPtr<UHierarchicalInstancedStaticMeshComponent> Grass;
+
+    bool bGrassEnabled = false;
+
     UStaticMeshComponent* AddBox(FName Name, const FVector& MinM, const FVector& MaxM, const FLinearColor& Color, bool bCollides,
         TOptional<EOpenFairwaySurface> Surface = TOptional<EOpenFairwaySurface>());
 

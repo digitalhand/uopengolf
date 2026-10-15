@@ -9,9 +9,9 @@ namespace OpenFairway
     {
         constexpr float DegToRad = 3.14159265f / 180.0f;
         constexpr float RadToDeg = 180.0f / 3.14159265f;
-        const FVector3f Up(0.0f, 1.0f, 0.0f);
+        const FVector3f UpAxis(0.0f, 1.0f, 0.0f);
         // Godot's Vector3.Forward, the axis the reference rotates the launch angle about.
-        const FVector3f Forward(0.0f, 0.0f, -1.0f);
+        const FVector3f GodotForward(0.0f, 0.0f, -1.0f);
 
         bool IsFiniteOptional(const TOptional<float>& Value)
         {
@@ -22,8 +22,8 @@ namespace OpenFairway
     bool FLaunchData::IsValid() const
     {
         return FMath::IsFinite(SpeedMph) && SpeedMph >= 0.0f && FMath::IsFinite(VerticalLaunchDeg) && VerticalLaunchDeg >= -90.0f &&
-            VerticalLaunchDeg <= 90.0f && FMath::IsFinite(HorizontalLaunchDeg) && IsFiniteOptional(BackSpinRpm) && IsFiniteOptional(SideSpinRpm) &&
-            IsFiniteOptional(TotalSpinRpm) && IsFiniteOptional(SpinAxisDeg) && ShotSetup::ParseSpin(*this).TotalSpinRpm >= 0.0f;
+               VerticalLaunchDeg <= 90.0f && FMath::IsFinite(HorizontalLaunchDeg) && IsFiniteOptional(BackSpinRpm) && IsFiniteOptional(SideSpinRpm) &&
+               IsFiniteOptional(TotalSpinRpm) && IsFiniteOptional(SpinAxisDeg) && ShotSetup::ParseSpin(*this).TotalSpinRpm >= 0.0f;
     }
 
     FShotSpin ShotSetup::ParseSpin(const FLaunchData& Launch)
@@ -94,10 +94,10 @@ namespace OpenFairway
         // backspin and sidespin stay aligned with the shot plane.
         FLaunchVectors Vectors;
         const float SpeedMps = SpeedMph * MpsPerMph;
-        Vectors.Velocity = Rotate(Rotate(FVector3f(SpeedMps, 0.0f, 0.0f), Forward, -VerticalLaunchDeg * DegToRad), Up, -HorizontalLaunchDeg * DegToRad);
-        const FVector3f Omega = Rotate(FVector3f(0.0f, -SideSpinRpm * GolfPhysics::RadPerRpm, BackSpinRpm * GolfPhysics::RadPerRpm), Up,
+        Vectors.Velocity = Rotate(Rotate(FVector3f(SpeedMps, 0.0f, 0.0f), GodotForward, -VerticalLaunchDeg * DegToRad), UpAxis, -HorizontalLaunchDeg * DegToRad);
+        const FVector3f Omega = Rotate(FVector3f(0.0f, -SideSpinRpm * GolfPhysics::RadPerRpm, BackSpinRpm * GolfPhysics::RadPerRpm), UpAxis,
             -HorizontalLaunchDeg * DegToRad);
-        Vectors.Omega = GolfPhysics::LaunchSpin(Vectors.Velocity, Omega, Up, FBounceProfile());
+        Vectors.Omega = GolfPhysics::LaunchSpin(Vectors.Velocity, Omega, UpAxis, FBounceProfile());
         const FVector3f Flat(Vectors.Velocity.X, 0.0f, Vectors.Velocity.Z);
         Vectors.ShotDirection = Flat.Size() > 0.001f ? Flat / Flat.Size() : FVector3f(1.0f, 0.0f, 0.0f);
         return Vectors;
@@ -125,7 +125,7 @@ namespace OpenFairway
 
         constexpr float Dt = GolfPhysics::SimulationDt;
         constexpr float Radius = GolfPhysics::Radius;
-        const FVector3f Normal = Up;
+        const FVector3f Normal = UpAxis;
         FVector3f Velocity = Vectors.Velocity;
         FVector3f Omega = Vectors.Omega;
         FVector3f Position = Normal * Radius;
