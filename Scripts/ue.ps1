@@ -2,13 +2,16 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('Build', 'Editor', 'Run', 'Smoke', 'ProjectFiles', 'CompileCommands')]
+    [ValidateSet('Build', 'Editor', 'Run', 'Smoke', 'Test', 'ProjectFiles', 'CompileCommands')]
     [string]$Action = 'Build',
     [string]$EngineRoot = $env:UE_ROOT,
     [ValidateSet('Editor', 'Game')]
     [string]$Target = 'Editor',
     [ValidateRange(1, 3600)]
-    [int]$TimeoutSeconds = 180
+    [int]$TimeoutSeconds = 180,
+    # Test only: automation test name prefix to run, such as UOpenGolf.LaunchMonitor.
+    [ValidatePattern('^[A-Za-z0-9_.]+$')]
+    [string]$Filter = 'UOpenGolf'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,7 +57,9 @@ try {
         }
         'Editor' { & $editor $project }
         'Run' { & $editor $project -game -windowed -ResX=1280 -ResY=720 }
-        'Smoke' {
+        { $_ -in 'Smoke', 'Test' } {
+            # Smoke runs the startup tests and requires HelloWorld; Test runs any prefix.
+            $tests = if ($Action -eq 'Smoke') { 'UOpenGolf.Smoke' } else { $Filter }
             $python = Join-Path $EngineRoot 'Engine\Binaries\ThirdParty\Python3\Win64\python.exe'
             if (-not (Test-Path -LiteralPath $python)) { throw "Bundled Python not found: $python" }
             $runId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8)
@@ -62,7 +67,7 @@ try {
             New-Item -ItemType Directory -Path $report -Force | Out-Null
             $arguments = @(
                 $project, '-unattended', '-nopause', '-nosplash', '-nosound', '-nullrhi', '-DDC=UOpenGolfSmoke',
-                '-stdout', '-FullStdOutLogOutput', '-ExecCmds=Automation RunTests UOpenGolf.Smoke',
+                '-stdout', '-FullStdOutLogOutput', "-ExecCmds=Automation RunTests $tests",
                 '-TestExit=Automation Test Queue Empty', "-ReportExportPath=$report", "-abslog=$report\Unreal.log"
             )
             # Start-Process joins its argument array; quote each argument for paths with spaces.
@@ -74,7 +79,7 @@ try {
                 -RedirectStandardOutput "$report\stdout.log" -RedirectStandardError "$report\stderr.log"
             # Retain the handle so ExitCode remains available after a short-lived process exits.
             $processHandle = $process.Handle
-            Write-Host "Running smoke test; report: $report"
+            Write-Host "Running $tests automation tests; report: $report"
             if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
                 # Terminate Unreal and any worker processes belonging to this run.
                 & taskkill.exe /PID $process.Id /T /F | Out-Null
@@ -82,12 +87,14 @@ try {
                     # Some restricted environments deny taskkill's process-tree query.
                     $process.Kill()
                 }
-                throw "Smoke test exceeded $TimeoutSeconds seconds. See $report"
+                throw "Automation run exceeded $TimeoutSeconds seconds. See $report"
             }
             $process.WaitForExit()
-            if ($process.ExitCode -ne 0) { throw "Unreal smoke process failed (exit $($process.ExitCode)). See $report" }
-            & $python (Join-Path $PSScriptRoot 'check_automation_report.py') (Join-Path $report 'index.json')
-            if ($LASTEXITCODE -ne 0) { throw "Smoke report validation failed. See $report" }
+            if ($process.ExitCode -ne 0) { throw "Unreal automation process failed (exit $($process.ExitCode)). See $report" }
+            $validation = @((Join-Path $PSScriptRoot 'check_automation_report.py'), (Join-Path $report 'index.json'))
+            if ($Action -eq 'Test') { $validation += @('--prefix', $Filter) }
+            & $python @validation
+            if ($LASTEXITCODE -ne 0) { throw "Automation report validation failed. See $report" }
         }
     }
 }

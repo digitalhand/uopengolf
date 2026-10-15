@@ -1,18 +1,13 @@
 # Phased roadmap
 
-Only Phase 0 is the current implementation task. Later milestones require their own
-design and implementation work; this document does not authorize imports or migrations.
-Keep status and completion evidence synchronized with the README as work progresses.
+Later milestones require their own design and implementation work; this document
+does not authorize imports or migrations. Current status and completion evidence
+for each phase are tracked in [phase status](PhasesStatus.md).
+
+Phases 1 and 2 are split into a **Windows track** (current) and a **Linux track**
+(deferred, not blocking Windows work). Each phase's exit still requires both tracks.
 
 ## Phase 0 — Hello-world foundation
-
-**Status:** foundation files created; maintainer confirms the SDK issue resolved
-and the project opens in Unreal on Windows. Play-mode greeting and automated game
-smoke confirmation remain pending. Agent-side build checks encountered workspace
-write restrictions. The original map was generated with Unreal 5.8.3. Linux
-execution remains unverified.
-Script syntax and six engine-free report-validator checks pass. A smoke invocation
-correctly failed for the uncompiled game module; it is not a successful game smoke.
 
 - Create an Unreal 5.8.3 native C++ game with a blank startup map and visible greeting.
 - Add original-work MIT licensing, third-party/asset policy, architecture, contributor
@@ -28,8 +23,7 @@ requires no sibling repositories, purchased assets, or hardware.
 ## Phase 1 — Linux baseline and integration design
 
 - Build and run the foundation with native Linux Unreal 5.8.3, and validate its smoke test.
-- Pin reference revisions of `open-lm-connector`, `openfairway`, and permitted `ogolf`
-  references. Review licenses before any copying.
+- Pin reference revisions of `open-lm-connector`, `openfairway`, and `ogolf`.
 - Evaluate reusing the connector through a bridge versus native adaptation on both
   platforms. Record the chosen approach and platform dependencies in a design note.
 - Establish shot units, axes, handedness, spin conventions, timestamps, optional
@@ -61,11 +55,11 @@ hardware-free replay works. Physics and golf-course implementation are not requi
   coordinate conversion, units, timestep behavior and numerical tolerances on both OSes.
 
 **Exit:** native simulation passes the agreed baseline corpus on Windows and Linux;
-both C++ and Blueprint callers can use the Unreal wrapper. Preserve upstream notices.
+both C++ and Blueprint callers can use the Unreal wrapper.
 
 ## Phase 4 — Greens and surfaces
 
-- Reference permitted `ogolf` concepts/code for contour generation and green speed,
+- Reference `ogolf` concepts/code for contour generation and green speed,
   matching rendered and collision terrain, lies, and contact-surface lookup.
 - Supply surface/contact data to OpenFairway; keep impact/rollout formulas in the core.
 - Add a minimal practice surface with green, fringe, rough and sand zones.

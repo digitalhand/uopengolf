@@ -22,14 +22,14 @@ Check the applicable engine terms when distributing builds or development tools.
 
 ## Upstream projects
 
-OpenFairway and the connector addon contain MIT licenses in the inspected local
-repositories. They remain future dependencies at this milestone. Before importing,
-pin the source revision, inspect the specific files/dependencies, preserve the
-original notices, and update [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+open-lm-connector, OpenFairway and ogolf are the maintainer's own `digitalhand`
+projects. Code ported from them is rewritten in C++ and covered by this
+repository's MIT license, with no separate notice. Pin the reference revision in the
+relevant design note so behavior can be traced back.
 
-No root license was found in the inspected `ogolf` checkout. Verify permission and
-applicable notices before copying its implementation or assets. Architectural
-reference does not establish redistribution rights to its files.
+Third-party dependencies or assets inside those projects are not the maintainer's;
+check their licenses before importing and record them in
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
 ## Public and private content
 

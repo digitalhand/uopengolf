@@ -156,7 +156,8 @@ bool SquareProtocol::TryParseShot(TConstArrayView<uint8> Data, FSquareShotMetric
 
     FSquareShotMetrics Metrics;
     // Byte 2 is opaque metadata on the Home: 0x37 on full swings, 0x13 on putts.
-    Metrics.ShotType = Data[2] == 0x37 ? ESquareShotType::Full : Data[2] == 0x13 ? ESquareShotType::Putt : ESquareShotType::Unknown;
+    Metrics.ShotType = Data[2] == 0x37 ? ESquareShotType::Full : Data[2] == 0x13 ? ESquareShotType::Putt
+                                                                                 : ESquareShotType::Unknown;
 
     Metrics.BallSpeedSource = Source(ReadScaledInt16(Data, 3, 100.0f, Metrics.BallSpeedMps));
     Metrics.VerticalAngleSource = Source(ReadScaledInt16(Data, 5, 100.0f, Metrics.VerticalAngleDeg));

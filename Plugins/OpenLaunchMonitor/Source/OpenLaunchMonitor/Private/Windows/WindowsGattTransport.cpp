@@ -105,39 +105,42 @@ public:
 
     virtual void StartScan(const FString& NamePrefix) override
     {
-        Enqueue([this, NamePrefix]() { StartScanOnWorker(NamePrefix); });
+        Enqueue([this, NamePrefix]()
+            { StartScanOnWorker(NamePrefix); });
     }
 
     virtual void StopScan() override
     {
-        Enqueue([this]() { StopScanOnWorker(); });
+        Enqueue([this]()
+            { StopScanOnWorker(); });
     }
 
     virtual void Connect(const FString& DeviceId, const TArray<FString>& RequiredUuids, const TArray<FString>& OptionalUuids,
         FCompletion OnComplete) override
     {
         Enqueue([this, DeviceId, RequiredUuids, OptionalUuids, OnComplete = MoveTemp(OnComplete)]() mutable
-        {
+            {
             const FString Error = RunGuarded([&]() { return ConnectOnWorker(DeviceId, RequiredUuids, OptionalUuids); });
             if (!Error.IsEmpty())
             {
                 RunGuarded([this]() { DisconnectOnWorker(); return FString(); });
             }
-            Complete(MoveTemp(OnComplete), Error);
-        });
+            Complete(MoveTemp(OnComplete), Error); });
     }
 
     virtual void Disconnect() override
     {
         // Invalidate pending link-loss events now; the worker releases the device.
         ++ConnectionSerial;
-        Enqueue([this]() { RunGuarded([this]() { DisconnectOnWorker(); return FString(); }); });
+        Enqueue([this]()
+            { RunGuarded([this]()
+                  { DisconnectOnWorker(); return FString(); }); });
     }
 
     virtual void Read(const FString& Uuid, TFunction<void(const TArray<uint8>&)> OnComplete) override
     {
         Enqueue([this, Uuid, OnComplete = MoveTemp(OnComplete)]() mutable
-        {
+            {
             TArray<uint8> Value;
             const FString Error = RunGuarded([&]()
             {
@@ -155,24 +158,21 @@ public:
             {
                 UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Reading %s failed: %s"), *Uuid, *Error);
             }
-            PostToGameThread([OnComplete = MoveTemp(OnComplete), Value = MoveTemp(Value)](FWindowsGattTransport&) { OnComplete(Value); });
-        });
+            PostToGameThread([OnComplete = MoveTemp(OnComplete), Value = MoveTemp(Value)](FWindowsGattTransport&) { OnComplete(Value); }); });
     }
 
     virtual void Subscribe(const FString& Uuid, FCompletion OnComplete) override
     {
         Enqueue([this, Uuid, OnComplete = MoveTemp(OnComplete)]() mutable
-        {
-            Complete(MoveTemp(OnComplete), RunGuarded([&]() { return SubscribeOnWorker(Uuid); }));
-        });
+            { Complete(MoveTemp(OnComplete), RunGuarded([&]()
+                                                 { return SubscribeOnWorker(Uuid); })); });
     }
 
     virtual void Write(const FString& Uuid, const TArray<uint8>& Value, FCompletion OnComplete) override
     {
         Enqueue([this, Uuid, Value, OnComplete = MoveTemp(OnComplete)]() mutable
-        {
-            Complete(MoveTemp(OnComplete), RunGuarded([&]()
-            {
+            { Complete(MoveTemp(OnComplete), RunGuarded([&]()
+                                                 {
                 const WinGatt::GattCharacteristic* Characteristic = Characteristics.Find(Uuid);
                 if (!Characteristic)
                 {
@@ -184,9 +184,7 @@ public:
                     Characteristic->WriteValueWithResultAsync(Writer.DetachBuffer(), WinGatt::GattWriteOption::WriteWithResponse).get();
                 return Result.Status() == WinGatt::GattCommunicationStatus::Success
                            ? FString()
-                           : FString::Printf(TEXT("Bluetooth write returned status %d."), static_cast<int32>(Result.Status()));
-            }));
-        });
+                           : FString::Printf(TEXT("Bluetooth write returned status %d."), static_cast<int32>(Result.Status())); })); });
     }
 
 private:
@@ -194,10 +192,9 @@ private:
     virtual uint32 Run() override
     {
         const FString InitError = RunGuarded([]()
-        {
+            {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
-            return FString();
-        });
+            return FString(); });
         if (!InitError.IsEmpty())
         {
             UE_LOG(LogOpenLaunchMonitor, Error, TEXT("Bluetooth worker could not initialize WinRT: %s"), *InitError);
@@ -212,11 +209,10 @@ private:
             }
         }
         RunGuarded([this]()
-        {
+            {
             StopScanOnWorker();
             DisconnectOnWorker();
-            return FString();
-        });
+            return FString(); });
         winrt::uninit_apartment();
         return 0;
     }
@@ -237,24 +233,24 @@ private:
     void PostToGameThread(FunctorType&& Functor)
     {
         AsyncTask(ENamedThreads::GameThread, [WeakSelf = AsWeak(), Functor = Forward<FunctorType>(Functor)]() mutable
-        {
+            {
             if (const TSharedPtr<FWindowsGattTransport> Self = WeakSelf.Pin())
             {
                 Functor(*Self);
-            }
-        });
+            } });
     }
 
     void Complete(FCompletion OnComplete, const FString& Error)
     {
-        PostToGameThread([OnComplete = MoveTemp(OnComplete), Error](FWindowsGattTransport&) { OnComplete(Error.IsEmpty(), Error); });
+        PostToGameThread([OnComplete = MoveTemp(OnComplete), Error](FWindowsGattTransport&)
+            { OnComplete(Error.IsEmpty(), Error); });
     }
 
     void StartScanOnWorker(const FString& Prefix)
     {
         StopScanOnWorker();
         const FString Error = RunGuarded([&]()
-        {
+            {
             const TWeakPtr<FWindowsGattTransport> WeakSelf = AsWeak();
             AdvertisementWatcher = WinAdvertisement::BluetoothLEAdvertisementWatcher();
             AdvertisementWatcher.ScanningMode(WinAdvertisement::BluetoothLEScanningMode::Active);
@@ -269,8 +265,7 @@ private:
                 }
             });
             AdvertisementWatcher.Start();
-            return FString();
-        });
+            return FString(); });
         if (!Error.IsEmpty())
         {
             UE_LOG(LogOpenLaunchMonitor, Error, TEXT("Bluetooth scan could not start: %s"), *Error);
@@ -280,19 +275,18 @@ private:
     static void PostDiscovered(const TWeakPtr<FWindowsGattTransport>& WeakSelf, FGattDeviceInfo Device)
     {
         AsyncTask(ENamedThreads::GameThread, [WeakSelf, Device = MoveTemp(Device)]()
-        {
+            {
             const TSharedPtr<FWindowsGattTransport> Self = WeakSelf.Pin();
             if (Self && Self->OnDeviceDiscovered)
             {
                 Self->OnDeviceDiscovered(Device);
-            }
-        });
+            } });
     }
 
     void StopScanOnWorker()
     {
         RunGuarded([this]()
-        {
+            {
             if (AdvertisementWatcher)
             {
                 AdvertisementWatcher.Received(AdvertisementToken);
@@ -302,13 +296,13 @@ private:
                 }
                 AdvertisementWatcher = nullptr;
             }
-            return FString();
-        });
+            return FString(); });
     }
 
     WinBluetooth::BluetoothLEDevice OpenDevice(const FString& DeviceId)
     {
-        const bool bIsAddress = !DeviceId.IsEmpty() && Algo::AllOf(DeviceId, [](TCHAR Character) { return FChar::IsDigit(Character); });
+        const bool bIsAddress = !DeviceId.IsEmpty() && Algo::AllOf(DeviceId, [](TCHAR Character)
+                                                           { return FChar::IsDigit(Character); });
         return bIsAddress ? WinBluetooth::BluetoothLEDevice::FromBluetoothAddressAsync(FCString::Strtoui64(*DeviceId, nullptr, 10)).get()
                           : WinBluetooth::BluetoothLEDevice::FromIdAsync(winrt::hstring(*DeviceId)).get();
     }
@@ -380,7 +374,7 @@ private:
         const uint32 ThisConnection = ++ConnectionSerial;
         const TWeakPtr<FWindowsGattTransport> WeakSelf = AsWeak();
         ConnectionStatusToken = Device.ConnectionStatusChanged([WeakSelf, ThisConnection](const WinBluetooth::BluetoothLEDevice& Sender, const auto&)
-        {
+            {
             if (Sender.ConnectionStatus() != WinBluetooth::BluetoothConnectionStatus::Disconnected)
             {
                 return;
@@ -392,8 +386,7 @@ private:
                 {
                     Self->OnDisconnected();
                 }
-            });
-        });
+            }); });
         UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Bluetooth device opened; %d characteristic(s) resolved."), Characteristics.Num());
         return FString();
     }
@@ -412,7 +405,7 @@ private:
 
         const TWeakPtr<FWindowsGattTransport> WeakSelf = AsWeak();
         const winrt::event_token Token = Characteristic->ValueChanged([WeakSelf, Uuid](const WinGatt::GattCharacteristic&, const WinGatt::GattValueChangedEventArgs& Args)
-        {
+            {
             TArray<uint8> Value = ReadBuffer(Args.CharacteristicValue());
             AsyncTask(ENamedThreads::GameThread, [WeakSelf, Uuid, Value = MoveTemp(Value)]()
             {
@@ -421,8 +414,7 @@ private:
                 {
                     Self->OnNotification(Uuid, Value);
                 }
-            });
-        });
+            }); });
         Subscriptions.Add(Uuid, Token);
 
         const bool bNotify = (Characteristic->CharacteristicProperties() & WinGatt::GattCharacteristicProperties::Notify) ==
@@ -452,12 +444,11 @@ private:
                 if (bLinkUp)
                 {
                     RunGuarded([Characteristic]()
-                    {
+                        {
                         Characteristic
                             ->WriteClientCharacteristicConfigurationDescriptorAsync(WinGatt::GattClientCharacteristicConfigurationDescriptorValue::None)
                             .get();
-                        return FString();
-                    });
+                        return FString(); });
                 }
             }
         }

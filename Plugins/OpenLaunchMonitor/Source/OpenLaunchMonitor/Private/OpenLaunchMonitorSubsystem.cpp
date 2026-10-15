@@ -33,21 +33,35 @@ namespace
     {
         switch (Club)
         {
-        case ELaunchMonitorClub::Wood3: return TEXT("0305");
-        case ELaunchMonitorClub::Wood5: return TEXT("0505");
-        case ELaunchMonitorClub::Wood7: return TEXT("0705");
-        case ELaunchMonitorClub::Iron4: return TEXT("0406");
-        case ELaunchMonitorClub::Iron5: return TEXT("0506");
-        case ELaunchMonitorClub::Iron6: return TEXT("0606");
-        case ELaunchMonitorClub::Iron7: return TEXT("0706");
-        case ELaunchMonitorClub::Iron8: return TEXT("0806");
-        case ELaunchMonitorClub::Iron9: return TEXT("0906");
-        case ELaunchMonitorClub::PitchingWedge: return TEXT("0a06");
-        case ELaunchMonitorClub::GapWedge: return TEXT("0b06");
-        case ELaunchMonitorClub::SandWedge: return TEXT("0c06");
-        case ELaunchMonitorClub::Putter: return SquareProtocol::PutterClubCode;
+        case ELaunchMonitorClub::Wood3:
+            return TEXT("0305");
+        case ELaunchMonitorClub::Wood5:
+            return TEXT("0505");
+        case ELaunchMonitorClub::Wood7:
+            return TEXT("0705");
+        case ELaunchMonitorClub::Iron4:
+            return TEXT("0406");
+        case ELaunchMonitorClub::Iron5:
+            return TEXT("0506");
+        case ELaunchMonitorClub::Iron6:
+            return TEXT("0606");
+        case ELaunchMonitorClub::Iron7:
+            return TEXT("0706");
+        case ELaunchMonitorClub::Iron8:
+            return TEXT("0806");
+        case ELaunchMonitorClub::Iron9:
+            return TEXT("0906");
+        case ELaunchMonitorClub::PitchingWedge:
+            return TEXT("0a06");
+        case ELaunchMonitorClub::GapWedge:
+            return TEXT("0b06");
+        case ELaunchMonitorClub::SandWedge:
+            return TEXT("0c06");
+        case ELaunchMonitorClub::Putter:
+            return SquareProtocol::PutterClubCode;
         case ELaunchMonitorClub::Driver:
-        default: return SquareProtocol::DriverClubCode;
+        default:
+            return SquareProtocol::DriverClubCode;
         }
     }
 
@@ -55,9 +69,12 @@ namespace
     {
         switch (Source)
         {
-        case ESquareValueSource::Packet: return ELaunchMonitorValueSource::Measured;
-        case ESquareValueSource::Derived: return ELaunchMonitorValueSource::Derived;
-        default: return ELaunchMonitorValueSource::Missing;
+        case ESquareValueSource::Packet:
+            return ELaunchMonitorValueSource::Measured;
+        case ESquareValueSource::Derived:
+            return ELaunchMonitorValueSource::Derived;
+        default:
+            return ELaunchMonitorValueSource::Missing;
         }
     }
 
@@ -65,11 +82,16 @@ namespace
     {
         switch (Status)
         {
-        case ESquareSessionStatus::Scanning: return ELaunchMonitorConnectionState::Scanning;
-        case ESquareSessionStatus::Connecting: return ELaunchMonitorConnectionState::Connecting;
-        case ESquareSessionStatus::Connected: return ELaunchMonitorConnectionState::Connected;
-        case ESquareSessionStatus::Ready: return ELaunchMonitorConnectionState::Ready;
-        default: return ELaunchMonitorConnectionState::Disconnected;
+        case ESquareSessionStatus::Scanning:
+            return ELaunchMonitorConnectionState::Scanning;
+        case ESquareSessionStatus::Connecting:
+            return ELaunchMonitorConnectionState::Connecting;
+        case ESquareSessionStatus::Connected:
+            return ELaunchMonitorConnectionState::Connected;
+        case ESquareSessionStatus::Ready:
+            return ELaunchMonitorConnectionState::Ready;
+        default:
+            return ELaunchMonitorConnectionState::Disconnected;
         }
     }
 
@@ -144,7 +166,9 @@ bool UOpenLaunchMonitorSubsystem::InjectReplayFrames(const FString& BallFrameHex
     FSquareShotMetrics Metrics;
     if (!SquareProtocol::FromHex(BallFrameHex, BallFrame) || !SquareProtocol::TryParseShot(BallFrame, Metrics))
     {
-        ReportError(FString::Printf(TEXT("Replay ball frame is not a plausible Square shot: %s"), *BallFrameHex));
+        const FString Message = FString::Printf(TEXT("Replay ball frame is not a plausible Square shot: %s"), *BallFrameHex);
+        UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("%s"), *Message);
+        ReportError(Message);
         return false;
     }
     DeliverShot(Metrics, ReplaySource, 0);
@@ -376,7 +400,7 @@ void UOpenLaunchMonitorSubsystem::ScheduleReconnect()
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Reconnecting in %.0f s (attempt %d of %d)."), Delay, ReconnectAttempts, MaxReconnectAttempts);
     TWeakObjectPtr<UOpenLaunchMonitorSubsystem> WeakThis(this);
     ReconnectHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
-    {
+                                                               {
         if (WeakThis.IsValid())
         {
             WeakThis->ReconnectHandle.Reset();
@@ -385,8 +409,7 @@ void UOpenLaunchMonitorSubsystem::ScheduleReconnect()
                 WeakThis->Session->Connect();
             }
         }
-        return false;
-    }),
+        return false; }),
         Delay);
 }
 

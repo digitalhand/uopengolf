@@ -12,7 +12,11 @@ namespace
     class FFakeGattTransport final : public IGattTransport
     {
     public:
-        virtual void StartScan(const FString& NamePrefix) override { ScanPrefix = NamePrefix; bScanning = true; }
+        virtual void StartScan(const FString& NamePrefix) override
+        {
+            ScanPrefix = NamePrefix;
+            bScanning = true;
+        }
         virtual void StopScan() override { bScanning = false; }
         virtual void Connect(const FString& DeviceId, const TArray<FString>&, const TArray<FString>&, FCompletion OnComplete) override
         {
@@ -49,7 +53,9 @@ namespace
 
         int32 CountWrites(const TCHAR* Prefix) const
         {
-            return Writes.FilterByPredicate([Prefix](const FString& Write) { return Write.StartsWith(Prefix); }).Num();
+            return Writes.FilterByPredicate([Prefix](const FString& Write)
+                             { return Write.StartsWith(Prefix); })
+                .Num();
         }
 
         FString ScanPrefix;
@@ -117,13 +123,20 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     int32 Battery = -1;
     FString Firmware;
     int32 ConnectionLost = 0;
-    Session->OnStatusChanged = [&Statuses](ESquareSessionStatus Status) { Statuses.Add(Status); };
-    Session->OnShot = [&ShotIds](const FSquareShotMetrics&, int32 ShotId) { ShotIds.Add(ShotId); };
-    Session->OnClub = [&ClubShotIds](const FSquareClubMetrics&, int32 ShotId) { ClubShotIds.Add(ShotId); };
-    Session->OnReadyChanged = [&ReadyChanges](bool bReady) { ReadyChanges.Add(bReady); };
-    Session->OnBatteryChanged = [&Battery](int32 Percent) { Battery = Percent; };
-    Session->OnFirmwareChanged = [&Firmware](const FString& Value) { Firmware = Value; };
-    Session->OnConnectionLost = [&ConnectionLost]() { ++ConnectionLost; };
+    Session->OnStatusChanged = [&Statuses](ESquareSessionStatus Status)
+    { Statuses.Add(Status); };
+    Session->OnShot = [&ShotIds](const FSquareShotMetrics&, int32 ShotId)
+    { ShotIds.Add(ShotId); };
+    Session->OnClub = [&ClubShotIds](const FSquareClubMetrics&, int32 ShotId)
+    { ClubShotIds.Add(ShotId); };
+    Session->OnReadyChanged = [&ReadyChanges](bool bReady)
+    { ReadyChanges.Add(bReady); };
+    Session->OnBatteryChanged = [&Battery](int32 Percent)
+    { Battery = Percent; };
+    Session->OnFirmwareChanged = [&Firmware](const FString& Value)
+    { Firmware = Value; };
+    Session->OnConnectionLost = [&ConnectionLost]()
+    { ++ConnectionLost; };
 
     // Scan, then connect to the first matching device.
     Session->Connect();
@@ -146,7 +159,7 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Arm after 3 s"), Transport->Writes.Last(), FString(TEXT("118102011100000000")));
     TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
     TestTrue(TEXT("Status sequence"), Statuses == TArray<ESquareSessionStatus>{ESquareSessionStatus::Scanning, ESquareSessionStatus::Connecting,
-                                                     ESquareSessionStatus::Connected, ESquareSessionStatus::Ready});
+                                                      ESquareSessionStatus::Connected, ESquareSessionStatus::Ready});
 
     // Heartbeat every 5 s.
     Scheduler->Advance(5.0f);
@@ -206,10 +219,12 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
     Scheduler->Advance(5.0f);
     TestTrue(TEXT("Ready after reconnect"), Session->GetStatus() == ESquareSessionStatus::Ready);
-    const int32 LastClubCommand = Transport->Writes.FindLastByPredicate([](const FString& Write) { return Write.StartsWith(TEXT("1182")); });
+    const int32 LastClubCommand = Transport->Writes.FindLastByPredicate([](const FString& Write)
+        { return Write.StartsWith(TEXT("1182")); });
     TestTrue(TEXT("Putter club command"), LastClubCommand != INDEX_NONE && Transport->Writes[LastClubCommand].Mid(6, 4) == TEXT("0107"));
     FSquareClubMetrics PutterClub;
-    Session->OnClub = [&PutterClub](const FSquareClubMetrics& Club, int32) { PutterClub = Club; };
+    Session->OnClub = [&PutterClub](const FSquareClubMetrics& Club, int32)
+    { PutterClub = Club; };
     Transport->Notify(TEXT("1102138101E6FF91010000000000000000"));
     Transport->Notify(ClubHex);
     TestFalse(TEXT("Putter club angles dropped"), PutterClub.HasReading());

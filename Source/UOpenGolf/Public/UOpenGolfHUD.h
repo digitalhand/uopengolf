@@ -4,7 +4,7 @@
 #include "GameFramework/HUD.h"
 #include "UOpenGolfHUD.generated.h"
 
-/** Hello-world presentation, available without imported assets or plugins. */
+/** Greeting and launch-monitor status panel, drawn without imported assets. */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfHUD : public AHUD
 {
@@ -15,4 +15,7 @@ public:
 
     UFUNCTION(BlueprintPure, Category = "UOpenGolf")
     FText GetGreeting() const;
+
+private:
+    void DrawLaunchMonitorPanel();
 };
