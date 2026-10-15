@@ -7,7 +7,7 @@ public class UOpenGolf : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
-        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "OpenLaunchMonitor" });
+        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "OpenLaunchMonitor", "OpenFairwayPhysics" });
 
         if (Target.bBuildEditor)
         {

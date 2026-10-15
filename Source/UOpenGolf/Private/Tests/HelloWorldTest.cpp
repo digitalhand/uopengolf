@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
+#include "OpenFairwayBall.h"
+#include "OpenFairway/GolfPhysics.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfHUD.h"
+#include "UOpenGolfRange.h"
 
 #include "Editor.h"
 #include "Engine/World.h"
@@ -35,10 +38,20 @@ bool FVerifyUOpenGolfHelloWorld::Update()
     }
     Test->TestEqual(TEXT("Startup map"), UWorld::RemovePIEPrefix(World->GetOutermost()->GetName()),
         FString(TEXT("/Game/UOpenGolf/Maps/HelloWorld")));
-    Test->TestNotNull(TEXT("Configured game mode"), World->GetAuthGameMode<AUOpenGolfGameMode>());
-    if (Test->TestNotNull(TEXT("Spawned hello-world HUD"), HUD))
+    const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
+    Test->TestNotNull(TEXT("Spawned HUD"), HUD);
+    if (Test->TestNotNull(TEXT("Configured game mode"), Mode))
     {
-        Test->TestEqual(TEXT("Greeting"), HUD->GetGreeting().ToString(), FString(TEXT("Hello, Unreal Open Golf")));
+        Test->TestNotNull(TEXT("Spawned range"), Mode->GetRange());
+        const AOpenFairwayBall* Ball = Mode->GetBall();
+        if (Test->TestNotNull(TEXT("Spawned ball"), Ball) && Mode->GetRange())
+        {
+            // Teed up: resting on the ground at the tee, one ball radius above it.
+            const FVector Offset = Ball->GetActorLocation() - Mode->GetRange()->GetTeeLocation();
+            Test->TestFalse(TEXT("Ball at rest"), Ball->IsMoving());
+            Test->TestEqual(TEXT("Ball on the tee"), Offset.Size2D(), 0.0, 1.0);
+            Test->TestEqual(TEXT("Ball resting on the ground"), Offset.Z, static_cast<double>(OpenFairway::GolfPhysics::Radius * 100.0f), 0.5);
+        }
     }
     return true;
 }

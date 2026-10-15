@@ -32,3 +32,7 @@ __pycache__/
 .env.*
 .DS_Store
 Thumbs.db
+
+# .NET reference harness output
+/Plugins/OpenFairwayPhysics/Tools/ReferenceHarness/bin/
+/Plugins/OpenFairwayPhysics/Tools/ReferenceHarness/obj/

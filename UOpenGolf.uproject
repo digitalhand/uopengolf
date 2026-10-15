@@ -19,6 +19,10 @@
     {
       "Name": "OpenLaunchMonitor",
       "Enabled": true
+    },
+    {
+      "Name": "OpenFairwayPhysics",
+      "Enabled": true
     }
   ],
   "TargetPlatforms": ["Windows", "Linux"]

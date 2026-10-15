@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Optional maintainer tool, not part of the Unreal build. It compiles the Godot-free
+    ogolf-physics sources from a sibling checkout to produce the golden values in
+    Private/Tests/PhysicsFixtureTest.cpp. Override the checkout with -p:OgolfPhysicsDir=PATH.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <DefineConstants>$(DefineConstants);OPENFAIRWAY_CORE</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS8632;CS0436</NoWarn>
+    <OgolfPhysicsDir Condition="'$(OgolfPhysicsDir)' == ''">$(MSBuildThisFileDirectory)../../../../../ogolf-physics</OgolfPhysicsDir>
+    <Src>$(OgolfPhysicsDir)/addons/openfairway</Src>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs;Stubs.cs" />
+    <Compile Include="$(Src)/core/*.cs" />
+    <Compile Include="$(Src)/physics/FlightProfile.cs;$(Src)/physics/FlightAerodynamicsModel.cs;$(Src)/physics/BounceProfile.cs;$(Src)/physics/RolloutProfile.cs;$(Src)/physics/ShotRegimeKey.cs;$(Src)/physics/LandingBucket.cs;$(Src)/physics/GreenSpeed.cs" />
+    <Compile Include="$(Src)/physics/BallPhysicsProfile.cs;$(Src)/physics/RegimeScaleOverride.cs;$(Src)/physics/PhysicsEnums.cs;$(Src)/physics/SurfacePhysicsCatalog.cs;$(Src)/physics/SurfacePhysicsSettings.cs" />
+  </ItemGroup>
+</Project>

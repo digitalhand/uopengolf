@@ -4,7 +4,9 @@
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "OpenFairwayBall.h"
 #include "OpenLaunchMonitorSubsystem.h"
+#include "UOpenGolfGameMode.h"
 
 namespace
 {
@@ -39,27 +41,86 @@ namespace
     }
 } // namespace
 
-FText AUOpenGolfHUD::GetGreeting() const
-{
-    return NSLOCTEXT("UOpenGolf", "HelloWorld", "Hello, Unreal Open Golf");
-}
-
 void AUOpenGolfHUD::DrawHUD()
 {
     Super::DrawHUD();
 
     if (Canvas && GEngine)
     {
-        const FString Greeting = GetGreeting().ToString();
-        UFont* Font = GEngine->GetLargeFont();
+        DrawLaunchMonitorPanel();
+        DrawShotPanel();
+    }
+}
+
+void AUOpenGolfHUD::DrawShotPanel()
+{
+    const UWorld* World = GetWorld();
+    const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
+    const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    if (!Ball)
+    {
+        return;
+    }
+
+    const FLinearColor Label(0.85f, 0.85f, 0.85f);
+    const FLinearColor Heading(0.55f, 0.8f, 1.0f);
+    const FLinearColor Value = FLinearColor::White;
+    TArray<FLine> Lines;
+    FOpenFairwayShotResult Shot;
+    if (!Ball->GetShotResult(Shot))
+    {
+        Lines.Add({TEXT("SHOT"), Heading});
+        Lines.Add({TEXT("Waiting for a shot: hit one or press [R]"), Label});
+        DrawPanel(Lines, -20.0f, 20.0f);
+        return;
+    }
+
+    const auto SurfaceName = [](EOpenFairwaySurface Surface)
+    { return StaticEnum<EOpenFairwaySurface>()->GetDisplayNameTextByValue(static_cast<int64>(Surface)).ToString(); };
+    const TCHAR* Status = Shot.bAtRest ? TEXT("at rest") : Shot.bLanded ? TEXT("rolling") : TEXT("in flight");
+    Lines.Add({FString::Printf(TEXT("SHOT #%d  (%s)"), Shot.ShotNumber, Status), Heading});
+    Lines.Add({FString::Printf(TEXT("Carry:    %s"), Shot.bLanded || Shot.bAtRest ? *FString::Printf(TEXT("%.1f yd"), Shot.CarryM * OpenFairway::YardsPerMeter) : Dash),
+        Value});
+    Lines.Add({FString::Printf(TEXT("Roll:     %s"), Shot.bLanded ? *FString::Printf(TEXT("%.1f yd"), Shot.RollM * OpenFairway::YardsPerMeter) : Dash), Value});
+    Lines.Add({FString::Printf(TEXT("Total:    %.1f yd%s"), Shot.TotalM * OpenFairway::YardsPerMeter, Shot.bAtRest ? TEXT("") : TEXT(" ...")), Value});
+    Lines.Add({FString::Printf(TEXT("Offline:  %.1f yd %s"), FMath::Abs(Shot.LateralM) * OpenFairway::YardsPerMeter, Shot.LateralM >= 0.0f ? TEXT("right") : TEXT("left")),
+        Value});
+    Lines.Add({FString::Printf(TEXT("Apex:     %.1f ft"), Shot.ApexM * OpenFairway::FeetPerMeter), Value});
+    Lines.Add({FString::Printf(TEXT("Hang time: %s"), Shot.bLanded ? *FString::Printf(TEXT("%.2f s"), Shot.HangTimeS) : Dash), Value});
+    Lines.Add({FString::Printf(TEXT("Landing:  %s"),
+                   Shot.bLanded ? *FString::Printf(TEXT("%.1f deg at %.1f mph on %s"), Shot.LandingAngleDeg, Shot.LandingSpeedMps / OpenFairway::MpsPerMph, *SurfaceName(Shot.LandingSurface))
+                                : Dash),
+        Value});
+    Lines.Add({FString::Printf(TEXT("Lie:      %s"), *SurfaceName(Shot.Surface)), Label});
+    Lines.Add({FString::Printf(TEXT("Response: %s"), *Shot.LandingBucket), Label});
+    Lines.Add({FString(), Label});
+    Lines.Add({TEXT("[T] Tee up again"), FLinearColor(0.6f, 0.6f, 0.6f)});
+    DrawPanel(Lines, -20.0f, 20.0f);
+}
+
+void AUOpenGolfHUD::DrawPanel(const TArray<FLine>& Lines, float Left, float Top)
+{
+    UFont* Font = GEngine->GetMediumFont();
+    const float Scale = 1.0f;
+    const float Padding = 12.0f;
+    const float LineHeight = Font->GetMaxCharHeight() * Scale + 4.0f;
+    float PanelWidth = 0.0f;
+    for (const FLine& Line : Lines)
+    {
         float Width = 0.0f;
         float Height = 0.0f;
-        GetTextSize(Greeting, Width, Height, Font, 2.0f);
-        DrawText(Greeting, FLinearColor::White,
-            (Canvas->SizeX - Width) * 0.5f, (Canvas->SizeY - Height) * 0.5f,
-            Font, 2.0f);
+        GetTextSize(Line.Text, Width, Height, Font, Scale);
+        PanelWidth = FMath::Max(PanelWidth, Width);
+    }
 
-        DrawLaunchMonitorPanel();
+    const float Width = PanelWidth + Padding * 2.0f;
+    const float X = Left < 0.0f ? Canvas->SizeX - Width + Left : Left;
+    DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), X, Top, Width, Lines.Num() * LineHeight + Padding * 2.0f);
+    float Y = Top + Padding;
+    for (const FLine& Line : Lines)
+    {
+        DrawText(Line.Text, Line.Color, X + Padding, Y, Font, Scale);
+        Y += LineHeight;
     }
 }
 
@@ -72,11 +133,6 @@ void AUOpenGolfHUD::DrawLaunchMonitorPanel()
         return;
     }
 
-    struct FLine
-    {
-        FString Text;
-        FLinearColor Color;
-    };
     TArray<FLine> Lines;
     const FLinearColor Label(0.85f, 0.85f, 0.85f);
     const FLinearColor Heading(0.55f, 0.8f, 1.0f);
@@ -155,27 +211,5 @@ void AUOpenGolfHUD::DrawLaunchMonitorPanel()
     }
     Lines.Add({FString(), Label});
     Lines.Add({TEXT("[C] Connect   [X] Disconnect   [R] Replay shot   [Tab] Next club"), FLinearColor(0.6f, 0.6f, 0.6f)});
-
-    UFont* Font = GEngine->GetMediumFont();
-    const float Scale = 1.0f;
-    const float Padding = 12.0f;
-    const float LineHeight = Font->GetMaxCharHeight() * Scale + 4.0f;
-    float PanelWidth = 0.0f;
-    for (const FLine& Line : Lines)
-    {
-        float Width = 0.0f;
-        float Height = 0.0f;
-        GetTextSize(Line.Text, Width, Height, Font, Scale);
-        PanelWidth = FMath::Max(PanelWidth, Width);
-    }
-
-    const float Left = 20.0f;
-    const float Top = 20.0f;
-    DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), Left, Top, PanelWidth + Padding * 2.0f, Lines.Num() * LineHeight + Padding * 2.0f);
-    float Y = Top + Padding;
-    for (const FLine& Line : Lines)
-    {
-        DrawText(Line.Text, Line.Color, Left + Padding, Y, Font, Scale);
-        Y += LineHeight;
-    }
+    DrawPanel(Lines, 20.0f, 20.0f);
 }
