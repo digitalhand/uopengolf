@@ -17,6 +17,7 @@ AUOpenGolfGameMode::AUOpenGolfGameMode()
     HUDClass = AUOpenGolfHUD::StaticClass();
     PlayerControllerClass = AUOpenGolfPlayerController::StaticClass();
     DefaultPawnClass = nullptr;
+    RangeClass = AUOpenGolfRange::StaticClass();
     Recorder = MakeShared<ShotRecording::FShotRecorder>();
 }
 
@@ -25,7 +26,9 @@ void AUOpenGolfGameMode::StartPlay()
     UWorld* World = GetWorld();
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    Range = World->SpawnActor<AUOpenGolfRange>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+    Range = World->SpawnActor<AUOpenGolfRange>(RangeClass ? RangeClass.Get() : AUOpenGolfRange::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, Params);
+    if (!ensure(Range))
+        return;
     Ball = World->SpawnActor<AUOpenGolfBall>(Range->GetTeeLocation() + FVector::UpVector * 10.0f, FRotator::ZeroRotator, Params);
     if (Ball)
     {

@@ -6,6 +6,7 @@
 #include "UOpenGolfRange.generated.h"
 
 class UStaticMesh;
+class UMaterialInterface;
 class UStaticMeshComponent;
 class UHierarchicalInstancedStaticMeshComponent;
 
@@ -38,11 +39,36 @@ public:
 protected:
     virtual void BeginPlay() override;
 
+    /** Empty uses the public clump. Private subclasses own optional content references. */
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation")
+    TArray<TObjectPtr<UStaticMesh>> GrassMeshes;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation")
+    TObjectPtr<UMaterialInterface> GroundMaterialOverride;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation", meta = (ClampMin = "5", ClampMax = "200"))
+    float GrassSpacingCm = 20.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation")
+    FVector GrassScale = FVector::OneVector;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation", meta = (ClampMin = "100", ClampMax = "5000"))
+    float GrassRadiusCm = 2000.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation", meta = (ClampMin = "0"))
+    int32 GrassCullStartCm = 1200;
+
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Presentation", meta = (ClampMin = "100"))
+    int32 GrassCullEndCm = 2200;
+
 private:
     void UpdateGrass();
 
     UPROPERTY()
     TObjectPtr<UHierarchicalInstancedStaticMeshComponent> Grass;
+
+    UPROPERTY()
+    TArray<TObjectPtr<UHierarchicalInstancedStaticMeshComponent>> GrassComponents;
 
     bool bGrassEnabled = false;
 

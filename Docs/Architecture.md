@@ -140,3 +140,9 @@ Public maps/defaults must reference only distributable project content or separa
 installed engine resources. Optional restricted content lives in private content
 plugins under ignored `Plugins/PrivateContent/`, with private maps owning those
 references. The public baseline must open, compile, and run when that directory is absent.
+
+The game mode's editable `RangeClass` defaults to the native range. Private maps
+can select a Blueprint game-mode subclass whose range subclass supplies grass
+mesh variants, a ground material and scatter settings. C++ applies those settings
+at startup and retains ownership of grass toggling and all gameplay. See
+[optional range visuals](OptionalRange.md) for the content boundary and verification.

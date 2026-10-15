@@ -88,8 +88,6 @@ TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult*
     Add(TEXT("Face to Target"), TileOptional(C.bHasFaceToTarget, C.FaceToTargetDeg, TEXT("°")), ETileGroup::Club);
     Add(TEXT("Attack Angle"), TileOptional(C.bHasAngleOfAttack, C.AngleOfAttackDeg, TEXT("°")), ETileGroup::Club);
     Add(TEXT("Dynamic Loft"), TileOptional(C.bHasDynamicLoft, C.DynamicLoftDeg, TEXT("°")), ETileGroup::Club);
-    Add(TEXT("Impact H (mm)"), TileOptional(C.bHasImpactHorizontal, C.ImpactHorizontalMm, TEXT("")), ETileGroup::Club);
-    Add(TEXT("Impact V (mm)"), TileOptional(C.bHasImpactVertical, C.ImpactVerticalMm, TEXT("")), ETileGroup::Club);
 
     // Every source of a default shot is Missing, so no shot shows dashes.
     const FLaunchMonitorShot NoShot;

@@ -65,6 +65,10 @@ namespace
             return TEXT("0b06");
         case ELaunchMonitorClub::SandWedge:
             return TEXT("0c06");
+        case ELaunchMonitorClub::LobWedge:
+            // Extrapolated from PW/GW/SW (0a/0b/0c). The Square Home arms and measures with it (2026-10-15), but
+            // nothing shows it treats it differently from the sand wedge; open-lm-connector reports no LW code.
+            return TEXT("0d06");
         case ELaunchMonitorClub::Putter:
             return SquareProtocol::PutterClubCode;
         case ELaunchMonitorClub::Driver:

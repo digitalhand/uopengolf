@@ -45,4 +45,20 @@ required full license texts next to the imported work or in a documented license
 Purchased assets and their derivatives must not enter public Git or Git LFS history
 unless their license explicitly permits that redistribution.
 
+## Optional Project Nature content (not distributed)
+
+The locally acquired **temperate Vegetation: optimized Grass Library** by Project
+Nature is used only in the ignored `Plugins/PrivateContent/ProjectNatureRange/`
+plugin. [Fab listing](https://www.fab.com/listings/8b68642e-35f4-438e-82b4-799fc2228303).
+The installed download was selected for UE 5.4 and converted locally for UE 5.8.3
+on 2026-10-15. It is restricted content, not CC0 or MIT. The
+[Fab Standard License summary](https://www.fab.com/eula) was reviewed; the public
+listing does not expose the acquisition-specific license/version, so the account's
+acquisition terms must be retained and checked before any distribution. No new
+rights are asserted here. The private manifest records source hashes and changes.
+
+The imported folder was already tracked when integration began. Moving it out of
+the working tree does not remove its earlier Git history; public release requires
+a separate history review/remediation. No history rewrite was performed.
+
 See [licensing and asset policy](Docs/Licensing.md).

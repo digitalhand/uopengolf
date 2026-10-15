@@ -63,6 +63,10 @@ public:
     static bool ToLaunch(const FLaunchMonitorShot& Shot, FOpenFairwayLaunch& OutLaunch);
 
 protected:
+    /** Optional map-owned presentation variant; public maps use the native range. */
+    UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Range")
+    TSubclassOf<AUOpenGolfRange> RangeClass;
+
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:

@@ -161,6 +161,34 @@ void AUOpenGolfRange::AddYardageMarker(int32 Yards)
 void AUOpenGolfRange::BeginPlay()
 {
     Super::BeginPlay();
+    GrassComponents.Add(Grass);
+    if (!GrassMeshes.IsEmpty())
+    {
+        Grass->SetStaticMesh(GrassMeshes[0]);
+        for (int32 Index = 1; Index < GrassMeshes.Num(); ++Index)
+        {
+            auto* Component = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+            Component->SetupAttachment(RootComponent);
+            Component->SetMobility(EComponentMobility::Movable);
+            Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            Component->SetGenerateOverlapEvents(false);
+            Component->SetCanEverAffectNavigation(false);
+            Component->CastShadow = false;
+            Component->SetStaticMesh(GrassMeshes[Index]);
+            Component->RegisterComponent();
+            GrassComponents.Add(Component);
+        }
+    }
+    for (const auto& Component : GrassComponents)
+        Component->SetCullDistances(FMath::Max(0, GrassCullStartCm), FMath::Max(GrassCullStartCm + 1, GrassCullEndCm));
+    if (GroundMaterialOverride)
+    {
+        TArray<UStaticMeshComponent*> Components;
+        GetComponents(Components);
+        for (auto* Component : Components)
+            if (Component->ComponentHasTag(AOpenFairwayBall::GetSurfaceTag(EOpenFairwaySurface::Fairway)))
+                Component->SetMaterial(0, GroundMaterialOverride);
+    }
     UpdateGrass();
     for (const TPair<TObjectPtr<UStaticMeshComponent>, FLinearColor>& Piece : ColoredPieces)
     {
@@ -180,7 +208,10 @@ void AUOpenGolfRange::Tick(float DeltaSeconds)
 
 int32 AUOpenGolfRange::GetGrassInstanceCount() const
 {
-    return Grass->GetInstanceCount();
+    int32 Count = 0;
+    for (const auto& Component : GrassComponents)
+        Count += Component->GetInstanceCount();
+    return Count;
 }
 
 void AUOpenGolfRange::UpdateGrass()
@@ -191,24 +222,30 @@ void AUOpenGolfRange::UpdateGrass()
     bGrassEnabled = bWanted;
     if (!bWanted)
     {
-        Grass->ClearInstances();
+        for (const auto& Component : GrassComponents)
+            Component->ClearInstances();
         return;
     }
 
     FRandomStream Random(20261015);
-    TArray<FTransform> Transforms;
-    // 25 clumps/m2, in a 20 m radius clipped to the range. Leave tee paint clear.
-    for (float X = -990; X < 2000; X += 20)
+    TArray<TArray<FTransform>> Transforms;
+    Transforms.SetNum(GrassComponents.Num());
+    const float Spacing = FMath::Clamp(GrassSpacingCm, 5.0f, 200.0f);
+    const float Radius = FMath::Clamp(GrassRadiusCm, 100.0f, 5000.0f);
+    // Deterministic coverage clipped to the range. Leave tee paint clear.
+    int32 InstanceIndex = 0;
+    for (float X = FMath::Max(-1000.0f, -Radius) + Spacing * 0.5f; X < Radius; X += Spacing)
     {
-        for (float Y = -1990; Y < 2000; Y += 20)
+        for (float Y = -Radius + Spacing * 0.5f; Y < Radius; Y += Spacing)
         {
-            const float PX = X + Random.FRandRange(-8, 8);
-            const float PY = Y + Random.FRandRange(-8, 8);
-            if (PX * PX + PY * PY > 2000 * 2000 || (FMath::Abs(PX) < 255 && FMath::Abs(PY) < 255))
+            const float PX = X + Random.FRandRange(-0.4f, 0.4f) * Spacing;
+            const float PY = Y + Random.FRandRange(-0.4f, 0.4f) * Spacing;
+            if (PX * PX + PY * PY > Radius * Radius || (FMath::Abs(PX) < 255 && FMath::Abs(PY) < 255))
                 continue;
             const float Scale = Random.FRandRange(0.75f, 1.15f);
-            Transforms.Emplace(FRotator(0, Random.FRandRange(0, 360), 0), FVector(PX, PY, 0.0f), FVector(Scale));
+            Transforms[InstanceIndex++ % GrassComponents.Num()].Emplace(FRotator(0, Random.FRandRange(0, 360), 0), FVector(PX, PY, 0.0f), GrassScale * Scale);
         }
     }
-    Grass->AddInstances(Transforms, false, false, false);
+    for (int32 Index = 0; Index < GrassComponents.Num(); ++Index)
+        GrassComponents[Index]->AddInstances(Transforms[Index], false, false, false);
 }

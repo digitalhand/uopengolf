@@ -168,6 +168,12 @@ void FSquareSession::Disconnect()
 
 void FSquareSession::SetClub(const FString& InClubCode)
 {
+    TArray<uint8> CodeBytes;
+    if (!InClubCode.IsEmpty() && (InClubCode.Len() != 4 || !SquareProtocol::FromHex(InClubCode, CodeBytes)))
+    {
+        UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Ignoring club code '%s': it must be four hex digits such as 0c06."), *InClubCode);
+        return;
+    }
     ClubCode = InClubCode.IsEmpty() ? FString(SquareProtocol::DriverClubCode) : InClubCode;
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Club set to %s."), *ClubCode);
     if (!bConnected)

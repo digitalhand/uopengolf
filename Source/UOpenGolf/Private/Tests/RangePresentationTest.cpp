@@ -11,6 +11,8 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
@@ -39,7 +41,8 @@ public:
             FScreenshotRequest::Reset();
             return true;
         }
-        if (!Mode || !World->HasBegunPlay()) return false;
+        if (!Mode || !World->HasBegunPlay())
+            return false;
         auto* Range = Mode->GetRange();
         if (Stage == 0)
         {
@@ -53,7 +56,8 @@ public:
             Stage = 1;
             return false;
         }
-        if (GetCurrentRunTime() < ReadyAt) return false;
+        if (GetCurrentRunTime() < ReadyAt)
+            return false;
         if (Stage == 1)
         {
             InitialCount = Range->GetGrassInstanceCount();
@@ -74,7 +78,8 @@ public:
         if (Stage == 3)
         {
             Test->TestEqual(TEXT("Re-enabling grass restores deterministic population"), Range->GetGrassInstanceCount(), InitialCount);
-            if (!bCapture) return true;
+            if (!bCapture)
+                return true;
             auto* PC = Cast<AUOpenGolfPlayerController>(World->GetFirstPlayerController());
             PC->SetReplayPanelOpen(false);
             Camera = World->SpawnActor<ACameraActor>();
@@ -85,9 +90,11 @@ public:
         if (Stage == 4)
         {
             const FVector Locations[] = {FVector(-600, 0, 220), FVector(-600, 0, 220),
-                FVector(-18, -18, 10), FVector(AUOpenGolfRange::GreenDistanceM * 100 - 400, -200, 180)};
+                FVector(-18, -18, 10), FVector(AUOpenGolfRange::GreenDistanceM * 100 - 400, -200, 180),
+                FVector(-330, -400, 15), FVector(1600, -200, 100)};
             const FVector Targets[] = {FVector(6000, 0, 0), FVector(6000, 0, 0),
-                Mode->GetBall()->GetActorLocation(), FVector(AUOpenGolfRange::GreenDistanceM * 100, 0, 140)};
+                Mode->GetBall()->GetActorLocation(), FVector(AUOpenGolfRange::GreenDistanceM * 100, 0, 140),
+                FVector(-200, -380, 0), FVector(2300, 0, 0)};
             Camera->SetActorLocation(Locations[View]);
             Camera->SetActorRotation((Targets[View] - Locations[View]).Rotation());
             GrassVar->Set(View == 1 ? 0 : 1, ECVF_SetByConsole);
@@ -103,12 +110,13 @@ public:
         }
         if (Stage == 6)
         {
-            if (++Frames < 120) return false;
+            if (++Frames < 120)
+                return false;
             Test->AddInfo(FString::Printf(TEXT("View %d: mean editor frame %.3f ms over 119 intervals; grass clumps %d"),
                 View, (FPlatformTime::Seconds() - SampleStart) * 1000 / 119, Range->GetGrassInstanceCount()));
-            const TCHAR* Names[] = {TEXT("TeeGrassOn"), TEXT("TeeGrassOff"), TEXT("Ball"), TEXT("Flag")};
+            const TCHAR* Names[] = {TEXT("TeeGrassOn"), TEXT("TeeGrassOff"), TEXT("Ball"), TEXT("Flag"), TEXT("GrassClose"), TEXT("GrassEdge")};
             Filename = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots/RangeAssets") /
-                FString::Printf(TEXT("%s-%s.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")), Names[View]));
+                                                         FString::Printf(TEXT("%s-%s.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")), Names[View]));
             IFileManager::Get().MakeDirectory(*FPaths::GetPath(Filename), true);
             FScreenshotRequest::RequestScreenshot(Filename, true, false, false, FIntRect(), true);
             Stage = 7;
@@ -116,13 +124,16 @@ public:
         }
         if (Stage == 7)
         {
-            if (!IFileManager::Get().FileExists(*Filename)) return false;
+            if (!IFileManager::Get().FileExists(*Filename))
+                return false;
             Test->AddInfo(FString::Printf(TEXT("Range visual capture: %s"), *Filename));
-            if (++View == 4) return true;
+            if (++View == 6)
+                return true;
             Stage = 4;
         }
         return false;
     }
+
 private:
     FAutomationTestBase* Test;
     IConsoleVariable* GrassVar;
@@ -140,7 +151,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeAssetsVisualTest, "UOpenGolf.Visual.Range
 
 static bool QueuePresentationCheck(FAutomationTestBase* Test, bool bCapture)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    FString Map = TEXT("/Game/UOpenGolf/Maps/UOpenGolf");
+    if (bCapture)
+        FParse::Value(FCommandLine::Get(), TEXT("RangeVisualMap="), Map);
+    if (!FEditorFileUtils::LoadMap(Map, false, true))
     {
         Test->AddError(TEXT("Could not load UOpenGolf map."));
         return false;
@@ -151,6 +165,12 @@ static bool QueuePresentationCheck(FAutomationTestBase* Test, bool bCapture)
     return true;
 }
 
-bool FRangePresentationTest::RunTest(const FString&) { return QueuePresentationCheck(this, false); }
-bool FRangeAssetsVisualTest::RunTest(const FString&) { return QueuePresentationCheck(this, true); }
+bool FRangePresentationTest::RunTest(const FString&)
+{
+    return QueuePresentationCheck(this, false);
+}
+bool FRangeAssetsVisualTest::RunTest(const FString&)
+{
+    return QueuePresentationCheck(this, true);
+}
 #endif

@@ -24,6 +24,8 @@ CLAUDE.md
 
 # Restricted assets must live outside public history, including Git LFS.
 /Plugins/PrivateContent/
+# Fab's default import destination for the optional Project Nature pack.
+/Content/PN_GrassLibrary/
 
 # Local tools and OS state
 __pycache__/

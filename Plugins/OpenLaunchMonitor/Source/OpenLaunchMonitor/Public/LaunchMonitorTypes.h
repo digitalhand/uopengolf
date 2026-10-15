@@ -51,6 +51,7 @@ enum class ELaunchMonitorClub : uint8
     PitchingWedge UMETA(DisplayName = "Pitching Wedge"),
     GapWedge UMETA(DisplayName = "Gap Wedge"),
     SandWedge UMETA(DisplayName = "Sand Wedge"),
+    LobWedge UMETA(DisplayName = "Lob Wedge"),
     Putter
 };
 

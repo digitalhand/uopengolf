@@ -85,7 +85,7 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Missing launch value"), ShotTileValue(Tiles, TEXT("Ball Speed (mph)")), Dash);
     TestEqual(TEXT("Club path"), ShotTileValue(Tiles, TEXT("Club Path")), FString(TEXT("2.0°")));
     TestEqual(TEXT("Missing club value"), ShotTileValue(Tiles, TEXT("Face to Target")), Dash);
-    for (const TCHAR* Removed : {TEXT("Lie"), TEXT("Response"), TEXT("Shot Type")})
+    for (const TCHAR* Removed : {TEXT("Lie"), TEXT("Response"), TEXT("Shot Type"), TEXT("Impact H (mm)"), TEXT("Impact V (mm)")})
     {
         TestFalse(FString::Printf(TEXT("No %s tile"), Removed), Labels.Contains(Removed));
     }

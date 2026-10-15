@@ -215,6 +215,11 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Link loss not repeated"), ConnectionLost, 1);
 
     // Selecting the putter after reconnecting drops club angles.
+    const FString ClubBeforeInvalid = Session->GetClubCode();
+    Session->SetClub(TEXT("0xxx"));
+    TestEqual(TEXT("Invalid club code ignored"), Session->GetClubCode(), ClubBeforeInvalid);
+    Session->SetClub(TEXT("0d061"));
+    TestEqual(TEXT("Odd-length club code ignored"), Session->GetClubCode(), ClubBeforeInvalid);
     Session->SetClub(SquareProtocol::PutterClubCode);
     Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
     Scheduler->Advance(5.0f);

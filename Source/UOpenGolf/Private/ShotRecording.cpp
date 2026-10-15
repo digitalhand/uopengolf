@@ -149,6 +149,8 @@ namespace ShotRecording
             return TEXT("gw");
         case ELaunchMonitorClub::SandWedge:
             return TEXT("sw");
+        case ELaunchMonitorClub::LobWedge:
+            return TEXT("lw");
         case ELaunchMonitorClub::Putter:
             return TEXT("putter");
         }

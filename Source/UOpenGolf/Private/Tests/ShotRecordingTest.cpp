@@ -65,6 +65,7 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("3 wood code"), ClubCode(ELaunchMonitorClub::Wood3), FString(TEXT("3w")));
     TestEqual(TEXT("7 iron code"), ClubCode(ELaunchMonitorClub::Iron7), FString(TEXT("7i")));
     TestEqual(TEXT("Pitching wedge code"), ClubCode(ELaunchMonitorClub::PitchingWedge), FString(TEXT("pw")));
+    TestEqual(TEXT("Lob wedge code"), ClubCode(ELaunchMonitorClub::LobWedge), FString(TEXT("lw")));
     TestEqual(TEXT("File name"), ShotFileName(ELaunchMonitorClub::Driver, 1), FString(TEXT("club_driver_shot_1.json")));
     TestEqual(TEXT("Session folder"), SessionFolderName(FDateTime(2026, 10, 15, 14, 3, 22)), FString(TEXT("session_20261015-140322")));
     const FString DefaultRoot = DefaultRootDir();

@@ -23,6 +23,7 @@ the [MIT license](LICENSE). Unreal Engine and third-party content retain their o
 - [Plugins](#plugins)
 - [Driving range and ball physics](#driving-range-and-ball-physics)
   - [Grass and golf assets](#grass-and-golf-assets)
+  - [Optional range visuals](#optional-range-visuals)
   - [FlightScope comparison](#flightscope-comparison)
   - [Shot library vs FlightScope](#shot-library-vs-flightscope)
   - [Hitting shots on the range](#hitting-shots-on-the-range)
@@ -149,7 +150,7 @@ nothing until it does.
 | --- | --- |
 | **C** | Connect to a Square Home (scans for up to 30 s) |
 | **D** | Disconnect the launch monitor |
-| **Tab** | Next club: Driver, 3/5/7 Wood, 4–9 Iron, Pitching/Gap/Sand Wedge, Putter, then back to Driver |
+| **Tab** | Next club: Driver, 3/5/7 Wood, 4–9 Iron, Pitching/Gap/Sand Wedge, Lob Wedge (club code `0d06`; the Square Home arms and measures with it, but it may treat it like a sand wedge), Putter, then back to Driver |
 | **F9** | Record shots on/off (only while a launch monitor is connected) |
 | **R** | Hit the selected test shot again |
 | **P** | Open or close the test-shot list |
@@ -489,6 +490,14 @@ conversion details, and the rendered validation command. Presentation is owned b
 the game module; the physics plugin uses its existing ball radius and collision
 queries.
 
+### Optional range visuals
+
+The range supports optional map-specific grass meshes and turf materials through
+private content plugins. The public range remains the default. See
+[optional range visuals](Docs/OptionalRange.md) for setup, asset boundaries and
+paired replay/rendered verification. Each installed private plugin supplies its
+own map and README; restricted assets are not part of the public distribution.
+
 ### FlightScope comparison
 
 The [FlightScope analysis](Docs/FlightScopeAnalysis.md) records the supplied
@@ -544,7 +553,8 @@ was run on Windows only; on Linux it calls `Scripts/ue.sh` but has not been trie
 3. The shot tiles (right edge, two columns, translucent gray) update live. From the
    top: a header with the shot number, its state and the selected club; Total | Carry;
    Roll | Apex; Offline | Hang Time; landing angle and speed; club path, face, attack,
-   loft and impact location; then, in darker tiles, the raw launch-monitor values
+   and dynamic loft (the Square Home reports no impact location, so there are no tiles
+   for it); then, in darker tiles, the raw launch-monitor values
    (ball speed, VLA, total spin, HLA, back/side spin, spin axis). `…` means the value
    arrives after landing, `—` that it is missing, `*` that it is derived; `L`/`R`
    marks direction. The status box at the bottom right shows the launch-monitor
