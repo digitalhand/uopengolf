@@ -17,6 +17,11 @@ Saved/
 *.xcodeproj/
 *.slnx
 
+# Agents
+AGENTS.md
+CLAUDE.md
+.claude
+
 # Restricted assets must live outside public history, including Git LFS.
 /Plugins/PrivateContent/
 
