@@ -68,8 +68,8 @@ every 5 s. Duplicate notifications are ignored. See upstream `addons/square/PROT
 
 ## Remaining work
 
-- Verify reconnect after link loss and club selection on a real Square Home under
-  Windows (connection, battery/firmware, shots and club data are verified), and
+- Verify reconnect after link loss on a real Square Home under
+  Windows (connection, battery/firmware, shots, club data and club selection are verified), and
   record the tested firmware and Windows build in [phase status](PhasesStatus.md).
 - Linux track: BlueZ transport, permissions/dependencies, and hardware validation.
 - Phase 1 physics items (OpenFairway fixtures and tolerances) are unaffected by this note.

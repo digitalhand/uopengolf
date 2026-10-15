@@ -33,7 +33,8 @@ project; the port is covered by this repository's MIT license.
 | Square protocol and session | Working; tested with a real Square Home (2026-10-14) | Builds into the same code; not run |
 | Bluetooth transport | C++/WinRT; connection, battery, firmware, shot and club data verified | Not implemented (BlueZ planned) |
 | Replay shots | Working | Expected to work; not run |
-| Reconnect after link loss, club selection on hardware | Implemented; not yet tested on hardware | — |
+| Club selection and club toggle on hardware | Verified on a real Square Home (2026-10-15) | — |
+| Reconnect after link loss on hardware | Implemented; not yet tested on hardware | — |
 
 Ported from open-lm-connector revision `92eb021abe28d8eb1abe43f87767d3eb73e5939e`. Design
 notes: [launch-monitor integration](../../Docs/LaunchMonitorIntegration.md).
@@ -179,7 +180,7 @@ None of these need hardware.
 - Windows only for real devices; Linux has no Bluetooth transport yet.
 - The first matching device found is used; there is no device picker.
 - Square Omni, alignment and spin-mode selection are not exposed.
-- Reconnect after link loss and club selection have not been tested on hardware.
+- Reconnect after link loss has not been tested on hardware.
 
 ## Plugin structure
 
