@@ -16,9 +16,7 @@ namespace
 
 FSquareSession::FSquareSession(
     TSharedRef<IGattTransport> InTransport, TSharedRef<ISquareScheduler> InScheduler, FSquareConnectionOptions InOptions)
-    : Transport(MoveTemp(InTransport))
-    , Scheduler(MoveTemp(InScheduler))
-    , Options(MoveTemp(InOptions))
+    : Transport(MoveTemp(InTransport)), Scheduler(MoveTemp(InScheduler)), Options(MoveTemp(InOptions))
 {
 }
 
@@ -68,14 +66,13 @@ void FSquareSession::Connect()
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Scanning for devices named %s*."), *Options.DeviceNamePrefix);
     Transport->StartScan(Options.DeviceNamePrefix);
     Scheduler->Schedule(Options.ScanTimeoutSeconds, Guard([this]()
-    {
+                                                        {
         if (Status == ESquareSessionStatus::Scanning)
         {
             Transport->StopScan();
             EmitError(TEXT("No Square device found. Check that it is powered on, nearby, and not connected to another app."));
             SetStatus(ESquareSessionStatus::Disconnected);
-        }
-    }));
+        } }));
 }
 
 void FSquareSession::ConnectToDevice(const FGattDeviceInfo& Device)
@@ -95,22 +92,21 @@ void FSquareSession::ConnectToDevice(const FGattDeviceInfo& Device)
     }
     Transport->Connect(Device.Id, {Options.CommandCharacteristicUuid, Options.EventCharacteristicUuid},
         {Options.BatteryCharacteristicUuid, Options.FirmwareCharacteristicUuid}, Guard([this](bool bSuccess, const FString& Error)
-    {
+                                                                                     {
         if (!bSuccess)
         {
             FailConnect(Error);
             return;
         }
         bConnected = true;
-        ContinueHandshake();
-    }));
+        ContinueHandshake(); }));
 }
 
 void FSquareSession::ContinueHandshake()
 {
     // Device info, notifications, heartbeat, club after 2 s, arm after 3 s, then the heartbeat timer.
     Transport->Read(Options.BatteryCharacteristicUuid, Guard([this](const TArray<uint8>& Battery)
-    {
+                                                           {
         if (Battery.Num() > 0 && OnBatteryChanged)
         {
             OnBatteryChanged(Battery[0]);
@@ -159,8 +155,7 @@ void FSquareSession::ContinueHandshake()
                     }));
                 }));
             }));
-        }));
-    }));
+        })); }));
 }
 
 void FSquareSession::Disconnect()
@@ -180,12 +175,11 @@ void FSquareSession::SetClub(const FString& InClubCode)
         return;
     }
     QueueCommand(SquareProtocol::Club(NextSequence(), ClubCode, Handedness), Guard([this](bool bSuccess, const FString& Error)
-    {
+                                                                                 {
         if (!bSuccess)
         {
             EmitError(FString::Printf(TEXT("Could not set the club: %s"), *Error));
-        }
-    }));
+        } }));
     // The club is the device's shot-mode signal and is always followed by arming;
     // a shot still waiting to re-arm sends its own.
     if (bArmed && !bShotPendingRearm)
@@ -261,7 +255,7 @@ void FSquareSession::PumpWrites()
     bWriteInFlight = true;
     const FString Hex = SquareProtocol::ToHex(Next.Command);
     Transport->Write(Options.CommandCharacteristicUuid, Next.Command, Guard([this, Hex, Done = MoveTemp(Next.OnComplete)](bool bSuccess, const FString& Error)
-    {
+                                                                          {
         bWriteInFlight = false;
         if (bSuccess)
         {
@@ -275,15 +269,14 @@ void FSquareSession::PumpWrites()
         {
             Done(bSuccess, Error);
         }
-        PumpWrites();
-    }));
+        PumpWrites(); }));
 }
 
 void FSquareSession::Arm()
 {
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Arming ball detection (spin mode %s)."), SpinMode == 0 ? TEXT("calculated") : TEXT("measured"));
     QueueCommand(SquareProtocol::DetectBall(NextSequence(), 1, SpinMode), Guard([this](bool bSuccess, const FString& Error)
-    {
+                                                                              {
         if (!bSuccess)
         {
             EmitError(FString::Printf(TEXT("Could not arm the Square device: %s"), *Error));
@@ -292,8 +285,7 @@ void FSquareSession::Arm()
         bShotPendingRearm = false;
         bArmed = true;
         EmitReady(true);
-        SetStatus(ESquareSessionStatus::Ready);
-    }));
+        SetStatus(ESquareSessionStatus::Ready); }));
 }
 
 void FSquareSession::ScheduleHeartbeat()
@@ -303,7 +295,7 @@ void FSquareSession::ScheduleHeartbeat()
         return;
     }
     Scheduler->Schedule(Options.HeartbeatIntervalSeconds, Guard([this]()
-    {
+                                                              {
         QueueCommand(SquareProtocol::Heartbeat(NextSequence()), Guard([this](bool bSuccess, const FString& Error)
         {
             if (!bSuccess)
@@ -311,8 +303,7 @@ void FSquareSession::ScheduleHeartbeat()
                 EmitError(FString::Printf(TEXT("Square heartbeat failed: %s"), *Error));
             }
         }));
-        ScheduleHeartbeat();
-    }));
+        ScheduleHeartbeat(); }));
 }
 
 void FSquareSession::HandleDeviceDiscovered(const FGattDeviceInfo& Device)
@@ -375,7 +366,8 @@ void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
         // The device stops detecting after any strike, readable or not: re-arm.
         UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Ball frame rejected as implausible: %s"), *Payload);
         EmitReady(false);
-        Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]() { Arm(); }));
+        Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]()
+                                                                     { Arm(); }));
         return;
     }
 
@@ -399,13 +391,12 @@ void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
     AwaitingClubForShot = ShotId;
     RequestClubMetrics(ShotId, 1);
     Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this, ShotId]()
-    {
+                                                                 {
         if (AwaitingClubForShot == ShotId)
         {
             AwaitingClubForShot = 0;
         }
-        Arm();
-    }));
+        Arm(); }));
 }
 
 void FSquareSession::HandleClubFrame(const TArray<uint8>& Data, FSquareClubMetrics Club)
@@ -441,7 +432,7 @@ void FSquareSession::RequestClubMetrics(int32 ShotId, int32 Attempt)
 {
     // A failed request never stops the wait: the club frame may still arrive until re-arm.
     QueueCommand(SquareProtocol::RequestClubMetrics(NextSequence()), Guard([this, ShotId, Attempt](bool bSuccess, const FString& Error)
-    {
+                                                                         {
         if (bSuccess || AwaitingClubForShot != ShotId)
         {
             return;
@@ -457,8 +448,7 @@ void FSquareSession::RequestClubMetrics(int32 ShotId, int32 Attempt)
             {
                 RequestClubMetrics(ShotId, Attempt + 1);
             }
-        }));
-    }));
+        })); }));
 }
 
 void FSquareSession::HandleTransportDisconnected()

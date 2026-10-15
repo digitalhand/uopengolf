@@ -1,18 +1,13 @@
 # Phased roadmap
 
-Only Phase 0 is the current implementation task. Later milestones require their own
-design and implementation work; this document does not authorize imports or migrations.
-Keep status and completion evidence synchronized with the README as work progresses.
+Later milestones require their own design and implementation work; this document
+does not authorize imports or migrations. Current status and completion evidence
+for each phase are tracked in [phase status](PhasesStatus.md).
+
+Phases 1 and 2 are split into a **Windows track** (current) and a **Linux track**
+(deferred, not blocking Windows work). Each phase's exit still requires both tracks.
 
 ## Phase 0 — Hello-world foundation
-
-**Status:** foundation files created; maintainer confirms the SDK issue resolved
-and the project opens in Unreal on Windows. Play-mode greeting and automated game
-smoke confirmation remain pending. Agent-side build checks encountered workspace
-write restrictions. The original map was generated with Unreal 5.8.3. Linux
-execution remains unverified.
-Script syntax and six engine-free report-validator checks pass. A smoke invocation
-correctly failed for the uncompiled game module; it is not a successful game smoke.
 
 - Create an Unreal 5.8.3 native C++ game with a blank startup map and visible greeting.
 - Add original-work MIT licensing, third-party/asset policy, architecture, contributor

@@ -66,6 +66,30 @@ class AutomationReportTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_report(self.path)
 
+    def test_prefix_accepts_matching_tests_without_hello_world(self):
+        report = copy.deepcopy(SUCCESS)
+        report["succeeded"] = 2
+        report["tests"] = [{"fullTestPath": "UOpenGolf.LaunchMonitor.Protocol", "state": "Success"},
+                           {"fullTestPath": "UOpenGolf.LaunchMonitor.Session", "state": "Success"}]
+        self.write(report)
+        self.assertEqual(validate_report(self.path, "UOpenGolf.LaunchMonitor"), 2)
+
+    def test_prefix_rejects_no_match_or_partial_name_match(self):
+        for path in ("UOpenGolf.Smoke.HelloWorld", "UOpenGolf.LaunchMonitorExtra"):
+            with self.subTest(path=path):
+                report = copy.deepcopy(SUCCESS)
+                report["tests"][0]["fullTestPath"] = path
+                self.write(report)
+                with self.assertRaises(ValueError):
+                    validate_report(self.path, "UOpenGolf.LaunchMonitor")
+
+    def test_prefix_rejects_failed_test(self):
+        report = copy.deepcopy(SUCCESS)
+        report["tests"] = [{"fullTestPath": "UOpenGolf.LaunchMonitor.Session", "state": "Fail"}]
+        self.write(report)
+        with self.assertRaises(ValueError):
+            validate_report(self.path, "UOpenGolf.LaunchMonitor")
+
     def test_rejects_missing_or_invalid_report(self):
         with self.assertRaises(OSError):
             validate_report(self.path)

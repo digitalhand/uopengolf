@@ -1,11 +1,10 @@
-# Future integrations
+# Plugins
 
-Phase 0 has one game module and no custom runtime plugins. See
+- `OpenLaunchMonitor/`: launch-monitor input (Square Home over Bluetooth LE on
+  Windows, plus replay shots). See [launch-monitor integration](../Docs/LaunchMonitorIntegration.md).
+
+A reusable OpenFairway native C++ physics plugin is planned. See
 [architecture](../Docs/Architecture.md) and the [roadmap](../Docs/Roadmap.md).
-
-Planned boundaries are a launch-monitor adapter using `open-lm-connector` and a
-reusable OpenFairway native C++ physics plugin with Unreal/Blueprint wrappers.
-Their APIs and connector implementation approach will be designed in Phase 1.
 
 `PrivateContent/` is reserved for separately obtained restricted content plugins
 and ignored by Git. Public code, maps, and default configuration must never require

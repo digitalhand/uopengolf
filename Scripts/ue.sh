@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: bash Scripts/ue.sh {build|editor|run|smoke|projectfiles|compilecommands} [--engine-root PATH] [--target editor|game] [--timeout SECONDS]"
+    echo "Usage: bash Scripts/ue.sh {build|editor|run|smoke|test|projectfiles|compilecommands} [--engine-root PATH] [--target editor|game] [--timeout SECONDS] [--filter TEST.PREFIX]"
 }
 
 action="${1:-build}"
@@ -11,22 +11,25 @@ if [[ $# -gt 0 ]]; then shift; fi
 engine_root="${UE_ROOT:-}"
 target=editor
 timeout_seconds=180
+filter=UOpenGolf
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --engine-root|--target|--timeout)
+        --engine-root|--target|--timeout|--filter)
             [[ $# -ge 2 ]] || { usage; exit 2; }
             case "$1" in
                 --engine-root) engine_root="$2" ;;
                 --target) target="$2" ;;
                 --timeout) timeout_seconds="$2" ;;
+                --filter) filter="$2" ;;
             esac
             shift 2 ;;
         *) usage; exit 2 ;;
     esac
 done
-case "$action" in build|editor|run|smoke|projectfiles|compilecommands) ;; *) usage; exit 2 ;; esac
+case "$action" in build|editor|run|smoke|test|projectfiles|compilecommands) ;; *) usage; exit 2 ;; esac
 case "$target" in editor|game) ;; *) usage; exit 2 ;; esac
 [[ "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] && (( timeout_seconds <= 3600 )) || { echo 'Timeout must be 1..3600 seconds.' >&2; exit 2; }
+[[ "$filter" =~ ^[A-Za-z0-9_.]+$ ]] || { echo 'Filter must be an automation test name prefix.' >&2; exit 2; }
 [[ -n "$engine_root" ]] || { echo 'Set UE_ROOT or supply --engine-root pointing to Unreal Engine 5.8.' >&2; exit 2; }
 
 script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -59,22 +62,26 @@ case "$action" in
         ;;
     editor) exec "$editor" "$project" ;;
     run) exec "$editor" "$project" -game -windowed -ResX=1280 -ResY=720 ;;
-    smoke)
+    smoke|test)
+        # smoke runs the startup tests and requires HelloWorld; test runs any prefix.
+        tests=UOpenGolf.Smoke
+        validation=()
+        if [[ "$action" == test ]]; then tests="$filter"; validation=(--prefix "$filter"); fi
         command -v python3 >/dev/null || { echo 'python3 is required to validate smoke reports.' >&2; exit 2; }
         command -v timeout >/dev/null || { echo 'GNU coreutils timeout is required.' >&2; exit 2; }
         mkdir -p "$project_root/Saved/Automation"
         report="$(mktemp -d "$project_root/Saved/Automation/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
-        echo "Running smoke test; report: $report"
+        echo "Running $tests automation tests; report: $report"
         # Linux uses UnrealEditor with unattended/NullRHI flags; no separate -Cmd binary is required.
         if timeout --kill-after=10s "${timeout_seconds}s" "$editor" "$project" \
             -unattended -nopause -nosplash -nosound -nullrhi -DDC=UOpenGolfSmoke -stdout -FullStdOutLogOutput \
-            '-ExecCmds=Automation RunTests UOpenGolf.Smoke' '-TestExit=Automation Test Queue Empty' \
+            "-ExecCmds=Automation RunTests $tests" '-TestExit=Automation Test Queue Empty' \
             "-ReportExportPath=$report" "-abslog=$report/Unreal.log" \
             >"$report/stdout.log" 2>"$report/stderr.log"; then
-            python3 "$script_root/check_automation_report.py" "$report/index.json"
+            python3 "$script_root/check_automation_report.py" "$report/index.json" ${validation[@]+"${validation[@]}"}
         else
             result=$?
-            echo "Smoke process failed or timed out (exit $result). See $report" >&2
+            echo "Automation process failed or timed out (exit $result). See $report" >&2
             exit "$result"
         fi
         ;;

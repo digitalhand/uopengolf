@@ -2,10 +2,22 @@
 
 ## Current foundation
 
-The only game module is `UOpenGolf`. Its C++ GameMode selects a C++ HUD, whose
-Blueprint-readable greeting is drawn on the canvas during play. There is no pawn,
-simulation, launch-monitor connection, course geometry, or imported content.
-`HelloWorld` is an original blank Unreal map used for editor and game startup.
+The game module is `UOpenGolf`. Its C++ GameMode selects a C++ HUD and player
+controller. The HUD draws the greeting and a launch-monitor status panel; the
+controller binds test keys (C connect, X disconnect, R replay shot, Tab next club).
+There is no pawn, simulation, course geometry, or imported content. `HelloWorld` is
+an original blank Unreal map used for editor and game startup.
+
+The `OpenLaunchMonitor` runtime plugin is the launch-monitor adapter:
+
+| Layer | Location (`Plugins/OpenLaunchMonitor/Source/OpenLaunchMonitor/`) | Notes |
+| --- | --- | --- |
+| Game boundary | `Public/OpenLaunchMonitorSubsystem.h`, `Public/LaunchMonitorTypes.h` | Game-instance subsystem; Blueprint and C++ events for state, ball ready, battery, shots, club data and errors; replay input |
+| Square session | `Private/Square/SquareSession.*` | Game-thread state machine: scan, handshake, heartbeat, arming, duplicate filtering, late club data, link loss |
+| Square protocol | `Private/Square/SquareProtocol.*` | Frame decoding and commands; depends only on Core (and Json for firmware text) |
+| Transport | `Private/Bluetooth/GattTransport.h`, `Private/Windows/` | Bluetooth LE GATT interface; C++/WinRT on Windows, not yet on Linux |
+
+See [launch-monitor integration](LaunchMonitorIntegration.md) for its contracts.
 
 Game and editor targets use UnrealBuildTool's standard C# configuration files.
 Gameplay remains native C++. Python is used only by developer utilities.
@@ -37,14 +49,15 @@ flowchart LR
     Shots --> View
 ```
 
-This diagram describes planned behavior. The foundation only displays a greeting.
+The connector, mock/replay input and presentation edges exist (replay is built in,
+presentation is the HUD panel); physics and course nodes are planned.
 
 ## Reference projects
 
 - `open-lm-connector`: Godot-facing C# entry points wrap Square session/protocol code
-  and Bluetooth abstractions. Windows uses WinRT; Linux uses BlueZ. Evaluate a bridge
-  versus native adaptation before promising direct Unreal integration. Do not invent
-  a wire protocol or embed a .NET runtime in Phase 0.
+  and Bluetooth abstractions. Windows uses WinRT; Linux uses BlueZ. Its protocol,
+  session and Windows transport were ported natively to C++ from a pinned revision;
+  no .NET runtime or bridge process is used.
 - `openfairway`: C# physics is the reference implementation. Some current classes
   depend on Godot types. Identify the numerical core and regression corpus before
   migration; retain upstream notices and pin the reference revision.
@@ -52,9 +65,14 @@ This diagram describes planned behavior. The foundation only displays a greeting
   mapping, and resolving surfaces at actual contact points. Physics calculations
   belong to OpenFairway. Verify licensing before copying implementation or assets.
 
-The sibling repositories are not required, copied, modified, or linked by the foundation.
+The sibling repositories are not required, modified, or linked by the build. Ported
+connector code is recorded in the third-party notices.
 
 ## Contracts to establish in Phase 1
+
+Launch-monitor contracts are now recorded in
+[launch-monitor integration](LaunchMonitorIntegration.md). The remaining items are
+the physics-side contracts below.
 
 Document measured-shot units and optional values, axis/handedness and spin signs,
 Unreal centimeters versus physics units, timing and fixed-step ownership, thread
