@@ -37,6 +37,10 @@ void FSquareSession::Initialize()
             Self->HandleNotification(CharacteristicUuid, Value);
         }
     };
+    Transport->OnError = [WeakSelf](const FString& Error)
+    {
+        if (const TSharedPtr<FSquareSession> Self = WeakSelf.Pin()) Self->FailConnect(Error);
+    };
     Transport->OnDisconnected = [WeakSelf]()
     {
         if (const TSharedPtr<FSquareSession> Self = WeakSelf.Pin())

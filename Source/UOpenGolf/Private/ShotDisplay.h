@@ -37,4 +37,10 @@ namespace ShotDisplay
 
     /** Shot-recording status: "Off", or "On · 3" with the shots saved this session. */
     FString RecordingStatus(bool bRecording, int32 ShotCount);
+
+    /** "v0.0.1" for project version "0.0.1"; empty when no version is set. */
+    FString VersionLabel(const FString& ProjectVersion);
+
+    /** ProjectVersion from the [/Script/EngineSettings.GeneralProjectSettings] game config. */
+    FString ProjectVersion();
 } // namespace ShotDisplay

@@ -1,5 +1,8 @@
 # Unreal / IDE output (including future public plugins)
 Binaries/
+Packaged
+# Cook/editor file-open order logs written by packaging.
+/Build/*/FileOpenOrder/
 DerivedDataCache/
 Intermediate/
 Saved/
@@ -26,6 +29,8 @@ CLAUDE.md
 /Plugins/PrivateContent/
 # Fab's default import destination for the optional Project Nature pack.
 /Content/PN_GrassLibrary/
+# Per-machine config layer, e.g. LocalRangeClass for an installed private range.
+/Config/User*.ini
 
 # Local tools and OS state
 __pycache__/

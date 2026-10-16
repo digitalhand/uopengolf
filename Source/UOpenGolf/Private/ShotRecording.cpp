@@ -7,6 +7,8 @@
 #include "HAL/PlatformProcess.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/Guid.h"
+#include "HAL/PlatformTime.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "Policies/PrettyJsonPrintPolicy.h"
 #include "Serialization/JsonSerializer.h"
@@ -220,98 +222,166 @@ namespace ShotRecording
         return Json;
     }
 
-    FShotRecorder::FShotRecorder(FString InRootDir)
-        : RootDir(InRootDir.IsEmpty() ? DefaultRootDir() : MoveTemp(InRootDir))
+    bool WriteRecordingFile(const FString& Path, const FString& Json, FString& Error)
     {
+        IFileManager& Files = IFileManager::Get();
+        if (!Files.MakeDirectory(*FPaths::GetPath(Path), true))
+        {
+            Error = TEXT("Cannot create recording folder");
+            return false;
+        }
+        const FString Temp = Path + TEXT(".tmp");
+        if (!FFileHelper::SaveStringToFile(Json, *Temp, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+        {
+            Error = TEXT("Cannot write recording file");
+            return false;
+        }
+        // Never replace an existing final record. Temp and destination share a filesystem.
+        if (!Files.Move(*Path, *Temp, false, false, false, true))
+        {
+            Error = TEXT("Cannot finalize recording file");
+            return false;
+        }
+        return true;
+    }
+
+    FShotRecorder::FShotRecorder(FString InRootDir, TFunction<double()> InClock, FWriter InWriter)
+        : RootDir(InRootDir.IsEmpty() ? DefaultRootDir() : MoveTemp(InRootDir)),
+          Clock(InClock ? MoveTemp(InClock) : TFunction<double()>([] { return FPlatformTime::Seconds(); })), Writer(MoveTemp(InWriter))
+    {
+        if (!Writer)
+        {
+            Writer = WriteRecordingFile;
+        }
     }
 
     void FShotRecorder::SetEnabled(bool bNewEnabled)
     {
-        if (bNewEnabled == bEnabled)
+        if (bNewEnabled == bEnabled) return;
+        if (bNewEnabled)
         {
-            return;
-        }
-        if (!bNewEnabled)
-        {
-            Flush();
+            CurrentSession = MakeShared<FSession>();
+            SessionDir.Reset();
         }
         else
         {
-            // A new session folder is made on the first shot, so toggling without shooting leaves nothing behind.
-            SessionDir.Reset();
-            ShotCount = 0;
+            for (FPending& Item : Pending) Item.bFinalized = true;
+            Process();
         }
         bEnabled = bNewEnabled;
     }
 
-    void FShotRecorder::OnShot(const FLaunchMonitorShot& Shot, ELaunchMonitorConnectionState State, ELaunchMonitorClub Club, bool bLeftHanded,
-        const FString& Firmware)
+    void FShotRecorder::OnShot(const FLaunchMonitorShot& Shot, ELaunchMonitorConnectionState State,
+        ELaunchMonitorClub Club, bool bLeftHanded, const FString& Firmware)
     {
-        Flush();
-        if (!bEnabled || !IsRecordable(Shot, State))
+        CancelSimulation();
+        if (!bEnabled || !IsRecordable(Shot, State)) return;
+        if (CurrentSession->Directory.IsEmpty())
         {
-            return;
+            CurrentSession->Directory = FPaths::Combine(RootDir, SessionFolderName(FDateTime::Now()) + TEXT("-") +
+                FGuid::NewGuid().ToString(EGuidFormats::Digits));
         }
-        FRecordedShot& Recorded = Pending.Emplace();
-        Recorded.Shot = Shot;
-        Recorded.SelectedClub = Club;
-        Recorded.bLeftHanded = bLeftHanded;
-        Recorded.Firmware = Firmware;
-        Recorded.RecordedLocal = FDateTime::Now();
+        FPending& Item = Pending.AddDefaulted_GetRef();
+        Item.Session = CurrentSession;
+        Item.Index = ++CurrentSession->NextIndex;
+        Item.ClubDeadline = Clock() + 3.0;
+        Item.Record.Shot = Shot;
+        Item.Record.SelectedClub = Club;
+        Item.Record.bLeftHanded = bLeftHanded;
+        Item.Record.Firmware = Firmware;
+        Item.Record.RecordedLocal = FDateTime::Now();
+    }
+
+    void FShotRecorder::BindSimulation(int32 DeviceShot, int32 SimulationShot)
+    {
+        for (FPending& Item : Pending)
+            if (!Item.bFinalized && Item.Record.Shot.ShotNumber == DeviceShot)
+                Item.SimulationShot = SimulationShot;
+    }
+
+    void FShotRecorder::CancelSimulation()
+    {
+        for (FPending& Item : Pending)
+        {
+            Item.bSimulationDone = true;
+            Item.SimulationShot = INDEX_NONE;
+        }
+        Process();
     }
 
     void FShotRecorder::OnClubData(const FLaunchMonitorClubData& ClubData)
     {
-        if (Pending.IsSet() && Pending->Shot.ShotNumber == ClubData.ShotNumber)
-        {
-            Pending->ClubData = ClubData;
-        }
+        for (FPending& Item : Pending)
+            if (!Item.bFinalized && Item.Record.Shot.ShotNumber == ClubData.ShotNumber)
+                Item.Record.ClubData = ClubData;
+        Process();
     }
 
     void FShotRecorder::OnBallAtRest(const FOpenFairwayShotResult& Result)
     {
-        if (Pending.IsSet())
+        for (FPending& Item : Pending)
         {
-            Pending->Engine = Result;
-            Flush();
+            if (!Item.bFinalized && !Item.bSimulationDone && Item.SimulationShot == Result.ShotNumber)
+            {
+                Item.Record.Engine = Result;
+                Item.bSimulationDone = true;
+            }
         }
+        Process();
+    }
+
+    int32 FShotRecorder::GetFailedSaveCount() const
+    {
+        if (LastError.IsEmpty()) return 0;
+        int32 Count = 0;
+        for (const FPending& Item : Pending) if (Item.bFinalized) ++Count;
+        return Count;
+    }
+
+    void FShotRecorder::Tick() { Process(); }
+
+    void FShotRecorder::Process(bool bForceRetry)
+    {
+        const double Now = Clock();
+        for (FPending& Item : Pending)
+            if (Item.bSimulationDone && (Item.Record.ClubData.IsSet() || Now >= Item.ClubDeadline))
+                Item.bFinalized = true;
+        if (!bForceRetry && Now < NextRetry) return;
+        for (int32 I = 0; I < Pending.Num();)
+        {
+            FPending& Item = Pending[I];
+            if (!Item.bFinalized) { ++I; continue; }
+            const FString Path = FPaths::Combine(Item.Session->Directory, ShotFileName(Item.Record.SelectedClub, Item.Index));
+            FString Error;
+            if (!Writer(Path, BuildShotJson(Item.Record, Item.Index), Error))
+            {
+                if (Error.IsEmpty()) Error = TEXT("Cannot save recording");
+                if (LastError != Error)
+                    UE_LOG(LogUOpenGolfRecording, Warning, TEXT("%s: %s. Retained in memory; retrying during Play."), *Error, *Path);
+                LastError = Error;
+                NextRetry = Now + 1.0;
+                return;
+            }
+            ++Item.Session->Saved;
+            if (Item.Session == CurrentSession) SessionDir = Item.Session->Directory;
+            UE_LOG(LogUOpenGolfRecording, Log, TEXT("Recorded shot %s"), *Path);
+            Pending.RemoveAt(I);
+        }
+        LastError.Reset();
+        NextRetry = 0;
     }
 
     void FShotRecorder::Flush()
     {
-        if (!Pending.IsSet())
-        {
-            return;
-        }
-        const FRecordedShot Recorded = MoveTemp(Pending.GetValue());
-        Pending.Reset();
+        for (FPending& Item : Pending) Item.bFinalized = true;
+        Process(true);
+    }
 
-        IFileManager& FileManager = IFileManager::Get();
-        if (SessionDir.IsEmpty())
-        {
-            // Two sessions in the same second get -2, -3... rather than sharing a folder.
-            const FString Base = FPaths::Combine(RootDir, SessionFolderName(Recorded.RecordedLocal));
-            FString Candidate = Base;
-            for (int32 Suffix = 2; FileManager.DirectoryExists(*Candidate); ++Suffix)
-            {
-                Candidate = FString::Printf(TEXT("%s-%d"), *Base, Suffix);
-            }
-            if (!FileManager.MakeDirectory(*Candidate, true))
-            {
-                UE_LOG(LogUOpenGolfRecording, Error, TEXT("Could not create shot recording folder %s"), *Candidate);
-                return;
-            }
-            SessionDir = Candidate;
-        }
-
-        const int32 Index = ShotCount + 1;
-        const FString Path = FPaths::Combine(SessionDir, ShotFileName(Recorded.SelectedClub, Index));
-        if (!FFileHelper::SaveStringToFile(BuildShotJson(Recorded, Index), *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
-        {
-            UE_LOG(LogUOpenGolfRecording, Error, TEXT("Could not write recorded shot %s"), *Path);
-            return;
-        }
-        ShotCount = Index;
-        UE_LOG(LogUOpenGolfRecording, Log, TEXT("Recorded shot %s"), *FPaths::ConvertRelativePathToFull(Path));
+    void FShotRecorder::Shutdown()
+    {
+        Flush();
+        if (!Pending.IsEmpty())
+            UE_LOG(LogUOpenGolfRecording, Error, TEXT("Play ended with %d unsaved recordings for %s. In-memory records cannot survive shutdown."),
+                Pending.Num(), *RootDir);
     }
 } // namespace ShotRecording

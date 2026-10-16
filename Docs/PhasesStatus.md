@@ -55,6 +55,10 @@ device shot as GSPro-shaped JSON with the selected club, club data and the engin
 under `Documents/UOpenGolf/Saved/ShotRecordings/session_<timestamp>/club_<club>_shot_<n>.json` (README
 "Recording shots"). `UOpenGolf.Range.ShotRecording` passes headless
 (`Saved/Automation/20261015-134115-0067205c`); the maintainer also validated recorded real Square Home shots on 2026-10-15.
+Later reliability changes add a unique suffix to session folders, save retries,
+late-club-data handling and Bluetooth cancellation. See the
+[reliability validation](#recording-reliability-bluetooth-cancellation-and-tracer-cpu-work)
+for current behavior, automated evidence and remaining hardware gaps.
 
 ## Phase 3 — Native OpenFairway
 
@@ -202,6 +206,259 @@ headless project tests pass on Windows, Unreal 5.8.3:
 `Saved/Automation/20261015-123610-1f202c67`. This exact palette has not had a new
 rendered inspection; scene lighting and tone mapping affect displayed colors.
 Linux remains untested.
+
+Optional turf limited to the fairway (2026-10-15): a private range's ground
+material override now applies only to fairway and fringe pieces
+(`AUOpenGolfRange::TurfTag`), and 3D grass is clipped to the 40 m fairway strip
+and the range start. Previously the override covered the 140 m-wide rough as well.
+Collision and surface tags are unchanged. `UOpenGolf.Range` (8 tests) passes
+(`Saved/Automation/20261015-155931-f69b247a`). The optional variant check passes
+with a new "turf off rough" assertion
+(`Saved/Automation/20261015-160556-variant-d730eb3d`), and its rendered captures
+were inspected (`Saved/Automation/20261015-160646-variant-ade59700`). Windows only.
+A per-machine `LocalRangeClass` setting in the ignored `Config/UserGame.ini` now
+lets the default map use an installed private range. Automation tests ignore it.
+In a `-game` run the log showed the private range being used, and a missing class
+falls back to the public range with a warning. Smoke and `UOpenGolf.Range`
+(`Saved/Automation/20261015-161611-5ed09967`) pass.
+
+Range look pass (2026-10-15): the earlier renders were overexposed. Auto exposure is
+off and no exposure was set, so the public fairway (`#406B1F` palette) rendered as
+`#B2D594` and the private turf as `#D2E18D`. The reference photo measures `#80A151`.
+
+Changes:
+- The range now has an unbound post-process: -0.5 EV fixed exposure (`ExposureBiasEV`)
+  and no motion blur.
+- A collision-free 4 km backdrop plane hides the void past the range.
+- `RoughMaterialOverride` covers the rough and the backdrop, and the green now takes the
+  turf material.
+- The private turf is palette-driven, with lengthwise 8 m stripes and anti-tiling.
+
+The private tee view measures fairway `#7C9F4D` and rough `#739448`, against the photo's
+`#80A151` and `#6E8E40`. Evidence:
+- Smoke and `UOpenGolf.Range` pass (`Saved/Automation/20261015-165632-7e9796dc`).
+- The optional variant passes with identical carry and total
+  (`Saved/Automation/20261015-165804-variant-99440e8a`).
+- Rendered captures of both maps were inspected. Windows only.
+
+Range dimensions, calm turf and white tracer (2026-10-15): the game ball now
+normalizes its imported bounds to 42.67 mm diameter. The original flag mesh is
+213.36 cm above ground with a 1.27 cm pole and a 35.56 by 50.8 cm flag. Seven
+feet is a conventional flagstick choice, not a mandated PGA height. The tee and
+yardage markers now explicitly use the basic-shape color material instead of
+falling back to the checkerboard material.
+
+The game owns a feathered translucent white ribbon (2 cm width, 0.35 opacity).
+It retains the whole flight path and fades monotonically during rollout below
+5 m/s, disappearing at rest and clearing on reset or another shot. No physics
+plugin source or shot-library data changed, so no FlightScope rerun was required.
+The private/public comparison retained identical carry/total/rest positions:
+iron 85.9318 / 89.0567 yd; low wood 121.5477 / 159.2398 yd.
+
+Private turf uses 16 cm spacing and (0.45, 0.45, 0.10) scale, 38,471 instances.
+Wind/player wobble and material displacement are disabled. The generated private
+material chain retains vendor opacity shapes, adds distance fading, shares the
+ground's mowing colors and uses upward canopy normals to suppress dark edge
+shimmer. Ground detail repeats at 1 m with reduced normal/macro variation. Vendor
+originals and the per-machine private startup selection are preserved.
+
+Windows verification:
+- Editor build passed. Smoke: `Saved/Automation/20261015-181940-93764773`.
+- All nine range tests, including actual dimensions and three tracer scenarios:
+  `Saved/Automation/20261015-181204-f44513ff`.
+- All five physics tests: `Saved/Automation/20261015-181940-c5808233`.
+- Private/public equivalence: `Saved/Automation/20261015-182009-variant-2c3c9da5`.
+- Driver, iron and slow-shot rendered tracer sequences:
+  `Saved/Automation/20261015-182252-variant-98d529d0`; inspected captures under
+  `Saved/Screenshots/ShotTrail/20261015-182311-*`. Slow-shot opacity fell from
+  0.122 at 1.99 m/s to below 0.001 at 0.12 m/s.
+
+History tracers (2026-10-15): when a ball stops, its tracer turns orange (0.55
+opacity) and stays on screen; the last two finished shots are kept and a third
+replaces the oldest. The automatic re-tee keeps them; **T** clears all tracers. All
+tracers are now 3 cm wide, widening with camera distance (0.004 × distance) so the
+far arc no longer thins below a pixel and breaks up. The ball rotates a fixed pool of three ribbons that share
+the existing geometry code. `M_ShotTrail` gained a `Color` parameter (white default).
+No physics plugin source changed, so no FlightScope rerun was required.
+- Editor build passed. Smoke: `Saved/Automation/20261015-194748-20f7ff14`.
+- Range tests (12), including the new history checks in `.ShotTrail`:
+  `Saved/Automation/20261015-195454-d20981e9`.
+- Physics tests (5): `Saved/Automation/20261015-195009-adbcfdb8`.
+- Rendered captures not yet inspected.
+- Private and public static visual checks passed:
+  `Saved/Automation/20261015-183631-variant-8be43815` and
+  `Saved/Automation/20261015-183834-variant-36a875cf`.
+
+Twenty stationary frames per view span more than ten seconds after shaders settle.
+Comparing first/last frames in the sampled turf region, the private tee's mean
+maximum RGB-channel difference fell from 2.7667/255 before the shading correction
+to 0.5454/255 afterward (grass off: 0.5396/255). Pixels changing more than three
+levels fell from 25.798% to 0.018%; closeup was 0.002%, coverage edge 0.000%.
+This indicates substantially reduced shimmer, not bit-identical temporal rendering.
+Measurements: `Saved/Automation/20261015-183631-variant-8be43815/GrassStability.txt`.
+The public fallback still shows more blade-edge temporal noise (tee region 9.253%
+above three levels versus 0.037% with grass off); the private material correction
+is not a replacement for the public asset palette. Its functional/rendered tests
+pass, but equivalent public-grass shimmer reduction is not claimed.
+
+The first final private tee timing was 25.502 ms with grass versus 8.413 ms off;
+other views were about 8.4 ms. An isolated six-view repeat passed at 8.334 ms on /
+8.379 ms off, with all other views 8.344–8.576 ms:
+`Saved/Automation/20261015-184323-variant-c054289e`. The first slowdown did not
+reproduce. These capped editor measurements do not establish GPU headroom or
+packaged performance. Historical captures were 1080x492 versus this run's
+1629x932, so historical timing is not a controlled resolution comparison.
+A longer repeat crashed in Unreal's ImageWrapper screenshot encoder
+(`Saved/Automation/20261015-184123-variant-a430bbe1`); the complete stationary
+sequences had already passed, and the shorter repeat used `--static-only`.
+The initial sandboxed render failed because shader working files could not be
+written outside the workspace; successful renders used approved access and waited
+for shader compilation. Linux and packaged-game rendering remain untested.
+
+Shot camera framing (2026-10-15): after the hit the camera holds the tee view for
+0.5 s (`FollowDelaySeconds`), then follows the ball from 7 m behind and 1.35 m above
+it, in flight and at rest (`FollowOffset`). It aims at the ball and tilts up 8°
+(`FollowFramingPitch`), which puts the ball in the lower third with the horizon in
+view, similar to a GSPro follow-camera screenshot. The values are estimated from one
+frame, not measured. Previously the camera followed immediately from 9 m back and
+3 m up, centred on the ball. No physics code changed. On Windows the editor build,
+smoke (`Saved/Automation/20261015-190406-91c8b8bb`) and all nine `UOpenGolf.Range`
+tests (`Saved/Automation/20261015-190417-3de3e315`) pass. No test checks the framing; it has
+not been visually reviewed in a rendered session yet. Linux remains untested.
+
+Standalone and packaged startup fix (2026-10-15): `-game` and a packaged Development
+build crashed in `AUOpenGolfGameMode::StartPlay` with `Assertion failed: Guid.IsValid()`
+(`MapBuildData.cpp:956`). The engine assigns a sky atmosphere's static-lighting GUID only
+to non-template components, so the range's default-subobject sky was spawned with an
+empty one, and the map's built lighting data looked it up. Editor automation did not hit
+this. The range now gives the template sky a fixed GUID. On Windows: editor build, smoke,
+`UOpenGolf.Range` (`Saved/Automation/20261015-192354-293952d8`), a 60 s `-game` run and a
+45 s run of a fresh `RunUAT BuildCookRun` Win64 Development package all start without the
+assert. Packaging is manual; there is no packaging script or test yet.
+
+HUD version label (2026-10-15): the bottom-left corner shows `v` plus `ProjectVersion`
+from `Config/DefaultGame.ini`, now `0.0.1` (was `0.1.0`). The Test shots button and the
+status box moved up together (`HudScale::BottomPanelGap`) to leave room. Windows: build,
+smoke and `UOpenGolf.Range` including `.ShotDisplay` version checks
+(`Saved/Automation/20261015-202135-8adb5fa5`). Not yet inspected in a rendered session.
+
+Packaging documented (2026-10-15): README [Package Windows](../README.md#package-windows)
+gives the `RunUAT BuildCookRun` command and the editor route. A fresh run of that
+command succeeded (`BUILD SUCCESSFUL`, 550 packages cooked, about 1 GB; log
+`Saved/Logs/PackageCheck.log`, output `Saved/PackageCheck/`). The manifest shows the
+enabled private `ProjectNatureRange` plugin content is cooked into the package, so
+packages built with `Plugins/PrivateContent/` present are not distributable. This run
+was not launched; Square Home from a package, Shipping and Linux remain unverified.
+
+### Recording reliability, Bluetooth cancellation and tracer CPU work
+
+2026-10-15:
+recordings now retain failed saves in memory and retry once per second during Play,
+including after recording is off or the device disconnects. Files use a same-directory
+temporary write and a non-replacing rename; file indices and session folders survive
+failures and recording toggles. The HUD shows unsaved counts and errors. Shutdown
+makes one final attempt and reports outstanding records; recovery across Play sessions
+or application restarts is not provided.
+
+Shot records associate device and simulation IDs explicitly. Club responses can arrive
+before or after ball rest, until three seconds after shot receipt. An interrupted shot
+can still accept club data but cannot receive another simulation's result. Stop-recording
+and shutdown finalize the data available immediately. Regression coverage includes
+actual directory/write/rename failures, no-overwrite behavior, recovery, delayed and
+missing club data, session transitions, unrelated results and shutdown failures.
+
+Windows Bluetooth waits now check cancellation within 25 ms, with a 10 s operation
+limit and a 30 s device-open/discovery limit. Disconnect invalidates queued work and
+callbacks; shutdown cooperatively stops and joins the worker. Cleanup does not wait
+for remote notification-disable writes. Initialization errors reach the session error
+path. Deadline/cancellation and session tests use deterministic clocks and fake
+transports; Windows driver behavior and real-device reconnect/shutdown still need
+hardware validation. OS calls during cancellation/resource release can still block.
+
+The game tracer reuses vertex/index/UV buffers, updates existing mesh sections when
+topology is unchanged, and skips unchanged geometry, opacity and visibility work.
+The previous geometry path is retained only in development automation builds for
+comparison. The 120 Hz timestep, 12-substep cap and physics-plugin source are unchanged.
+`UOpenGolf.Range.FrameRates` verifies carry, total and simulation duration at 30, 60,
+144 and sustained 5 FPS, plus 250 ms hitches. Stalls still discard excess catch-up time.
+
+Windows, Unreal 5.8.3 validation:
+- Editor builds pass. Full headless project run: 23/23 passed
+  (`Saved/Automation/20261015-192001-1dda1bf0`), including all five physics tests.
+- The subsequently added real-filesystem storage regression and both recording tests:
+  3/3 passed (`Saved/Automation/20261015-192237-b4f861f8`). Together these runs cover
+  all 24 current headless project tests.
+- After the final transport cleanup adjustment, all five launch-monitor tests pass
+  (`Saved/Automation/20261015-192355-169c33aa`); separate smoke passes
+  (`Saved/Automation/20261015-192355-a2fd063a`). All 17 Python tests pass.
+- Driver, iron and slow-shot rendered sequences pass
+  (`Saved/Automation/20261015-192716-variant-662113bb`). Captures under
+  `Saved/Screenshots/ShotTrail/20261015-192740-*` were visually inspected for the
+  camera-facing ribbon and rollout fade. These captures used the editor's 1080x492
+  viewport, before the timing test was changed to enforce its render-target size.
+
+The final timing workload explicitly sets and checks a 1280x720 render target,
+waits ten seconds after shaders finish, disables VSync, caps at 120 FPS, and omits
+screenshot encoding. Mean game-thread measurements, in microseconds per actor/widget
+tick; frame intervals are milliseconds:
+
+| Shot | Previous tracer | Updated tracer | Reduction | Ball physics | HUD refresh | Previous / updated frame interval |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Driver | 67.185 | 44.731 | 33% | 33.951 | 43.851 | 8.850 / 9.038 |
+| Iron | 45.648 | 31.554 | 31% | 28.178 | 44.981 | 9.027 / 9.405 |
+| Slow shot | 33.932 | 15.157 | 55% | 44.311 | 43.408 | 8.917 / 8.923 |
+
+Previous-path report: `Saved/Automation/20261015-192920-variant-b07518ea`.
+Updated-path repeat: `Saved/Automation/20261015-193253-variant-4fde181d`.
+An earlier updated-path run had 51.609 / 43.554 / 9.624 ms frame intervals
+(`Saved/Automation/20261015-193043-variant-1f0701b0`); the large slowdown did not
+reproduce. Frame intervals are slightly worse in the final updated-path comparison,
+and these editor measurements do not establish an FPS improvement, GPU headroom or
+packaged performance. They support reduced tracer CPU work. Ball physics and HUD
+refresh each average less than 0.05 ms in the final repeat, so neither was rewritten
+for performance. Linux and these changes on real hardware remain unverified.
+No physics-plugin source or shot-library data changed; no FlightScope rerun was needed.
+
+### History tracer review
+
+2026-10-15: source review of the three-ribbon pool found that retained shots use the
+optimized geometry path. Promotion rotates ribbon indices without copying path arrays
+or creating components. Each ribbon retains its CPU buffers; camera-only changes use
+`UpdateMeshSection_LinearColor`, and a stationary camera/unchanged width skips geometry
+work. Topology creation is confined to changed point counts (including a possible
+final sample on promotion). History is capped at two ribbons with 4096 points per path.
+The allocation/recreation implementation remains opt-in through `-RangeLegacyTrail`
+in development automation builds; adding shot history does not select it.
+
+Unreal's procedural-mesh update still copies vertex data for the render thread, so
+moving-camera history updates are not allocation-free. Two follow-ups remain: history
+with zero opacity is hidden but still receives geometry updates while the camera moves;
+and existing history tests verify retention/eviction/clearing but do not assert mesh
+creation/update/skip counts. Those counts would guard against future performance regressions.
+No runtime source was changed as part of this review.
+
+The latest Windows editor build passes after closing processes that held the module DLL.
+Separate smoke and history regression pass:
+`Saved/Automation/20261015-195459-ed4ca1f5` and
+`Saved/Automation/20261015-195459-1a145e64`. The history regression checks oldest-shot
+eviction, automatic re-tee preservation and explicit clearing across three shots.
+
+Sequential rendered timings use the checked 1280x720 target, VSync off, 120 FPS cap,
+shader settling and no screenshots. Both runs pass. Means include all tracer work
+for the active shot and retained histories, in microseconds per actor tick:
+
+| Active shot | Retained shots during flight/rollout | Optimized tracer CPU | Legacy tracer CPU | Optimized / legacy frame interval, ms |
+| --- | ---: | ---: | ---: | ---: |
+| Driver | 0 | 43.891 | 67.652 | 9.848 / 13.217 |
+| Iron | 1 | 64.706 | 96.827 | 9.653 / 20.146 |
+| Slow shot | 2 | 69.620 | 116.897 | 10.191 / 20.619 |
+
+Optimized report: `Saved/Automation/20261015-195558-variant-525fc874`.
+Legacy report: `Saved/Automation/20261015-195707-variant-2aa1c571`.
+This is a history-enabled comparison, separate from the earlier single-ribbon timing.
+The editor measurements support lower tracer CPU work; they do not establish packaged
+FPS or GPU headroom. The history review did not verify Linux or packaged rendering.
+No physics-plugin source or shot-library data changed.
 
 ## Phase 6 — Community and content expansion
 

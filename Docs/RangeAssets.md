@@ -18,7 +18,12 @@ Grass covers a 20 m radius around the tee, clipped at the range's back edge and
 excluding the 5 m tee paint. Clumps contain 32 small triangles, use no collision
 or shadows, and cull between 12 and 22 m. The toggle is checked every 0.25 s.
 The fairway texture, mowing stripes, and physical ground remain when grass is off.
-The flag is static; it does not simulate cloth.
+Grass world-position displacement is disabled. The flag is static; it does not
+simulate cloth. Its pole is 213.36 cm above ground, 1.27 cm in diameter, with a
+35.56 by 50.8 cm flag. These are conventional flag dimensions, not prescribed
+PGA dimensions. The ball is rendered at 42.67 mm diameter, matching the
+[USGA minimum](https://www.usga.org/equipment-standards/equipment-rules-2019/equipment-rules/part-4-rule-4.html).
+The pole dimensions meet the [flagstick dimensional constraints](https://www.usga.org/content/usga/home-page/equipment-standards/equipment-rules-2019/equipment-rules/part-8-rule-2.html).
 
 The fairway and grass-blade materials expose `GrassDarkColor` and
 `GrassLightColor` parameters, set to sRGB **#406B1F** and **#4D7E20** respectively.
@@ -38,7 +43,7 @@ All third-party inputs below use CC0 1.0 Universal. Converted assets live under
 | --- | --- |
 | ambientCG `Grass004_2K-JPG.zip` | Import Color as sRGB, NormalDX as a normal map without flipping green, and Roughness as linear masks. Planar world-space UVs repeat every 140 cm; world-space normals match the flat ground. Add modest stripes and broad color variation in the material. |
 | jpsweber `golf_0.zip`, `Golf_ball.obj` | Center and normalize to a 100 cm diameter. Use smooth normals and an ivory material. UE generates LODs at 100%, 25%, and 5% of source triangles, with screen sizes 1.0, 0.1, and 0.025. Source LOD has 61,672 triangles. |
-| mess110 `game-golf.tar_6.gz`, `bin/golf-flag.obj` | Convert Y-up to Z-up, scale pole top to 240 cm, orient flag toward the tee, and assign pole/flag materials by mesh region. Retain the small below-ground pole section. Other models and textures are omitted. |
+| Original flagstick | Generate a 32-sided half-inch pole, seven feet above ground plus a 10 cm buried section, and a 14 by 20 inch rectangular flag facing the tee. Replaces the earlier converted mess110 model. |
 | Original grass clump | Deterministically generate 32 blades over a 20 cm square, 1.2–2 cm tall, with a two-sided material and per-instance color variation. |
 
 Archive SHA-256 checksums, which pin the downloaded versions:
@@ -47,7 +52,7 @@ Archive SHA-256 checksums, which pin the downloaded versions:
 | --- | --- |
 | `Grass004_2K-JPG.zip` | `d7d3f08e8bb1e59aed0c3dbb85ea0b46d5308481f89b6a3fd62c0ec9e862245b` |
 | `golf_0.zip` | `33358f1d9549e3b56f8826b65982dc1b5bafa701321425e7970971b7e4388d2e` |
-| `game-golf.tar.gz` (downloaded as `game-golf.tar_6.gz`) | `fd2ca23a434ec9c1131d2a8758ea2d24710fcc6c4c00eb73b9f193b45ea2e303` |
+| Historical `game-golf.tar.gz` (no longer needed by regeneration) | `fd2ca23a434ec9c1131d2a8758ea2d24710fcc6c4c00eb73b9f193b45ea2e303` |
 
 ## Regeneration
 
@@ -77,6 +82,20 @@ reimporting textures or replacing material graphs. Run it through Unreal Python
 to reset the palette to these defaults. The importer applies the palette to new
 materials and preserves existing palette edits on subsequent imports.
 
+Run `Scripts/UpdateRangePresentation.py` through the same Unreal Python entrypoint
+after conversion to import only the dimensioned flag and regenerate `M_ShotTrail`.
+The game-owned ribbon uses a two-sided unlit translucent material with feathered
+edges and a `Color` parameter (white by default) that tints the history tracers
+orange. Defaults are 3 cm width (at least 0.004 × camera distance, about
+2 px at 1080p, so the far arc doesn't thin below a pixel), 0.35 opacity (0.55 for history tracers) and
+rollout fading below 5 m/s; these are editable game-ball presentation properties.
+Because the game ball loads `M_ShotTrail` at startup, the script can't delete its
+graph nodes (`!IsRooted` assertion). On an existing material it rewires emissive to
+`Color` and leaves the old white constant disconnected. The ribbon reuses CPU
+buffers, recreates topology only when sample count changes, and updates existing
+vertices for camera motion. It skips unchanged geometry, opacity and visibility.
+These are game-side presentation changes; physics still runs at 120 Hz.
+
 ## Validation
 
 Build and run Smoke, `UOpenGolf.Physics`, and `UOpenGolf.Range` with the project
@@ -98,5 +117,27 @@ editor frame intervals with grass on and off after a settling period. These
 include editor and automation overhead and are not standalone-game benchmarks.
 The first rendered run using the project-local cache may spend several minutes
 compiling shaders.
-Record actual test outcomes and remaining platform gaps in
-[phase status](PhasesStatus.md).
+Static tee, grass-off, closeup and coverage-edge views additionally capture 20
+frames at half-second intervals to inspect flicker. `UOpenGolf.Range.ShotTrail`
+checks path creation, monotonic rollout fade, disappearance at rest and reset for
+driver, iron and slow shots. Use `check_range_variant.py --map <map> --render
+--shot-trail` for matching moving captures under `Saved/Screenshots/ShotTrail/`.
+For a CPU comparison without screenshot encoding, set `UE_ROOT`, build the editor,
+and run these sequentially on an otherwise idle machine:
+
+```powershell
+python Scripts/check_range_variant.py --map /Game/UOpenGolf/Maps/UOpenGolf --render --shot-trail --trail-timing --legacy-trail
+python Scripts/check_range_variant.py --map /Game/UOpenGolf/Maps/UOpenGolf --render --shot-trail --trail-timing
+```
+
+`--legacy-trail` selects the previous geometry implementation in development automation
+builds; it requires `--trail-timing`. Timing mode sets and checks a 1280x720 render
+target, disables VSync, caps at 120 FPS and waits ten seconds after shaders finish.
+The report's `Editor.log` includes mean/max tracer and ball CPU times, mean HUD CPU
+time, and whole-frame intervals for each shot. These means cover actor/widget ticks,
+not individual 120 Hz physics substeps. The game also exposes CPU trace scopes
+`UOpenGolf_BallPhysics`, `UOpenGolf_ShotTrail` and `UOpenGolf_HudRefresh`.
+
+Measured tracer CPU work decreased, but whole-frame intervals did not establish an
+FPS gain. Detailed measurements, a non-reproducing slow run, and remaining platform
+gaps are recorded in [phase status](PhasesStatus.md#recording-reliability-bluetooth-cancellation-and-tracer-cpu-work).

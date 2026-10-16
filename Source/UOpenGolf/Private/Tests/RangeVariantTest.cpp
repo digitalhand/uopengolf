@@ -3,6 +3,7 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/World.h"
+#include "Materials/MaterialInterface.h"
 #include "FileHelpers.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
@@ -77,6 +78,19 @@ namespace
                     Test->TestTrue(TEXT("Grass mesh resolves"), Component->GetStaticMesh() != nullptr);
                     Test->TestEqual(TEXT("Grass has no collision"), Component->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
                 }
+                UMaterialInterface* FairwayMaterial = nullptr;
+                UMaterialInterface* RoughMaterial = nullptr;
+                TArray<UStaticMeshComponent*> Pieces;
+                Range->GetComponents(Pieces);
+                for (auto* Piece : Pieces)
+                {
+                    if (Piece->GetName() == TEXT("FairwayFront"))
+                        FairwayMaterial = Piece->GetMaterial(0);
+                    else if (Piece->GetName() == TEXT("RoughLeft"))
+                        RoughMaterial = Piece->GetMaterial(0);
+                }
+                if (bEnhanced)
+                    Test->TestTrue(TEXT("Turf override stays off the rough"), FairwayMaterial != RoughMaterial);
                 GrassVar->Set(1, ECVF_SetByConsole);
                 ReadyAt = GetCurrentRunTime() + 0.5;
                 Stage = 1;

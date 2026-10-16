@@ -9,7 +9,8 @@ class AUOpenGolfPlayerController;
 
 /**
  * Range HUD: shot tiles down the right edge (results, club data, then the raw launch-monitor
- * values) and a launch-monitor status box in the bottom-right corner. Clicks pass through it,
+ * values), a launch-monitor status box in the bottom-right corner and the game version in the
+ * bottom-left corner. Clicks pass through it,
  * and it hides while the test-shot panel is open.
  */
 class SRangeHud : public SCompoundWidget

@@ -15,10 +15,13 @@ the [MIT license](LICENSE). Unreal Engine and third-party content retain their o
   - [HUD](#hud)
   - [Changing clubs](#changing-clubs)
   - [Recording shots](#recording-shots)
+  - [Recording errors and retries](#recording-errors-and-retries)
   - [Settings](#settings)
-- [Engine version warning](#engine-version-warning)
-- [Visual Studio Code setup](#visual-studio-code-setup)
-- [Build, run, and test](#build-run-and-test)
+- [Developer](#developer)
+  - [Build, run, and test](#build-run-and-test)
+  - [Package Windows](#package-windows)
+  - [Engine version warning](#engine-version-warning)
+  - [Visual Studio Code setup](#visual-studio-code-setup)
 - [Project structure and architecture](#project-structure-and-architecture)
 - [Plugins](#plugins)
 - [Driving range and ball physics](#driving-range-and-ball-physics)
@@ -46,7 +49,9 @@ Working on Windows (Unreal 5.8.3, verified 2026-10-15 by headless automation):
 - Editor and game targets build; the startup smoke test passes.
 - The `OpenLaunchMonitor` plugin: a native C++ port of the open-lm-connector Square
   protocol and session, a C++/WinRT Bluetooth LE transport, built-in replay shots,
-  and Blueprint/C++ events. Its protocol, session and replay tests pass.
+  and Blueprint/C++ events. Protocol, session, replay, cancellation and operation-wait
+  tests pass. Async Bluetooth waits have cancellation and deadlines; real-device
+  verification of the updated shutdown/reconnect paths remains outstanding.
 - The `OpenFairwayPhysics` plugin: a native C++ port of the ogolf-physics flight,
   impact, bounce and roll equations, with speed-dependent flight spin decay and
   continuous calibration. A historical profile matches the C# reference on 21
@@ -57,10 +62,14 @@ Working on Windows (Unreal 5.8.3, verified 2026-10-15 by headless automation):
 
 Verified by the maintainer with a **real Square Home** on Windows (2026-10-14): the
 Bluetooth connection, battery and firmware readout, and captured shot and club data.
+Club selection and shot recording were also verified by the maintainer on 2026-10-15.
+The newer save-failure recovery and Bluetooth cancellation paths have automated
+coverage; they have not been reverified with hardware.
 
 The launch-direction HUD and nine-shot replay selector were also inspected in rendered captures on Windows
-(2026-10-14). Full ball/camera presentation review, link-loss reconnect and club
-selection on hardware, and all Linux verification remain outstanding. Linux has
+(2026-10-14). Ball/flag dimensions and translucent tracer behavior were verified on
+Windows on 2026-10-15. Full camera review, link-loss reconnect and cancellation
+on hardware, and all Linux verification remain outstanding. Linux has
 no Bluetooth transport yet.
 
 Launch-monitor hardware and purchased content are optional; replay shots work
@@ -156,7 +165,7 @@ nothing until it does.
 | **P** | Open or close the test-shot list |
 | **T** | Tee the ball up again straight away |
 | **~** | Unreal console, for the [settings](#settings) below |
-| **Escape** | Stop Play (in the editor) |
+| **Escape** | Quit the game (standalone or packaged); stop Play in the editor |
 
 The mouse is only used for the test-shot panel at the bottom left. The HUD itself
 does not take clicks: clicking the club name or a tile does nothing.
@@ -170,10 +179,16 @@ does not take clicks: clicking the club name or a tile does nothing.
   `*` that it is derived from other measurements, and `L`/`R` the direction.
 - **Status box** (bottom right): the launch-monitor state (Disconnected, Scanning,
   Connecting, Connected, Ready) and battery. While connected it also shows
-  **Record Shots** (Off, or On with the number of shots saved), with the key tips
+  **Record Shots** (Off, or On with the number of shots saved). Failed saves keep
+  the status visible after disconnect and show the unsaved count and error while
+  retrying; see [Recording errors and retries](#recording-errors-and-retries).
+  The usual key tips are
   **Connect [C]**, or **Disconnect [D] · Record [F9]**.
 - **Test shots [P] | Repeat [R]** (bottom left): only shown while no launch monitor is
   connected. See [Selecting test shots](#selecting-test-shots).
+- **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
+  from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
+  currently **v0.0.1**. Change the version there; packaged builds use the same value.
 
 A stopped ball stays put for 3 seconds with its result shown, then goes back to the
 tee. The tiles keep the last shot until the next one. See
@@ -200,8 +215,9 @@ Optimizer) and compare with this engine.
 3. Select the club with **Tab** before each shot; the club selected when the shot
    arrives is the one recorded.
 
-Each time recording is switched on, the first shot creates a new folder
-`Documents/UOpenGolf/Saved/ShotRecordings/session_<YYYYMMDD-HHMMSS>/` in your user folder
+Each time recording is switched on, the first shot reserves a unique session folder
+(created when its first record is saved):
+`Documents/UOpenGolf/Saved/ShotRecordings/session_<YYYYMMDD-HHMMSS>-<unique-id>/` in your user folder
 (on Windows `%USERPROFILE%\Documents\...`; on Linux the XDG documents folder, usually
 `~/Documents/...`), so recordings survive rebuilds and reinstalls. Each shot is one file named
 `club_<club>_shot_<n>.json`, such as `club_driver_shot_1.json` then
@@ -210,10 +226,12 @@ codes match the shot library: `driver`, `3w`, `5w`, `7w`, `4i` to `9i`, `pw`, `g
 `sw`, `putter`.
 
 Only shots from the connected device are recorded; replay and test shots (**R**,
-**P**) never are. A file is written once the ball stops, so it includes the club data
-(which arrives about a second after the shot) and the engine's result. A shot still in
-flight when the next one arrives, recording stops or Play ends is written without the
-engine result.
+**P**) never are. A completed shot waits for its club response, or until three seconds
+have elapsed since receipt, before being saved. Club data arriving after a short shot
+stops is still included. Each engine result is matched to the simulation that belongs
+to that recorded shot. A shot interrupted before rest has no engine result;
+it can still receive club data until its deadline. Turning recording off or ending
+Play saves the information available immediately.
 
 The file uses the GSPro Open Connect layout (ball speed in mph, angles in degrees, spin
 in rpm, GSPro signs) plus a `UOpenGolf` block:
@@ -237,10 +255,25 @@ Decimal values (speeds, angles, distances, times) are rounded to two decimal pla
 whole numbers (spin rpm, shot numbers) are written as they are. Values the device did
 not measure are left out rather than written as 0, and
 `ClubData` is left out (with `ContainsClubData: false`) when the shot has no club
-reading. Recording has not yet been run with a real Square Home.
+reading. The maintainer verified recording with a real Square Home on 2026-10-15;
+the subsequent retry and delayed-data changes have automated coverage only.
 
 To check that a shot was saved, look for `Recorded shot <path>` under
 `LogUOpenGolfRecording` in the Output Log.
+
+### Recording errors and retries
+
+Files are written to a temporary file in the recording folder and renamed only after
+the write closes successfully. Existing final files are never replaced. If creating
+the folder, writing, or renaming fails, the shot remains in memory and retries once
+per second during Play. Later shots retain their own file numbers and session folders.
+The saved count advances only on success.
+
+The status box shows the number of unsaved records and the save error, including
+while disconnected or recording is off. Restore access to the folder while Play
+remains open to let the retries complete. Ending Play makes one final save attempt
+and logs any remaining unsaved count and destination. **There is no recovery across
+Play sessions or application restarts**; failed recordings still in memory are lost.
 
 ### Settings
 
@@ -259,7 +292,132 @@ None of these are saved between Play sessions.
 Shots are played on flat fairway at 75 °F and sea level; there is no wind, weather,
 altitude or surface option in the game yet.
 
-## Engine version warning
+## Developer
+
+Building, packaging, testing and editor setup for working on the project.
+
+### Build, run, and test
+
+Run commands from the repository root. Windows scripts also accept `-EngineRoot PATH`;
+Linux scripts accept `--engine-root PATH`. Windows falls back to the standard
+`Program Files/Epic Games/UE_5.8` location when `UE_ROOT` is unset.
+
+| Action | Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File` | Linux: `bash` |
+| --- | --- | --- |
+| Build Development Editor | `Scripts/ue.ps1 Build` | `Scripts/ue.sh build` |
+| Open editor | `Scripts/ue.ps1 Editor` | `Scripts/ue.sh editor` |
+| Run through editor executable in game mode | `Scripts/ue.ps1 Run` | `Scripts/ue.sh run` |
+| Run headless startup smoke test | `Scripts/ue.ps1 Smoke` | `Scripts/ue.sh smoke` |
+| Run automation tests by name prefix | `Scripts/ue.ps1 Test -Filter UOpenGolf.LaunchMonitor` | `Scripts/ue.sh test --filter UOpenGolf.LaunchMonitor` |
+| Compile Development game target | `Scripts/ue.ps1 Build -Target Game` | `Scripts/ue.sh build --target game` |
+
+Build the editor target **before** running the editor, game-mode preview, or smoke test.
+The game-target command compiles native code; it does not cook or package a standalone
+game. To build a `.exe`, see [Package Windows](#package-windows).
+
+Unreal's command-line equivalents to Godot console/headless workflows are
+`Build.bat` / `Build.sh` (UnrealBuildTool), `UnrealEditor-Cmd.exe` on Windows or
+`UnrealEditor` on Linux with unattended options, the Automation Framework, and
+`RunUAT.bat` / `RunUAT.sh` with `BuildCookRun` for packaging.
+
+The `UOpenGolf.Smoke.UOpenGolf` startup test (named after the committed map) loads
+the map, starts Play In Editor, and verifies the game mode, HUD, range, and a ball
+resting on the tee. It does not verify pixels; check the range visually with
+rendering enabled as well.
+
+`Test` runs every automation test whose name starts with `-Filter` (default
+`UOpenGolf`, which includes the smoke test) and fails unless at least one matching
+test ran and every test passed. None of the tests need hardware:
+
+| Test | Covers |
+| --- | --- |
+| `UOpenGolf.Smoke.UOpenGolf` | Startup map, game mode, HUD, range and teed-up ball |
+| `UOpenGolf.LaunchMonitor.Protocol`, `.Session`, `.Replay` | Square protocol, session and replay shots |
+| `UOpenGolf.LaunchMonitor.OperationWait`, `.Cancellation` | Operation deadlines, cooperative cancellation, obsolete completions, repeated reconnect and initialization failure without hardware |
+| `UOpenGolf.Range.ReplaySelection` | Preset selection, repeat, invalid selection, and corrected low-wood carry in the range |
+| `UOpenGolf.Range.RolloutSurfaces` | Low-wood rollout with mixed surfaces, all fairway, and fringe retained; neutral regime contact settings |
+| `UOpenGolf.Physics.Core`, `.Fixtures` | Physics core, 21 C# shots under the historical profile, and current-model completion checks |
+| `UOpenGolf.Physics.FlightCorrections` | Spin decay, mirrored directions, interpolation and calibration-boundary continuity |
+| `UOpenGolf.Physics.FlightScopeAnalysis` | Screenshot reproduction and isolated flight-model experiments; does not assert FlightScope accuracy |
+| `UOpenGolf.Physics.ShotLibrary` | Replays every shot in `Data/ShotLibrary/` for `Scripts/flightscope_compare.py`; checks only that each shot completes, not FlightScope accuracy |
+| `UOpenGolf.Range.Shot` | A drive hit on the running range matches the headless prediction |
+| `UOpenGolf.Range.AutoReset` | A stopped ball returns to the tee after 3 s with its shot result and launch-monitor shot kept; a shot hit during the wait is not interrupted |
+| `UOpenGolf.Range.ShotConversion`, `.ShotDisplay` | Signed shot conversion and direction labels, including missing measurements |
+| `UOpenGolf.Range.ShotRecording` | File names, JSON contents and connected-device-only recording |
+| `UOpenGolf.Range.ShotRecordingRecovery` | Delayed/missing club data, simulation identity, queued retries, recording-session changes and shutdown failures |
+| `UOpenGolf.Range.ShotRecordingStorage` | Real directory/write/rename failures, retry and preserving existing final files |
+| `UOpenGolf.Range.FrameRates` | Matching carry, total and simulation duration at 30/60/144/5 FPS and with 250 ms hitches |
+| `UOpenGolf.Range.Presentation`, `.ShotTrail` | Ball dimensions, decorative grass toggling, tracer path, monotonic fade, rest and reset, two history tracers (oldest replaced, kept on re-tee, cleared on request) |
+| `UOpenGolf.Visual.LaunchDirections` | Rendered HUD captures; requires rendering and is excluded from headless runs |
+| `UOpenGolf.Visual.ShotTrail`, `.RangeAssets`, `.ReplaySelector` | Rendered tracer, range assets and replay-panel checks; excluded from headless runs |
+
+Each smoke or test run writes logs and an `index.json` report to a fresh directory under
+`Saved/Automation/`. The runner fails on a nonzero process exit, timeout, missing or
+invalid report, zero tests, a missing UOpenGolf test, or failed/incomplete tests.
+Smoke runs select a project-local filesystem cache in `DerivedDataCache/`, without
+requiring a Zen cache service; normal interactive editor sessions use engine defaults.
+Default timeout is 180 seconds; use `-TimeoutSeconds 300` or `--timeout 300` on slower machines.
+Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
+
+The report validator and the FlightScope comparison script also have engine-free checks:
+`python Scripts/test_automation_report.py` and `python Scripts/test_flightscope_compare.py`
+(Windows), or the same with `python3` (Linux).
+
+The original blank map is committed. `Scripts/CreateUOpenGolfMap.py` is a maintainer
+generation utility, not a setup step; it refuses to replace an existing map.
+
+### Package Windows
+
+Packaging builds the game target, cooks content, and stages a standalone
+`UOpenGolf.exe` that runs without the editor. Build the editor first (see
+[Build, run, and test](#build-run-and-test)) and close the Unreal Editor.
+
+**From the command line** (verified on Windows, 2026-10-15; Development, about 1 GB):
+
+```powershell
+# Uses UE_ROOT if set, otherwise the default install location (like Scripts/ue.ps1).
+$ue = if ($env:UE_ROOT) { $env:UE_ROOT } else { 'C:\Program Files\Epic Games\UE_5.8' }
+& "$ue\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun "-project=$PWD\UOpenGolf.uproject" `
+  -platform=Win64 -clientconfig=Development -build -cook -stage -pak -archive `
+  "-archivedirectory=$PWD\Packaged" -nop4 -utf8output -unattended
+```
+
+Run it from the repository root. If Unreal is installed elsewhere, set `$env:UE_ROOT`
+to the folder that contains `Engine\` first.
+
+**From the editor:** **Platforms > Windows > Package Project**, then choose the
+`Packaged` folder.
+
+Either way the output is `Packaged/Windows/`. Run `Packaged/Windows/UOpenGolf.exe`. To
+share or move the game, copy the whole `Windows` folder, not just the `.exe`.
+`Packaged/` is ignored by Git.
+
+| Setting | Where | Purpose |
+| --- | --- | --- |
+| Map to cook | `Config/DefaultGame.ini`, `[/Script/UnrealEd.ProjectPackagingSettings]` `+MapsToCook` | Cooks `/Game/UOpenGolf/Maps/UOpenGolf` |
+| Startup map and game mode | `Config/DefaultEngine.ini`, `[/Script/EngineSettings.GameMapsSettings]` | `GameDefaultMap` and `GlobalDefaultGameMode` used by the `.exe` |
+| Project name and version | `Config/DefaultGame.ini`, `[/Script/EngineSettings.GeneralProjectSettings]` | Package metadata and the HUD version label (`ProjectVersion=0.0.1`, shown as **v0.0.1**) |
+| Game target | `Source/UOpenGolf.Target.cs` | The `UOpenGolf` game target that `-build` compiles |
+| Build configuration | `-clientconfig=` | `Development` is verified; `Shipping` has not been tried |
+| Cook order logs | `Build/Windows/FileOpenOrder/` | Written by packaging; ignored by Git |
+
+In the packaged game, **Escape** quits. Shot recordings still go to
+`Documents/UOpenGolf/Saved/ShotRecordings`, and the game's own logs are under
+`Packaged/Windows/UOpenGolf/Saved/Logs/`.
+
+**Private content is packaged too.** Every enabled plugin with content is cooked,
+including optional packs under the ignored `Plugins/PrivateContent/` (for example
+`ProjectNatureRange`, whose assets were in the verified package). Such a package is
+for your own machine only. For a package you can distribute, move
+`Plugins/PrivateContent/` out of the project (or disable those plugins) and package
+again. See [Optional range visuals](#optional-range-visuals).
+
+A packaged Development build has started and run for 45 s without crashing (see
+[phase status](Docs/PhasesStatus.md)). Not yet verified: connecting a Square Home from
+a packaged build, Shipping builds, and Linux packaging (`RunUAT.sh` with
+`-platform=Linux`). There is no packaging script or automated package test yet.
+
+### Engine version warning
 
 The project uses `"EngineAssociation": "5.8"`; this is the normal release association
 for Unreal **5.8.3**, not a request to downgrade to 5.8.0. The original map was also
@@ -289,7 +447,7 @@ installation. Keep machine-specific identifiers out of shared project changes.
 Opening still requires a successful C++ build. A missing-module or NetFxSDK error
 is a separate build prerequisite problem; skipping conversion does not fix it.
 
-## Visual Studio Code setup
+### Visual Studio Code setup
 
 Install Microsoft's **C/C++** extension (`ms-vscode.cpptools`) and open the actual
 `uopengolf` repository folder in VS Code. A generated conversion copy such as
@@ -354,71 +512,6 @@ installation. Generating just the compilation database succeeded separately and
 its source/compiler/response-file paths were checked. Full native workspace
 generation and interactive VS Code IntelliSense/debugging remain unverified here.
 
-## Build, run, and test
-
-Run commands from the repository root. Windows scripts also accept `-EngineRoot PATH`;
-Linux scripts accept `--engine-root PATH`. Windows falls back to the standard
-`Program Files/Epic Games/UE_5.8` location when `UE_ROOT` is unset.
-
-| Action | Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File` | Linux: `bash` |
-| --- | --- | --- |
-| Build Development Editor | `Scripts/ue.ps1 Build` | `Scripts/ue.sh build` |
-| Open editor | `Scripts/ue.ps1 Editor` | `Scripts/ue.sh editor` |
-| Run through editor executable in game mode | `Scripts/ue.ps1 Run` | `Scripts/ue.sh run` |
-| Run headless startup smoke test | `Scripts/ue.ps1 Smoke` | `Scripts/ue.sh smoke` |
-| Run automation tests by name prefix | `Scripts/ue.ps1 Test -Filter UOpenGolf.LaunchMonitor` | `Scripts/ue.sh test --filter UOpenGolf.LaunchMonitor` |
-| Compile Development game target | `Scripts/ue.ps1 Build -Target Game` | `Scripts/ue.sh build --target game` |
-
-Build the editor target **before** running the editor, game-mode preview, or smoke test.
-The game-target command compiles native code; it does not cook or package a standalone game.
-Packaging automation is a later roadmap milestone.
-
-Unreal's command-line equivalents to Godot console/headless workflows are
-`Build.bat` / `Build.sh` (UnrealBuildTool), `UnrealEditor-Cmd.exe` on Windows or
-`UnrealEditor` on Linux with unattended options, and the Automation Framework.
-Future packaging will use `RunUAT.bat` / `RunUAT.sh` with `BuildCookRun`.
-
-The `UOpenGolf.Smoke.UOpenGolf` startup test (named after the committed map) loads
-the map, starts Play In Editor, and verifies the game mode, HUD, range, and a ball
-resting on the tee. It does not verify pixels; check the range visually with
-rendering enabled as well.
-
-`Test` runs every automation test whose name starts with `-Filter` (default
-`UOpenGolf`, which includes the smoke test) and fails unless at least one matching
-test ran and every test passed. None of the tests need hardware:
-
-| Test | Covers |
-| --- | --- |
-| `UOpenGolf.Smoke.UOpenGolf` | Startup map, game mode, HUD, range and teed-up ball |
-| `UOpenGolf.LaunchMonitor.Protocol`, `.Session`, `.Replay` | Square protocol, session and replay shots |
-| `UOpenGolf.Range.ReplaySelection` | Preset selection, repeat, invalid selection, and corrected low-wood carry in the range |
-| `UOpenGolf.Range.RolloutSurfaces` | Low-wood rollout with mixed surfaces, all fairway, and fringe retained; neutral regime contact settings |
-| `UOpenGolf.Physics.Core`, `.Fixtures` | Physics core, 21 C# shots under the historical profile, and current-model completion checks |
-| `UOpenGolf.Physics.FlightCorrections` | Spin decay, mirrored directions, interpolation and calibration-boundary continuity |
-| `UOpenGolf.Physics.FlightScopeAnalysis` | Screenshot reproduction and isolated flight-model experiments; does not assert FlightScope accuracy |
-| `UOpenGolf.Physics.ShotLibrary` | Replays every shot in `Data/ShotLibrary/` for `Scripts/flightscope_compare.py`; checks only that each shot completes, not FlightScope accuracy |
-| `UOpenGolf.Range.Shot` | A drive hit on the running range matches the headless prediction |
-| `UOpenGolf.Range.AutoReset` | A stopped ball returns to the tee after 3 s with its shot result and launch-monitor shot kept; a shot hit during the wait is not interrupted |
-| `UOpenGolf.Range.ShotConversion`, `.ShotDisplay` | Signed shot conversion and direction labels, including missing measurements |
-| `UOpenGolf.Range.ShotRecording` | Shot-recording file names, JSON contents, and that only connected device shots are saved |
-| `UOpenGolf.Visual.LaunchDirections` | Rendered HUD captures; requires rendering and is excluded from headless runs |
-| `UOpenGolf.Range.ShotConversion` | Launch-monitor shots become ball launches without inventing missing values |
-
-Each smoke or test run writes logs and an `index.json` report to a fresh directory under
-`Saved/Automation/`. The runner fails on a nonzero process exit, timeout, missing or
-invalid report, zero tests, a missing UOpenGolf test, or failed/incomplete tests.
-Smoke runs select a project-local filesystem cache in `DerivedDataCache/`, without
-requiring a Zen cache service; normal interactive editor sessions use engine defaults.
-Default timeout is 180 seconds; use `-TimeoutSeconds 300` or `--timeout 300` on slower machines.
-Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
-
-The report validator and the FlightScope comparison script also have engine-free checks:
-`python Scripts/test_automation_report.py` and `python Scripts/test_flightscope_compare.py`
-(Windows), or the same with `python3` (Linux).
-
-The original blank map is committed. `Scripts/CreateUOpenGolfMap.py` is a maintainer
-generation utility, not a setup step; it refuses to replace an existing map.
-
 ## Project structure and architecture
 
 ```text
@@ -461,6 +554,9 @@ grass and golf assets for presentation: fairway ground, a target flag at
 former green/fringe area and side strips, is assigned the Fairway surface tag and
 fairway appearance for test-shot comparisons. The ball reads the contacted mesh's
 surface normally; there is no replay-specific or global physics surface override.
+A collision-free backdrop plane extends the ground to the horizon. The range's
+unbound post-process sets a fixed -0.5 EV exposure and turns off motion blur, so the
+follow camera does not smear the ground.
 
 Ball physics come from the [OpenFairway Physics](Plugins/OpenFairwayPhysics/README.md)
 plugin. Unreal's physics engine (Chaos) plays the role Jolt plays in ogolf-physics: it
@@ -475,8 +571,9 @@ The fairway uses ambientCG Grass 004 color, DirectX normal and roughness maps at
 dark green mowing shades of **#406B1F** and **#4D7E20**, shared with the 3D
 grass. The tee uses #406B1F. These sRGB colors are converted to linear material
 values; scene lighting affects their rendered appearance. The
-ball uses a dimpled CC0 model with three levels of detail; the target uses a CC0
-flagstick with a two-sided red flag. These assets are included under
+ball uses a dimpled CC0 model with three levels of detail, rendered at 42.67 mm
+diameter. The original target flagstick stands 7 feet above ground, with a
+half-inch pole and a 14 by 20 inch two-sided red flag. These assets are included under
 `Content/UOpenGolf/Art/`; playing requires no downloads or Blender installation.
 
 Original short grass clumps appear within 20 meters of the tee, excluding the tee
@@ -484,6 +581,35 @@ paint. They have no collision or shadows and cull at distance. Open the Unreal
 console with **~** during play and enter `uopengolf.Grass3D 0` to release the grass
 instances if performance is poor. Enter `uopengolf.Grass3D 1` to restore them.
 The textured fairway remains visible with either setting; 3D grass defaults to on.
+Grass displacement is disabled for this calm range. The local private variant
+uses static, denser short turf with material fading across its cull distance.
+The ball continues to simulate at 120 Hz, capped at 12 steps per rendered frame.
+Long stalls discard excess catch-up time; sustained rates below about 10 FPS slow
+simulation relative to wall time. The timestep and collision behavior are unchanged.
+
+The tracer reuses CPU buffers and updates existing geometry when its sample count
+stays constant. Camera movement still updates the ribbon orientation. Rendered
+performance comparisons can be run with:
+
+```powershell
+python Scripts/check_range_variant.py --render --shot-trail --trail-timing --map /Game/UOpenGolf/Maps/UOpenGolf --engine-root "<UE_ROOT>"
+```
+
+Add `--legacy-trail` to compare the previous mesh-building path in a development build.
+Both runs enforce and check a 1280x720 render target, use a 120 FPS cap and VSync off,
+wait ten seconds after shader compilation, and omit screenshot encoding.
+Timing logs report ball physics, tracer, HUD refresh and frame time separately.
+These editor timings do not establish packaged performance or GPU headroom. The
+[validation notes](Docs/PhasesStatus.md#recording-reliability-bluetooth-cancellation-and-tracer-cpu-work)
+record the measured tracer CPU reduction and frame-time variability; no FPS gain is claimed.
+
+The shot tracer is a narrow (3 cm), feathered translucent white arc. Far from the
+camera it widens to stay about 2 px on screen, so the distant arc stays visible. It keeps the full
+flight path and fades as rollout slows below 5 m/s. When the ball stops, the arc
+becomes an orange history tracer (0.55 opacity). The last two shots stay on screen;
+a third finished shot replaces the oldest. The automatic re-tee keeps them, and **T**
+clears all tracers. The ball reuses a fixed pool of three ribbons, so no components are
+created per shot.
 
 See [range asset sources and regeneration](Docs/RangeAssets.md) for licenses,
 conversion details, and the rendered validation command. Presentation is owned by
@@ -493,7 +619,10 @@ queries.
 ### Optional range visuals
 
 The range supports optional map-specific grass meshes and turf materials through
-private content plugins. The public range remains the default. See
+private content plugins. Private turf and grass cover only the fairway strip; the
+rough keeps the public material. The public range remains the default; a local,
+ignored `Config/UserGame.ini` can make an installed private range the default on
+one machine. See
 [optional range visuals](Docs/OptionalRange.md) for setup, asset boundaries and
 paired replay/rendered verification. Each installed private plugin supplies its
 own map and README; restricted assets are not part of the public distribution.
@@ -549,7 +678,8 @@ was run on Windows only; on Linux it calls `Scripts/ue.sh` but has not been trie
 1. Build, open the editor, and press **Play**. Click in the viewport for input focus.
 2. Press **R** to hit the selected replay, **P** to choose a test shot, or connect
    a Square Home with **C** and hit a ball.
-   The camera follows the ball and a tracer draws its path.
+   The camera holds the tee view for half a second, then follows low behind the ball
+   (ball in the lower third, horizon in view); a tracer draws its path.
 3. The shot tiles (right edge, two columns, translucent gray) update live. From the
    top: a header with the shot number, its state and the selected club; Total | Carry;
    Roll | Apex; Offline | Hang Time; landing angle and speed; club path, face, attack,
@@ -558,10 +688,10 @@ was run on Windows only; on Linux it calls `Scripts/ue.sh` but has not been trie
    (ball speed, VLA, total spin, HLA, back/side spin, spin axis). `…` means the value
    arrives after landing, `—` that it is missing, `*` that it is derived; `L`/`R`
    marks direction. The status box at the bottom right shows the launch-monitor
-   connection, battery, **Record Shots** while connected, and the key tips (see [HUD](#hud)). The bottom-left
+   connection, battery, **Record Shots** while connected or saves are failing, and the key tips (see [HUD](#hud)). The bottom-left
    **Test shots [P] | Repeat [R]** button shows only while no launch monitor is connected.
 4. Three seconds after the ball stops, it goes back to the tee and the camera glides
-   back behind it. The HUD and the tracer keep the last shot until the next
+   back behind it. The HUD keeps the last shot until the next
    one. Press **T** to tee up straight away. Each new shot starts from the tee.
 
 The first replay is the reference wood (114.5 mph, VLA 6.95°, 1933 rpm). On flat

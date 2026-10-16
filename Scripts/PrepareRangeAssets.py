@@ -9,7 +9,6 @@ from pathlib import Path
 import hashlib
 import math
 import random
-import tarfile
 import urllib.request
 import zipfile
 
@@ -21,8 +20,6 @@ SOURCES = [
      "d7d3f08e8bb1e59aed0c3dbb85ea0b46d5308481f89b6a3fd62c0ec9e862245b"),
     ("golf_0.zip", "https://opengameart.org/sites/default/files/golf_0.zip",
      "33358f1d9549e3b56f8826b65982dc1b5bafa701321425e7970971b7e4388d2e"),
-    ("game-golf.tar.gz", "https://opengameart.org/sites/default/files/game-golf.tar_6.gz",
-     "fd2ca23a434ec9c1131d2a8758ea2d24710fcc6c4c00eb73b9f193b45ea2e303"),
 ]
 
 
@@ -41,9 +38,6 @@ def prepare():
     with zipfile.ZipFile(WORK / "golf_0.zip") as archive:
         for name in ("Golf_ball.obj", "Golf_ball.mtl"):
             (OUT / name).write_bytes(archive.read(name))
-    with tarfile.open(WORK / "game-golf.tar.gz") as archive:
-        # Explicit members only: never extract arbitrary archive paths.
-        (OUT / "golf-flag.obj").write_bytes(archive.extractfile("bin/golf-flag.obj").read())
 
 
 def convert():
@@ -80,23 +74,24 @@ def convert():
     export("SM_GolfBall")
 
     clear()
-    bpy.ops.wm.obj_import(filepath=str(OUT / "golf-flag.obj"), forward_axis="NEGATIVE_Z", up_axis="Y")
-    bpy.ops.object.join()
+    # Original geometry with explicit dimensions in meters. Ground is Z=0;
+    # the 10 cm buried section is excluded from the seven-foot visible height.
+    bpy.ops.mesh.primitive_cylinder_add(vertices=32, radius=0.00635, depth=2.2336,
+                                      location=(0, 0, 1.0168))
     obj = bpy.context.object
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    # The original includes a pole section below ground; keep that below ground.
-    # Turn its flag into the Y/Z plane so it is readable from the tee (+X view).
-    top = max(v.co.z for v in obj.data.vertices)
-    scale = 2.4 / top
-    for v in obj.data.vertices:
-        x, y, z = v.co
-        v.co = (-y * scale, x * scale, z * scale)
-    obj.data.materials.clear()
-    for name in ("Pole", "Flag"):
-        obj.data.materials.append(bpy.data.materials.new(name))
+    obj.data.materials.append(bpy.data.materials.new("Pole"))
     for poly in obj.data.polygons:
-        poly.material_index = int(any(obj.data.vertices[i].co.y > 0.07 for i in poly.vertices))
-        poly.use_smooth = poly.material_index == 0
+        poly.use_smooth = len(poly.vertices) == 4
+    flag_mesh = bpy.data.meshes.new("Flag")
+    flag_mesh.from_pydata([(0, 0.00635, 2.1336), (0, 0.51435, 2.1336),
+                          (0, 0.51435, 1.778), (0, 0.00635, 1.778)], [], [(0, 1, 2, 3)])
+    flag = bpy.data.objects.new("Flag", flag_mesh)
+    bpy.context.collection.objects.link(flag)
+    flag.data.materials.append(bpy.data.materials.new("Flag"))
+    flag.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.join()
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     export("SM_Flagstick")
 
     clear()

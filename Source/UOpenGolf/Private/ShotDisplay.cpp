@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "ShotDisplay.h"
 
+#include "Misc/ConfigCacheIni.h"
 #include "OpenFairway/ShotSimulator.h"
 
 namespace
@@ -116,4 +117,18 @@ FString ShotDisplay::Heading(const FOpenFairwayShotResult* Result)
 FString ShotDisplay::RecordingStatus(bool bRecording, int32 ShotCount)
 {
     return bRecording ? FString::Printf(TEXT("On · %d"), ShotCount) : FString(TEXT("Off"));
+}
+
+FString ShotDisplay::VersionLabel(const FString& ProjectVersion)
+{
+    const FString Trimmed = ProjectVersion.TrimStartAndEnd();
+    return Trimmed.IsEmpty() ? FString() : TEXT("v") + Trimmed;
+}
+
+FString ShotDisplay::ProjectVersion()
+{
+    // Read the config directly so the game module needs no EngineSettings dependency.
+    FString Version;
+    GConfig->GetString(TEXT("/Script/EngineSettings.GeneralProjectSettings"), TEXT("ProjectVersion"), Version, GGameIni);
+    return Version;
 }

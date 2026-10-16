@@ -32,6 +32,11 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
     using ShotDisplay::ETileGroup;
     const FString Dash(TEXT("—"));
 
+    // Version shown in the bottom-left corner comes from the project settings.
+    TestEqual(TEXT("Version label"), ShotDisplay::VersionLabel(TEXT(" 0.0.1 ")), FString(TEXT("v0.0.1")));
+    TestEqual(TEXT("No version, no label"), ShotDisplay::VersionLabel(FString()), FString());
+    TestFalse(TEXT("Project version is set"), ShotDisplay::ProjectVersion().IsEmpty());
+
     // Layout: distances first, the raw launch-monitor values last in the requested order.
     const TArray<ShotDisplay::FTile> Empty = ShotDisplay::BuildTiles(nullptr, nullptr, nullptr);
     const TArray<FString> Labels = ShotTileLabels(Empty);

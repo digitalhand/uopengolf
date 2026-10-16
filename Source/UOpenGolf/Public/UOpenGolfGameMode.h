@@ -21,7 +21,7 @@ namespace ShotRecording
  * tee after ResetDelayS; its shot result stays available until the next launch. While shot
  * recording is on, device shots are saved as JSON under Documents/UOpenGolf/Saved/ShotRecordings.
  */
-UCLASS()
+UCLASS(Config = Game)
 class UOPENGOLF_API AUOpenGolfGameMode : public AGameModeBase
 {
     GENERATED_BODY()
@@ -52,6 +52,12 @@ public:
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Recording")
     int32 GetRecordedShotCount() const;
 
+    UFUNCTION(BlueprintPure, Category = "UOpenGolf|Recording")
+    int32 GetFailedRecordingCount() const;
+
+    UFUNCTION(BlueprintPure, Category = "UOpenGolf|Recording")
+    FString GetRecordingError() const;
+
     /** Folder of the current recording session; empty until its first shot is saved. */
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Recording")
     FString GetRecordingFolder() const;
@@ -66,6 +72,14 @@ protected:
     /** Optional map-owned presentation variant; public maps use the native range. */
     UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Range")
     TSubclassOf<AUOpenGolfRange> RangeClass;
+
+    /**
+     * Optional per-machine range subclass, set in the ignored Config/UserGame.ini. Used only
+     * when the map keeps the native range and not during automation; if it fails to load,
+     * the native range is used.
+     */
+    UPROPERTY(Config)
+    FSoftClassPath LocalRangeClass;
 
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -89,4 +103,5 @@ private:
     FDelegateHandle ShotHandle;
     FDelegateHandle ClubDataHandle;
     FTimerHandle ResetTimer;
+    FTimerHandle RecordingTimer;
 };

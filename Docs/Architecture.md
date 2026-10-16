@@ -12,6 +12,14 @@ binds keys (C connect, D disconnect, R replay shot, Tab next club, T tee up) and
 the shot camera. There is no pawn, course or scoring. `UOpenGolf`
 is an original blank Unreal map used for editor and game startup.
 
+Shot recording is a game-owned service, independent of Slate and the world. It tracks
+measured shot IDs separately from simulation IDs, accepts club data after ball rest,
+and closes the club-data window three seconds after receipt. Completed records use
+same-directory temporary writes followed by a rename. Failed saves retain their
+session and file index in memory and retry during Play, even after recording is
+switched off; shutdown makes a final attempt. This queue does not recover across
+Play sessions or application restarts. The HUD exposes its saved count and failures.
+
 The calibration range assigns `OpenFairway.Surface.Fairway` and fairway appearance
 to every ground mesh, including the former green/fringe area and side strips.
 These are scene assignments: the ball still resolves contact tags normally, and
@@ -20,8 +28,12 @@ override is used.
 
 The game owns the imported CC0 grass textures, golf ball and flagstick under
 `Content/UOpenGolf/Art/` (see [asset provenance](RangeAssets.md)). The ball subclass
-only replaces the protected visual mesh, normalized to the base actor's 100 cm
-source diameter. Ground collision stays on the basic shapes. Decorative grass
+normalizes the visual mesh's actual bounds to a 42.67 mm diameter and owns a
+collision-free procedural ribbon with a translucent material. It samples the
+simulated path and fades during rollout; launch/reset clears the ribbon. CPU buffers
+are reused, topology is recreated only when sample count changes, and camera-facing
+vertices update an existing section otherwise. Unchanged geometry, opacity and
+visibility updates are skipped. The inherited debug tracer is disabled on the game ball. Ground collision stays on the basic shapes. Decorative grass
 uses collision-free hierarchical instances near the tee; `uopengolf.Grass3D`
 clears or recreates those instances at runtime. The physics plugin has no
 dependency on these assets or on the game module.
@@ -35,7 +47,12 @@ The `OpenLaunchMonitor` runtime plugin is the launch-monitor adapter:
 | Square protocol | `Private/Square/SquareProtocol.*` | Frame decoding and commands; depends only on Core (and Json for firmware text) |
 | Transport | `Private/Bluetooth/GattTransport.h`, `Private/Windows/` | Bluetooth LE GATT interface; C++/WinRT on Windows, not yet on Linux |
 
-See [launch-monitor integration](LaunchMonitorIntegration.md) for its contracts.
+The Windows transport bounds async waits to ten seconds per operation and thirty
+seconds for device opening/service discovery, checking cancellation at most every
+25 ms while waiting. Disconnect invalidates queued work and old callbacks; shutdown
+cooperatively stops the worker. Synchronous OS/driver cleanup is outside those wait
+limits. See [launch-monitor integration](LaunchMonitorIntegration.md) for contracts
+and remaining hardware verification.
 
 The `OpenFairwayPhysics` runtime plugin is the physics core and its Unreal wrapper:
 
@@ -47,6 +64,11 @@ The `OpenFairwayPhysics` runtime plugin is the physics core and its Unreal wrapp
 Chaos only answers contact queries; the ball never simulates as a Chaos rigid body, so
 OpenFairway owns the motion. See the [plugin README](../Plugins/OpenFairwayPhysics/README.md).
 The two plugins do not depend on each other; the game module converts shots to launches.
+The ball actor retains a 120 Hz fixed step and a twelve-step frame cap. Long stalls
+discard excess catch-up time, so sustained frame rates below about 10 FPS slow
+simulation relative to wall time. The game tests cover frame-rate/hitch equivalence;
+rendered CPU measurements and their limits are recorded in
+[phase status](PhasesStatus.md#recording-reliability-bluetooth-cancellation-and-tracer-cpu-work).
 
 Game and editor targets use UnrealBuildTool's standard C# configuration files.
 Gameplay remains native C++. Python is used only by developer utilities.
@@ -144,5 +166,5 @@ references. The public baseline must open, compile, and run when that directory 
 The game mode's editable `RangeClass` defaults to the native range. Private maps
 can select a Blueprint game-mode subclass whose range subclass supplies grass
 mesh variants, a ground material and scatter settings. C++ applies those settings
-at startup and retains ownership of grass toggling and all gameplay. See
+at startup, limiting the material and grass to the fairway strip, and retains ownership of grass toggling and all gameplay. See
 [optional range visuals](OptionalRange.md) for the content boundary and verification.

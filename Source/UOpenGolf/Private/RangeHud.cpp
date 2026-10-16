@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "RangeHud.h"
+#include "RangePerformance.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -28,7 +30,9 @@ namespace
     constexpr float HudGroupGap = 6.0f;
     constexpr float HudEdge = 20.0f;
     /** Space kept under the tiles so they never cover the status box. */
-    constexpr float HudStatusReserve = 64.0f;
+    constexpr float HudStatusReserve = 56.0f + HudScale::BottomPanelGap;
+    /** Version label distance from the bottom edge, inside HudScale::BottomPanelGap. */
+    constexpr float HudVersionBottom = 6.0f;
     const FLinearColor HudShadowColor(0.0f, 0.0f, 0.0f, 0.6f);
 
     FLinearColor HudLabelColor()
@@ -105,7 +109,7 @@ void SRangeHud::Construct(const FArguments& Args)
                 [ Column ]
             ]
             // Bottom padding matches the Test shots button in the opposite corner.
-            + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(HudEdge, 0, HudEdge, 8)
+            + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(HudEdge, 0, HudEdge, HudScale::BottomPanelGap)
             [
                 SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(12, 4))
                 [
@@ -135,6 +139,13 @@ void SRangeHud::Construct(const FArguments& Args)
                     ]
                 ]
             ]
+            // Game version in the bottom-left corner, under the Test shots button.
+            + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, 0, 0, HudVersionBottom)
+            [
+                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(HudLabelColor())
+                .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
+                .Text(FText::FromString(ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion())))
+            ]
         ]
     ];
     // clang-format on
@@ -148,6 +159,8 @@ void SRangeHud::Tick(const FGeometry& AllottedGeometry, const double InCurrentTi
 
 void SRangeHud::Refresh()
 {
+    TRACE_CPUPROFILER_EVENT_SCOPE(UOpenGolf_HudRefresh);
+    RangePerformance::FScope Timing(RangePerformance::Hud);
     const AUOpenGolfPlayerController* PlayerController = Controller.Get();
     const UWorld* World = PlayerController ? PlayerController->GetWorld() : nullptr;
     const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
@@ -171,10 +184,18 @@ void SRangeHud::Refresh()
     ConnectionColor = HudStateColor(State);
     BatteryText = Battery < 0 ? FString(TEXT("—")) : FString::Printf(TEXT("%d%%"), Battery);
     const bool bRecording = Mode && Mode->IsRecordingShots();
-    bShowRecord = State != ELaunchMonitorConnectionState::Disconnected;
+    const int32 Failed = Mode ? Mode->GetFailedRecordingCount() : 0;
+    bShowRecord = State != ELaunchMonitorConnectionState::Disconnected || Failed > 0;
     RecordText = ShotDisplay::RecordingStatus(bRecording, Mode ? Mode->GetRecordedShotCount() : 0);
     RecordColor = bRecording ? FLinearColor(1.0f, 0.25f, 0.2f) : FLinearColor(0.65f, 0.65f, 0.65f);
+    if (Failed > 0)
+    {
+        RecordText += FString::Printf(TEXT(" | %d unsaved"), Failed);
+        RecordColor = FLinearColor(1.0f, 0.6f, 0.15f);
+    }
     KeyTip = State == ELaunchMonitorConnectionState::Disconnected ? TEXT("Connect [C]") : TEXT("Disconnect [D]  ·  Record [F9]");
+    if (Failed > 0)
+        KeyTip = Mode->GetRecordingError() + TEXT(" - retrying");
 }
 
 EVisibility SRangeHud::GetHudVisibility() const

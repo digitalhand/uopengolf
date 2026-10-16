@@ -9,13 +9,13 @@ by CC0 and is recorded here for provenance.
 | --- | --- | --- |
 | Grass 004 / Lennart Demes (ambientCG) | [Source](https://ambientcg.com/view?id=Grass004), [CC0 terms](https://docs.ambientcg.com/license/) | `Content/UOpenGolf/Art/T_Grass_*.uasset`; used by `M_Fairway` |
 | Golf ball / jpsweber | [Source, CC0](https://opengameart.org/content/golf-ball) | `Content/UOpenGolf/Art/SM_GolfBall.uasset` |
-| Golf Set flagstick / mess110 | [Source, CC0](https://opengameart.org/content/golf-set) | `Content/UOpenGolf/Art/SM_Flagstick.uasset` |
+| Golf Set flagstick / mess110 (historical) | [Source, CC0](https://opengameart.org/content/golf-set) | Earlier `SM_Flagstick.uasset`; replaced by original dimensioned geometry on 2026-10-15 |
 
 The [CC0 1.0 legal text](https://creativecommons.org/publicdomain/zero/1.0/legalcode)
 applies to these assets and their conversions. Archive SHA-256 hashes and exact
 downloads are pinned in `Scripts/PrepareRangeAssets.py`; conversion and import
 details are in [Range assets](Docs/RangeAssets.md). Grass-blade geometry and the
-game's material graphs are original MIT contributions. Other Golf Set models and
+game's material graphs and current flagstick geometry are original MIT contributions. Other Golf Set models and
 textures are not included.
 
 The reference projects below are the maintainer's own (`digitalhand`) projects. Code
