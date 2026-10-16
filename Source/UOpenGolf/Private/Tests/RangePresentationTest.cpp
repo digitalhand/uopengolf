@@ -6,10 +6,13 @@
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/GameViewportClient.h"
+#include "StaticMeshResources.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
+#include "Materials/Material.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "Misc/CommandLine.h"
@@ -93,6 +96,23 @@ public:
                 }
             }
             Test->TestEqual(TEXT("Grass stays on the fairway strip"), Outside, 0);
+            for (const auto* Part : GrassParts)
+            {
+                // Public blades are ~1 cm wide and end before they fall below two pixels from the tee camera.
+                const UStaticMesh* Clump = Part->GetStaticMesh();
+                if (!Clump || Clump->GetName() != TEXT("SM_GrassClump"))
+                    continue;
+                Test->TestEqual(TEXT("Public clump blade count"), Clump->GetRenderData()->LODResources[0].GetNumTriangles(), 16);
+                Test->TestTrue(TEXT("Public clump blades 2-3 cm tall"), Clump->GetBoundingBox().Max.Z > 2.2 && Clump->GetBoundingBox().Max.Z < 3.1);
+                Test->TestEqual(TEXT("Public grass cull start in cm"), Part->InstanceStartCullDistance, 700);
+                Test->TestEqual(TEXT("Public grass cull end in cm"), Part->InstanceEndCullDistance, 1000);
+                const UMaterial* Material = Part->GetMaterial(0) ? Part->GetMaterial(0)->GetMaterial() : nullptr;
+                if (Test->TestNotNull(TEXT("Public grass material"), Material))
+                {
+                    Test->TestTrue(TEXT("Public grass material supports instances"), Material->GetUsageByFlag(MATUSAGE_InstancedStaticMeshes));
+                    Test->TestFalse(TEXT("Public grass normals use world space"), Material->bTangentSpaceNormal != 0);
+                }
+            }
             TArray<UStaticMeshComponent*> Pieces;
             Range->GetComponents(Pieces);
             for (const auto* Piece : Pieces)
@@ -129,7 +149,8 @@ public:
             auto* PC = Cast<AUOpenGolfPlayerController>(World->GetFirstPlayerController());
             PC->SetReplayPanelOpen(false);
             Camera = World->SpawnActor<ACameraActor>();
-            Camera->GetCameraComponent()->SetFieldOfView(65);
+            Camera->GetCameraComponent()->SetFieldOfView(70);
+            Camera->GetCameraComponent()->bConstrainAspectRatio = false;
             PC->SetViewTarget(Camera);
             Stage = 4;
         }
@@ -160,6 +181,15 @@ public:
                 return false;
             Test->AddInfo(FString::Printf(TEXT("View %d: mean editor frame %.3f ms over 119 intervals; grass clumps %d"),
                 View, (FPlatformTime::Seconds() - SampleStart) * 1000 / 119, Range->GetGrassInstanceCount()));
+            const FIntPoint Size = World->GetGameViewport()->Viewport->GetSizeXY();
+            Test->AddInfo(FString::Printf(TEXT("Capture size %dx%d; camera FOV %.1f"), Size.X, Size.Y,
+                Camera->GetCameraComponent()->FieldOfView));
+            for (const TCHAR* Name : {TEXT("r.AntiAliasingMethod"), TEXT("r.ScreenPercentage"),
+                     TEXT("sg.AntiAliasingQuality"), TEXT("r.TSR.ShadingRejection.Flickering"), TEXT("r.TSR.ThinGeometryDetection")})
+            {
+                if (const IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(Name))
+                    Test->AddInfo(FString::Printf(TEXT("%s = %s"), Name, *Variable->GetString()));
+            }
             const TCHAR* Names[] = {TEXT("TeeGrassOn"), TEXT("TeeGrassOff"), TEXT("Ball"), TEXT("Flag"), TEXT("GrassClose"), TEXT("GrassEdge")};
             Filename = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Screenshots/RangeAssets") /
                                                          FString::Printf(TEXT("%s-%s.png"), *FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")), Names[View]));

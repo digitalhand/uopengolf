@@ -10,7 +10,7 @@ Phases 1 and 2 are split into a **Windows track** (current) and a **Linux track*
 
 | Phase | Windows track | Linux track |
 | --- | --- | --- |
-| 0 — UOpenGolf foundation | Complete | Commands provided; not run |
+| 0 — UOpenGolf foundation | Complete | Complete |
 | 1 — Linux baseline and integration design | Launch-monitor design and physics fixtures done | Not started |
 | 2 — Launch-monitor input | Square Home verified on hardware; lifecycle checks remain | Not started (no BlueZ transport) |
 | 3 — Native OpenFairway | Core, simulator and ball actor ported; fixtures pass | Not started |
@@ -24,7 +24,18 @@ Phases 1 and 2 are split into a **Windows track** (current) and a **Linux track*
 `UOpenGolf.Smoke.UOpenGolf` passes headless with Unreal 5.8.3 (2026-10-14), after
 aligning the HUD greeting with the test. The maintainer opened and compiled the
 project in the editor; the rendered greeting should still be checked visually.
-Linux execution remains unverified.
+
+**Linux:** on Ubuntu 26.04.1 LTS with the prebuilt Unreal 5.8.3 Linux engine
+(CL 58210709, bundled Clang 20.1.8), the editor target builds in Development and
+DebugGame with no project warnings, and `UOpenGolf.Smoke.UOpenGolf` passes headless
+(`Saved/Automation/20261016-010434-OHEYpb`, 2026-10-16). The first run exposed a script
+issue rather than a code one: Unreal's forced `-TestExit` returns 1 on Linux even after a
+clean run (`FUnixPlatformMisc::RequestExit`), so `Scripts/ue.sh` now lets the report
+decide for exit codes 0 and 1; a run matching no tests still fails. VS Code project
+files and the compilation database generate on Linux. On 2026-10-16 the maintainer
+opened the editor on Linux, pressed Play and hit manual shots; the range rendered
+with the public grass (no private content installed), which shimmers at the tee as
+already measured on Windows below.
 
 ## Phase 1 — Linux baseline and integration design
 

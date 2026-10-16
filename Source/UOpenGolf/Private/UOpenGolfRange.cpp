@@ -21,6 +21,10 @@ namespace
     constexpr float CmPerM = 100.0f;
     constexpr float MetersPerYard = 0.9144f;
     constexpr float GroundThicknessM = 1.0f;
+    // The public clump's ~1 cm blades drop below two pixels from the tee camera past about
+    // 10 m and shimmer under temporal AA, so public grass ends closer than the class defaults.
+    constexpr int32 PublicGrassCullStartCm = 700;
+    constexpr int32 PublicGrassCullEndCm = 1000;
 
     // Range layout in meters: X downrange from the tee, Y to the right.
     constexpr float RangeStartM = -10.0f;
@@ -223,11 +227,14 @@ void AUOpenGolfRange::BeginPlay()
             GrassComponents.Add(Component);
         }
     }
+    const bool bPublicGrass = GrassMeshes.IsEmpty();
+    const int32 CullStartCm = bPublicGrass ? PublicGrassCullStartCm : FMath::Max(0, GrassCullStartCm);
+    const int32 CullEndCm = bPublicGrass ? PublicGrassCullEndCm : FMath::Max(GrassCullStartCm + 1, GrassCullEndCm);
     for (const auto& Component : GrassComponents)
     {
         // Calm practice turf: block material wind and player-interaction displacement.
         Component->SetEvaluateWorldPositionOffset(false);
-        Component->SetCullDistances(FMath::Max(0, GrassCullStartCm), FMath::Max(GrassCullStartCm + 1, GrassCullEndCm));
+        Component->SetCullDistances(CullStartCm, CullEndCm);
     }
     TArray<UStaticMeshComponent*> Components;
     GetComponents(Components);

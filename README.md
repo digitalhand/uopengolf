@@ -73,8 +73,8 @@ coverage; they have not been reverified with hardware.
 The launch-direction HUD and nine-shot replay selector were also inspected in rendered captures on Windows
 (2026-10-14). Ball/flag dimensions and translucent tracer behavior were verified on
 Windows on 2026-10-15. Full camera review, link-loss reconnect and cancellation
-on hardware, and all Linux verification remain outstanding. Linux has
-no Bluetooth transport yet.
+on hardware, and Linux verification beyond the editor build and smoke test remain
+outstanding. Linux has no Bluetooth transport yet.
 
 Launch-monitor hardware and purchased content are optional; replay shots work
 without hardware.
@@ -84,7 +84,7 @@ without hardware.
 | Platform | Intended support | Verification |
 | --- | --- | --- |
 | Windows x64 | Yes, from the foundation onward | Editor/game build; smoke, launch-monitor, physics and range tests pass; Square Home connection, shot and club data verified |
-| Linux x86_64 | Yes, deferred track | Build/run/test scripts provided; not yet executed on Linux; no Bluetooth transport yet |
+| Linux x86_64 | Yes, deferred track | Editor build (Development, DebugGame) and smoke test pass on Ubuntu 26.04.1 (2026-10-16); other tests, game target and packaging not yet run; no Bluetooth transport yet |
 
 Keep paths case-correct and platform-specific integrations outside shared gameplay.
 Linux support is a project goal; it does not change Unreal Engine's license.
@@ -120,7 +120,9 @@ system-wide Visual Studio installation has not been modified by this project.
   The smoke command uses `-nullrhi` and does not test rendering.
 
 Follow Epic's [Linux development requirements](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine)
-for the engine version being used. Linux prerequisites have not been validated locally.
+for the engine version being used. The editor build and smoke test were run with the
+prebuilt Linux 5.8.3 engine and its bundled Clang 20.1.8 toolchain on Ubuntu 26.04.1 LTS,
+without installing extra system packages.
 
 Bluetooth and BlueZ are **not needed to build**. A future Linux Square transport will
 require BlueZ and appropriate Bluetooth access; it is not implemented yet.
@@ -138,7 +140,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Build
 powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Editor
 ```
 
-Linux Bash (commands supplied for future Linux validation):
+Linux Bash:
 
 ```bash
 export UE_ROOT='/path/to/UnrealEngine-5.8.3'
@@ -494,7 +496,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 CompileComman
 ```
 
 The local VS Code task **uopengolf: refresh compile commands** runs the same command.
-On Linux, use `bash Scripts/ue.sh compilecommands` (not yet executed on Linux).
+On Linux, use `bash Scripts/ue.sh compilecommands`. Run it again after
+`projectfiles`, which replaces the database with a smaller one.
 This uses UnrealBuildTool's `GenerateClangDatabase` mode with the Windows MSVC
 toolchain explicitly selected; installing Clang is not necessary for this Windows
 workflow. The generator disables unity builds/PCHs to produce per-file entries.
@@ -515,6 +518,16 @@ Agent-side native generation was attempted but blocked when Unreal tried to writ
 installation. Generating just the compilation database succeeded separately and
 its source/compiler/response-file paths were checked. Full native workspace
 generation and interactive VS Code IntelliSense/debugging remain unverified here.
+
+On Linux (2026-10-16), `projectfiles` and `compilecommands` both succeed when the engine
+directory is writable. The generated workspace has `cppdbg` launch entries that use gdb;
+the **DebugGame** editor keeps project modules unoptimized for stepping. To display
+`FString`, `TArray` and `FName` readably, add a gdb setup command that runs
+`python import sys, gdb.printing; sys.path.insert(0, '<UE_ROOT>/Engine/Extras/GDBPrinters'); from UEPrinters import register_ue_printers; register_ue_printers(None)`
+(the `gdb.printing` import is required). Folder-level `.vscode/tasks.json` and
+`.vscode/launch.json` are not overwritten by regeneration, unlike the workspace file.
+Generation also writes a local `.ignore` that excludes `Docs/`, `Scripts/`, `Content/` and
+`Data/` from ripgrep-based search.
 
 ## Project structure and architecture
 

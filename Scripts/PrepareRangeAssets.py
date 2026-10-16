@@ -15,6 +15,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / "Saved/AssetImport"
 OUT = WORK / "Prepared"
+USER_AGENT = "UOpenGolf-PrepareRangeAssets/1 (+https://github.com/digitalhand/uopengolf)"
 SOURCES = [
     ("Grass004_2K-JPG.zip", "https://ambientcg.com/get?file=Grass004_2K-JPG.zip",
      "d7d3f08e8bb1e59aed0c3dbb85ea0b46d5308481f89b6a3fd62c0ec9e862245b"),
@@ -28,7 +29,10 @@ def prepare():
     for name, url, digest in SOURCES:
         path = WORK / name
         if not path.exists():
-            urllib.request.urlretrieve(url, path)
+            # ambientCG rejects Python's default User-Agent (HTTP 403); checksums still apply.
+            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(request) as response:
+                path.write_bytes(response.read())
         if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
             raise RuntimeError(f"Source checksum mismatch: {path}")
     with zipfile.ZipFile(WORK / SOURCES[0][0]) as archive:
@@ -97,14 +101,17 @@ def convert():
     clear()
     rng = random.Random(20261015)
     vertices, faces = [], []
-    for _ in range(32):
+    # Blades 0.8-1.2 cm wide at the base: at least two pixels wherever the public
+    # grass renders (it is culled 7-10 m from the camera; see UOpenGolfRange.cpp).
+    # Thinner blades shimmer under temporal AA.
+    for _ in range(16):
         x, y = rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1)
         angle = rng.uniform(0, 2 * math.pi)
-        width, height = rng.uniform(0.001, 0.002), rng.uniform(0.012, 0.020)
+        width, height = rng.uniform(0.004, 0.006), rng.uniform(0.020, 0.030)
         dx, dy = math.cos(angle) * width, math.sin(angle) * width
         start = len(vertices)
         vertices.extend([(x-dx, y-dy, 0), (x+dx, y+dy, 0),
-                         (x + dx*2, y + dy*2, height)])
+                         (x + dx*0.5, y + dy*0.5, height)])
         faces.append((start, start+1, start+2))
     mesh = bpy.data.meshes.new("GrassClump")
     mesh.from_pydata(vertices, [], faces)
