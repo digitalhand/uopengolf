@@ -44,6 +44,10 @@ from the tee and flown, bounced and rolled by native C++ golf physics, and the H
 shows carry, roll, total, offline, apex, hang time and landing data. There is no
 course, scoring or player character yet.
 
+<img width="3412" height="1424" alt="image" src="https://github.com/user-attachments/assets/9a05739b-4d0b-4f75-876f-6819c8bd3622" />
+
+<img width="3417" height="1421" alt="image" src="https://github.com/user-attachments/assets/b6570112-d68b-480b-b029-31569b73fa44" />
+
 Working on Windows (Unreal 5.8.3, verified 2026-10-15 by headless automation):
 
 - Editor and game targets build; the startup smoke test passes.
