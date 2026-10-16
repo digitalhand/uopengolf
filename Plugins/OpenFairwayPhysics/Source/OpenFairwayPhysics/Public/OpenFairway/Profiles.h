@@ -29,6 +29,8 @@ namespace OpenFairway
         float DragScale = 1.0f;
         float LiftScale = 1.0f;
         float InitialLaunchAngleDeg = 0.0f;
+        /** Air velocity (m/s, OpenFairway frame). Drag and lift act on the ball's speed through the air. */
+        FVector3f Wind = FVector3f::ZeroVector;
     };
 
     /** Aerodynamic constants: drag polynomial, lift caps and the calibrated spin/launch corrections. */
@@ -45,11 +47,16 @@ namespace OpenFairway
         float CdPolyB = -0.0000209661f;
         float CdPolyC = 1.42472e-10f;
         float CdPolyD = -3.14383e-16f;
+        // Above Re 200k drag is the cap; the cap, not a floor, bounds high-Re drag.
         float HighReCdCap = 0.2f;
+        // Reynolds number where the polynomial starts blending into the cap at 200k; use
+        // 50k-200k (below 50k the blend would add a step at 50k). At or above 200k the
+        // polynomial steps to the cap at 200k (the ogolf-physics behaviour, kept by
+        // HistoricalReference).
+        float HighReCdBlendStart = 175000.0f;
         float LowReCdFloor = 0.38f;
         float LowReBlendStart = 30000.0f;
         float CdAt50k = 0.4632f;
-        float CdMin = 0.223f;
 
         // Lift caps.
         float ClMaxBase = 0.268f;
@@ -68,6 +75,11 @@ namespace OpenFairway
         float HighSpinDragReliefReZero = 105000.0f;
         float UltraHighSpinDragSrStart = 0.57f;
         float UltraHighSpinDragSrEnd = 0.77f;
+
+        // Low-Re lift: the 60k and 65k fits fall to zero for spin ratios near 0.1-0.2. When set,
+        // Re 50k-70k interpolates the 50k and 70k curves instead of passing through that dip.
+        // HistoricalReference keeps the dip.
+        bool bBridgeLowReLift = true;
 
         // High-Re lift.
         float HighReStart = 75000.0f;

@@ -84,6 +84,9 @@ bool FOpenFairwayFlightScopeAnalysisTest::RunTest(const FString& Parameters)
     LogFlight(TEXT("Historical model"), Historical);
     FBallPhysicsProfile DecayOnly;
     DecayOnly.bInterpolateCalibration = false;
+    // The isolated decay experiment predates the drag-cap blend and low-Re lift bridge.
+    DecayOnly.Flight.HighReCdBlendStart = 200000.0f;
+    DecayOnly.Flight.bBridgeLowReLift = false;
     const FFlightObservation Decay = ObserveFlight(Launch, DecayOnly, Air, GolfPhysics::SimulationDt);
     TestEqual(TEXT("Isolated decay experiment reproduced"), Decay.CarryYd, 85.1825f, 0.01f);
     LogFlight(TEXT("Speed-dependent spin decay only"), Decay);

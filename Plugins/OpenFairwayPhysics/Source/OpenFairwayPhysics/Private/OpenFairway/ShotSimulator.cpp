@@ -140,7 +140,7 @@ namespace OpenFairway
         {
             if (!bOnGround)
             {
-                const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(Velocity, Omega, Params.Environment.AirDensity,
+                const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(Velocity - Params.Environment.Wind, Omega, Params.Environment.AirDensity,
                     Params.Environment.AirViscosity, Params.Environment.DragScale, Params.Environment.LiftScale, Params.Environment.InitialLaunchAngleDeg,
                     Params.Flight);
                 const FVector3f Previous = Position;
@@ -184,6 +184,7 @@ namespace OpenFairway
                     if (!bCarryRecorded)
                     {
                         Result.LandingSpeedMps = PreImpactSpeed;
+                        Result.LandingSpinRpm = RolloutImpactSpinRpm;
                         Result.LandingAngleDeg = FMath::Atan2(PreImpactNormalSpeed, FMath::Max(PreImpactTangent.Size(), 0.0001f)) * RadToDeg;
                         Result.CarryM = FMath::Max(FVector3f::DotProduct(Position, Vectors.ShotDirection), 0.0f);
                         Result.HangTimeS = (static_cast<float>(Step) + ImpactFraction) * Dt;

@@ -57,7 +57,11 @@ def main():
     print(f'Range verification report: {report}', flush=True)
     try:
         with (report / 'stdout.log').open('w', encoding='utf-8') as log:
-            subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout, check=True)
+            result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout)
+        # -TestExit forces an exit, which Unreal reports as 1 on Linux even after a clean run
+        # (FUnixPlatformMisc::RequestExit), so the report decides pass/fail for 0 and 1.
+        if result.returncode not in (0, 1) or not (report / 'index.json').is_file():
+            raise subprocess.CalledProcessError(result.returncode, command)
         subprocess.run([sys.executable, str(root / 'Scripts/check_automation_report.py'), str(report / 'index.json'), '--prefix', prefix], check=True)
     except (subprocess.SubprocessError, OSError) as error:
         print(f'Verification failed: {error}. See {report}', file=sys.stderr)

@@ -150,14 +150,25 @@ namespace OpenFairway
         constexpr float DryAirGasConstant = 287.058f;
         constexpr float MolarMassDryAir = 0.0289644f;
         constexpr float UniversalGasConstant = 8.314462618f;
+        constexpr float MolarMassWater = 0.018016f;
+        constexpr float TetensSaturationPa = 610.78f;
     } // namespace
 
-    float Atmosphere::Density(float AltitudeMeters, float TemperatureCelsius)
+    float Atmosphere::Density(float AltitudeMeters, float TemperatureCelsius, float RelativeHumidity, float StationPressurePa)
     {
         const float TemperatureKelvin = FMath::Max(TemperatureCelsius + KelvinOffset, 1.0f);
-        const float Exponent = -9.80665f * MolarMassDryAir * AltitudeMeters / (UniversalGasConstant * TemperatureKelvin);
-        const float Pressure = SeaLevelPressurePa * FMath::Exp(Exponent);
-        return Pressure / (DryAirGasConstant * TemperatureKelvin);
+        const float Humidity = FMath::IsNaN(RelativeHumidity) ? 0.0f : FMath::Clamp(RelativeHumidity, 0.0f, 1.0f);
+        const float Pressure = StationPressurePa > 0.0f
+                                   ? StationPressurePa
+                                   : SeaLevelPressurePa * FMath::Exp(-9.80665f * MolarMassDryAir * AltitudeMeters / (UniversalGasConstant * TemperatureKelvin));
+        if (Humidity <= 0.0f)
+        {
+            return Pressure / (DryAirGasConstant * TemperatureKelvin);
+        }
+        // Tetens saturation pressure; the dry air contributes only its partial pressure.
+        const float VapourPressure = Humidity * TetensSaturationPa * FMath::Pow(10.0f, 7.5f * TemperatureCelsius / (TemperatureCelsius + 237.3f));
+        const float DryPressure = FMath::Max(Pressure - VapourPressure, 0.0f);
+        return (DryPressure * MolarMassDryAir + VapourPressure * MolarMassWater) / (UniversalGasConstant * TemperatureKelvin);
     }
 
     float Atmosphere::DynamicViscosity(float TemperatureCelsius)
@@ -169,7 +180,7 @@ namespace OpenFairway
 
     FBallState GolfPhysics::StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt)
     {
-        const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(State.Velocity, State.Spin, Environment.AirDensity,
+        const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(State.Velocity - Environment.Wind, State.Spin, Environment.AirDensity,
             Environment.AirViscosity, Environment.DragScale, Environment.LiftScale, Environment.InitialLaunchAngleDeg, Profile);
         return StepFlight(State, Environment, Sample, Dt);
     }
@@ -179,11 +190,13 @@ namespace OpenFairway
         FVector3f Force(0.0f, -Gravity * Mass, 0.0f);
         if (Sample.HasAerodynamics())
         {
-            Force += -0.5f * Sample.DragCoefficient * Environment.AirDensity * CrossSection * State.Velocity * Sample.Speed;
+            // Drag and lift act on the velocity through the air; the sample was taken from it too.
+            const FVector3f AirVelocity = State.Velocity - Environment.Wind;
+            Force += -0.5f * Sample.DragCoefficient * Environment.AirDensity * CrossSection * AirVelocity * Sample.Speed;
             const float SpinLength = State.Spin.Size();
             if (SpinLength > 0.1f)
             {
-                Force += 0.5f * Sample.LiftCoefficient * Environment.AirDensity * CrossSection * Cross(State.Spin, State.Velocity) * Sample.Speed / SpinLength;
+                Force += 0.5f * Sample.LiftCoefficient * Environment.AirDensity * CrossSection * Cross(State.Spin, AirVelocity) * Sample.Speed / SpinLength;
             }
         }
 

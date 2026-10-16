@@ -25,6 +25,7 @@ maintainer's own MIT project, so the port is covered by this repository's licens
   - [Landing buckets](#landing-buckets)
   - [FlightScope comparisons and replay shots](#flightscope-comparisons-and-replay-shots)
   - [Does the regime limit rollout?](#does-the-regime-limit-rollout)
+- [Flight corrections](#flight-corrections)
 - [Shot results](#shot-results)
 - [Units and coordinate frames](#units-and-coordinate-frames)
 - [Tests and golden fixtures](#tests-and-golden-fixtures)
@@ -40,12 +41,13 @@ maintainer's own MIT project, so the port is covered by this repository's licens
 
 | Area | State |
 | --- | --- |
-| Core equations (flight, impact, ground, rest) | Ported, then corrected for spin decay, calibration continuity and excess low-launch lift; historical profile matches 21 C# fixtures |
+| Core equations (flight, impact, ground, rest) | Ported, then corrected for spin decay, calibration continuity, excess low-launch lift, the high-Re drag step and the low-Re lift dead band; historical profile matches 21 C# fixtures |
+| Air | Temperature, altitude, humidity, station pressure and wind |
 | Headless simulator (`ShotSimulator`) | Ported from `PhysicsAdapter`; flat ground, one surface |
 | Ball actor (`AOpenFairwayBall`) | Working on Windows; automated range shot within tolerance of the headless result |
 | Surfaces | All seven presets; assigned by tags |
 | JSON ball profiles, surface zones, terrain probes | Not ported yet (see [Known gaps](#known-gaps)) |
-| Linux | Code is portable; not built or run on Linux yet |
+| Linux | Editor build and `UOpenGolf.Physics` tests pass (Unreal 5.8.3, 2026-10-16) |
 
 Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
 
@@ -54,6 +56,11 @@ Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
 - Aerodynamic drag and Magnus lift from inherited polynomial fits, with calibrated
   spin-drag, high-launch and mid-spin corrections. The legacy low-launch lift boost
   is neutral in gameplay; the historical profile retains it.
+- Drag eases into its high-Re cap from Re 175k instead of stepping up 7.8% at 200k, and
+  lift bridges the Re 55k-68k band where two inherited fits fall to zero (see
+  [Flight corrections](#flight-corrections)).
+- Air density from temperature, altitude or a measured station pressure, and humidity.
+  Wind acts on drag and lift through the ball's velocity relative to the air.
 - Impact impulses with speed- and spin-dependent restitution, friction-limited tangential
   response and a first-impact "bite" chosen per landing bucket (run, release, check, spin-back).
 - Ground roll with sliding friction until rolling, spin-scaled rolling resistance, grass drag,
@@ -114,7 +121,9 @@ Ball->OnBallAtRest.AddDynamic(this, &AMyRange::HandleBallAtRest);
 ```
 
 `PlaceAt(Location)` stops the ball and sets it on the ground. `AimYawDeg` turns launches
-clockwise from the world +X target line.
+clockwise from the world +X target line. The **OpenFairway|Air** properties set
+`TemperatureF`, `AltitudeFt`, `RelativeHumidity` (0-1), `PressurePa` (0 derives it from
+altitude), `WindSpeedMph` and `WindFromDeg`; they apply from the next launch.
 
 ### C++ headless simulation
 
@@ -130,7 +139,15 @@ Launch.SideSpinRpm = -47.8f;
 
 const OpenFairway::FShotSimulationResult Result =
     OpenFairway::ShotSimulator::Simulate(Launch, OpenFairway::ESurface::Fairway);
-// Result.CarryM, Result.TotalM, Result.LateralM, Result.ApexM, Result.HangTimeS, Result.bAtRest
+// Result.CarryM, Result.TotalM, Result.LateralM, Result.ApexM, Result.HangTimeS,
+// Result.LandingSpinRpm, Result.bAtRest
+
+OpenFairway::FAirConditions Air;  // 75 F, sea level, dry and calm by default
+Air.RelativeHumidity = 0.5f;
+Air.WindSpeedMph = 10.0f;
+Air.WindFromDeg = 0.0f;  // headwind
+const auto IntoWind = OpenFairway::ShotSimulator::Simulate(
+    Launch, OpenFairway::ESurface::Fairway, OpenFairway::FBallPhysicsProfile(), Air);
 ```
 
 Check `bAtRest` before treating `TotalM` as final; false means the 30 s limit ran out.
@@ -366,6 +383,21 @@ solver or replay path. Other surface presets remain available for scenes that
 assign them. The rollout regression test explicitly recreates the old mixed
 assignments in a disposable test world to preserve that comparison.
 
+## Flight corrections
+
+Two corrections to the inherited aerodynamic fits are on by default. Both were measured
+against the FlightScope shot library before being adopted, and `HistoricalReference()`
+turns both off, so the golden fixtures are unchanged.
+
+| Correction | Profile field | Problem | Shot-library effect |
+| --- | --- | --- | --- |
+| High-Re drag blend | `Flight.HighReCdBlendStart = 175000` | Drag stepped from 0.186 to the 0.2 cap at Re 200k (about 162 mph at 75 F) | No shot launched below 141 mph moves; library unchanged (it has one shot at or above 150 mph) |
+| Low-Re lift bridge | `Flight.bBridgeLowReLift = true` | The 60k and 65k lift fits clamp to zero for spin ratios 0.1-0.2, so lift vanished at about 43-54 mph | Carry mean error 3.78 to 3.70 yd overall over 175 compared shots, better in every carry band |
+
+Wind and humidity are inputs rather than corrections: calm, dry air gives exactly the
+previous results. Wind is uniform with height and has no gusts. Humidity uses the Tetens
+saturation pressure, with the dry air contributing its partial pressure.
+
 ## Shot results
 
 `FOpenFairwayShotResult` is updated every frame while the ball moves and is passed to
@@ -390,26 +422,34 @@ Distances are measured along the shot's horizontal launch direction, like ogolf-
   side spin are to the right.
 - **Core:** SI units (m, m/s, rad/s) in the OpenFairway frame: +X downrange, +Y up,
   +Z right (right-handed, as in Godot).
+- **Wind:** `WindFromDeg` is the direction the wind blows from, clockwise seen from above,
+  measured from the +X target line: 0 is a headwind, 90 comes from the right and 180 is a
+  tailwind. It is fixed to the world, so it does not turn with `AimYawDeg`.
 - **Unreal:** centimeters with +X forward, +Y right, +Z up (left-handed). The ball actor
   converts positions and directions at its boundary; spin stays in the core frame, so
   cross products keep their physical meaning.
 
 ## Tests and golden fixtures
 
-Run from the repository root (Windows shown):
+Run from the repository root:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Test -Filter UOpenGolf.Physics
 ```
 
+```bash
+bash Scripts/ue.sh test --filter UOpenGolf.Physics   # add --engine-root PATH if UE_ROOT is unset
+```
+
 | Test | What it checks |
 | --- | --- |
-| `UOpenGolf.Physics.Core` | Air properties, spin parsing, launch vectors, regime keys, landing buckets, friction, rest and rebound rules, green speed |
+| `UOpenGolf.Physics.Core` | Air properties (including humid air and station pressure), spin parsing, launch vectors, regime keys, landing buckets, friction, rest and rebound rules, green speed |
 | `UOpenGolf.Physics.Fixtures` | 21 historical-profile shots against unchanged C# golden values: distances (0.1 yd), apex (0.1 ft), hang time (0.01 s) and landing bucket; current defaults also checked for finite, completed shots |
-| `UOpenGolf.Physics.FlightCorrections` | Analytical spin decay, mirrored directions, anchor values, interpolation bounds and boundary continuity |
+| `UOpenGolf.Physics.FlightCorrections` | Analytical spin decay, mirrored directions, landing spin, anchor values, interpolation bounds, boundary continuity, the high-Re drag blend and the low-Re lift bridge |
+| `UOpenGolf.Physics.Wind` | Calm air unchanged; head-, tail- and crosswind direction and size; a ball moving with the air feels gravity only |
 | `UOpenGolf.Physics.FlightScopeAnalysis` | Both screenshots; historical, decay, interpolation, lift/drag and timestep diagnostics; not an assertion of FlightScope accuracy |
-| `UOpenGolf.Physics.ShotLibrary` | Replays all shots in `Data/ShotLibrary/` with the current and historical profiles and writes `Saved/ShotLibrary/results.csv`; checks that every shot parses, completes and stays finite, not FlightScope accuracy |
-| `UOpenGolf.Range.Shot` (game module) | A drive hit in the running range lands and stops within 1 yd carry / 2 yd total of the headless prediction (current: both 248.41 / 262.51 yd) |
+| `UOpenGolf.Physics.ShotLibrary` | Replays all shots in `Data/ShotLibrary/` with every profile in `MakeShotLibraryProfiles()` and writes `Saved/ShotLibrary/results.csv`, including landing angle and spin; checks that every shot parses, completes and stays finite, not FlightScope accuracy |
+| `UOpenGolf.Range.Shot` (game module) | A drive hit in the running range lands and stops within 1 yd carry / 2 yd total of the headless prediction (headless 248.44 / 262.53 yd since the 2026-10-16 flight corrections) |
 | `UOpenGolf.Range.FrameRates` (game module) | Fixed-step outcomes across 30/60/144/5 FPS and 250 ms hitches, including the twelve-step catch-up cap |
 | `UOpenGolf.Range.ReplaySelection` (game module) | Selected/repeated replay reaches the ball; corrected low wood lands at 121.5477 yd versus headless 121.5451 yd |
 | `UOpenGolf.Range.RolloutSurfaces` (game module) | Same ball actor and geometry with mixed, all-fairway, and fringe-only tags; isolates rollout changes and checks neutral regime contact multipliers |
@@ -443,9 +483,15 @@ python Scripts/flightscope_compare.py
 ```
 
 It prints engine minus FlightScope per shot for carry, total, roll and apex, then
-summaries per profile and per club. It also shows the change since the last run with
-different results, so rerun it after every physics change. Shots are read at run time,
-so adding a session needs no rebuild.
+summaries per profile and per club, and current-profile rollout by spin bin and landing
+angle. It also shows the change since the last run with different results, so rerun it
+after every physics change. Shots are read at run time, so adding a session needs no
+rebuild. On Linux, run `python3 Scripts/flightscope_compare.py`.
+
+To evaluate a physics change before making it the default, put it behind a profile field
+that defaults to today's behaviour and add a named profile to `MakeShotLibraryProfiles()`
+in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
+`historical`, and `--profile <name>` shows its per-shot table.
 
 ## Differences from ogolf-physics
 
@@ -458,17 +504,24 @@ so adding a session needs no rebuild.
 - The ball actor spends the remainder of a landing step moving after impact, with
   another sweep to detect intervening geometry. This now matches the headless loop's
   contact timing closely enough to avoid selecting a different subsequent bounce.
-- Current flight spin decay, neutral low-launch lift recovery and continuous calibration intentionally differ from
-  the pinned C# model; use `HistoricalReference()` when comparing golden fixtures.
+- Current flight spin decay, neutral low-launch lift recovery, continuous calibration, the
+  high-Re drag blend and the low-Re lift bridge intentionally differ from the pinned C#
+  model; use `HistoricalReference()` when comparing golden fixtures.
+- Wind, humidity and station pressure are additions; ogolf-physics has calm, dry air.
 
 ## Known gaps
 
 - JSON ball profiles (`BallPhysicsProfile.FromJson`) are not ported; change `Profile` in C++.
 - `SurfaceZone` area overrides, Terrain3D height queries and the lie resolver are not ported;
   use surface tags.
-- No wind; no shot camera, tracer styling or HUD here (the game module supplies those).
+- Wind is uniform: no change with height and no gusts.
+- No shot camera, tracer styling or HUD here (the game module supplies those).
 - Physical-material surfaces are a possible later addition to tags.
-- Linux builds have not been run.
+- Packaged Linux builds have not been run. On Linux the full `UOpenGolf` automation run passes
+  24 of 25 tests; `UOpenGolf.Range.ShotRecordingStorage` fails its "existing final file is
+  never replaced" check (file I/O, not physics).
+- Against the FlightScope shot library the current profile carries long (bias +2.4 yd) and
+  rolls short (bias -2.9 yd); see the [baseline](../../Docs/FlightScopeAnalysis.md#shot-library-baseline-2026-10-16-linux).
 
 ## Plugin structure
 

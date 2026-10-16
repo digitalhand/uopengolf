@@ -73,16 +73,18 @@ case "$action" in
         report="$(mktemp -d "$project_root/Saved/Automation/$(date +%Y%m%d-%H%M%S)-XXXXXX")"
         echo "Running $tests automation tests; report: $report"
         # Linux uses UnrealEditor with unattended/NullRHI flags; no separate -Cmd binary is required.
-        if timeout --kill-after=10s "${timeout_seconds}s" "$editor" "$project" \
+        result=0
+        timeout --kill-after=10s "${timeout_seconds}s" "$editor" "$project" \
             -unattended -nopause -nosplash -nosound -nullrhi -DDC=UOpenGolfSmoke -stdout -FullStdOutLogOutput \
             "-ExecCmds=Automation RunTests $tests" '-TestExit=Automation Test Queue Empty' \
             "-ReportExportPath=$report" "-abslog=$report/Unreal.log" \
-            >"$report/stdout.log" 2>"$report/stderr.log"; then
-            python3 "$script_root/check_automation_report.py" "$report/index.json" ${validation[@]+"${validation[@]}"}
-        else
-            result=$?
+            >"$report/stdout.log" 2>"$report/stderr.log" || result=$?
+        # -TestExit forces an exit, which Unreal reports as 1 on Linux even after a clean run
+        # (FUnixPlatformMisc::RequestExit), so the report decides pass/fail for 0 and 1.
+        if (( result > 1 )) || [[ ! -s "$report/index.json" ]]; then
             echo "Automation process failed or timed out (exit $result). See $report" >&2
-            exit "$result"
+            exit $(( result > 1 ? result : 1 ))
         fi
+        python3 "$script_root/check_automation_report.py" "$report/index.json" ${validation[@]+"${validation[@]}"}
         ;;
 esac

@@ -22,9 +22,13 @@ LIBRARY_DIR = ROOT / "Data" / "ShotLibrary"
 RESULTS_PATH = ROOT / "Saved" / "ShotLibrary" / "results.csv"
 HISTORY_DIR = ROOT / "Saved" / "ShotLibrary" / "history"
 TEST_NAME = "UOpenGolf.Physics.ShotLibrary"
-PROFILES = ("current", "historical")
+# Listed first in reports; any other profile in the results follows in first-seen order.
+LEADING_PROFILES = ("current", "historical")
 # (key, label, unit); roll is total minus carry for both the engine and FlightScope.
 METRICS = (("carry", "Carry", "yd"), ("total", "Total", "yd"), ("roll", "Roll", "yd"), ("apex", "Apex", "ft"))
+# Report bins for the rollout breakdown, a simplification of LandingBucket::Classify.
+SPIN_BINS = ((4000.0, "Run"), (5500.0, "Release"), (7500.0, "Check"), (float("inf"), "Spinback"))
+LANDING_BANDS = ((35.0, "<35"), (45.0, "35-45"), (float("inf"), ">=45"))
 # The grades used by openfairway's compare_csv.py.
 CARRY_PASS, CARRY_MODERATE = 3.0, 7.0
 TOTAL_PASS, TOTAL_MODERATE = 5.0, 10.0
@@ -72,6 +76,12 @@ def load_library(library_dir):
     return shots
 
 
+def optional_float(row, column):
+    """A float, or None when the column is missing or empty (results from older builds)."""
+    text = (row.get(column) or "").strip()
+    return float(text) if text else None
+
+
 def load_results(path):
     """Engine results keyed by (session, shot_name, profile)."""
     results = {}
@@ -80,8 +90,17 @@ def load_results(path):
             results[(row["session"], row["shot_name"], row["profile"])] = {
                 "carry": float(row["carry_yd"]), "total": float(row["total_yd"]),
                 "roll": float(row["rollout_yd"]), "apex": float(row["apex_ft"]),
+                "landing_angle": optional_float(row, "landing_angle_deg"),
+                "landing_spin": optional_float(row, "landing_spin_rpm"),
             }
     return results
+
+
+def profiles_in(results):
+    """Profiles present in the results: current and historical first, then first-seen order."""
+    seen = list(dict.fromkeys(profile for _, _, profile in results))
+    return [profile for profile in LEADING_PROFILES if profile in seen] + [
+        profile for profile in seen if profile not in LEADING_PROFILES]
 
 
 def grade(carry_diff, total_diff):
@@ -107,6 +126,8 @@ def compare(shots, results, profile):
             continue
         row = {key: shot[key] for key in ("session", "shot", "club", "speed", "vla", "spin")}
         row["profile"] = profile
+        row["landing_angle"] = engine["landing_angle"]
+        row["landing_spin"] = engine["landing_spin"]
         for metric, _, _ in METRICS:
             reference = shot["fs"][metric]
             row[metric] = engine[metric]
@@ -168,7 +189,7 @@ def shot_table(rows):
 def summary_table(rows_by_profile):
     header = ["Profile", "Metric", "Bias", "Avg |+/-|", "Worst"] + [f"<={limit:g}" for limit in WITHIN]
     body = []
-    for profile in PROFILES:
+    for profile in rows_by_profile:
         for index, (metric, label, unit) in enumerate(METRICS):
             cells = [profile if index == 0 else "", f"{label} ({unit})"]
             stats = summarize(rows_by_profile[profile], metric)
@@ -179,10 +200,38 @@ def summary_table(rows_by_profile):
                 cells += [f"{share:.0f}%" for share in stats["within"]]
             body.append(cells)
     lines = [render(header, body, set(range(2, len(header))))]
-    for profile in PROFILES:
+    for profile in rows_by_profile:
         counts = [sum(row["status"] == status for row in rows_by_profile[profile]) for status in ("pass", "moderate", "severe")]
         lines.append(f"Status ({profile}): pass {counts[0]}, moderate {counts[1]}, severe {counts[2]}")
     return "\n".join(lines)
+
+
+def bin_label(value, bins):
+    return next(label for limit, label in bins if value < limit)
+
+
+def rollout_cells(rows):
+    """Engine and FlightScope roll per (spin bin, landing band) over rows with both values."""
+    groups = {}
+    for row in rows:
+        if row["landing_angle"] is None or row["fs_roll"] is None:
+            continue
+        key = (bin_label(row["spin"], SPIN_BINS), bin_label(row["landing_angle"], LANDING_BANDS))
+        groups.setdefault(key, []).append(row)
+    return {key: {"count": len(group),
+                  "engine": sum(row["roll"] for row in group) / len(group),
+                  "fs": sum(row["fs_roll"] for row in group) / len(group),
+                  "bias": sum(row["diff_roll"] for row in group) / len(group)}
+            for key, group in groups.items()}
+
+
+def rollout_table(rows):
+    cells = rollout_cells(rows)
+    order = {label: index for index, (_, label) in enumerate(SPIN_BINS + LANDING_BANDS)}
+    header = ["Spin", "Landing (deg)", "Shots", "Roll", "FS roll", "Bias"]
+    body = [[spin, band, str(cell["count"]), format(cell["engine"], ".1f"), format(cell["fs"], ".1f"), format(cell["bias"], "+.1f")]
+            for (spin, band), cell in sorted(cells.items(), key=lambda item: (order[item[0][0]], order[item[0][1]]))]
+    return render(header, body, set(range(2, len(header))))
 
 
 def club_table(rows):
@@ -200,7 +249,7 @@ def club_table(rows):
 
 
 def snapshot_text(rows):
-    """Both profiles' rows as CSV; identical text means identical engine results."""
+    """Every profile's rows as CSV; identical text means identical engine results."""
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=SNAPSHOT_FIELDS, lineterminator="\n")
     writer.writeheader()
@@ -300,7 +349,7 @@ def parse_args(argv):
     parser.add_argument("--session", action="append", help="only this session, such as session_5 (repeatable)")
     parser.add_argument("--club", action="append", help="only this club, such as driver or 7i (repeatable)")
     parser.add_argument("--sort", choices=[metric for metric, _, _ in METRICS], help="largest |+/-| of this metric first")
-    parser.add_argument("--profile", choices=PROFILES, default="current", help="profile for the per-shot table")
+    parser.add_argument("--profile", default="current", help="profile for the per-shot table (current, historical or a candidate)")
     parser.add_argument("--baseline", type=Path, help="history snapshot to compare with instead of the last different run")
     parser.add_argument("--library", type=Path, default=LIBRARY_DIR, help=argparse.SUPPRESS)
     parser.add_argument("--results", type=Path, default=RESULTS_PATH, help=argparse.SUPPRESS)
@@ -323,13 +372,18 @@ def main(argv=None):
         sys.exit(f"No results at {args.results}; run without --skip-run first.")
     shots = load_library(args.library)
     results = load_results(args.results)
-    compared = {profile: compare(shots, results, profile) for profile in PROFILES}
+    profiles = profiles_in(results)
+    if "current" not in profiles:
+        sys.exit(f"No current profile in {args.results}; it has: {', '.join(profiles)}.")
+    if args.profile not in profiles:
+        sys.exit(f"No {args.profile} profile in {args.results}; it has: {', '.join(profiles)}.")
+    compared = {profile: compare(shots, results, profile) for profile in profiles}
 
     def selected(rows):
         return [row for row in rows if (not args.session or row["session"] in args.session)
                 and (not args.club or row["club"] in args.club)]
 
-    rows_by_profile = {profile: selected(compared[profile][0]) for profile in PROFILES}
+    rows_by_profile = {profile: selected(compared[profile][0]) for profile in profiles}
     table_rows = list(rows_by_profile[args.profile])
     if args.sort:
         key = "diff_" + args.sort
@@ -346,14 +400,18 @@ def main(argv=None):
     print()
     print("By club (current profile):")
     print(club_table(rows_by_profile["current"]))
-    for profile in PROFILES:
+    if any(row["landing_angle"] is not None for row in rows_by_profile["current"]):
+        print()
+        print("Rollout by spin and landing angle (current profile):")
+        print(rollout_table(rows_by_profile["current"]))
+    for profile in profiles:
         missing = compared[profile][1]
         if missing:
             names = ", ".join(f"{shot['session']}/{shot['shot']}" for shot in missing)
             print(f"WARNING: no {profile} engine result for {len(missing)} shot(s): {names}", file=sys.stderr)
             exit_code = 1
 
-    snapshot = snapshot_text(compared["current"][0] + compared["historical"][0])
+    snapshot = snapshot_text([row for profile in profiles for row in compared[profile][0]])
     saved, is_new, baseline = record_history(args.history, snapshot, datetime.now())
     if args.baseline:
         baseline = args.baseline

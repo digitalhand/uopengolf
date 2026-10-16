@@ -4,6 +4,7 @@
 #include "OpenFairway/BallProfile.h"
 
 #include "OpenFairway/GolfPhysics.h"
+#include "OpenFairway/ShotSimulator.h"
 
 namespace OpenFairway
 {
@@ -230,6 +231,8 @@ namespace OpenFairway
         Profile.Flight.SpinDecayCoefficient = 0.0f;
         Profile.Flight.ConstantSpinDecayRatePerSecond = 0.2f;
         Profile.Flight.LowLaunchLiftRecoveryMax = 1.08f;
+        Profile.Flight.HighReCdBlendStart = 200000.0f;
+        Profile.Flight.bBridgeLowReLift = false;
         return Profile;
     }
 
@@ -296,11 +299,14 @@ namespace OpenFairway
         Params.Regime = Profile.ResolveScaleOverride(SpeedMph, LaunchAngleDeg, TotalSpinRpm, Params.RegimeKey, Params.MatchedRegimeKey);
         Params.Landing = Profile.ResolveLandingResponse(LaunchAngleDeg, TotalSpinRpm, Params.LandingBucket);
         const float TemperatureC = Atmosphere::FahrenheitToCelsius(Air.TemperatureF);
-        Params.Environment.AirDensity = Atmosphere::Density(Air.AltitudeFt * FeetToMeters, TemperatureC);
+        Params.Environment.AirDensity = Atmosphere::Density(Air.AltitudeFt * FeetToMeters, TemperatureC, Air.RelativeHumidity, Air.PressurePa);
         Params.Environment.AirViscosity = Atmosphere::DynamicViscosity(TemperatureC);
         Params.Environment.DragScale = Profile.DragScaleMultiplier * Params.Regime.DragScaleMultiplier;
         Params.Environment.LiftScale = Profile.LiftScaleMultiplier * Params.Regime.LiftScaleMultiplier;
         Params.Environment.InitialLaunchAngleDeg = LaunchAngleDeg;
+        // The wind blows away from WindFromDeg (clockwise from the +X target line toward +Z right).
+        const float FromRadians = FMath::DegreesToRadians(Air.WindFromDeg);
+        Params.Environment.Wind = -Air.WindSpeedMph * MpsPerMph * FVector3f(FMath::Cos(FromRadians), 0.0f, FMath::Sin(FromRadians));
         Params.Flight = Profile.Flight;
         Params.Bounce = Profile.Bounce;
         Params.Rollout = Profile.Rollout;

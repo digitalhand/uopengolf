@@ -128,6 +128,42 @@ class FlightScopeCompareTests(unittest.TestCase):
         self.assertIn("Change since run", output)
         self.assertIn("Carry (yd): avg|+/-| 3.70 -> 2.70 (-1.00)", output)
 
+    def test_profiles_come_from_results(self):
+        rows = [RESULTS_HEADER.rstrip("\n") + ",landing_angle_deg,landing_spin_rpm\n"]
+        for profile in ("candidate-cd", "historical", "current"):
+            rows.append(f"session_5,shot_driver_42,{profile},196.9,210.9,14.0,40.1,4.5,-8.0,true,38.5,1650.0\n")
+            rows.append(f"standard,drive_test_shot,{profile},248.4,262.5,14.1,82.2,5.9,-10.0,true,40.0,1800.0\n")
+        self.write(self.results, "".join(rows))
+        results = compare_script.load_results(self.results)
+        self.assertEqual(compare_script.profiles_in(results), ["current", "historical", "candidate-cd"])
+        self.assertEqual(results[("session_5", "shot_driver_42", "current")]["landing_angle"], 38.5)
+        self.assertEqual(results[("session_5", "shot_driver_42", "current")]["landing_spin"], 1650.0)
+        code, output = self.run_main("--profile", "candidate-cd")
+        self.assertEqual(code, 0)
+        self.assertIn("Status (candidate-cd):", output)
+        self.assertIn("Rollout by spin and landing angle (current profile):", output)
+
+    def test_results_without_landing_columns_still_load(self):
+        result = compare_script.load_results(self.results)[("session_5", "shot_driver_42", "current")]
+        self.assertIsNone(result["landing_angle"])
+        self.assertIsNone(result["landing_spin"])
+
+    def test_rollout_breakdown_by_landing(self):
+        def row(spin, angle, roll, fs_roll):
+            return {"spin": spin, "landing_angle": angle, "roll": roll, "fs_roll": fs_roll,
+                    "diff_roll": None if fs_roll is None else roll - fs_roll}
+        rows = [row(2000.0, 30.0, 20.0, 25.0), row(3000.0, 20.0, 10.0, 15.0), row(6000.0, 50.0, 9.0, 2.0),
+                row(4000.0, 35.0, 6.0, 5.0), row(7500.0, 45.0, 1.0, 0.5),
+                row(8000.0, 40.0, 3.0, None), row(2000.0, None, 3.0, 4.0)]
+        cells = compare_script.rollout_cells(rows)
+        self.assertEqual(set(cells), {("Run", "<35"), ("Check", ">=45"), ("Release", "35-45"), ("Spinback", ">=45")})
+        run = cells[("Run", "<35")]
+        self.assertEqual(run["count"], 2)
+        self.assertAlmostEqual(run["engine"], 15.0)
+        self.assertAlmostEqual(run["fs"], 20.0)
+        self.assertAlmostEqual(run["bias"], -5.0)
+        self.assertAlmostEqual(cells[("Check", ">=45")]["bias"], 7.0)
+
     def test_filters_limit_rows_and_summary(self):
         code, output = self.run_main("--club", "driver")
         self.assertEqual(code, 0)

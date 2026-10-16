@@ -80,6 +80,21 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Air")
     float AltitudeFt = 0.0f;
 
+    /** 0-1. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Air", meta = (ClampMin = "0", ClampMax = "1"))
+    float RelativeHumidity = 0.0f;
+
+    /** Measured station pressure in pascals (about 101325 at sea level, not hPa or psi); 0 derives it from AltitudeFt. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Air", meta = (ClampMin = "0"))
+    float PressurePa = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Air", meta = (ClampMin = "0"))
+    float WindSpeedMph = 0.0f;
+
+    /** Direction the wind blows from, clockwise from the world +X target line: 0 is a headwind, 90 from the right. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Air")
+    float WindFromDeg = 0.0f;
+
     /** Degrees to turn launches clockwise (seen from above) from the world +X target line. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway")
     float AimYawDeg = 0.0f;

@@ -15,8 +15,8 @@ Use the Unreal console (**~**) during play:
 | `uopengolf.Grass3D 1` | Recreates the same deterministic grass population (default) |
 
 Grass covers a 20 m radius around the tee, clipped at the range's back edge and
-excluding the 5 m tee paint. Clumps contain 32 small triangles, use no collision
-or shadows, and cull between 12 and 22 m. The toggle is checked every 0.25 s.
+excluding the 5 m tee paint. Public clumps contain 16 small triangles, use no collision
+or shadows, and use draw-distance bounds of 7 and 10 m. The toggle is checked every 0.25 s.
 The fairway texture, mowing stripes, and physical ground remain when grass is off.
 Grass world-position displacement is disabled. The flag is static; it does not
 simulate cloth. Its pole is 213.36 cm above ground, 1.27 cm in diameter, with a
@@ -33,6 +33,12 @@ variation blend between these endpoints; the tee paint uses #406B1F. Lighting
 and tone mapping still affect the final on-screen pixels. The supplied golf photograph was used
 as a visual color reference only and is not distributed as a game asset.
 
+Both sides of each public blade use upward shading normals, matching the turf's
+lighting direction. This reduces the dark blade edges that flicker as Unreal
+combines successive frames. The material retains its palette and 0.9 roughness.
+It explicitly enables instanced static mesh support so the range can use the
+saved grass shader instead of falling back to Unreal's default material.
+
 ## Sources and conversions
 
 See [third-party notices](../THIRD_PARTY_NOTICES.md) for asset licenses and authors.
@@ -44,7 +50,7 @@ All third-party inputs below use CC0 1.0 Universal. Converted assets live under
 | ambientCG `Grass004_2K-JPG.zip` | Import Color as sRGB, NormalDX as a normal map without flipping green, and Roughness as linear masks. Planar world-space UVs repeat every 140 cm; world-space normals match the flat ground. Add modest stripes and broad color variation in the material. |
 | jpsweber `golf_0.zip`, `Golf_ball.obj` | Center and normalize to a 100 cm diameter. Use smooth normals and an ivory material. UE generates LODs at 100%, 25%, and 5% of source triangles, with screen sizes 1.0, 0.1, and 0.025. Source LOD has 61,672 triangles. |
 | Original flagstick | Generate a 32-sided half-inch pole, seven feet above ground plus a 10 cm buried section, and a 14 by 20 inch rectangular flag facing the tee. Replaces the earlier converted mess110 model. |
-| Original grass clump | Deterministically generate 32 blades over a 20 cm square, 1.2–2 cm tall, with a two-sided material and per-instance color variation. |
+| Original grass clump | Deterministically generate 16 blades over a 20 cm square, 2–3 cm tall and 0.8–1.2 cm wide at the base, with a two-sided material and per-instance color variation. |
 
 Archive SHA-256 checksums, which pin the downloaded versions:
 
@@ -82,6 +88,16 @@ reimporting textures or replacing material graphs. Run it through Unreal Python
 to reset the palette to these defaults. The importer applies the palette to new
 materials and preserves existing palette edits on subsequent imports.
 
+`Scripts/UpdateRangeGrassMaterial.py` updates only the owned public blade material.
+It can be rerun without adding duplicate nodes and leaves the palette and roughness
+alone. The importer calls the same update for fresh assets. To apply it on Linux:
+
+```bash
+"$UE_ROOT/Engine/Binaries/Linux/UnrealEditor" "$PWD/UOpenGolf.uproject" \
+  -run=pythonscript "-script=$PWD/Scripts/UpdateRangeGrassMaterial.py" \
+  -unattended -nosound -nullrhi -DDC=UOpenGolfSmoke
+```
+
 Run `Scripts/UpdateRangePresentation.py` through the same Unreal Python entrypoint
 after conversion to import only the dimensioned flag and regenerate `M_ShotTrail`.
 The game-owned ribbon uses a two-sided unlit translucent material with feathered
@@ -118,7 +134,15 @@ include editor and automation overhead and are not standalone-game benchmarks.
 The first rendered run using the project-local cache may spend several minutes
 compiling shaders.
 Static tee, grass-off, closeup and coverage-edge views additionally capture 20
-frames at half-second intervals to inspect flicker. `UOpenGolf.Range.ShotTrail`
+frames at half-second intervals to inspect flicker. The tee views match the startup
+camera's 70-degree field of view and unrestricted aspect ratio. The report records
+actual viewport dimensions and anti-aliasing settings; editor captures may differ
+from the requested command-line resolution. Compare equal-sized sequences with
+`python3 Scripts/grass_stability.py Saved/Screenshots/RangeAssets --sequence <id>`.
+This measures changes over the lower 40% of the image, averaging consecutive pairs;
+it counts a pixel as changed when any RGB channel differs by more than 3/255.
+
+`UOpenGolf.Range.ShotTrail`
 checks path creation, monotonic rollout fade, disappearance at rest and reset for
 driver, iron and slow shots. Use `check_range_variant.py --map <map> --render
 --shot-trail` for matching moving captures under `Saved/Screenshots/ShotTrail/`.

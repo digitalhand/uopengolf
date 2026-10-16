@@ -138,13 +138,20 @@ namespace OpenFairway
 
     float FlightAerodynamics::GetCd(float Reynolds, const FFlightProfile& P)
     {
-        if (Reynolds > 200000.0f)
+        constexpr float CapReynolds = 200000.0f;
+        if (Reynolds > CapReynolds)
         {
             return P.HighReCdCap;
         }
         if (Reynolds >= 50000.0f)
         {
-            return P.CdPolyA + P.CdPolyB * Reynolds + P.CdPolyC * Reynolds * Reynolds + P.CdPolyD * Reynolds * Reynolds * Reynolds;
+            const float Polynomial = P.CdPolyA + P.CdPolyB * Reynolds + P.CdPolyC * Reynolds * Reynolds + P.CdPolyD * Reynolds * Reynolds * Reynolds;
+            if (P.HighReCdBlendStart >= CapReynolds || Reynolds <= P.HighReCdBlendStart)
+            {
+                return Polynomial;
+            }
+            // Ease into the cap so drag has no step where the polynomial ends.
+            return Lerp(Polynomial, P.HighReCdCap, SafeSmoothStep01(Reynolds, P.HighReCdBlendStart, CapReynolds));
         }
         if (Reynolds <= P.LowReBlendStart)
         {
@@ -178,17 +185,24 @@ namespace OpenFairway
             return ApplyHighSpinLiftAttenuation(Spin, FMath::Clamp(ClHighRe(Spin, P), 0.0f, DynamicClMax), P);
         }
 
-        constexpr int32 Count = UE_ARRAY_COUNT(ReynoldsSamplePoints);
-        int32 HighIndex = Count - 1;
-        for (int32 Index = 0; Index < Count; ++Index)
+        // Indices into ReynoldsSamplePoints. The bridge brackets with the 50k (0), 70k (3) and
+        // 75k (4) curves only, skipping the 60k/65k dip.
+        constexpr int32 AllSamples[] = {0, 1, 2, 3, 4};
+        constexpr int32 BridgedSamples[] = {0, 3, 4};
+        static_assert(UE_ARRAY_COUNT(AllSamples) == UE_ARRAY_COUNT(ReynoldsSamplePoints), "Every Reynolds sample needs an index");
+        const int32* Samples = P.bBridgeLowReLift ? BridgedSamples : AllSamples;
+        const int32 Count = P.bBridgeLowReLift ? UE_ARRAY_COUNT(BridgedSamples) : UE_ARRAY_COUNT(AllSamples);
+        int32 HighSlot = Count - 1;
+        for (int32 Slot = 0; Slot < Count; ++Slot)
         {
-            if (Reynolds <= ReynoldsSamplePoints[Index])
+            if (Reynolds <= ReynoldsSamplePoints[Samples[Slot]])
             {
-                HighIndex = Index;
+                HighSlot = Slot;
                 break;
             }
         }
-        const int32 LowIndex = FMath::Max(HighIndex - 1, 0);
+        const int32 HighIndex = Samples[HighSlot];
+        const int32 LowIndex = Samples[FMath::Max(HighSlot - 1, 0)];
 
         const float ClLow = FMath::Max(0.0f, ClAtReynoldsIndex(LowIndex, Spin, P));
         const float ClHigh = FMath::Max(0.0f, ClAtReynoldsIndex(HighIndex, Spin, P));

@@ -73,6 +73,8 @@ namespace OpenFairway
         float HangTimeS = 0.0f;
         float LandingSpeedMps = 0.0f;
         float LandingAngleDeg = 0.0f;
+        /** Spin at the first impact; 0 when the ball never lands. */
+        float LandingSpinRpm = 0.0f;
         /** False when the time limit ran out before the ball stopped. */
         bool bAtRest = false;
         ELandingBucket LandingBucket = ELandingBucket::Run;

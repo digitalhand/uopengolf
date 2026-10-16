@@ -183,5 +183,7 @@ for name, materials in (("SM_GolfBall", [ball_mat]), ("SM_Flagstick", [pole_mat,
 sys.path.insert(0, str(ROOT / "Scripts"))
 from RangeGrassAppearance import apply_grass_colors
 apply_grass_colors()
+from UpdateRangeGrassMaterial import apply_grass_shading
+apply_grass_shading()
 
 ue.log("Range assets imported successfully.")
