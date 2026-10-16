@@ -35,6 +35,50 @@ bool FFlightCorrectionsTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Spin direction preserved"), ByProfile.Spin.GetSafeNormal().Equals(Spin.GetSafeNormal(), 0.0001f));
         TestTrue(TEXT("Decay cannot add spin"), ByProfile.Spin.Size() <= Spin.Size());
     }
+    // High-Re drag: the historical profile keeps the legacy step into the cap at Re 200k; a blend
+    // start below 200k removes the step, and any start at or above it is the legacy step exactly.
+    const FFlightProfile Legacy = FBallPhysicsProfile::HistoricalReference().Flight;
+    TestEqual(TEXT("Legacy drag below the cap"), FlightAerodynamics::GetCd(199999.0f, Legacy), 0.1856f, 0.001f);
+    TestEqual(TEXT("Legacy drag at 200k is the polynomial"), FlightAerodynamics::GetCd(200000.0f, Legacy), 0.1854f, 0.001f);
+    TestEqual(TEXT("Legacy drag above 200k is the cap"), FlightAerodynamics::GetCd(200001.0f, Legacy), 0.2f, 1e-6f);
+    FFlightProfile Blended = Legacy;
+    Blended.HighReCdBlendStart = 175000.0f;
+    TestEqual(TEXT("Blend starts on the polynomial"), FlightAerodynamics::GetCd(175000.0f, Blended), 0.2041f, 0.001f);
+    TestTrue(TEXT("Blend removes the 200k step"),
+        FMath::Abs(FlightAerodynamics::GetCd(199999.0f, Blended) - FlightAerodynamics::GetCd(200001.0f, Blended)) < 0.001f);
+    TestEqual(TEXT("Blend keeps the cap above 200k"), FlightAerodynamics::GetCd(300000.0f, Blended), 0.2f, 1e-6f);
+    FFlightProfile LateStart = Legacy;
+    LateStart.HighReCdBlendStart = 250000.0f;
+    for (float Re : {150000.0f, 199999.0f, 200000.0f, 200001.0f})
+    {
+        TestTrue(TEXT("Blend start at or above 200k is the legacy step"), FlightAerodynamics::GetCd(Re, LateStart) == FlightAerodynamics::GetCd(Re, Legacy));
+    }
+
+    // Low-Re lift: the 60k and 65k fits clamp to zero for mid spin ratios; the bridge
+    // interpolates the 50k and 70k curves instead, matching them at both ends.
+    TestEqual(TEXT("Legacy dead band has no lift"), FlightAerodynamics::GetCl(62000.0f, 0.15f, Legacy), 0.0f, 1e-6f);
+    FFlightProfile Bridged = Legacy;
+    Bridged.bBridgeLowReLift = true;
+    TestEqual(TEXT("Bridge lifts across the dead band"), FlightAerodynamics::GetCl(62000.0f, 0.15f, Bridged), 0.102f, 0.003f);
+    for (float Re : {50000.0f, 70000.0f})
+    {
+        TestEqual(TEXT("Bridge meets the legacy curve at its ends"), FlightAerodynamics::GetCl(Re, 0.15f, Bridged),
+            FlightAerodynamics::GetCl(Re, 0.15f, Legacy), 1e-5f);
+    }
+    for (float SpinRatio : {0.0f, 0.05f, 0.15f, 0.3f, 0.9f})
+    {
+        for (float Re : {50000.0f, 55000.0f, 60000.0f, 65000.0f, 70000.0f, 74900.0f})
+        {
+            const float Cl = FlightAerodynamics::GetCl(Re, SpinRatio, Bridged);
+            TestTrue(FString::Printf(TEXT("Bridged lift bounded at Re %.0f, spin ratio %.2f"), Re, SpinRatio),
+                Cl >= 0.0f && Cl <= FlightAerodynamics::GetClMax(SpinRatio, Bridged));
+        }
+    }
+
+    // Both corrections beat or matched the shot library (Docs/FlightScopeAnalysis.md), so gameplay uses them.
+    TestTrue(TEXT("Default drag has no 200k step"), FMath::Abs(FlightAerodynamics::GetCd(199999.0f, Flight) - FlightAerodynamics::GetCd(200001.0f, Flight)) < 0.001f);
+    TestTrue(TEXT("Default lift bridges the low-Re dead band"), FlightAerodynamics::GetCl(62000.0f, 0.15f, Flight) > 0.09f);
+
     const FBallState ZeroSpin{FVector3f::ZeroVector, FVector3f(50.0f, 0.0f, 0.0f), FVector3f::ZeroVector};
     TestTrue(TEXT("Zero spin stays zero"), GolfPhysics::StepFlight(ZeroSpin, Air, Flight, 1.0f).Spin.IsZero());
     const FBallState Slow{FVector3f::ZeroVector, FVector3f(20.0f, 0.0f, 0.0f), Spin};
@@ -54,6 +98,8 @@ bool FFlightCorrectionsTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Signed shots go to correct sides"), Left.LateralM < 0.0f && Right.LateralM > 0.0f);
     TestEqual(TEXT("Mirrored shot carry"), Left.CarryM, Right.CarryM, 0.001f);
     TestEqual(TEXT("Mirrored shot offline"), Left.LateralM, -Right.LateralM, 0.001f);
+    // Flight decay leaves less spin at first impact than at launch, but not none.
+    TestTrue(TEXT("Landing spin recorded"), Left.LandingSpinRpm > 0.0f && Left.LandingSpinRpm < 4463.0f);
 
     const FBallPhysicsProfile Profile;
     const FBallPhysicsProfile Historical = FBallPhysicsProfile::HistoricalReference();

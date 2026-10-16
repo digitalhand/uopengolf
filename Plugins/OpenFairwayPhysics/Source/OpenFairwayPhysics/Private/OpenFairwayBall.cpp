@@ -148,12 +148,19 @@ FAirConditions AOpenFairwayBall::GetAirConditions() const
     FAirConditions Air;
     Air.TemperatureF = TemperatureF;
     Air.AltitudeFt = AltitudeFt;
+    Air.RelativeHumidity = RelativeHumidity;
+    Air.PressurePa = PressurePa;
+    Air.WindSpeedMph = WindSpeedMph;
+    Air.WindFromDeg = WindFromDeg;
     return Air;
 }
 
 FShotSimulationResult AOpenFairwayBall::PredictShot(const FOpenFairwayLaunch& LaunchData, EOpenFairwaySurface Surface) const
 {
-    return ShotSimulator::Simulate(ToLaunchData(LaunchData), ToCoreSurface(Surface), Profile, GetAirConditions());
+    // The headless shot is not turned by AimYawDeg, so give it the world-fixed wind relative to the aim line.
+    FAirConditions Air = GetAirConditions();
+    Air.WindFromDeg -= AimYawDeg;
+    return ShotSimulator::Simulate(ToLaunchData(LaunchData), ToCoreSurface(Surface), Profile, Air);
 }
 
 bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)

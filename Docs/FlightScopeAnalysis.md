@@ -260,7 +260,7 @@ Inputs: 75.7 mph, 20.78 degrees vertical launch, 4463 rpm total spin,
 FlightScope is set to **+0.97 degrees (Right)**. FlightScope uses its standard ball,
 medium surface, no wind, 77 F, 14.69 psi and 50% humidity. The game defaults to
 75 F, sea level, dry air and fairway. Pressure and humidity are not exposed by
-the game's air model.
+the game's air model. (Since added as inputs, 2026-10-16; the game still defaults to dry air.)
 
 | Output | Game screenshot | Native headless reproduction | FlightScope screenshot |
 | --- | ---: | ---: | ---: |
@@ -335,7 +335,7 @@ the screenshot alone does not establish that the polynomial fits are wrong.
 Other calibration corrections depend on the initial launch angle, so this is an
 empirical shot model rather than aerodynamics determined solely by instantaneous
 velocity, spin, air and ball properties. `FFlightProfile::CdMin` is also declared
-but never used; changing it currently has no effect.
+but never used; changing it currently has no effect. (Removed 2026-10-16.)
 
 ### 4. Input comparison and numerical effects
 
@@ -422,3 +422,64 @@ and expanded list are readable at 700×330, and the game HUD reports 121.5 yd ca
 An earlier visual run exposed small text and a transparent background; those
 were corrected before this final render. Linux and hardware remain untested in
 this follow-up.
+
+## Shot-library baseline, 2026-10-16 (Linux)
+
+`Scripts/flightscope_compare.py` over 175 shots with a FlightScope carry (47 library
+shots have none), 75 F, sea level, fairway. Linux / Unreal 5.8.3; report
+`Saved/Automation/20261016-030659-O8TRAw`. This is the baseline for the flight-model
+corrections in `Docs/superpowers/plans/2026-10-16-openfairway-physics-easy-wins.md`.
+
+| Profile | Carry bias / avg / worst (yd) | Total bias / avg (yd) | Roll bias / avg (yd) | Apex bias / avg (ft) | pass / moderate / severe |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| current | +2.5 / 3.8 / +14.5 | -0.4 / 4.9 | -2.9 / 3.8 | -0.1 / 3.2 | 68 / 54 / 53 |
+| historical | +0.1 / 1.8 / +7.4 | +3.6 / 5.8 | +3.5 / 5.3 | -1.0 / 3.4 | 80 / 61 / 34 |
+
+The current profile carries long for woods and irons (driver +4.8, 3w +4.1, 7i +5.0 yd
+bias) and keeps far more spin: drivers land with 86% of launch spin on average, against
+40% for the historical 0.2/s decay. The regime overrides were fitted around the old
+decay, which matches the warning under "Flight spin decay is unusually fast".
+
+Current-profile rollout by spin bin and landing angle (bins simplify
+`LandingBucket::Classify`; engine and FlightScope roll in yd):
+
+| Spin | Landing | Shots | Roll | FS roll | Bias |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Run (<4000) | <35 | 60 | 20.6 | 23.4 | -2.8 |
+| Run | 35-45 | 11 | 7.7 | 8.6 | -0.9 |
+| Release (4000-5500) | <35 | 25 | 4.2 | 11.0 | -6.9 |
+| Release | 35-45 | 27 | 2.2 | 4.7 | -2.5 |
+| Release | >=45 | 7 | 1.2 | 3.1 | -1.9 |
+| Check (5500-7500) | <35 | 2 | 0.2 | 4.4 | -4.3 |
+| Check | 35-45 | 20 | 0.1 | 2.4 | -2.3 |
+| Check | >=45 | 18 | -0.0 | 1.1 | -1.1 |
+| Spinback (>=7500) | >=45 | 5 | -0.0 | -0.4 | +0.3 |
+
+Every bin except Spinback rolls short, worst for Release-spin shots that land shallow.
+That is the opposite of the March 2026 Godot results, where steep high-spin landings
+rolled too far.
+
+### Drag-cap blend and low-Re lift bridge, 2026-10-16
+
+Both ran as candidate profiles beside `current` in the shot library before adoption.
+Carry mean error by FlightScope carry band (yd):
+
+| Band | Shots | Current | Drag-cap blend | Lift bridge |
+| --- | ---: | ---: | ---: | ---: |
+| <115 yd | 87 | 2.10 | 2.10 | 2.05 |
+| 115-150 yd | 49 | 4.32 | 4.32 | 4.24 |
+| 150-180 yd | 25 | 6.67 | 6.67 | 6.46 |
+| >=180 yd | 14 | 7.18 | 7.18 | 7.08 |
+| All | 175 | 3.78 | 3.78 | 3.70 |
+
+The drag-cap blend moves one shot (the 150 mph drive) by 0.03 yd. The library has a
+single shot at or above 150 mph, so it cannot show the blend's effect on fast drivers.
+The blend is adopted because it removes a non-physical 7.8% drag step. The lift bridge
+moves 36 of the 175 compared shots (37 library shots in all) by up to 2.48 yd and improves every band. Both are now gameplay defaults
+(`HighReCdBlendStart = 175000`, `bBridgeLowReLift = true`); `HistoricalReference()` and
+the isolated decay experiment in `UOpenGolf.Physics.FlightScopeAnalysis` keep the legacy
+values. With both adopted, the current profile reads carry +2.4 / 3.7 yd, total
+-0.4 / 4.8 yd, roll -2.9 / 3.8 yd and apex -0.1 / 3.2 ft (bias / mean error). Rollout
+by bin is unchanged within 0.3 yd. The low wood regression remains 121.5451 yd.
+Wind, humidity and station pressure were added as inputs. The library still runs calm,
+dry 75 F air, so they do not change these numbers.

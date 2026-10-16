@@ -14,6 +14,11 @@ bool FOpenFairwayPhysicsCoreTest::RunTest(const FString& Parameters)
     // Air at 75 F, sea level (the headless default), and Sutherland's reference viscosity at 0 C.
     const float TemperatureC = Atmosphere::FahrenheitToCelsius(75.0f);
     TestEqual(TEXT("Air density"), Atmosphere::Density(0.0f, TemperatureC), 1.1883f, 1e-4f);
+    // Water vapour is lighter than dry air; the dry share is the partial pressure, not the total.
+    TestEqual(TEXT("Humid air density"), Atmosphere::Density(0.0f, TemperatureC, 0.5f), 1.18175f, 1e-4f);
+    TestEqual(TEXT("Station pressure density (77 F, 50%, 14.69 psi)"), Atmosphere::Density(0.0f, 25.0f, 0.5f, 101283.0f), 1.17642f, 2e-4f);
+    TestEqual(TEXT("Humidity clamps at saturation"), Atmosphere::Density(0.0f, TemperatureC, 1.5f), Atmosphere::Density(0.0f, TemperatureC, 1.0f));
+    TestEqual(TEXT("NaN humidity is dry air"), Atmosphere::Density(0.0f, TemperatureC, NAN), Atmosphere::Density(0.0f, TemperatureC));
     TestEqual(TEXT("Air viscosity at 0 C"), Atmosphere::DynamicViscosity(0.0f), 1.716e-5f, 1e-10f);
     TestEqual(TEXT("Air viscosity at 75 F"), Atmosphere::DynamicViscosity(TemperatureC), 1.8318e-5f, 1e-8f);
 

@@ -92,11 +92,21 @@ namespace OpenFairway
         FLandingResponse ResolveLandingResponse(float LaunchAngleDeg, float TotalSpinRpm, ELandingBucket& OutBucket) const;
     };
 
-    /** Air conditions; defaults match the ogolf-physics headless simulator (75 F at sea level). */
+    /** Air conditions; defaults match the ogolf-physics headless simulator (75 F at sea level, dry, calm). */
     struct FAirConditions
     {
         float TemperatureF = 75.0f;
         float AltitudeFt = 0.0f;
+        /** 0-1. Humid air is less dense, so the ball carries slightly farther. */
+        float RelativeHumidity = 0.0f;
+        /** Measured station pressure; 0 derives it from AltitudeFt. */
+        float PressurePa = 0.0f;
+        float WindSpeedMph = 0.0f;
+        /**
+         * Direction the wind blows from, in degrees clockwise seen from above, measured from the +X
+         * target line: 0 is a headwind, 90 comes from the player's right, 180 is a tailwind.
+         */
+        float WindFromDeg = 0.0f;
     };
 
     /** Everything about a shot that is fixed at launch: air, scales, profiles and the landing response. */

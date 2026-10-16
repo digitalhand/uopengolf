@@ -28,6 +28,9 @@ CLAUDE.md
 CLAUDE.local.md
 .claude
 
+# Agent Docs
+/Docs/superpowers/*
+
 # Restricted assets must live outside public history, including Git LFS.
 /Plugins/PrivateContent/
 # Fab's default import destination for the optional Project Nature pack.

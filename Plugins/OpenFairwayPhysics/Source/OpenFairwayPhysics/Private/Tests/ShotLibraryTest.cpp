@@ -106,6 +106,18 @@ namespace
         }
         return true;
     }
+
+    /**
+     * Profiles replayed for every shot: current and historical (the engine before the spin-decay
+     * and calibration-interpolation changes) first, then candidate changes under evaluation.
+     */
+    TArray<FShotLibraryProfile> MakeShotLibraryProfiles()
+    {
+        TArray<FShotLibraryProfile> Profiles;
+        Profiles.Add({TEXT("current"), FBallPhysicsProfile()});
+        Profiles.Add({TEXT("historical"), FBallPhysicsProfile::HistoricalReference()});
+        return Profiles;
+    }
 } // namespace
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOpenFairwayShotLibraryTest, "UOpenGolf.Physics.ShotLibrary",
@@ -147,13 +159,9 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
         TestFalse(FString::Printf(TEXT("%s/%s is unique"), *Shot.Session, *Shot.ShotName), bDuplicate);
     }
 
-    // Default air (75 F, sea level) and fairway, as in the game. The historical profile is the
-    // engine before the spin-decay and calibration-interpolation changes.
-    const FShotLibraryProfile Profiles[] = {
-        {TEXT("current"), FBallPhysicsProfile()},
-        {TEXT("historical"), FBallPhysicsProfile::HistoricalReference()},
-    };
-    FString Csv = TEXT("session,shot_name,profile,carry_yd,total_yd,rollout_yd,apex_ft,hang_s,lateral_yd,at_rest\n");
+    // Default air (75 F, sea level) and fairway, as in the game.
+    const TArray<FShotLibraryProfile> Profiles = MakeShotLibraryProfiles();
+    FString Csv = TEXT("session,shot_name,profile,carry_yd,total_yd,rollout_yd,apex_ft,hang_s,lateral_yd,at_rest,landing_angle_deg,landing_spin_rpm\n");
     int32 ResultCount = 0;
     for (const FShotLibraryShot& Shot : Shots)
     {
@@ -168,9 +176,10 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
             TestTrue(Label + TEXT(" at rest"), Result.bAtRest);
             TestTrue(Label + TEXT(" finite"), FMath::IsFinite(Result.CarryM) && FMath::IsFinite(Result.TotalM) && FMath::IsFinite(Result.ApexM) &&
                                                   FMath::IsFinite(Result.HangTimeS) && FMath::IsFinite(Result.LateralM));
-            Csv += FString::Printf(TEXT("%s,%s,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s\n"), *Shot.Session, *Shot.ShotName, Entry.Name,
+            Csv += FString::Printf(TEXT("%s,%s,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s,%.4f,%.1f\n"), *Shot.Session, *Shot.ShotName, Entry.Name,
                 Result.CarryM * YardsPerMeter, Result.TotalM * YardsPerMeter, (Result.TotalM - Result.CarryM) * YardsPerMeter,
-                Result.ApexM * FeetPerMeter, Result.HangTimeS, Result.LateralM * YardsPerMeter, Result.bAtRest ? TEXT("true") : TEXT("false"));
+                Result.ApexM * FeetPerMeter, Result.HangTimeS, Result.LateralM * YardsPerMeter, Result.bAtRest ? TEXT("true") : TEXT("false"),
+                Result.LandingAngleDeg, Result.LandingSpinRpm);
             ++ResultCount;
         }
     }

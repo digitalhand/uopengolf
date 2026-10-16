@@ -11,8 +11,11 @@ namespace OpenFairway
     /** Air properties from the barometric formula and Sutherland's law. */
     namespace Atmosphere
     {
-        /** Air density in kg/m^3. */
-        OPENFAIRWAYPHYSICS_API float Density(float AltitudeMeters, float TemperatureCelsius);
+        /**
+         * Air density in kg/m^3. RelativeHumidity is 0-1 (clamped; NaN is dry air). A station
+         * pressure of 0 derives the pressure from altitude; otherwise it is used as measured.
+         */
+        OPENFAIRWAYPHYSICS_API float Density(float AltitudeMeters, float TemperatureCelsius, float RelativeHumidity = 0.0f, float StationPressurePa = 0.0f);
 
         /** Dynamic viscosity in kg/(m*s). */
         OPENFAIRWAYPHYSICS_API float DynamicViscosity(float TemperatureCelsius);
@@ -71,6 +74,7 @@ namespace OpenFairway
         constexpr float SimulationDt = 1.0f / SimulationHz;
 
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt);
+        /** Sample must come from the air-relative velocity, State.Velocity - Environment.Wind. */
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightAerodynamicsSample& Sample, float Dt);
 
         /** Contact impulse with spin-dependent restitution, friction-limited tangential response and landing bite. */
