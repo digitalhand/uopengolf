@@ -31,7 +31,7 @@ void SReplayShotPanel::Construct(const FArguments& Args)
         SNew(SDPIScaler).DPIScale_Lambda([this] { return HudScale::Readable(Controller.IsValid() ? Controller->GetWorld() : nullptr); })
         [
             SNew(SOverlay)
-            + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(20, 0, 20, 8)
+            + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(20, 0, 20, HudScale::BottomPanelGap)
             [
                 SNew(SButton).IsFocusable(false)
                 // Test shots are for playing without a launch monitor.

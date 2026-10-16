@@ -43,39 +43,56 @@ namespace ShotRecording
      */
     FString BuildShotJson(const FRecordedShot& Recorded, int32 Index);
 
-    /**
-     * Collects a recordable shot, its club data and the engine result, and writes the file when
-     * the ball comes to rest (or when the shot is superseded, recording stops or play ends).
-     * Each time recording is switched on, the next shot starts a new session folder.
-     */
+    /** Write and close a same-directory temporary file, then rename without replacing a final file. */
+    bool WriteRecordingFile(const FString& Path, const FString& Json, FString& Error);
+
+    /** In-memory collection and retry queue. Clock and atomic writer are injectable for tests. */
     class FShotRecorder
     {
     public:
-        /** Defaults to DefaultRootDir(). */
-        explicit FShotRecorder(FString InRootDir = FString());
-
+        using FWriter = TFunction<bool(const FString&, const FString&, FString&)>;
+        explicit FShotRecorder(FString InRootDir = FString(), TFunction<double()> InClock = {}, FWriter InWriter = {});
         void SetEnabled(bool bNewEnabled);
         bool IsEnabled() const { return bEnabled; }
-
-        /** Shots written to the current session. */
-        int32 GetShotCount() const { return ShotCount; }
-
-        /** Empty until the session's first shot is written. */
+        int32 GetShotCount() const { return CurrentSession ? CurrentSession->Saved : 0; }
         const FString& GetSessionDir() const { return SessionDir; }
-
-        void OnShot(const FLaunchMonitorShot& Shot, ELaunchMonitorConnectionState State, ELaunchMonitorClub Club, bool bLeftHanded,
-            const FString& Firmware);
+        int32 GetFailedSaveCount() const;
+        const FString& GetLastError() const { return LastError; }
+        void OnShot(const FLaunchMonitorShot& Shot, ELaunchMonitorConnectionState State, ELaunchMonitorClub Club,
+            bool bLeftHanded, const FString& Firmware);
+        void BindSimulation(int32 DeviceShot, int32 SimulationShot);
+        void CancelSimulation();
         void OnClubData(const FLaunchMonitorClubData& ClubData);
         void OnBallAtRest(const FOpenFairwayShotResult& Result);
-
-        /** Writes the pending shot, if any. */
+        void Tick();
+        /** Finalize available data and make one final attempt, irrespective of retry delay. */
         void Flush();
+        void Shutdown();
 
     private:
-        FString RootDir;
-        FString SessionDir;
-        int32 ShotCount = 0;
+        struct FSession
+        {
+            FString Directory;
+            int32 NextIndex = 0;
+            int32 Saved = 0;
+        };
+        struct FPending
+        {
+            FRecordedShot Record;
+            TSharedPtr<FSession> Session;
+            int32 Index = 0;
+            int32 SimulationShot = INDEX_NONE;
+            double ClubDeadline = 0;
+            bool bSimulationDone = false;
+            bool bFinalized = false;
+        };
+        void Process(bool bForceRetry = false);
+        FString RootDir, SessionDir, LastError;
+        TSharedPtr<FSession> CurrentSession;
+        TArray<FPending> Pending;
+        TFunction<double()> Clock;
+        FWriter Writer;
+        double NextRetry = 0;
         bool bEnabled = false;
-        TOptional<FRecordedShot> Pending;
     };
 } // namespace ShotRecording

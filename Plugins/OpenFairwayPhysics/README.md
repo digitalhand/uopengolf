@@ -153,7 +153,17 @@ This plugin does the same with Chaos:
 
 The ball is never a simulating Chaos rigid body, so Chaos cannot fight the calibrated
 bounce and roll. Walls (normals flatter than about 45°) reflect the ball at 30% speed, as
-in ogolf-physics. Steps run at 120 Hz with up to 12 substeps per frame.
+in ogolf-physics. Steps run at 120 Hz with up to 12 substeps per frame. After a long
+stall, excess accumulated time is discarded rather than allowing unbounded catch-up.
+Sustained rates below about 10 FPS therefore slow simulation relative to wall time.
+The game module's `UOpenGolf.Range.FrameRates` regression checks matching carry,
+total and simulation duration at 30/60/144/5 FPS and with 250 ms hitches. This verifies
+fixed-step outcomes, not real-time playback at every render rate.
+
+The game's ribbon tracer is separate from this actor's debug tracer. Its buffer/mesh
+optimizations do not change the timestep, equations or collision queries. See the
+[game validation notes](../../Docs/PhasesStatus.md#recording-reliability-bluetooth-cancellation-and-tracer-cpu-work)
+for CPU measurements and frame-time limitations.
 
 ## Surfaces
 
@@ -400,6 +410,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Test -Filter 
 | `UOpenGolf.Physics.FlightScopeAnalysis` | Both screenshots; historical, decay, interpolation, lift/drag and timestep diagnostics; not an assertion of FlightScope accuracy |
 | `UOpenGolf.Physics.ShotLibrary` | Replays all shots in `Data/ShotLibrary/` with the current and historical profiles and writes `Saved/ShotLibrary/results.csv`; checks that every shot parses, completes and stays finite, not FlightScope accuracy |
 | `UOpenGolf.Range.Shot` (game module) | A drive hit in the running range lands and stops within 1 yd carry / 2 yd total of the headless prediction (current: both 248.41 / 262.51 yd) |
+| `UOpenGolf.Range.FrameRates` (game module) | Fixed-step outcomes across 30/60/144/5 FPS and 250 ms hitches, including the twelve-step catch-up cap |
 | `UOpenGolf.Range.ReplaySelection` (game module) | Selected/repeated replay reaches the ball; corrected low wood lands at 121.5477 yd versus headless 121.5451 yd |
 | `UOpenGolf.Range.RolloutSurfaces` (game module) | Same ball actor and geometry with mixed, all-fairway, and fringe-only tags; isolates rollout changes and checks neutral regime contact multipliers |
 

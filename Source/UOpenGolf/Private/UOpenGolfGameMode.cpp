@@ -12,11 +12,14 @@
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfRange.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUOpenGolfGameMode, Log, All);
+
 AUOpenGolfGameMode::AUOpenGolfGameMode()
 {
     HUDClass = AUOpenGolfHUD::StaticClass();
     PlayerControllerClass = AUOpenGolfPlayerController::StaticClass();
     DefaultPawnClass = nullptr;
+    RangeClass = AUOpenGolfRange::StaticClass();
     Recorder = MakeShared<ShotRecording::FShotRecorder>();
 }
 
@@ -25,7 +28,22 @@ void AUOpenGolfGameMode::StartPlay()
     UWorld* World = GetWorld();
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    Range = World->SpawnActor<AUOpenGolfRange>(FVector::ZeroVector, FRotator::ZeroRotator, Params);
+    UClass* SpawnClass = RangeClass ? RangeClass.Get() : AUOpenGolfRange::StaticClass();
+    if (SpawnClass == AUOpenGolfRange::StaticClass() && LocalRangeClass.IsValid() && !GIsAutomationTesting)
+    {
+        if (UClass* LocalClass = LocalRangeClass.TryLoadClass<AUOpenGolfRange>())
+        {
+            SpawnClass = LocalClass;
+            UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Using local range %s"), *LocalRangeClass.ToString());
+        }
+        else
+        {
+            UE_LOG(LogUOpenGolfGameMode, Warning, TEXT("Local range %s did not load; using the public range"), *LocalRangeClass.ToString());
+        }
+    }
+    Range = World->SpawnActor<AUOpenGolfRange>(SpawnClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+    if (!ensure(Range))
+        return;
     Ball = World->SpawnActor<AUOpenGolfBall>(Range->GetTeeLocation() + FVector::UpVector * 10.0f, FRotator::ZeroRotator, Params);
     if (Ball)
     {
@@ -37,6 +55,11 @@ void AUOpenGolfGameMode::StartPlay()
         ShotHandle = LaunchMonitor->OnShotReceivedNative.AddUObject(this, &ThisClass::HandleShot);
         ClubDataHandle = LaunchMonitor->OnClubDataReceivedNative.AddUObject(this, &ThisClass::HandleClubData);
     }
+
+    GetWorldTimerManager().SetTimer(RecordingTimer, FTimerDelegate::CreateWeakLambda(this, [this]
+    {
+        if (Recorder) Recorder->Tick();
+    }), 0.1f, true);
 
     // Spawn the range before players start so the controller can find the ball.
     Super::StartPlay();
@@ -54,16 +77,20 @@ void AUOpenGolfGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
     if (Recorder)
     {
-        Recorder->Flush();
+        Recorder->Shutdown();
     }
+    GetWorldTimerManager().ClearTimer(RecordingTimer);
     Super::EndPlay(EndPlayReason);
 }
 
 void AUOpenGolfGameMode::ResetBallToTee()
 {
     GetWorldTimerManager().ClearTimer(ResetTimer);
+    if (Recorder) Recorder->CancelSimulation();
     if (Ball && Range)
     {
+        if (auto* PresentedBall = Cast<AUOpenGolfBall>(Ball))
+            PresentedBall->ResetShotTrail();
         Ball->PlaceAt(Range->GetTeeLocation() + FVector::UpVector * 10.0f);
     }
 }
@@ -84,6 +111,16 @@ bool AUOpenGolfGameMode::IsRecordingShots() const
 int32 AUOpenGolfGameMode::GetRecordedShotCount() const
 {
     return Recorder ? Recorder->GetShotCount() : 0;
+}
+
+int32 AUOpenGolfGameMode::GetFailedRecordingCount() const
+{
+    return Recorder ? Recorder->GetFailedSaveCount() : 0;
+}
+
+FString AUOpenGolfGameMode::GetRecordingError() const
+{
+    return Recorder ? Recorder->GetLastError() : FString();
 }
 
 FString AUOpenGolfGameMode::GetRecordingFolder() const
@@ -135,6 +172,7 @@ bool AUOpenGolfGameMode::ToLaunch(const FLaunchMonitorShot& Shot, FOpenFairwayLa
 
 void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
 {
+    ResetBallToTee();
     const UOpenLaunchMonitorSubsystem* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>();
     if (Recorder && LaunchMonitor)
     {
@@ -145,11 +183,18 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     FOpenFairwayLaunch Launch;
     if (!Ball || !ToLaunch(Shot, Launch))
     {
+        if (Recorder) Recorder->CancelSimulation();
         return;
     }
     // Range mode: every shot is hit from the tee.
-    ResetBallToTee();
-    Ball->Launch(Launch);
+    if (Ball->Launch(Launch))
+    {
+        FOpenFairwayShotResult Result;
+        if (Recorder && Ball->GetShotResult(Result)) Recorder->BindSimulation(Shot.ShotNumber, Result.ShotNumber);
+        if (auto* PresentedBall = Cast<AUOpenGolfBall>(Ball))
+            PresentedBall->StartShotTrail();
+    }
+    else if (Recorder) Recorder->CancelSimulation();
 }
 
 void AUOpenGolfGameMode::HandleClubData(const FLaunchMonitorClubData& ClubData)

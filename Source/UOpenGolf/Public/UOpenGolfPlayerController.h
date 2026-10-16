@@ -9,8 +9,8 @@ class SWidget;
 
 /**
  * Range controls and the shot camera. Keys: C connect, D disconnect, R repeat selected shot, P presets, Tab next
- * club, T tee up the ball again, F9 record shots on/off. The camera waits behind the tee, follows the ball in flight
- * and settles behind it at rest, then glides back to the tee view when the ball is teed up again.
+ * club, T tee up the ball again, F9 record shots on/off, Escape quit. The camera waits behind the tee, holds that view for half a
+ * second after the hit, then follows low behind the ball in flight and at rest, then glides back to the tee view when the ball is teed up again.
  */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfPlayerController : public APlayerController
@@ -47,6 +47,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Recording")
     void ToggleRecordShots();
 
+    /** Quits the game (ends Play in the editor). */
+    UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Range")
+    void QuitGame();
+
     virtual void PlayerTick(float DeltaTime) override;
 
 protected:
@@ -66,6 +70,8 @@ private:
     float ReturnElapsed = 0.0f;
     bool bReturningToTee = false;
     bool bCameraAtTee = true;
+    // Time since the ball left the tee, for the delay before the camera follows it.
+    float FollowDelayElapsed = 0.0f;
 
     TSharedPtr<SWidget> ReplayPanel;
     int32 SelectedReplayIndex = 0;

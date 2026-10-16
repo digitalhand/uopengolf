@@ -103,6 +103,10 @@ on the range (see [OpenFairway Physics](../OpenFairwayPhysics/README.md)).
   including unreadable strikes.
 - **Link loss:** reports an error and, with `bAutoReconnect` (default on), retries with
   2–30 s backoff up to five times.
+- **Cancellation / failure:** disconnect invalidates queued work and old callbacks;
+  shutdown cooperatively stops the worker. Async operations have a 10 s deadline,
+  and opening the device/resolving characteristics has a 30 s overall deadline.
+  See [Threading and ownership](#threading-and-ownership) for limits and verification.
 
 ## Shot and club data
 
@@ -121,7 +125,13 @@ side spin are to the right. Each value has an `ELaunchMonitorValueSource`.
 
 `FLaunchMonitorClubData::ShotNumber` names the shot it belongs to. Club data arrives up to
 about a second after the shot; fields the device did not measure have their `bHas…` flag
-cleared, and `HasReading()` is false for an untracked shot (no club sticker).
+cleared, and `HasReading()` is false for an untracked shot (no club sticker). The
+session accepts one matching club response until re-arming three seconds after the shot.
+
+Recording belongs to the game module. Its recorder associates monitor shot IDs with
+simulation IDs, waits for delayed club data after short shots, and retries failed saves
+during Play. See [Recording shots](../../README.md#recording-shots) and
+[Recording errors and retries](../../README.md#recording-errors-and-retries).
 
 ## Replay shots
 
@@ -157,9 +167,23 @@ replay does not connect to hardware or change the device's selected club.
 
 ## Threading and ownership
 
-All WinRT calls run on one worker thread. Results are posted to the game thread, and
-every event, getter and delegate is game-thread only. `UOpenLaunchMonitorSubsystem` owns
-the session and transport for the game instance's lifetime.
+All WinRT calls run on one worker thread. Async operation waits check cancellation
+at most every 25 ms, with a 10-second per-operation deadline and a 30-second overall
+device-open/service-discovery deadline. Retry delays are interruptible. Disconnect
+invalidates queued work immediately; shutdown requests cooperative cancellation and
+joins the worker. Cleanup revokes callbacks and closes the connection without waiting
+for another remote notification-disable write.
+
+Results, discovery, notifications and link-loss events return to the game thread with
+generation checks, so queued events from an old connection cannot update a new one.
+Worker, apartment and scan initialization failures use the existing error/state path.
+Read exceptions and timeouts also fail the connection sequence instead of silently
+keeping it pending. Missing optional characteristics still return an empty value.
+
+These are application-side wait limits, not a guarantee against a blocking OS/driver
+call inside cancellation or resource release. The cancellation/deadline policy and
+session lifecycle have hardware-free tests; real-device shutdown and reconnect still
+need hardware verification.
 
 ## Tests
 
@@ -171,6 +195,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Test -Filter 
 | --- | --- |
 | `UOpenGolf.LaunchMonitor.Protocol` | Frame decoding, sentinels, signs and commands against open-lm-connector's test expectations |
 | `UOpenGolf.LaunchMonitor.Session` | Handshake timing, heartbeat, arming, club data matching, link loss and reconnecting, with a fake transport and scheduler |
+| `UOpenGolf.LaunchMonitor.OperationWait` | Completion, cancellation, shutdown and deadline behavior with a deterministic clock |
+| `UOpenGolf.LaunchMonitor.Cancellation` | Repeated disconnect/reconnect, obsolete completions and worker initialization failure with a fake transport |
 | `UOpenGolf.LaunchMonitor.Replay` | All presets decode, indexed repeat, screenshot inputs, invalid-index and malformed-frame rejection, and absent club-data clearing |
 
 None of these need hardware.
@@ -180,7 +206,9 @@ None of these need hardware.
 - Windows only for real devices; Linux has no Bluetooth transport yet.
 - The first matching device found is used; there is no device picker.
 - Square Omni, alignment and spin-mode selection are not exposed.
-- Reconnect after link loss has not been tested on hardware.
+- Updated cancellation/shutdown paths and reconnect after link loss have automated
+  coverage but have not been verified on hardware. Original shot recording and club
+  selection were verified separately; that evidence does not cover injected failures.
 
 ## Plugin structure
 

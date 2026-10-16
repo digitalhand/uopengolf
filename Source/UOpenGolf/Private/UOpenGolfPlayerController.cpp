@@ -8,8 +8,10 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "InputCoreTypes.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "OpenFairwayBall.h"
 #include "OpenLaunchMonitorSubsystem.h"
+#include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
 #include "ReplayShotPanel.h"
@@ -32,9 +34,14 @@ namespace
     // Camera placement in centimeters.
     const FVector TeeCameraOffset(-600.0f, 0.0f, 220.0f);
     const FVector TeeCameraTarget(6000.0f, 0.0f, 0.0f);
-    const FVector FollowOffset(-900.0f, 0.0f, 300.0f);
-    const FVector RestOffset(-700.0f, 0.0f, 250.0f);
+    // Low behind the ball, in flight and at rest.
+    const FVector FollowOffset(-700.0f, 0.0f, 135.0f);
+    // Degrees the follow view is tilted up from the ball, so the ball sits below the frame centre
+    // with the horizon in view.
+    constexpr float FollowFramingPitch = 8.0f;
     constexpr float FollowSpeed = 2.5f;
+    // The camera holds the tee view this long after the ball leaves the tee.
+    constexpr float FollowDelaySeconds = 0.5f;
     constexpr float TeeReturnSeconds = 2.0f;
 } // namespace
 
@@ -93,6 +100,13 @@ void AUOpenGolfPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::SelectNextClub);
     InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ThisClass::ResetBallToTee);
     InputComponent->BindKey(EKeys::F9, IE_Pressed, this, &ThisClass::ToggleRecordShots);
+    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::QuitGame);
+}
+
+void AUOpenGolfPlayerController::QuitGame()
+{
+    // Closes a standalone or packaged game; in the editor it ends Play.
+    UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 
 void AUOpenGolfPlayerController::PlayerTick(float DeltaTime)
@@ -144,12 +158,22 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
         return;
     }
 
+    if (bCameraAtTee)
+    {
+        FollowDelayElapsed = 0.0f;
+    }
     bCameraAtTee = false;
     bReturningToTee = false;
-    const FVector Desired = BallLocation + (Ball->IsMoving() ? FollowOffset : RestOffset);
-    const FVector Target = BallLocation;
+    if (!bSnap && FollowDelayElapsed < FollowDelaySeconds)
+    {
+        FollowDelayElapsed += DeltaTime;
+        return;
+    }
+    const FVector Desired = BallLocation + FollowOffset;
     const FVector Location = bSnap ? Desired : FMath::VInterpTo(ShotCamera->GetActorLocation(), Desired, DeltaTime, FollowSpeed);
-    const FRotator DesiredRotation = (Target - Location).Rotation();
+    // Aim at the ball so it stays in frame while the camera catches up, then tilt up to frame it low.
+    FRotator DesiredRotation = (BallLocation - Location).Rotation();
+    DesiredRotation.Pitch += FollowFramingPitch;
     const FRotator Rotation = bSnap ? DesiredRotation : FMath::RInterpTo(ShotCamera->GetActorRotation(), DesiredRotation, DeltaTime, FollowSpeed * 2.0f);
     ShotCamera->SetActorLocationAndRotation(Location, Rotation);
 }
@@ -216,6 +240,9 @@ void AUOpenGolfPlayerController::ResetBallToTee()
 {
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
+        // Only the player's tee-up clears the history tracers; the automatic re-tee keeps them.
+        if (auto* PresentedBall = Cast<AUOpenGolfBall>(Mode->GetBall()))
+            PresentedBall->ClearShotTrailHistory();
         Mode->ResetBallToTee();
     }
 }

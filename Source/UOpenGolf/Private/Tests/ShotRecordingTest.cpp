@@ -6,6 +6,7 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/Guid.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "ShotDisplay.h"
@@ -65,6 +66,7 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("3 wood code"), ClubCode(ELaunchMonitorClub::Wood3), FString(TEXT("3w")));
     TestEqual(TEXT("7 iron code"), ClubCode(ELaunchMonitorClub::Iron7), FString(TEXT("7i")));
     TestEqual(TEXT("Pitching wedge code"), ClubCode(ELaunchMonitorClub::PitchingWedge), FString(TEXT("pw")));
+    TestEqual(TEXT("Lob wedge code"), ClubCode(ELaunchMonitorClub::LobWedge), FString(TEXT("lw")));
     TestEqual(TEXT("File name"), ShotFileName(ELaunchMonitorClub::Driver, 1), FString(TEXT("club_driver_shot_1.json")));
     TestEqual(TEXT("Session folder"), SessionFolderName(FDateTime(2026, 10, 15, 14, 3, 22)), FString(TEXT("session_20261015-140322")));
     const FString DefaultRoot = DefaultRootDir();
@@ -115,6 +117,7 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     {
         FShotRecorder Recorder(Root);
         FOpenFairwayShotResult Rest;
+        Rest.ShotNumber = 44;
         Rest.bLanded = true;
         Rest.bAtRest = true;
         Rest.CarryM = 100.0f * 0.9144f;
@@ -133,6 +136,7 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("No folder before the first recorded shot"), Recorder.GetSessionDir().IsEmpty());
 
         Recorder.OnShot(RecordingTestShot(4, TEXT("Square Home")), EState::Ready, ELaunchMonitorClub::Driver, false, TEXT("1.0"));
+        Recorder.BindSimulation(4, Rest.ShotNumber);
         FLaunchMonitorClubData Club;
         Club.ShotNumber = 4;
         Club.bHasPath = true;
@@ -141,6 +145,10 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Written only at rest"), Recorder.GetShotCount(), 0);
         Recorder.OnBallAtRest(Rest);
         Recorder.OnShot(RecordingTestShot(5, TEXT("Square Home")), EState::Ready, ELaunchMonitorClub::Iron7, false, TEXT("1.0"));
+        Recorder.BindSimulation(5, Rest.ShotNumber);
+        FLaunchMonitorClubData MissingClub;
+        MissingClub.ShotNumber = 5;
+        Recorder.OnClubData(MissingClub);
         Recorder.OnBallAtRest(Rest);
         TestEqual(TEXT("Two shots recorded"), Recorder.GetShotCount(), 2);
 
@@ -178,4 +186,128 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShotRecordingRecoveryTest, "UOpenGolf.Range.ShotRecordingRecovery",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FShotRecordingRecoveryTest::RunTest(const FString&)
+{
+    using namespace ShotRecording;
+    double Now = 0;
+    int32 Calls = 0;
+    FString Failure;
+    TMap<FString, FString> Saved;
+    FShotRecorder Recorder(TEXT("UnusedTestRoot"), [&] { return Now; },
+        [&](const FString& Path, const FString& Json, FString& Error)
+        {
+            ++Calls;
+            Error = Failure;
+            if (!Failure.IsEmpty()) return false;
+            TestFalse(TEXT("Never overwrite a saved record"), Saved.Contains(Path));
+            Saved.Add(Path, Json);
+            return true;
+        });
+    auto Shot = [&](int32 Id)
+    {
+        Recorder.OnShot(RecordingTestShot(Id, TEXT("Square Home")), ELaunchMonitorConnectionState::Ready,
+            ELaunchMonitorClub::Driver, false, TEXT("test"));
+        Recorder.BindSimulation(Id, Id + 100);
+    };
+    auto Rest = [&](int32 Id)
+    {
+        FOpenFairwayShotResult Result;
+        Result.ShotNumber = Id + 100;
+        Result.bAtRest = true;
+        Recorder.OnBallAtRest(Result);
+    };
+    auto Club = [&](int32 Id)
+    {
+        FLaunchMonitorClubData Data;
+        Data.ShotNumber = Id;
+        Data.bHasPath = true;
+        Data.PathDeg = 2;
+        Recorder.OnClubData(Data);
+    };
+    Recorder.SetEnabled(true);
+    Shot(1); Rest(99); Club(1);
+    TestEqual(TEXT("Unrelated result ignored"), Calls, 0);
+    Rest(1); Rest(1);
+    TestEqual(TEXT("Club before rest saved exactly once"), Saved.Num(), 1);
+    Shot(2); Rest(2);
+    TestEqual(TEXT("Rest waits for club"), Saved.Num(), 1);
+    Shot(3); Club(2);
+    TestEqual(TEXT("Earlier completed shot accepts late club"), Saved.Num(), 2);
+    Rest(3); Now = 2.99; Recorder.Tick();
+    TestEqual(TEXT("Wait through club window"), Saved.Num(), 2);
+    Now = 3; Recorder.Tick();
+    TestEqual(TEXT("Missing club times out"), Saved.Num(), 3);
+    Club(3); TestEqual(TEXT("Late club cannot rewrite saved file"), Calls, 3);
+    Shot(4); Recorder.CancelSimulation(); Club(4); Rest(4);
+    TestEqual(TEXT("Reset shot saved once"), Saved.Num(), 4);
+    for (const auto& Pair : Saved)
+        if (Pair.Key.EndsWith(TEXT("shot_4.json")))
+            TestFalse(TEXT("Reset has no unrelated engine result"), ParseRecordingJson(Pair.Value)->GetObjectField(TEXT("UOpenGolf"))->HasField(TEXT("Engine")));
+
+    // The storage seam models failures at each transaction stage; none may discard records.
+    for (const TCHAR* Stage : {TEXT("directory"), TEXT("write"), TEXT("rename")})
+    {
+        Failure = Stage;
+        const int32 Id = Calls + 20;
+        Shot(Id); Club(Id); Rest(Id);
+        const int32 AtFailure = Calls;
+        TestEqual(TEXT("Failed record retained"), Recorder.GetFailedSaveCount(), 1);
+        Recorder.Tick();
+        TestEqual(TEXT("No busy retry"), Calls, AtFailure);
+        Failure.Reset(); Now += 1; Recorder.Tick();
+        TestEqual(TEXT("Retry recovers record"), Recorder.GetFailedSaveCount(), 0);
+        TestTrue(TEXT("Error cleared"), Recorder.GetLastError().IsEmpty());
+    }
+    Failure = TEXT("offline");
+    Shot(50); Club(50); Rest(50);
+    Shot(51); Club(51); Rest(51);
+    Recorder.SetEnabled(false);
+    Recorder.SetEnabled(true);
+    Shot(52); Club(52); Rest(52);
+    TestEqual(TEXT("Three records retained across sessions"), Recorder.GetFailedSaveCount(), 3);
+    const int32 BeforeRecovery = Saved.Num();
+    Recorder.SetEnabled(false);
+    Failure.Reset(); Now += 1; Recorder.Tick();
+    TestEqual(TEXT("All queued records saved while disabled"), Saved.Num(), BeforeRecovery + 3);
+    TestEqual(TEXT("Old session saves do not increment new session count"), Recorder.GetShotCount(), 1);
+    Recorder.SetEnabled(true);
+    Shot(60); Failure = TEXT("offline");
+    AddExpectedError(TEXT("Play ended with 1 unsaved recordings"), EAutomationExpectedErrorFlags::Contains, 1);
+    Recorder.Shutdown();
+    TestEqual(TEXT("Shutdown failure still retains data until destruction"), Recorder.GetFailedSaveCount(), 1);
+    Failure.Reset(); Recorder.Flush();
+    TestEqual(TEXT("Explicit final retry can recover"), Recorder.GetFailedSaveCount(), 0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShotRecordingStorageTest, "UOpenGolf.Range.ShotRecordingStorage",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FShotRecordingStorageTest::RunTest(const FString&)
+{
+    const FString Root = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation/RecordingStorage"), FGuid::NewGuid().ToString());
+    IFileManager& Files = IFileManager::Get();
+    Files.MakeDirectory(*Root, true);
+    const FString Folder = Root / TEXT("session");
+    const FString Path = Folder / TEXT("shot.json");
+    FString Error, Read;
+    FFileHelper::SaveStringToFile(TEXT("obstruction"), *Folder);
+    TestFalse(TEXT("Directory failure reported"), ShotRecording::WriteRecordingFile(Path, TEXT("{}"), Error));
+    Files.Delete(*Folder);
+    Files.MakeDirectory(*(Path + TEXT(".tmp")), true);
+    TestFalse(TEXT("Temp write failure reported"), ShotRecording::WriteRecordingFile(Path, TEXT("{}"), Error));
+    Files.DeleteDirectory(*(Path + TEXT(".tmp")), false, false);
+    Files.MakeDirectory(*Path, true);
+    TestFalse(TEXT("Rename failure reported"), ShotRecording::WriteRecordingFile(Path, TEXT("{}"), Error));
+    Files.DeleteDirectory(*Path, false, false);
+    TestTrue(TEXT("Retry succeeds"), ShotRecording::WriteRecordingFile(Path, TEXT("{}"), Error));
+    TestFalse(TEXT("Successful save consumes temp"), Files.FileExists(*(Path + TEXT(".tmp"))));
+    TestFalse(TEXT("Existing final file is never replaced"), ShotRecording::WriteRecordingFile(Path, TEXT("replacement"), Error));
+    FFileHelper::LoadFileToString(Read, *Path);
+    TestEqual(TEXT("Original file preserved"), Read, FString(TEXT("{}")));
+    Files.DeleteDirectory(*Root, false, true);
+    return true;
+}
 #endif

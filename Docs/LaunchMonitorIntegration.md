@@ -28,7 +28,7 @@ describes what Phase 2 implemented. Linux decisions are listed but not yet valid
 | Platform | Transport | Build dependency | Status |
 | --- | --- | --- | --- |
 | Windows 10/11 x64 | WinRT `BluetoothLEAdvertisementWatcher`, `BluetoothLEDevice`, `GattSession` | Windows SDK C++/WinRT headers (`Include/<sdk>/cppwinrt`) and `WindowsApp.lib`, added only to the plugin module by its `Build.cs`; C++ exceptions enabled in that module | Square Home connection, battery/firmware, shot and club data verified (2026-10-14) |
-| Linux x86_64 | Planned: BlueZ over D-Bus (sd-bus or GDBus) against `Adapter1`, `Device1`, `GattCharacteristic1` | To be decided with the Linux track | Stub reports "not supported yet"; replay works |
+| Linux x86_64 | Planned: BlueZ over D-Bus (sd-bus or GDBus) against `Adapter1`, `Device1`, `GattCharacteristic1` | To be decided with the Linux track | Stub reports "not supported yet"; replay is intended but unverified on Linux |
 
 The Windows build does not change engine/target settings (`bUseCPPWinRT` stays off),
 so it works with an installed engine. The device is not paired; Windows Bluetooth
@@ -48,16 +48,31 @@ must be on. No special permissions are required on Windows.
 - **Shot identity and late club data:** each shot gets a `ShotNumber` per game
   instance. The session requests the `11 07` club frame after a shot and accepts one
   frame until it re-arms (3 s); `FLaunchMonitorClubData::ShotNumber` names its shot.
+  The game recorder matches this ID independently of the ball's simulation ID and
+  can attach club data after a short shot stops. It waits for the response, or until
+  three seconds after receipt, before finalizing a completed/interrupted shot.
+  Recording-off and shutdown finalize available data immediately; see
+  [recording behavior](../README.md#recording-shots).
 - **Timestamps:** `ReceivedUtc` is when the game thread received the frame; the
   device supplies no shot timestamp.
 - **Threading:** all WinRT calls run on one worker thread in the multithreaded
   apartment. Results and device events are posted to the game thread; the session,
-  subsystem, delegates and HUD run on the game thread only.
+  subsystem, delegates and HUD run on the game thread only. Async operations use
+  interruptible status waits, checking cancellation at most every 25 ms. Each
+  operation has a 10 s deadline; opening the device and resolving characteristics
+  share a 30 s deadline.
 - **Ownership:** `UOpenLaunchMonitorSubsystem` (a game-instance subsystem) owns the
   session and transport. Mock/replay input enters through the same subsystem events.
 - **Connection lifecycle:** Disconnected → Scanning → Connecting → Connected → Ready.
   Scans time out after 30 s. A dropped link (new versus upstream) reports an error
   and, when `bAutoReconnect` is set, retries with 2–30 s backoff up to five times.
+  Disconnect immediately invalidates queued connection work and callbacks from the
+  old connection. Shutdown requests cooperative cancellation and joins the worker.
+  Cleanup revokes subscriptions and closes resources without waiting for a remote
+  notification-disable write. Worker/apartment/scan failures and read exceptions
+  or timeouts reach the error/state path; missing optional characteristics return
+  empty values. These wait limits do not bound synchronous OS/driver calls during
+  cancellation or cleanup.
 
 ## Session protocol summary
 
@@ -68,7 +83,8 @@ every 5 s. Duplicate notifications are ignored. See upstream `addons/square/PROT
 
 ## Remaining work
 
-- Verify reconnect after link loss on a real Square Home under
+- Verify reconnect after link loss, cancellation during discovery/read/write/subscribe,
+  and stopping Play during pending operations on a real Square Home under
   Windows (connection, battery/firmware, shots, club data and club selection are verified), and
   record the tested firmware and Windows build in [phase status](PhasesStatus.md).
 - Linux track: BlueZ transport, permissions/dependencies, and hardware validation.

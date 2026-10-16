@@ -9,13 +9,13 @@ by CC0 and is recorded here for provenance.
 | --- | --- | --- |
 | Grass 004 / Lennart Demes (ambientCG) | [Source](https://ambientcg.com/view?id=Grass004), [CC0 terms](https://docs.ambientcg.com/license/) | `Content/UOpenGolf/Art/T_Grass_*.uasset`; used by `M_Fairway` |
 | Golf ball / jpsweber | [Source, CC0](https://opengameart.org/content/golf-ball) | `Content/UOpenGolf/Art/SM_GolfBall.uasset` |
-| Golf Set flagstick / mess110 | [Source, CC0](https://opengameart.org/content/golf-set) | `Content/UOpenGolf/Art/SM_Flagstick.uasset` |
+| Golf Set flagstick / mess110 (historical) | [Source, CC0](https://opengameart.org/content/golf-set) | Earlier `SM_Flagstick.uasset`; replaced by original dimensioned geometry on 2026-10-15 |
 
 The [CC0 1.0 legal text](https://creativecommons.org/publicdomain/zero/1.0/legalcode)
 applies to these assets and their conversions. Archive SHA-256 hashes and exact
 downloads are pinned in `Scripts/PrepareRangeAssets.py`; conversion and import
 details are in [Range assets](Docs/RangeAssets.md). Grass-blade geometry and the
-game's material graphs are original MIT contributions. Other Golf Set models and
+game's material graphs and current flagstick geometry are original MIT contributions. Other Golf Set models and
 textures are not included.
 
 The reference projects below are the maintainer's own (`digitalhand`) projects. Code
@@ -44,5 +44,21 @@ applicable license, required notices, and repository location here. Put any
 required full license texts next to the imported work or in a documented license directory.
 Purchased assets and their derivatives must not enter public Git or Git LFS history
 unless their license explicitly permits that redistribution.
+
+## Optional Project Nature content (not distributed)
+
+The locally acquired **temperate Vegetation: optimized Grass Library** by Project
+Nature is used only in the ignored `Plugins/PrivateContent/ProjectNatureRange/`
+plugin. [Fab listing](https://www.fab.com/listings/8b68642e-35f4-438e-82b4-799fc2228303).
+The installed download was selected for UE 5.4 and converted locally for UE 5.8.3
+on 2026-10-15. It is restricted content, not CC0 or MIT. The
+[Fab Standard License summary](https://www.fab.com/eula) was reviewed; the public
+listing does not expose the acquisition-specific license/version, so the account's
+acquisition terms must be retained and checked before any distribution. No new
+rights are asserted here. The private manifest records source hashes and changes.
+
+The imported folder was already tracked when integration began. Moving it out of
+the working tree does not remove its earlier Git history; public release requires
+a separate history review/remediation. No history rewrite was performed.
 
 See [licensing and asset policy](Docs/Licensing.md).

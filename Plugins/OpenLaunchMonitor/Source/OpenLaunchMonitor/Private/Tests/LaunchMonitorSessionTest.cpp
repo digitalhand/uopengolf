@@ -21,6 +21,7 @@ namespace
         virtual void Connect(const FString& DeviceId, const TArray<FString>&, const TArray<FString>&, FCompletion OnComplete) override
         {
             ConnectedId = DeviceId;
+            if (bDeferConnect) { PendingConnects.Add(MoveTemp(OnComplete)); return; }
             OnComplete(true, FString());
         }
         virtual void Disconnect() override { ++DisconnectCalls; }
@@ -58,6 +59,8 @@ namespace
                 .Num();
         }
 
+        bool bDeferConnect = false;
+        TArray<FCompletion> PendingConnects;
         FString ScanPrefix;
         bool bScanning = false;
         FString ConnectedId;
@@ -215,6 +218,11 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Link loss not repeated"), ConnectionLost, 1);
 
     // Selecting the putter after reconnecting drops club angles.
+    const FString ClubBeforeInvalid = Session->GetClubCode();
+    Session->SetClub(TEXT("0xxx"));
+    TestEqual(TEXT("Invalid club code ignored"), Session->GetClubCode(), ClubBeforeInvalid);
+    Session->SetClub(TEXT("0d061"));
+    TestEqual(TEXT("Odd-length club code ignored"), Session->GetClubCode(), ClubBeforeInvalid);
     Session->SetClub(SquareProtocol::PutterClubCode);
     Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
     Scheduler->Advance(5.0f);
@@ -237,4 +245,36 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorCancellationTest, "UOpenGolf.LaunchMonitor.Cancellation",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorCancellationTest::RunTest(const FString&)
+{
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    const auto Scheduler = MakeShared<FManualScheduler>();
+    const auto Session = MakeShared<FSquareSession>(Transport, Scheduler);
+    Session->Initialize();
+    Transport->bDeferConnect = true;
+    for (int32 Attempt = 0; Attempt < 3; ++Attempt)
+    {
+        Session->ConnectToDevice({TEXT("123"), TEXT("Square"), 0});
+        Session->Disconnect();
+    }
+    Session->ConnectToDevice({TEXT("456"), TEXT("Square"), 0});
+    for (int32 I = 0; I < 3; ++I) Transport->PendingConnects[I](true, FString());
+    TestTrue(TEXT("Old completions cannot advance new connection"), Session->GetStatus() == ESquareSessionStatus::Connecting);
+    TestEqual(TEXT("No stale handshake commands"), Transport->Writes.Num(), 0);
+    Transport->PendingConnects[3](true, FString());
+    Scheduler->Advance(5);
+    TestTrue(TEXT("Current connection reaches Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    Session->Disconnect();
+    const int32 Writes = Transport->Writes.Num();
+    Scheduler->Advance(30);
+    TestEqual(TEXT("Disconnected connection cannot send delayed work"), Transport->Writes.Num(), Writes);
+    Session->Connect();
+    Transport->OnError(TEXT("Bluetooth worker could not initialize WinRT"));
+    TestTrue(TEXT("Initialization failure disconnects instead of waiting for scan timeout"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
+    TestFalse(TEXT("Initialization failure stops scan"), Transport->bScanning);
+    return true;
+}
 #endif

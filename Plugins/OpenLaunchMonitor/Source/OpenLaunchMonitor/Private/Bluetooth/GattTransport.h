@@ -28,6 +28,8 @@ public:
     TFunction<void(const FString& CharacteristicUuid, const TArray<uint8>& Value)> OnNotification;
     /** The link to a connected device was lost without Disconnect being called. */
     TFunction<void()> OnDisconnected;
+    /** Fatal scan/worker failure, delivered on the game thread. */
+    TFunction<void(const FString&)> OnError;
 
     /** Reports advertising devices whose name starts with NamePrefix (case-insensitive). */
     virtual void StartScan(const FString& NamePrefix) = 0;

@@ -149,6 +149,7 @@ bool FLaunchMonitorProtocolTest::RunTest(const FString& Parameters)
         TestEqual(TEXT("Detect ball"), SquareProtocol::ToHex(SquareProtocol::DetectBall(0x05, 1, 1)), FString(TEXT("118105011100000000")));
         TestEqual(TEXT("Club"), SquareProtocol::ToHex(SquareProtocol::Club(0x07, TEXT("0204"), 0)), FString(TEXT("118207020400000000")));
         TestEqual(TEXT("Left-handed wedge"), SquareProtocol::ToHex(SquareProtocol::Club(0xFF, TEXT("0a06"), 1)), FString(TEXT("1182FF0A0601000000")));
+        TestEqual(TEXT("Lob wedge (experimental code)"), SquareProtocol::ToHex(SquareProtocol::Club(0x07, TEXT("0d06"), 0)), FString(TEXT("1182070D0600000000")));
         TestEqual(TEXT("Request club"), SquareProtocol::ToHex(SquareProtocol::RequestClubMetrics(0x2A)), FString(TEXT("11872A000000000000")));
     }
     {

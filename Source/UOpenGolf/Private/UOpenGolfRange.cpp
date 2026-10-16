@@ -6,6 +6,7 @@
 #include "Components/SkyLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/PostProcessComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -24,7 +25,6 @@ namespace
     // Range layout in meters: X downrange from the tee, Y to the right.
     constexpr float RangeStartM = -10.0f;
     constexpr float RangeEndM = 320.0f;
-    constexpr float FairwayHalfWidthM = 20.0f;
     constexpr float RoughHalfWidthM = 70.0f;
     constexpr float GreenHalfSizeM = 15.0f;
     constexpr float FringeWidthM = 2.0f;
@@ -34,6 +34,9 @@ namespace
     const FLinearColor MarkerColor(0.95f, 0.95f, 0.95f);
 } // namespace
 
+const FName AUOpenGolfRange::TurfTag(TEXT("UOpenGolf.Turf"));
+const FName AUOpenGolfRange::RoughTag(TEXT("UOpenGolf.Rough"));
+
 AUOpenGolfRange::AUOpenGolfRange()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -42,6 +45,12 @@ AUOpenGolfRange::AUOpenGolfRange()
 
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
     CubeMesh = Cube.Object;
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> FairwayMaterialFinder(TEXT("/Game/UOpenGolf/Art/M_Fairway.M_Fairway"));
+    FairwayMaterial = FairwayMaterialFinder.Object;
+
+    PostProcess = CreateDefaultSubobject<UPostProcessComponent>(TEXT("RangeView"));
+    PostProcess->SetupAttachment(RootComponent);
+    PostProcess->bUnbound = true;
 
     Grass = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("Grass3D"));
     Grass->SetupAttachment(RootComponent);
@@ -85,6 +94,22 @@ AUOpenGolfRange::AUOpenGolfRange()
         AddYardageMarker(Yards);
     }
 
+    // Presentation only (no collision): ground out to the horizon so the void past the
+    // range is not visible. It sits just below the ground tops, hidden under the boxes.
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMesh(TEXT("/Engine/BasicShapes/Plane.Plane"));
+    UStaticMeshComponent* Backdrop = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Backdrop"));
+    Backdrop->SetupAttachment(RootComponent);
+    Backdrop->SetStaticMesh(PlaneMesh.Object);
+    Backdrop->SetMobility(EComponentMobility::Movable);
+    Backdrop->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Backdrop->SetCanEverAffectNavigation(false);
+    Backdrop->CastShadow = false;
+    // The engine plane is 100 cm square; this one is 4 km square, centered downrange.
+    Backdrop->SetRelativeLocation(FVector(1500.0f * CmPerM, 0.0f, -2.0f));
+    Backdrop->SetRelativeScale3D(FVector(4000.0f, 4000.0f, 1.0f));
+    Backdrop->SetMaterial(0, FairwayMaterial);
+    Backdrop->ComponentTags.Add(RoughTag);
+
     UDirectionalLightComponent* Sun = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("Sun"));
     Sun->SetupAttachment(RootComponent);
     Sun->SetMobility(EComponentMobility::Movable);
@@ -93,6 +118,18 @@ AUOpenGolfRange::AUOpenGolfRange()
 
     USkyAtmosphereComponent* Sky = CreateDefaultSubobject<USkyAtmosphereComponent>(TEXT("Sky"));
     Sky->SetupAttachment(RootComponent);
+    // The engine only assigns this GUID to non-template components, so copies spawned from this
+    // default subobject inherit an empty one. A map with built lighting data then asserts on it
+    // in -game and packaged builds. The range has no baked sky lighting, so a fixed GUID will do.
+    // The member is private, so it is set through reflection.
+    if (const FStructProperty* SkyGuidProperty = FindFProperty<FStructProperty>(USkyAtmosphereComponent::StaticClass(), TEXT("bStaticLightingBuiltGUID")))
+    {
+        FGuid* SkyGuid = SkyGuidProperty->ContainerPtrToValuePtr<FGuid>(Sky);
+        if (!SkyGuid->IsValid())
+        {
+            *SkyGuid = FGuid(0x55304F47, 0x52616E67, 0x65536B79, 0x00000001);
+        }
+    }
 
     USkyLightComponent* SkyLight = CreateDefaultSubobject<USkyLightComponent>(TEXT("SkyLight"));
     SkyLight->SetupAttachment(RootComponent);
@@ -126,11 +163,18 @@ UStaticMeshComponent* AUOpenGolfRange::AddBox(FName Name, const FVector& MinM, c
     if (Surface.IsSet())
     {
         Box->ComponentTags.Add(AOpenFairwayBall::GetSurfaceTag(Surface.GetValue()));
-        static ConstructorHelpers::FObjectFinder<UMaterialInterface> FairwayMaterial(TEXT("/Game/UOpenGolf/Art/M_Fairway.M_Fairway"));
-        Box->SetMaterial(0, FairwayMaterial.Object);
+        // Optional turf covers the fairway strip; optional rough covers the side strips.
+        const FString PieceName = Name.ToString();
+        if (PieceName.StartsWith(TEXT("Fairway")) || PieceName.StartsWith(TEXT("Fringe")) || PieceName == TEXT("Green"))
+            Box->ComponentTags.Add(TurfTag);
+        else if (PieceName.StartsWith(TEXT("Rough")))
+            Box->ComponentTags.Add(RoughTag);
+        Box->SetMaterial(0, FairwayMaterial);
     }
     else
     {
+        static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+        Box->SetMaterial(0, ShapeMaterial.Object);
         ColoredPieces.Emplace(Box, Color);
     }
     return Box;
@@ -161,6 +205,46 @@ void AUOpenGolfRange::AddYardageMarker(int32 Yards)
 void AUOpenGolfRange::BeginPlay()
 {
     Super::BeginPlay();
+    GrassComponents.Add(Grass);
+    if (!GrassMeshes.IsEmpty())
+    {
+        Grass->SetStaticMesh(GrassMeshes[0]);
+        for (int32 Index = 1; Index < GrassMeshes.Num(); ++Index)
+        {
+            auto* Component = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+            Component->SetupAttachment(RootComponent);
+            Component->SetMobility(EComponentMobility::Movable);
+            Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+            Component->SetGenerateOverlapEvents(false);
+            Component->SetCanEverAffectNavigation(false);
+            Component->CastShadow = false;
+            Component->SetStaticMesh(GrassMeshes[Index]);
+            Component->RegisterComponent();
+            GrassComponents.Add(Component);
+        }
+    }
+    for (const auto& Component : GrassComponents)
+    {
+        // Calm practice turf: block material wind and player-interaction displacement.
+        Component->SetEvaluateWorldPositionOffset(false);
+        Component->SetCullDistances(FMath::Max(0, GrassCullStartCm), FMath::Max(GrassCullStartCm + 1, GrassCullEndCm));
+    }
+    TArray<UStaticMeshComponent*> Components;
+    GetComponents(Components);
+    for (auto* Component : Components)
+    {
+        if (GroundMaterialOverride && Component->ComponentHasTag(TurfTag))
+            Component->SetMaterial(0, GroundMaterialOverride);
+        else if (RoughMaterialOverride && Component->ComponentHasTag(RoughTag))
+            Component->SetMaterial(0, RoughMaterialOverride);
+    }
+    // A fast follow camera smears the ground with motion blur; the fixed exposure keeps
+    // the sunlit grass from washing out.
+    FPostProcessSettings& View = PostProcess->Settings;
+    View.bOverride_MotionBlurAmount = true;
+    View.MotionBlurAmount = 0.0f;
+    View.bOverride_AutoExposureBias = true;
+    View.AutoExposureBias = ExposureBiasEV;
     UpdateGrass();
     for (const TPair<TObjectPtr<UStaticMeshComponent>, FLinearColor>& Piece : ColoredPieces)
     {
@@ -180,7 +264,10 @@ void AUOpenGolfRange::Tick(float DeltaSeconds)
 
 int32 AUOpenGolfRange::GetGrassInstanceCount() const
 {
-    return Grass->GetInstanceCount();
+    int32 Count = 0;
+    for (const auto& Component : GrassComponents)
+        Count += Component->GetInstanceCount();
+    return Count;
 }
 
 void AUOpenGolfRange::UpdateGrass()
@@ -191,24 +278,32 @@ void AUOpenGolfRange::UpdateGrass()
     bGrassEnabled = bWanted;
     if (!bWanted)
     {
-        Grass->ClearInstances();
+        for (const auto& Component : GrassComponents)
+            Component->ClearInstances();
         return;
     }
 
     FRandomStream Random(20261015);
-    TArray<FTransform> Transforms;
-    // 25 clumps/m2, in a 20 m radius clipped to the range. Leave tee paint clear.
-    for (float X = -990; X < 2000; X += 20)
+    TArray<TArray<FTransform>> Transforms;
+    Transforms.SetNum(GrassComponents.Num());
+    const float Spacing = FMath::Clamp(GrassSpacingCm, 5.0f, 200.0f);
+    const float Radius = FMath::Clamp(GrassRadiusCm, 100.0f, 5000.0f);
+    // Deterministic coverage clipped to the fairway strip. Leave tee paint clear.
+    const float MinX = RangeStartM * CmPerM;
+    const float MaxAbsY = FairwayHalfWidthM * CmPerM;
+    int32 InstanceIndex = 0;
+    for (float X = FMath::Max(MinX, -Radius) + Spacing * 0.5f; X < Radius; X += Spacing)
     {
-        for (float Y = -1990; Y < 2000; Y += 20)
+        for (float Y = FMath::Max(-MaxAbsY, -Radius) + Spacing * 0.5f; Y < FMath::Min(MaxAbsY, Radius); Y += Spacing)
         {
-            const float PX = X + Random.FRandRange(-8, 8);
-            const float PY = Y + Random.FRandRange(-8, 8);
-            if (PX * PX + PY * PY > 2000 * 2000 || (FMath::Abs(PX) < 255 && FMath::Abs(PY) < 255))
+            const float PX = X + Random.FRandRange(-0.4f, 0.4f) * Spacing;
+            const float PY = Y + Random.FRandRange(-0.4f, 0.4f) * Spacing;
+            if (PX * PX + PY * PY > Radius * Radius || PX < MinX || FMath::Abs(PY) > MaxAbsY || (FMath::Abs(PX) < 255 && FMath::Abs(PY) < 255))
                 continue;
             const float Scale = Random.FRandRange(0.75f, 1.15f);
-            Transforms.Emplace(FRotator(0, Random.FRandRange(0, 360), 0), FVector(PX, PY, 0.0f), FVector(Scale));
+            Transforms[InstanceIndex++ % GrassComponents.Num()].Emplace(FRotator(0, Random.FRandRange(0, 360), 0), FVector(PX, PY, 0.0f), GrassScale * Scale);
         }
     }
-    Grass->AddInstances(Transforms, false, false, false);
+    for (int32 Index = 0; Index < GrassComponents.Num(); ++Index)
+        GrassComponents[Index]->AddInstances(Transforms[Index], false, false, false);
 }

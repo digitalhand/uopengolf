@@ -152,4 +152,62 @@ bool FUOpenGolfShotConversionTest::RunTest(const FString& Parameters)
     return true;
 }
 
+class FCheckRangeFrameRates : public IAutomationLatentCommand
+{
+public:
+    explicit FCheckRangeFrameRates(FAutomationTestBase* InTest) : Test(InTest) {}
+    bool Update() override
+    {
+        UWorld* World = GEditor->PlayWorld;
+        auto* Mode = World && World->HasBegunPlay() ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
+        if (!Mode || !Mode->GetBall())
+        {
+            if (GetCurrentRunTime() > 30) { Test->AddError(TEXT("Range did not start")); return true; }
+            return false;
+        }
+        AOpenFairwayBall* Ball = Mode->GetBall();
+        FOpenFairwayShotResult Baseline;
+        const float Deltas[] = {1.0f / 60, 1.0f / 30, 1.0f / 144, 0.2f, 1.0f / 60};
+        // Drive the actor directly within one latent update; world timers cannot auto-reset it between steps.
+        for (int32 Case = 0; Case < UE_ARRAY_COUNT(Deltas); ++Case)
+        {
+            Mode->ResetBallToTee();
+            Test->TestTrue(TEXT("Frame-rate shot accepted"), Ball->Launch(DriveLaunch()));
+            int32 Frames = 0;
+            while (Ball->IsMoving() && Frames < 10000)
+            {
+                const float Dt = Case == 4 && Frames % 31 == 0 ? 0.25f : Deltas[Case];
+                Ball->Tick(Dt);
+                if (Frames == 0 && (Case == 3 || Case == 4))
+                {
+                    FOpenFairwayShotResult First;
+                    Ball->GetShotResult(First);
+                    Test->TestEqual(TEXT("Hitch consumes at most 12 physics steps"), First.ElapsedS, 0.1f, 1e-5f);
+                }
+                ++Frames;
+            }
+            FOpenFairwayShotResult Result;
+            Ball->GetShotResult(Result);
+            Test->TestTrue(TEXT("Shot reaches rest at every frame rate"), Result.bAtRest);
+            if (Case == 0) Baseline = Result;
+            Test->TestEqual(TEXT("Carry independent of render rate and stalls"), Result.CarryM, Baseline.CarryM, 0.001f);
+            Test->TestEqual(TEXT("Total independent of render rate and stalls"), Result.TotalM, Baseline.TotalM, 0.001f);
+            Test->TestEqual(TEXT("Simulation duration independent of render rate"), Result.ElapsedS, Baseline.ElapsedS, 0.01f);
+        }
+        return true;
+    }
+private:
+    FAutomationTestBase* Test;
+};
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeFrameRatesTest, "UOpenGolf.Range.FrameRates",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRangeFrameRatesTest::RunTest(const FString&)
+{
+    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true)) return false;
+    ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
+    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckRangeFrameRates>(this));
+    ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+    return true;
+}
 #endif
