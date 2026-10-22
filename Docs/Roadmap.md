@@ -90,14 +90,14 @@ contributors, and both platform release checks are documented and reproducible.
 
 ## Technical debt
 
-- **Tree collision is too broad (2026-10-20).** The jacaranda's hidden wood proxy collides on
-  the trunk and every branch, down to small twigs, so a ball brushing the canopy can deflect
-  sharply. The owner wants ball collision on the trunk only. Likely approach: build the proxy
-  from the trunk section alone, or from a simplified trunk shape such as a few capsules along
-  the main stems. Then rerun the wood sweeps and actual Play shots. Code:
-  `Plugins/OpenGolfSavanna/Scripts/tree_wood_collision.py` and the `WOOD` slots in the
-  private range's `private_jacaranda.py`. Status in
-  [Phase status](PhasesStatus.md#jacaranda-applied-in-place--2026-10-20).
+- **Tree collision is too broad (2026-10-20).** Mostly resolved (2026-10-21):
+  - only the jacaranda's trunk and main limbs block the ball
+  - a canopy volume slows a ball flying through the crown instead of bouncing it; both are applied
+    on the public map and checked in Play
+  - **Remaining:** rerun the corrected `UOpenGolf.Range.ObstacleContact` canopy case after the next
+    DebugGame rebuild, and the owner's review of the drag strength
+    (`AOpenFairwayBall::CanopyDecayLengthM`, `CanopyDeflectionDegPerSqrtM`)
+  - **Status:** [Phase status](PhasesStatus.md#tree-collision-trunk-and-main-limbs-canopy-drag--2026-10-21)
 - **The rough's edge row reads as a darker band (2026-10-21).** Seen from a distance, the
   first 0.4 m of rough beside the fairway looks darker and smoother than the tiles behind it,
   so the 3D grass does not appear to meet the fairway exactly. That row is 1 x 0.25 m edge

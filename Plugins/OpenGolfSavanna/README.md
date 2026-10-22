@@ -125,6 +125,14 @@ The script:
 4. rebuilds the terrain, trees, wood collision (`savanna_trees.py`) and understory
    (`understory.py`), then saves.
 
+Tree ball contact uses two hidden helpers exported with the tree by `blender/ExportJacaranda.py`:
+`SM_JacarandaCollision` (the trunk and main limbs, triangle collision) blocks the ball, and
+`SM_JacarandaCanopy` (one convex hull around the branches and leaves) slows a ball flying through
+the crown without blocking it. To update them on an existing course, reimport only the helpers with
+`ImportSavannaAssets.py <export.json> --meshes=SM_JacarandaCollision,SM_JacarandaCanopy`, then run
+`Scripts/ApplyTreeCollision.py [--canopy]` on the open map; it backs up, applies, checks ball-sized
+sweeps and saves. `Scripts/PlayTreeShots.py` plays trunk and canopy shots at one tree during Play.
+
 Then place the course grass with the course kit's `ApplyCourseGrass.py`; the completion line
 `OPEN_GOLF_SAVANNA_RANGE_COMPLETE` prints the command. The understory alone can be reapplied
 with `Scripts/understory.py` on the open map. Layout rules are pure Python with tests
