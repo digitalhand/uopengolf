@@ -1,0 +1,17 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Open Golf Savanna",
+  "Description": "Open-licence savanna range art and build scripts: Poly Haven (CC0) trees and ground, Nature Essentials (CC BY 4.0) grass and understory. See NOTICE.md; content keeps its own licences, not the repository's MIT licence.",
+  "Category": "UOpenGolf",
+  "CreatedBy": "uopengolf contributors",
+  "CanContainContent": true,
+  "Installed": false,
+  "Plugins": [
+    {
+      "Name": "OpenGolfCourse",
+      "Enabled": true
+    }
+  ]
+}

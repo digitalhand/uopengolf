@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Custom label of the self-hosted Unreal runners (see README "CI/CD").
+self-hosted-runner:
+  labels:
+    - ue-5.8

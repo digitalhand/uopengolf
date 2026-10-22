@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT
+# Conservative checks for Unreal C++; UE naming and macro idioms make broad groups noisy.
+# Needs a compile database: bash Scripts/ue.sh compilecommands, then point -p at a dir holding compile_commands.json.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-macro-parentheses,
+  -bugprone-narrowing-conversions,
+  performance-*,
+  -performance-enum-size,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-redundant-void-arg,
+  readability-misleading-indentation,
+  readability-redundant-smartptr-get,
+  misc-redundant-expression,
+  misc-unused-using-decls
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*/(Source|Plugins/[^/]+/Source)/.*\.h$'
+FormatStyle: file

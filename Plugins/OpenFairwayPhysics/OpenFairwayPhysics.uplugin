@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "OpenFairway Physics",
+  "Description": "Native C++ golf ball flight, impact, bounce and roll from ogolf-physics, with an Unreal ball actor that uses Chaos scene queries for contact.",
+  "Category": "UOpenGolf",
+  "CreatedBy": "uopengolf contributors",
+  "CanContainContent": false,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "OpenFairwayPhysics",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "PlatformAllowList": ["Win64", "Linux"]
+    }
+  ]
+}
