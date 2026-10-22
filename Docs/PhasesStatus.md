@@ -1032,5 +1032,79 @@ Not yet verified:
 - owner parity sign-off for rows 1–7
 
 `SM_Jacaranda` was left marked unsaved in the editor after the run, with its settings unchanged
-(Nanite on, no shape preservation); it was not saved. The scripts neither add nor remove the 50–300-yard
+(Nanite on, no shape preservation); it was not saved. Cause, found later the same day: the old
+`tree_wood_collision.proxy_mesh` wrote metadata tags onto the visible tree on every run. The scripts neither add nor remove the 50–300-yard
 markers; the owner removes them by hand.
+
+## Tree collision: trunk and main limbs, canopy drag — 2026-10-21
+
+The owner wanted ball collision on the trunk only, so twigs stop bouncing the ball back as hard as
+the trunk. Owner decisions: the trunk and main limbs block; branches and leaves slow the ball
+("canopy drag") rather than letting it pass untouched.
+
+Measured in `<art root>/Jacaranda/Jacaranda.blend`:
+
+| Material | Triangles | Height | Reach from trunk |
+|---|---|---|---|
+| `jacaranda_tree_trunk` | 28.7k | 0–10.4 m | up to 4.5 m |
+| `jacaranda_tree_branches` | 221k | 2.7–19.4 m | median 6.6 m |
+| `jacaranda_tree_leaves` | 554k | 2.5–19.6 m | median 7.4 m |
+
+The trunk material is the trunk and its main limbs.
+
+**Step 1: trunk-only collider (applied to the public map, saved).**
+- **Export:** `blender/ExportJacaranda.py` now also exports two hidden helpers:
+  - `SM_JacarandaCollision`: the trunk material's faces only, at the tree's transform
+  - `SM_JacarandaCanopy`: a 64-point convex hull of the branches and leaves, with its `UCX_`
+    collision, starting 2.55 m up
+- **Import:** `ImportSavannaAssets.py --meshes=…` imported both without touching the tree. The
+  collider is 1.15 MB (the old full-tree copy was 29.7 MB): 28,744 triangles, complex-as-simple,
+  Nanite off. The canopy has one convex hull.
+- **Apply:** `ApplyTreeCollision.py` swapped all 296 colliders and checked them:
+  - 296 of 296 trunk sweeps hit
+  - 888 of 888 sweeps through a branch face, a leaf face and an open gap stayed clear
+  - 0 failures
+  - backup: `Saved/TerrainBackups/20261022-030713-tree-collision`
+  - an earlier attempt failed before saving (its backup is `…/20261022-030625-tree-collision`)
+- **Python tests:** `export_rules` (34) and the savanna script tests (27) pass.
+
+**Step 2: canopy drag (C++; applied to the public map after the owner's DebugGame rebuild).**
+- **OpenFairwayPhysics:**
+  - a ball in the air inside a component tagged `OpenFairway.Canopy` (overlap-only) loses speed
+    as `exp(-path / 4 m)`, with spin scaled the same way
+  - it turns by a seeded angle of at most `6°·√path`, seeded by tree instance and step, so a
+    repeated shot takes the same path
+  - one overlap query per airborne step
+- **OpenGolfCourse:**
+  - `UOpenGolfVegetationPreset::TreeCanopyMesh` places hidden `OverlapAll` canopy volumes on a
+    separate `OpenGolf.Terrain.TreeCanopy` actor, keyed by tree mesh
+  - `UOpenGolfTerrainBuilder::RebuildTreeCanopy` replaces them on a baked course
+- **Builds:** the Development build and the full unity build (`-DisableAdaptiveUnity`) pass.
+- **Tests, in the editor through MCP:** 16 of 18 pass, including `Physics.CanopyResponse`,
+  `Physics.ObstacleResponse`, `Course.Terrain.Definition` (with the canopy preset rule), all
+  `Course.Terrain.*`, `Physics.Core`/`Fixtures`/`Wind`/`GreenRollout` and `Range.Shot` (open-air
+  shots are unchanged). Two fail:
+  - **`Range.ObstacleContact`, canopy case.** The test placed the canopy wrongly: its 4° drive
+    carries only 20 m, so it crossed just 2.3 m of the 16–24 m box in the air (carry 17.87 m
+    against 20.15 m). The trunk and flat-top cases pass. The box is now at 4–12 m; the
+    Development build compiles, but the rerun waits for the next DebugGame rebuild.
+  - **`Physics.Sand`, unrelated and already open.** It is the headless sand-plow model from
+    2026-10-20 ("A ball rolling into sand at 4 m/s stops after 2.48 m", against 2 m). This change
+    doesn't touch that code path; it is still to be tuned (`SandPlowRatio`).
+- **`ApplyTreeCollision.py --canopy`:**
+  - placed 296 canopy volumes
+  - with them in place, 296 of 296 trunk sweeps hit and 888 of 888 branch, leaf and gap sweeps
+    stay clear, so the canopy never blocks
+  - map saved; backup `Saved/TerrainBackups/20261022-032327-tree-collision`
+- **`PlayTreeShots.py` in Play on one tree, no wind:**
+  - a 12 mph shot at the low trunk rebounds
+  - a 40 mph shot at a mid-height trunk face rebounds, keeping 5% of its speed
+  - a 40 mph shot across the outer crown doesn't rebound and keeps 58% of its speed after 1 s
+    (free flight would gain speed as it falls)
+- **Clean state:** no map or content package was left unsaved; `SM_Jacaranda` is no longer
+  dirtied.
+
+Not yet verified:
+- the corrected `ObstacleContact` canopy case
+- frame time with the canopy queries
+- how the drag strength looks in Play (owner review; the constants are tunable)

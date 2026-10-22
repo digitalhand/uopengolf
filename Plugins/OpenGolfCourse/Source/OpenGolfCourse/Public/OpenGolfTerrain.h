@@ -66,6 +66,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation|Tree", meta = (EditCondition = "Kind == EOpenGolfVegetationKind::Tree"))
     TObjectPtr<UStaticMesh> TreeCollisionMesh;
 
+    /**
+     * Optional foliage volume (one convex hull in simple collision), placed at the visible tree's exact transform.
+     * Balls fly through it but are slowed and turned slightly; see AOpenFairwayBall::GetCanopyTag.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation|Tree", meta = (EditCondition = "Kind == EOpenGolfVegetationKind::Tree"))
+    TObjectPtr<UStaticMesh> TreeCanopyMesh;
+
     /** Trunk collider radius at instance scale 1. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation|Tree", meta = (ClampMin = "0.05", Units = "m", EditCondition = "Kind == EOpenGolfVegetationKind::Tree"))
     float TrunkColliderRadiusM = 0.25f;
@@ -267,6 +274,8 @@ public:
     static const FName TreesTag;
     /** Hidden trunk colliders, one per tree, also tagged as ball obstacles. */
     static const FName TreeCollidersTag;
+    /** Hidden canopy volumes, one per tree, tagged as ball canopy; they overlap and never block. */
+    static const FName TreeCanopyTag;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain")
     TObjectPtr<UOpenGolfTerrainDefinition> Definition;
     /** Course grass layer: ground-cover presets (for example dense tiles near play, sparse beyond), rebuilt on their own. */

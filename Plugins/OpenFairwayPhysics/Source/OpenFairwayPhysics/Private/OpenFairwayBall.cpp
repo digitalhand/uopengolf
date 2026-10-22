@@ -6,6 +6,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/LineBatchComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/OverlapResult.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "OpenFairwayLog.h"
@@ -118,6 +119,44 @@ bool AOpenFairwayBall::IsObstacle(const UPrimitiveComponent* Component)
     }
     const AActor* Owner = Component->GetOwner();
     return Component->ComponentHasTag(GetObstacleTag()) || (Owner && Owner->ActorHasTag(GetObstacleTag()));
+}
+
+FName AOpenFairwayBall::GetCanopyTag()
+{
+    static const FName Tag(TEXT("OpenFairway.Canopy"));
+    return Tag;
+}
+
+bool AOpenFairwayBall::IsCanopy(const UPrimitiveComponent* Component)
+{
+    if (!Component)
+    {
+        return false;
+    }
+    const AActor* Owner = Component->GetOwner();
+    return Component->ComponentHasTag(GetCanopyTag()) || (Owner && Owner->ActorHasTag(GetCanopyTag()));
+}
+
+float AOpenFairwayBall::CanopySpeedFactor(float PathM)
+{
+    return FMath::IsFinite(PathM) && PathM > 0.0f ? FMath::Exp(-PathM / CanopyDecayLengthM) : 1.0f;
+}
+
+FVector3f AOpenFairwayBall::ResolveCanopyDrag(const FVector3f& Velocity, float PathM, uint32 Seed)
+{
+    if (!FMath::IsFinite(PathM) || PathM <= 0.0f || Velocity.IsNearlyZero())
+    {
+        return Velocity;
+    }
+    // Branches and leaves knock the ball a little off line in any direction around its path.
+    FRandomStream Random(static_cast<int32>(Seed));
+    const FVector3f Direction = Velocity.GetSafeNormal();
+    FVector3f Side, Up;
+    Direction.FindBestAxisVectors(Side, Up);
+    const float Azimuth = Random.FRandRange(0.0f, UE_TWO_PI);
+    const FVector3f Axis = (Side * FMath::Cos(Azimuth) + Up * FMath::Sin(Azimuth)).GetSafeNormal();
+    const float Angle = FMath::DegreesToRadians(CanopyDeflectionDegPerSqrtM * FMath::Sqrt(PathM)) * Random.FRand();
+    return FQuat4f(Axis, Angle).RotateVector(Direction) * (Velocity.Size() * CanopySpeedFactor(PathM));
 }
 
 FVector3f AOpenFairwayBall::ResolveObstacleHit(const FVector3f& Velocity, const FVector3f& Normal, const FVector3f& AwayFromObstacle)
@@ -288,6 +327,7 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     bOnGround = false;
     FloorNormal = CoreUp;
     SubstepAccumulator = 0.0f;
+    ShotStep = 0;
     RolloutImpactSpinRpm = 0.0f;
     ShotStart = GetActorLocation();
 
@@ -423,12 +463,36 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         HandleCollision(bRemainderHit ? &RemainderHit : nullptr, bSupportedAfterImpact, ReboundVelocity);
     }
 
+    ++ShotStep;
+    if (!bOnGround)
+    {
+        ApplyCanopy(Dt);
+    }
+
     Result.ApexM = FMath::Max(Result.ApexM, static_cast<float>(GetActorLocation().Z - ShotStart.Z) / CmPerM);
     if (BallState != EOpenFairwayBallState::Rest && GolfPhysics::CanRest(FBallState{FVector3f::ZeroVector, Velocity, Omega}, bOnGround, FloorNormal, SurfaceSettings, ShotParams.Rollout))
     {
         EnterRest();
     }
     return true;
+}
+
+void AOpenFairwayBall::ApplyCanopy(float Dt)
+{
+    // Canopy only overlaps the contact channel, so the move sweep and ground probes never see it.
+    TArray<FOverlapResult> Overlaps;
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(OpenFairwayBallCanopy), false, this);
+    GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM), Params);
+    for (const FOverlapResult& Overlap : Overlaps)
+    {
+        if (IsCanopy(Overlap.GetComponent()))
+        {
+            const float PathM = Velocity.Size() * Dt;
+            Omega *= CanopySpeedFactor(PathM);
+            Velocity = ResolveCanopyDrag(Velocity, PathM, HashCombineFast(GetTypeHash(Overlap.ItemIndex), ShotStep));
+            return;
+        }
+    }
 }
 
 void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround, const FVector3f& PreviousVelocity)

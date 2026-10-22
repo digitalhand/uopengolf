@@ -81,6 +81,29 @@ public:
     static constexpr float ObstacleRestitution = 0.30f;
     static constexpr float ObstacleEscapeMps = 1.0f;
 
+    /**
+     * The tag ("OpenFairway.Canopy") that marks foliage, such as a tree's branches and leaves, on the component or
+     * its actor. Give it an overlap (never blocking) response on TraceChannel: a ball in the air inside it is slowed
+     * and turned slightly by ResolveCanopyDrag, and it is never a contact or the ground.
+     */
+    UFUNCTION(BlueprintPure, Category = "OpenFairway")
+    static FName GetCanopyTag();
+
+    static bool IsCanopy(const UPrimitiveComponent* Component);
+
+    /** Fraction of speed and spin kept after PathM metres of canopy: exp(-PathM / CanopyDecayLengthM). */
+    static float CanopySpeedFactor(float PathM);
+
+    /**
+     * Velocity after PathM metres through canopy, in the OpenFairway frame. Speed scales by CanopySpeedFactor, so
+     * many short steps lose as much as one long one. The direction turns by a seeded angle of at most
+     * CanopyDeflectionDegPerSqrtM * sqrt(PathM), so a shot repeated with the same seeds takes the same path.
+     */
+    static FVector3f ResolveCanopyDrag(const FVector3f& Velocity, float PathM, uint32 Seed);
+
+    static constexpr float CanopyDecayLengthM = 4.0f;
+    static constexpr float CanopyDeflectionDegPerSqrtM = 6.0f;
+
     /** The wind in world space (X downrange, Y right, Z up), m/s. */
     UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
     FVector GetWindVelocityMps() const;
@@ -180,6 +203,7 @@ private:
     };
 
     bool StepPhysics(float Dt);
+    void ApplyCanopy(float Dt);
     void HandleCollision(const FHitResult* Hit, bool bWasOnGround, const FVector3f& PreviousVelocity);
     bool ProbeGround(FGroundHit& OutHit, float UpMeters, float DownMeters) const;
     void SnapToGround();
@@ -200,6 +224,8 @@ private:
     EOpenFairwaySurface CurrentSurface = EOpenFairwaySurface::Fairway;
     float RolloutImpactSpinRpm = 0.0f;
     float SubstepAccumulator = 0.0f;
+    /** Physics steps since launch; seeds canopy deflection so a repeated shot takes the same path. */
+    uint32 ShotStep = 0;
 
     OpenFairway::FResolvedShotParams ShotParams;
     OpenFairway::FSurfaceSettings SurfaceSettings;

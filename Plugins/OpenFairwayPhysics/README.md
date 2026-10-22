@@ -183,7 +183,12 @@ in ogolf-physics. Obstacles, components or actors tagged `OpenFairway.Obstacle`
 (`AOpenFairwayBall::GetObstacleTag()`) such as tree trunk colliders, always deflect: the
 ball reflects off the horizontal part of the contact at 30% speed and never lands or
 rests on them. A ball dropping onto a flat top leaves along its offset from the
-obstacle's axis at 1 m/s or more. Ground probes look through obstacles. Steps run at 120 Hz with up to 12 substeps per frame. After a long
+obstacle's axis at 1 m/s or more. Ground probes look through obstacles. Canopy, components or
+actors tagged `OpenFairway.Canopy` (`GetCanopyTag()`) with an overlap-only response on the trace
+channel, such as a tree's foliage volume, never block: a ball in the air inside one keeps
+`exp(-path / CanopyDecayLengthM)` of its speed and spin (4 m) and turns by a seeded angle of at most
+`CanopyDeflectionDegPerSqrtM · √path` (6°), seeded by instance and step so a repeated shot repeats.
+`PredictShot` and the headless reference ignore obstacles and canopy. Steps run at 120 Hz with up to 12 substeps per frame. After a long
 stall, excess accumulated time is discarded rather than allowing unbounded catch-up.
 Sustained rates below about 10 FPS therefore slow simulation relative to wall time.
 The game module's `UOpenGolf.Range.FrameRates` regression checks matching carry,
@@ -492,6 +497,7 @@ bash Scripts/ue.sh test --filter UOpenGolf.Physics   # add --engine-root PATH if
 | `UOpenGolf.Physics.FlightCorrections` | Analytical spin decay, mirrored directions, landing spin, anchor values, interpolation bounds, boundary continuity, the high-Re drag blend and the low-Re lift bridge |
 | `UOpenGolf.Physics.Wind` | Calm air unchanged; head-, tail- and crosswind direction and size; a ball moving with the air feels gravity only |
 | `UOpenGolf.Physics.ObstacleResponse` | Face-on, glancing, edge and flat-top obstacle contacts; tagging by component or actor |
+| `UOpenGolf.Physics.CanopyResponse` | Canopy speed loss by path length (step-size independent), bounded seeded deflection, tagging; canopy is not an obstacle |
 | `UOpenGolf.Physics.SurfaceResolution` | Resolution order: component tag, hit or component physical material, actor tag, default; plain physical materials are ignored |
 | `UOpenGolf.Physics.GreenRollout` | After 2,000–6,000 rpm landings, a level stimp-10 green rolls a ball at 2–12 m/s at least as far as fairway; faster greens roll farther; the stimpmeter distance holds; the historical reference keeps the ported green |
 | `UOpenGolf.Physics.GreenStimp` | Green Stimp Feet reaches predictions: the default matches the headless putt, a faster green rolls it farther, out-of-range stimps clamp, fairway unchanged |
@@ -501,7 +507,7 @@ bash Scripts/ue.sh test --filter UOpenGolf.Physics   # add --engine-root PATH if
 | `UOpenGolf.Range.Shot` (game module) | A drive hit in the running range lands and stops within 1 yd carry / 2 yd total of the headless prediction (headless 248.44 / 262.53 yd since the 2026-10-16 flight corrections) |
 | `UOpenGolf.Range.FrameRates` (game module) | Fixed-step outcomes across 30/60/144/5 FPS and 250 ms hitches, including the twelve-step catch-up cap |
 | `UOpenGolf.Range.ReplaySelection` (game module) | Selected/repeated replay reaches the ball; corrected low wood lands at 121.5477 yd versus headless 121.5451 yd |
-| `UOpenGolf.Range.ObstacleContact` (game module) | A line drive into a tagged trunk rests short of it; a pitch onto a tagged flat-topped block slides off and rests on the ground |
+| `UOpenGolf.Range.ObstacleContact` (game module) | A line drive into a tagged trunk rests short of it; a pitch onto a tagged flat-topped block slides off and rests on the ground; a line drive through an overlap-only canopy volume flies on without rebounding and carries at least 5 m less |
 | `UOpenGolf.Range.RolloutSurfaces` (game module) | Default range (fairway strip by physical material, rough sides) and real lies on each, then mixed and fringe-only tags on the same geometry; checks that the green rolls farther than the same path tagged fairway and that regime contact multipliers are neutral |
 
 The golden values come from the ogolf-physics C# sources, not from this port.

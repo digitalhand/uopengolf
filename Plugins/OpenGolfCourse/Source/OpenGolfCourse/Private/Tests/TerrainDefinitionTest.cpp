@@ -75,6 +75,13 @@ bool FTerrainDefinitionTest::RunTest(const FString& Parameters)
     Pines->Meshes.Reset();
     Pines->TreeCollisionMesh = nullptr;
     Pines->TrunkColliderRadiusM = 0.25f;
+    Pines->TreeCanopyMesh = NewObject<UStaticMesh>();
+    TestTrue(TEXT("A canopy volume works with the cylinder collider"), Definition->Validate(Error));
+    Pines->Meshes.Add(NewObject<UStaticMesh>());
+    Pines->Meshes.Add(NewObject<UStaticMesh>());
+    TestFalse(TEXT("One canopy volume cannot stand in for different tree shapes"), Definition->Validate(Error));
+    Pines->Meshes.Reset();
+    Pines->TreeCanopyMesh = nullptr;
     Pines->MinimumDistanceFromPlayM = 20;
     Pines->MaximumDistanceFromPlayM = 10;
     TestFalse(TEXT("An empty distance band is rejected"), Definition->Validate(Error));
