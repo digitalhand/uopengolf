@@ -1,0 +1,19 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Open Launch Monitor",
+  "Description": "Launch-monitor input for uopengolf: Square Home over Bluetooth LE (Windows) and hardware-free replay shots.",
+  "Category": "UOpenGolf",
+  "CreatedBy": "uopengolf contributors",
+  "CanContainContent": false,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "OpenLaunchMonitor",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "PlatformAllowList": ["Win64", "Linux"]
+    }
+  ]
+}

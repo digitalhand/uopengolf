@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT
+# Unreal-style C++ formatting; matches .editorconfig (4 spaces, no tabs).
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+BreakBeforeBraces: Allman
+ColumnLimit: 0
+AccessModifierOffset: -4
+NamespaceIndentation: All
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AlignAfterOpenBracket: DontAlign
+ContinuationIndentWidth: 4
+PointerAlignment: Left
+SpaceBeforeParens: ControlStatements
+# Unreal requires *.generated.h to be the last include; never reorder.
+SortIncludes: Never
+IncludeBlocks: Preserve

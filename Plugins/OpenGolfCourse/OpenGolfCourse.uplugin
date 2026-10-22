@@ -1,0 +1,39 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1.0",
+  "FriendlyName": "Open Golf Course",
+  "Description": "Reusable golf course kit: surface materials that declare OpenFairway physics surfaces, a putting green, a flagstick with a cloth flag that flies in the wind, a marked golf ball and turf grass.",
+  "Category": "UOpenGolf",
+  "CreatedBy": "uopengolf contributors",
+  "CanContainContent": true,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "OpenGolfCourse",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "PlatformAllowList": ["Win64", "Linux"]
+    },
+    {
+      "Name": "OpenGolfCourseEditor",
+      "Type": "Editor",
+      "LoadingPhase": "PostEngineInit",
+      "PlatformAllowList": ["Win64", "Linux"]
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "OpenFairwayPhysics",
+      "Enabled": true
+    },
+    {
+      "Name": "ProceduralMeshComponent",
+      "Enabled": true
+    },
+    {
+      "Name": "PCG",
+      "Enabled": true
+    }
+  ]
+}
