@@ -55,8 +55,11 @@ namespace
             return false;
         if (Preset->Kind != EOpenGolfVegetationKind::Tree)
             return true;
+        // A wood proxy or canopy volume follows one tree shape, so it cannot serve several meshes.
+        if ((Preset->TreeCollisionMesh || Preset->TreeCanopyMesh) && Preset->Meshes.Num() > 1)
+            return false;
         if (Preset->TreeCollisionMesh)
-            return Preset->Meshes.Num() <= 1;
+            return true;
         return (FMath::IsFinite(Preset->TrunkColliderRadiusM) && FMath::IsFinite(Preset->TrunkColliderHeightM) &&
                    Preset->TrunkColliderRadiusM >= 0.05f && Preset->TrunkColliderHeightM >= 0.5f);
     }
@@ -66,6 +69,7 @@ const FName AOpenGolfTerrainArea::GeneratedTag(TEXT("OpenGolf.Terrain.Generated"
 const FName AOpenGolfTerrainArea::VegetationTag(TEXT("OpenGolf.Terrain.Vegetation"));
 const FName AOpenGolfTerrainArea::TreesTag(TEXT("OpenGolf.Terrain.Trees"));
 const FName AOpenGolfTerrainArea::TreeCollidersTag(TEXT("OpenGolf.Terrain.TreeColliders"));
+const FName AOpenGolfTerrainArea::TreeCanopyTag(TEXT("OpenGolf.Terrain.TreeCanopy"));
 
 double UOpenGolfTerrainDefinition::DistanceToOutline(const TArray<FVector2D>& Outline, FVector2D Point)
 {

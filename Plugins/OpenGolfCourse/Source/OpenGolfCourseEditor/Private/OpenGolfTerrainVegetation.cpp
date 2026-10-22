@@ -17,6 +17,7 @@
 #include "PCGDataAsset.h"
 #include "PCGGraph.h"
 #include "PCGNode.h"
+#include "PhysicsEngine/BodySetup.h"
 #include "UObject/SavePackage.h"
 
 namespace
@@ -42,7 +43,8 @@ namespace
     bool IsVegetationActor(const AActor* Actor)
     {
         return Actor->FindComponentByClass<UPCGComponent>() || Actor->ActorHasTag(AOpenGolfTerrainArea::VegetationTag) ||
-               Actor->ActorHasTag(AOpenGolfTerrainArea::TreesTag) || Actor->ActorHasTag(AOpenGolfTerrainArea::TreeCollidersTag);
+               Actor->ActorHasTag(AOpenGolfTerrainArea::TreesTag) || Actor->ActorHasTag(AOpenGolfTerrainArea::TreeCollidersTag) ||
+               Actor->ActorHasTag(AOpenGolfTerrainArea::TreeCanopyTag);
     }
 
     struct FScatterJob
@@ -143,6 +145,44 @@ namespace
         return Actor;
     }
 
+    // An overlap test only sees inside simple collision, so a canopy volume needs its convex hull.
+    bool HasCanopyVolume(const UStaticMesh* Mesh)
+    {
+        return Mesh && Mesh->GetBodySetup() && Mesh->GetBodySetup()->AggGeom.GetElementCount() > 0;
+    }
+
+    // Hidden foliage volumes, one per tree. They only overlap, so the ball's contact sweeps and ground probes never
+    // hit them, while its canopy query slows it inside. A separate actor: obstacle tags on an actor apply to all of it.
+    // Names the tree mesh a canopy actor serves, so rebuilding one species' canopy replaces only its own.
+    FName CanopyForTag(const UStaticMesh* TreeMesh)
+    {
+        return FName(*(TEXT("OpenGolf.Terrain.TreeCanopyFor.") + TreeMesh->GetPathName()));
+    }
+
+    AActor* MakeTreeCanopy(AOpenGolfTerrainArea* Area, const UStaticMesh* TreeMesh, UStaticMesh* Mesh, const TArray<FTransform>& Transforms)
+    {
+        auto* Actor = Area->GetWorld()->SpawnActor<AActor>();
+        Actor->SetOwner(Area);
+        Actor->Tags.Append({AOpenGolfTerrainArea::GeneratedTag, AOpenGolfTerrainArea::TreeCanopyTag, AOpenFairwayBall::GetCanopyTag(), CanopyForTag(TreeMesh)});
+        Actor->SetActorLabel(FString::Printf(TEXT("Tree canopy %s"), *TreeMesh->GetName()));
+        Actor->SetFolderPath(TEXT("Terrain/Trees"));
+        auto* Canopy = NewObject<UInstancedStaticMeshComponent>(Actor, TEXT("CanopyVolumes"), RF_Transactional);
+        Canopy->SetMobility(EComponentMobility::Static);
+        Canopy->SetStaticMesh(Mesh);
+        Canopy->SetCollisionProfileName(TEXT("OverlapAll"));
+        Canopy->SetGenerateOverlapEvents(false);
+        Canopy->SetVisibility(false);
+        Canopy->SetHiddenInGame(true);
+        Canopy->SetCastShadow(false);
+        Canopy->SetCanEverAffectNavigation(false);
+        Canopy->ComponentTags.Add(AOpenFairwayBall::GetCanopyTag());
+        Actor->SetRootComponent(Canopy);
+        Actor->AddInstanceComponent(Canopy);
+        Canopy->RegisterComponent();
+        Canopy->AddInstances(Transforms, false, true);
+        return Actor;
+    }
+
     // Every check and placement for a vegetation run, before anything in the level changes.
     bool PrepareVegetation(const AOpenGolfTerrainArea* Area, TArray<FScatterJob>& Jobs, FString& Error)
     {
@@ -163,6 +203,11 @@ namespace
                 !LoadObject<UStaticMesh>(nullptr, TrunkColliderMeshPath))
             {
                 Error = TEXT("Could not load the trunk collider mesh.");
+                return false;
+            }
+            if (Job.Preset->Kind == EOpenGolfVegetationKind::Tree && Job.Preset->TreeCanopyMesh && !HasCanopyVolume(Job.Preset->TreeCanopyMesh))
+            {
+                Error = FString::Printf(TEXT("%s: the canopy mesh needs simple (convex) collision."), *Job.Name);
                 return false;
             }
         }
@@ -279,6 +324,7 @@ namespace
             PCG->RegisterComponent();
             PCG->SetGraph(Graph);
             AActor* Colliders = nullptr;
+            AActor* Canopy = nullptr;
             if (bTree)
             {
                 Colliders = MakeTreeColliders(Area, Preset, Scattered, Jobs[Index].Name, Error);
@@ -287,10 +333,20 @@ namespace
                     Area->GetWorld()->DestroyActor(Actor);
                     return false;
                 }
+                if (Preset.TreeCanopyMesh && !Jobs[Index].Meshes.IsEmpty())
+                {
+                    TArray<FTransform> Transforms;
+                    Transforms.Reserve(Scattered.Num());
+                    for (const auto& Point : Scattered)
+                        Transforms.Add(Point.Transform);
+                    Canopy = MakeTreeCanopy(Area, Jobs[Index].Meshes[0], Preset.TreeCanopyMesh, Transforms);
+                }
             }
             Area->GeneratedActors.Add(Actor);
             if (Colliders)
                 Area->GeneratedActors.Add(Colliders);
+            if (Canopy)
+                Area->GeneratedActors.Add(Canopy);
             UE_LOG(LogTemp, Display, TEXT("OpenGolf vegetation %s: %d %s."), *Jobs[Index].Name, Scattered.Num(), bTree ? TEXT("trees") : TEXT("ground-cover instances"));
             PCG->GenerateLocal(true);
         }
@@ -449,6 +505,63 @@ bool UOpenGolfTerrainBuilder::RebuildCourseGrass(AOpenGolfTerrainArea* Area, con
         return true;
     UE_LOG(LogTemp, Error, TEXT("OpenGolf course grass failed; the existing layer was kept: %s"), *Error);
     return false;
+}
+
+bool UOpenGolfTerrainBuilder::RebuildTreeCanopy(AOpenGolfTerrainArea* Area, UStaticMesh* TreeMesh, UStaticMesh* CanopyMesh, int32& Count, FString& Error)
+{
+    Error.Reset();
+    Count = 0;
+    if (!IsValid(Area) || !Area->GetWorld() || Area->GetWorld()->IsGameWorld() || !TreeMesh || !HasCanopyVolume(CanopyMesh))
+    {
+        Error = TEXT("Tree canopy needs an editor terrain area, the tree mesh and a canopy mesh with simple (convex) collision.");
+        UE_LOG(LogTemp, Error, TEXT("OpenGolf tree canopy: %s"), *Error);
+        return false;
+    }
+    TArray<FTransform> Transforms;
+    for (const AActor* Actor : Area->GeneratedActors)
+    {
+        if (!IsValid(Actor) || !Actor->ActorHasTag(AOpenGolfTerrainArea::TreesTag))
+            continue;
+        if (Actor->FindComponentByClass<UPCGComponent>())
+        {
+            Error = TEXT("Bake the trees before rebuilding their canopy.");
+            UE_LOG(LogTemp, Error, TEXT("OpenGolf tree canopy: %s"), *Error);
+            return false;
+        }
+        TArray<UInstancedStaticMeshComponent*> Components;
+        Actor->GetComponents(Components);
+        for (const auto* Component : Components)
+            if (Component->GetStaticMesh() == TreeMesh)
+                for (int32 Instance = 0; Instance < Component->GetInstanceCount(); ++Instance)
+                {
+                    FTransform Transform;
+                    Component->GetInstanceTransform(Instance, Transform, true);
+                    Transforms.Add(Transform);
+                }
+    }
+    if (Transforms.IsEmpty())
+    {
+        Error = FString::Printf(TEXT("No baked trees use %s; the existing canopy was kept."), *TreeMesh->GetName());
+        UE_LOG(LogTemp, Error, TEXT("OpenGolf tree canopy: %s"), *Error);
+        return false;
+    }
+    // Only this tree mesh's canopy is replaced; other species keep theirs.
+    const FName ForTree = CanopyForTag(TreeMesh);
+    Area->Modify();
+    for (int32 Index = Area->GeneratedActors.Num() - 1; Index >= 0; --Index)
+    {
+        AActor* Actor = Area->GeneratedActors[Index];
+        if (IsValid(Actor) && Actor->ActorHasTag(AOpenGolfTerrainArea::TreeCanopyTag) && Actor->ActorHasTag(ForTree))
+        {
+            Area->GetWorld()->DestroyActor(Actor);
+            Area->GeneratedActors.RemoveAt(Index);
+        }
+    }
+    Area->GeneratedActors.Add(MakeTreeCanopy(Area, TreeMesh, CanopyMesh, Transforms));
+    Area->MarkPackageDirty();
+    Count = Transforms.Num();
+    UE_LOG(LogTemp, Display, TEXT("OpenGolf tree canopy: %d %s volumes."), Count, *CanopyMesh->GetName());
+    return true;
 }
 
 AActor* UOpenGolfTerrainBuilder::AddVegetationHost(AOpenGolfTerrainArea* Area, const FString& Label)
