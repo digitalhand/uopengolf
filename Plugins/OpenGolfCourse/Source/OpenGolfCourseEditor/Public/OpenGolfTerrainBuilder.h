@@ -5,6 +5,7 @@
 #include "OpenGolfTerrainBuilder.generated.h"
 
 class AOpenGolfTerrainArea;
+class UStaticMesh;
 
 UCLASS()
 class OPENGOLFCOURSEEDITOR_API UOpenGolfTerrainBuilder : public UBlueprintFunctionLibrary
@@ -31,6 +32,12 @@ public:
     // Call after PCG finishes. Baked actors load in packaged play without running PCG.
     UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
     static bool BakeVegetation(AOpenGolfTerrainArea* Area, FString& Error);
+
+    // Replaces the hidden canopy volumes of every baked tree that uses TreeMesh with CanopyMesh (one convex hull in
+    // simple collision) at each tree's transform. Trees, colliders and other vegetation are untouched. Count is the
+    // number of volumes placed; on failure the existing canopy is kept and the error is logged.
+    UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
+    static bool RebuildTreeCanopy(AOpenGolfTerrainArea* Area, UStaticMesh* TreeMesh, UStaticMesh* CanopyMesh, int32& Count, FString& Error);
 
     // An empty ground-cover actor owned by the area, for components placed by scripts (for example
     // understory). It is tagged and registered like baked vegetation, so the grass switch hides it

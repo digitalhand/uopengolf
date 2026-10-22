@@ -61,6 +61,11 @@ course, scoring or player character yet. Currently focused on foundation, eye ca
   - Also plays measured versus calculated ball data. Tested in measured only.
 - Shot recording data (F9) saved to Documents folder. This allows to collect shot data, analyze, and adjust physics when needed. 
 
+
+Newest build version with public assets (grass, trees, etc.).
+
+<img src="Assets/Images/public_range.png">
+
 The range in Play in the Linux editor, waiting for a shot, using Nvidia card:
 
 <img src="Assets/Images/linux.png" alt="The range in the Linux DebugGame editor during Play: the wind indicator at the top, empty shot tiles on the right and the ball on the tee" />
