@@ -1197,8 +1197,8 @@ Not yet verified:
   - quitting during a Square Home connect
   - link loss and recovery on Linux
   - the Windows build, connect and quit
-- **Re-importing the jacaranda and Nature Essentials textures**, with the shimmer protocol and
-  owner review of the darker leaf edges.
+- ~~Re-importing the jacaranda and Nature Essentials textures~~: done the same day; see
+  [Texture re-import](#texture-re-import-8-bit-exports--2026-10-27). The owner kept the new look.
 - **The committed Poly Haven grass textures were exported through the old `png8.save`.** Their
   albedo is not premultiplied, and `grass_medium_01_alpha_2k` stayed at 2K against the 1K opacity
   limit. A re-export would now premultiply and scale as `ExportPolyHavenGrass.py` intends, and needs
@@ -1216,7 +1216,7 @@ not imported.
 - **Size:** jacaranda assets 111.5 MB → 38.8 MB; Nature Essentials 84.6 MB → 69.8 MB.
 - **Look:** much darker trees. The jacaranda trunk changed from pale grey to dark brown and the leaves
   to a deeper green without the near-white edges. The old 16-bit exports were the washed-out ones.
-  Owner review is pending.
+  The owner reviewed the captures and kept the new look, including the close-canopy shimmer increase.
 
 Unreal Engine 5.8.3, Linux DebugGame editor, one editor via MCP, public map. Stationary
 `UOpenGolf.Visual.CoastalTerrain` sequences, 20 frames per view at 1320 × 959 (FOV 65), measured with
@@ -1251,6 +1251,32 @@ Evidence: `Saved/Automation/CoastalReview/BeforeTextureReimport-20261027-221111`
 `tree_before_after.png`, `tree_leaves_zoom.png`, `edge_before_after.png`).
 
 Not yet verified:
-- owner review of the darker trees, and whether the close-canopy shimmer increase is acceptable
 - slow camera motion: the test's motion sequence (View 9) was captured but not reviewed
 - the Poly Haven grass re-export and import
+
+## Git LFS migration — 2026-10-27
+
+All `.uasset` and `.umap` files moved to Git LFS, including their history:
+`git lfs migrate import --everything --include="*.uasset,*.umap"` (git-lfs 3.7.1). The 6 commits
+held 376 `.uasset` and 3 `.umap` versions (543 MB).
+
+- **Checks before the push:**
+  - all 328 current assets are byte-identical to the pre-migration commit
+  - the rewritten `main` merge matches the original file for file (584 files), with every pointer
+    hash equal to the original asset's SHA-256
+  - the only other change in each commit is the two LFS lines in `.gitattributes`
+- **Push:** the owner force-pushed the rewritten `main` and `feature/cleanup-textures-re-use` with
+  leases pinned to the original commits. The two merged branches were deleted instead of rewritten.
+  GitHub's LFS batch API then reported all 378 objects referenced by `main` and the branch as
+  present (537 MB).
+- **Backup:** a bundle of the pre-migration history, kept outside the repository.
+- **Working copy:** the migration's checkout left LFS pointer files in place of the assets, while the
+  editor was running. `git lfs checkout` restored them before the editor touched them. On another
+  machine, run `git lfs pull` if assets show up as small text files.
+- `--everything` rewrites commits reachable from remote refs but does not move the remote refs.
+  The rewritten `main` merge was found among the unreferenced commits and pushed by its hash.
+
+Still to do:
+- re-clone the Windows checkout with Git LFS
+- install Git LFS on both self-hosted runners and run the Package workflow once
+- check the account's GitHub LFS storage and bandwidth limits; each package job downloads about 340 MB

@@ -31,6 +31,12 @@ rebuilds it with `--regenerate`. Then in the editor run
 `Scripts/ImportSavannaAssets.py <project>/Saved/AssetImport/OpenGolfSavanna/Grass/export.json`.
 The export also records the blades' average colour, which the ground under them is tinted to.
 
+The exporters write 8-bit PNGs through `blender/png8.py`, which sets each image's colour space
+when it is loaded. To update only the textures after a re-export, add `--textures-only` to
+`ImportSavannaAssets.py` or `ImportNatureEssentials.py`. It replaces the textures in place and
+leaves material instances (and any values tuned in them) and meshes alone. Texture changes need
+the shimmer check in AGENTS.md.
+
 ## Course grass presets
 
 `Scripts/BuildSavannaGrassPresets.py` (editor) creates, in `Terrain/`:
@@ -102,7 +108,8 @@ adapted from "Realistic Nature Essentials" by CG Geek (CC BY 4.0, attribution re
 
    `-- --regenerate` rebuilds the project from the purchased pack (`--source PACK.blend` or
    `UOPENGOLF_NE_PACK`) and discards edits.
-2. In the editor run `Scripts/ImportNatureEssentials.py` (`--materials-only` keeps the meshes).
+2. In the editor run `Scripts/ImportNatureEssentials.py` (`--materials-only` keeps the meshes;
+   `--textures-only` replaces only the textures and keeps tuned material instances).
 
 Cards and rocks use `M_SavannaCard` and `M_SavannaSolid`. The grass uses
 `M_SavannaUnderstoryGrass`, dry by default; a course can set `CourseMask`, `MaskBounds`,

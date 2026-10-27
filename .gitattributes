@@ -9,8 +9,7 @@
 *.json text eol=lf
 *.csv text eol=lf
 *.uproject text eol=lf
-*.umap binary
-*.uasset binary
 *.blend binary
+# Unreal assets are stored in Git LFS (migrated 2026-10-27); -text also marks them binary.
 *.uasset filter=lfs diff=lfs merge=lfs -text
 *.umap filter=lfs diff=lfs merge=lfs -text
