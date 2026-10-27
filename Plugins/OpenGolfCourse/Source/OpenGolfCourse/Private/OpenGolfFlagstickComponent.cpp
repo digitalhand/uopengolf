@@ -2,6 +2,7 @@
 #include "OpenGolfFlagstickComponent.h"
 
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
 #include "OpenGolfCourse.h"
 #include "ProceduralMeshComponent.h"
@@ -60,6 +61,11 @@ void UOpenGolfFlagstickComponent::OnUnregister()
 void UOpenGolfFlagstickComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    // Up to 24 substeps and a full mesh upload per frame are wasted on a flag nobody sees.
+    constexpr float HiddenSeconds = 0.5f;
+    const UWorld* World = GetWorld();
+    if (!bSimulateWhenHidden && World && World->IsGameWorld() && FlagCloth && !FlagCloth->WasRecentlyRendered(HiddenSeconds))
+        return;
     Cloth.Advance(DeltaTime, GetPoleTop());
     UpdateFlagMesh(false);
 }

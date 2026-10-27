@@ -21,6 +21,9 @@ namespace
     constexpr float HeadingSeconds = 1.0f;
     constexpr float CalmWindMps = 0.1f;
     constexpr float MaxFrameSeconds = 1.0f / 20.0f;
+    /** A pole moving farther than this between frames was placed, not swung, and takes its flag along. */
+    constexpr double PoleJumpCm = 10.0;
+    constexpr float StandardAirDensity = 1.225f;
     constexpr float CmPerM = 100.0f;
     constexpr float Cm2PerM2 = 10000.0f;
 } // namespace
@@ -35,6 +38,7 @@ void FOpenGolfFlagCloth::Reset(const FSettings& InSettings, const FVector& PoleT
     ParticleKg = Settings.ClothKgPerM2 * Settings.LengthCm * Settings.HeightCm / Cm2PerM2 / Count;
     TimeSeconds = 0.0;
     Pending = 0.0f;
+    LastPoleTop = PoleTop;
 
     const FVector Along(FMath::Cos(HeadingRad), FMath::Sin(HeadingRad), 0.0);
     Positions.SetNum(Count);
@@ -96,14 +100,25 @@ void FOpenGolfFlagCloth::Settle(float Seconds, const FVector& PoleTop)
 
 void FOpenGolfFlagCloth::SetWind(const FVector& InWindMps, float AirDensityKgM3)
 {
-    WindMps = InWindMps;
-    AirDensity = FMath::Max(0.0f, AirDensityKgM3);
+    // One NaN would spread through the forces into every particle for good.
+    WindMps = InWindMps.ContainsNaN() ? FVector::ZeroVector : InWindMps;
+    AirDensity = FMath::IsFinite(AirDensityKgM3) ? FMath::Max(0.0f, AirDensityKgM3) : StandardAirDensity;
 }
 
 void FOpenGolfFlagCloth::Advance(float DeltaSeconds, const FVector& PoleTop)
 {
     if (Positions.IsEmpty())
         return;
+    const FVector Jump = PoleTop - LastPoleTop;
+    if (Jump.SizeSquared() > PoleJumpCm * PoleJumpCm)
+    {
+        // Velocities come from position changes, so a jump left in place would fling the cloth.
+        for (FVector& Position : Positions)
+            Position += Jump;
+        for (FVector& Position : Previous)
+            Position += Jump;
+    }
+    LastPoleTop = PoleTop;
     Pending += FMath::Clamp(DeltaSeconds, 0.0f, MaxFrameSeconds);
     while (Pending >= SubstepSeconds)
     {

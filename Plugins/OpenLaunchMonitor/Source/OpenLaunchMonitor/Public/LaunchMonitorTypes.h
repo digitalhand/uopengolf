@@ -4,6 +4,9 @@
 #include "CoreMinimal.h"
 #include "LaunchMonitorTypes.generated.h"
 
+/** Miles per hour in one metre per second. */
+inline constexpr float LaunchMonitorMphPerMps = 2.2369363f;
+
 UENUM(BlueprintType)
 enum class ELaunchMonitorConnectionState : uint8
 {
@@ -120,7 +123,7 @@ struct OPENLAUNCHMONITOR_API FLaunchMonitorShot
     UPROPERTY(BlueprintReadOnly, Category = "Launch Monitor")
     ELaunchMonitorValueSource SideSpinSource = ELaunchMonitorValueSource::Missing;
 
-    float GetBallSpeedMph() const { return BallSpeedMps * 2.2369363f; }
+    float GetBallSpeedMph() const { return BallSpeedMps * LaunchMonitorMphPerMps; }
 };
 
 /** Club delivery for a shot. Fields the device did not measure have their bHas flag cleared. */

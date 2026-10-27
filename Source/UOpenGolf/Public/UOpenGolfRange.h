@@ -173,6 +173,14 @@ private:
 
     bool bGrassEnabled = false;
 
+    /** The grass switch has been applied to the terrain's vegetation since the last refresh. */
+    bool bTerrainGrassApplied = false;
+
+    /** Ground under the tee during Play, found once per range position because it traces the terrain. */
+    mutable TOptional<FVector> CachedTee;
+    mutable FVector CachedTeeOrigin = FVector::ZeroVector;
+    mutable TWeakObjectPtr<AOpenGolfTerrainArea> CachedTeeTerrain;
+
     /** A ground piece when SurfaceMaterial is set (MI_Fairway or MI_Rough), else a colored decoration. */
     UStaticMeshComponent* AddBox(FName Name, const FVector& MinM, const FVector& MaxM, bool bCollides,
         UMaterialInterface* SurfaceMaterial = nullptr);

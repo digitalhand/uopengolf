@@ -33,7 +33,8 @@ it has no tree presets or tree areas yet, so nothing new appears in Play.
   [obstacles](../Plugins/OpenFairwayPhysics/README.md#how-it-uses-unreal-physics).
 - **Rebuilding.** `UOpenGolfTerrainBuilder::RebuildVegetation` places everything
   first, then replaces only an area's vegetation, trees and colliders; a placement
-  failure leaves the existing vegetation in place. Terrain, tee and targets are kept.
+  failure leaves the existing vegetation in place. Terrain, tee, targets and the course
+  grass layer are kept.
   `Scripts/RebuildRangeVegetation.py` wraps it for the public map: it backs the map up
   to `Saved/TerrainBackups`, bakes and saves. With `--remove-orphans` it then deletes
   older `Generated/Vegetation_*` folders that nothing on disk references.

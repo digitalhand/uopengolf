@@ -6,6 +6,11 @@
 EXPORT_LIMITS = {"albedo": 2048, "albedo_dry": 2048, "opacity_alpha": 2048, "normal": 2048, "roughness": 1024, "ao": 1024, "opacity": 1024}
 
 
+def is_colour(role):
+    """True for a colour map, written as sRGB; normal, roughness, AO and opacity maps are data, written raw."""
+    return role.startswith("albedo") or role == "opacity_alpha"
+
+
 def export_size(width, height, limit):
     """The longest side at most `limit`, keeping the aspect ratio."""
     scale = min(1.0, limit / max(width, height))

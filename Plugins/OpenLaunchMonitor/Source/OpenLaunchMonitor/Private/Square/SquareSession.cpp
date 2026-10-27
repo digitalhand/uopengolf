@@ -12,6 +12,10 @@ namespace
         TEXT("Square device was detected but is not ready yet. Wait a moment and try connecting again.");
     constexpr int32 ClubRequestAttempts = 3;
     constexpr float ClubRequestRetryDelaySeconds = 0.15f;
+    /** Arm commands tried, a ready delay apart, before the link is dropped and reconnected. */
+    constexpr int32 ArmAttempts = 3;
+    /** Heartbeats that may fail in a row before the device is treated as gone. */
+    constexpr int32 HeartbeatFailuresBeforeLinkLoss = 3;
 } // namespace
 
 FSquareSession::FSquareSession(
@@ -234,6 +238,9 @@ void FSquareSession::ResetConnection()
     bConnected = false;
     bArmed = false;
     bShotPendingRearm = false;
+    ArmFailures = 0;
+    HeartbeatFailures = 0;
+    bLastFrameRejected = false;
     LastLoggedBattery = -1;
 }
 
@@ -295,13 +302,35 @@ void FSquareSession::Arm()
                                                                               {
         if (!bSuccess)
         {
-            EmitError(FString::Printf(TEXT("Could not arm the Square device: %s"), *Error));
+            HandleArmFailed(Error);
             return;
+        }
+        ArmFailures = 0;
+        if (bLastFrameRejected)
+        {
+            // A second unreadable strike can repeat the last frame exactly and still needs its own
+            // re-arm. Readable frames stay filtered, so a late repeat never becomes a phantom shot.
+            LastPayload.Reset();
+            bLastFrameRejected = false;
         }
         bShotPendingRearm = false;
         bArmed = true;
         EmitReady(true);
         SetStatus(ESquareSessionStatus::Ready); }));
+}
+
+void FSquareSession::HandleArmFailed(const FString& Error)
+{
+    // An unarmed device detects nothing while the link still looks healthy, so never stop here.
+    const FString Message = FString::Printf(TEXT("Could not arm the Square device: %s"), *Error);
+    if (++ArmFailures >= ArmAttempts)
+    {
+        LoseConnection(TEXT("Arming failed repeatedly; dropping the link to reconnect."), Message);
+        return;
+    }
+    EmitError(Message);
+    Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]()
+                                                                 { Arm(); }));
 }
 
 void FSquareSession::ScheduleHeartbeat()
@@ -312,14 +341,21 @@ void FSquareSession::ScheduleHeartbeat()
     }
     Scheduler->Schedule(Options.HeartbeatIntervalSeconds, Guard([this]()
                                                               {
+        // Schedule the next one first: a failure that drops the link must also cancel it.
+        ScheduleHeartbeat();
         QueueCommand(SquareProtocol::Heartbeat(NextSequence()), Guard([this](bool bSuccess, const FString& Error)
         {
-            if (!bSuccess)
+            if (bSuccess)
             {
-                EmitError(FString::Printf(TEXT("Square heartbeat failed: %s"), *Error));
+                HeartbeatFailures = 0;
+                return;
             }
-        }));
-        ScheduleHeartbeat(); }));
+            EmitError(FString::Printf(TEXT("Square heartbeat failed: %s"), *Error));
+            if (++HeartbeatFailures >= HeartbeatFailuresBeforeLinkLoss)
+            {
+                LoseConnection(TEXT("Heartbeats failed repeatedly; dropping the link to reconnect."), TEXT("The Square device stopped answering."));
+            }
+        })); }));
 }
 
 void FSquareSession::HandleDeviceDiscovered(const FGattDeviceInfo& Device)
@@ -394,6 +430,7 @@ void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
     {
         // The device stops detecting after any strike, readable or not: re-arm.
         UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Ball frame rejected as implausible: %s"), *Payload);
+        bLastFrameRejected = true;
         EmitReady(false);
         Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]()
                                                                      { Arm(); }));
@@ -404,6 +441,7 @@ void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
         Metrics.BallSpeedMps, Metrics.VerticalAngleDeg, Metrics.HorizontalAngleDeg, Metrics.TotalSpinRpm, Metrics.SpinAxisDeg,
         Metrics.BackSpinRpm, Metrics.SideSpinRpm);
     bShotPendingRearm = true;
+    bLastFrameRejected = false;
     EmitReady(false);
     const int32 ShotId = ++ShotCount;
     const uint32 ShotGeneration = Generation;
@@ -482,14 +520,19 @@ void FSquareSession::RequestClubMetrics(int32 ShotId, int32 Attempt)
 
 void FSquareSession::HandleTransportDisconnected()
 {
+    LoseConnection(TEXT("Bluetooth link lost."), TEXT("Lost connection to the Square device."));
+}
+
+void FSquareSession::LoseConnection(const TCHAR* Reason, const FString& Message)
+{
     if (!bConnected)
     {
         return;
     }
-    UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Bluetooth link lost."));
+    UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("%s"), Reason);
     ResetConnection();
     EmitReady(false);
-    EmitError(TEXT("Lost connection to the Square device."));
+    EmitError(Message);
     SetStatus(ESquareSessionStatus::Disconnected);
     if (OnConnectionLost)
     {

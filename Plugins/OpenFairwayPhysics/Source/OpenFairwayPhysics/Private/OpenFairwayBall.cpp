@@ -351,6 +351,13 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
 
 void AOpenFairwayBall::PlaceAt(const FVector& Location)
 {
+    if (IsMoving() && bHasShot)
+    {
+        // Finish the interrupted shot where it was, so its result never stays "in flight".
+        Result.TerminationReason = EOpenFairwayShotTermination::SafetyStop;
+        Result.bAtRest = true;
+        UpdateResult();
+    }
     SetActorLocation(Location, false, nullptr, ETeleportType::ResetPhysics);
     BallState = EOpenFairwayBallState::Rest;
     Velocity = FVector3f::ZeroVector;
@@ -414,6 +421,13 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
     Velocity = Next.Velocity;
     Omega = Next.Spin;
     Result.ElapsedS += Dt;
+    if (Result.ElapsedS > MaxShotSeconds)
+    {
+        UE_LOG(LogOpenFairway, Warning, TEXT("Shot %d still moving after %.1f s; stopping it."), Result.ShotNumber, MaxShotSeconds);
+        Result.TerminationReason = EOpenFairwayShotTermination::SafetyStop;
+        EnterRest();
+        return false;
+    }
 
     const FVector Start = GetActorLocation();
     const FVector Offset = Start - ShotStart;
@@ -480,10 +494,10 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
 void AOpenFairwayBall::ApplyCanopy(float Dt)
 {
     // Canopy only overlaps the contact channel, so the move sweep and ground probes never see it.
-    TArray<FOverlapResult> Overlaps;
+    CanopyOverlaps.Reset();
     FCollisionQueryParams Params(SCENE_QUERY_STAT(OpenFairwayBallCanopy), false, this);
-    GetWorld()->OverlapMultiByChannel(Overlaps, GetActorLocation(), FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM), Params);
-    for (const FOverlapResult& Overlap : Overlaps)
+    GetWorld()->OverlapMultiByChannel(CanopyOverlaps, GetActorLocation(), FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM), Params);
+    for (const FOverlapResult& Overlap : CanopyOverlaps)
     {
         if (IsCanopy(Overlap.GetComponent()))
         {

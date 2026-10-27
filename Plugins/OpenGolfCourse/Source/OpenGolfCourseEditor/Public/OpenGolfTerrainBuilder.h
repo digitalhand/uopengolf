@@ -20,9 +20,13 @@ public:
     static bool StartVegetation(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error);
 
     // Removes only this area's vegetation, trees and trunk colliders, then starts vegetation again.
-    // Terrain, tee and targets are untouched. Bake afterwards as usual.
+    // Terrain, tee, targets and the course grass layer are untouched. Bake afterwards as usual.
     UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
     static bool RebuildVegetation(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error);
+
+    // True for a generated actor that RebuildVegetation removes and places again. Course grass is
+    // excluded: only RebuildCourseGrass places it.
+    static bool IsReplacedByVegetationRebuild(const AActor& Actor);
 
     // Places the area's course grass layer (CourseGrassPresets plus boundary strips) through PCG. Other vegetation is kept.
     // BakeVegetation then replaces only the previous course grass layer; a failed or empty run keeps it.

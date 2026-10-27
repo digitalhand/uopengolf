@@ -41,7 +41,17 @@ namespace
         virtual void Subscribe(const FString& Uuid, FCompletion OnComplete) override { OnComplete(true, FString()); }
         virtual void Write(const FString& Uuid, const TArray<uint8>& Value, FCompletion OnComplete) override
         {
-            Writes.Add(SquareProtocol::ToHex(Value));
+            const FString Hex = SquareProtocol::ToHex(Value);
+            Writes.Add(Hex);
+            for (TPair<FString, int32>& Failure : FailWrites)
+            {
+                if (Failure.Value > 0 && Hex.StartsWith(Failure.Key))
+                {
+                    --Failure.Value;
+                    OnComplete(false, TEXT("Write failed"));
+                    return;
+                }
+            }
             OnComplete(true, FString());
         }
 
@@ -66,6 +76,8 @@ namespace
         FString ConnectedId;
         int32 DisconnectCalls = 0;
         TArray<FString> Writes;
+        /** Command hex prefix -> how many of the next matching writes fail. */
+        TMap<FString, int32> FailWrites;
     };
 
     class FManualScheduler final : public ISquareScheduler
@@ -285,6 +297,91 @@ bool FLaunchMonitorCancellationTest::RunTest(const FString&)
     Transport->OnError(TEXT("Bluetooth worker could not initialize WinRT"));
     TestTrue(TEXT("Initialization failure disconnects instead of waiting for scan timeout"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
     TestFalse(TEXT("Initialization failure stops scan"), Transport->bScanning);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorArmRecoveryTest, "UOpenGolf.LaunchMonitor.ArmRecovery",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorArmRecoveryTest::RunTest(const FString&)
+{
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    const auto Scheduler = MakeShared<FManualScheduler>();
+    const auto Session = MakeShared<FSquareSession>(Transport, Scheduler);
+    Session->Initialize();
+    TArray<int32> ShotIds;
+    int32 ConnectionLost = 0;
+    Session->OnShot = [&ShotIds](const FSquareShotMetrics&, int32 ShotId)
+    { ShotIds.Add(ShotId); };
+    Session->OnConnectionLost = [&ConnectionLost]()
+    { ++ConnectionLost; };
+
+    // A failed arm is retried after the ready delay instead of leaving the device unarmed.
+    Transport->FailWrites.Add(TEXT("1181"), 1);
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(5.0f);
+    TestTrue(TEXT("Not ready after a failed arm"), Session->GetStatus() == ESquareSessionStatus::Connected);
+    Scheduler->Advance(3.0f);
+    TestTrue(TEXT("Ready once the arm is retried"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    TestEqual(TEXT("Arm sent twice"), Transport->CountWrites(TEXT("1181")), 2);
+
+    // A second unreadable strike can repeat the first frame exactly; it still re-arms the device.
+    Transport->Notify(UnreadableShotHex);
+    Transport->Notify(UnreadableShotHex);
+    Scheduler->Advance(3.0f);
+    TestEqual(TEXT("One re-arm for a repeated notification"), Transport->CountWrites(TEXT("1181")), 3);
+    Transport->Notify(UnreadableShotHex);
+    Scheduler->Advance(3.0f);
+    TestEqual(TEXT("Identical unreadable strike after re-arm re-arms again"), Transport->CountWrites(TEXT("1181")), 4);
+
+    // A readable frame repeated after re-arm stays filtered, so a late repeat never becomes a phantom shot.
+    Transport->Notify(ShotHex);
+    Scheduler->Advance(3.0f);
+    Transport->Notify(ShotHex);
+    TestEqual(TEXT("Readable repeat after re-arm ignored"), ShotIds, TArray<int32>{1});
+
+    // When every re-arm attempt fails, the link is dropped so the owner reconnects.
+    Transport->Notify(SecondShotHex);
+    Transport->FailWrites.Add(TEXT("1181"), 3);
+    Scheduler->Advance(10.0f);
+    TestEqual(TEXT("Link dropped after the last arm attempt"), ConnectionLost, 1);
+    TestTrue(TEXT("Disconnected after arm attempts run out"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
+    TestTrue(TEXT("Transport released"), Transport->DisconnectCalls > 0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorHeartbeatLossTest, "UOpenGolf.LaunchMonitor.HeartbeatLoss",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorHeartbeatLossTest::RunTest(const FString&)
+{
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    const auto Scheduler = MakeShared<FManualScheduler>();
+    const auto Session = MakeShared<FSquareSession>(Transport, Scheduler);
+    Session->Initialize();
+    int32 ConnectionLost = 0;
+    Session->OnConnectionLost = [&ConnectionLost]()
+    { ++ConnectionLost; };
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(5.0f);
+    TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
+
+    // Two failed heartbeats are tolerated, and a success clears the count.
+    Transport->FailWrites.Add(TEXT("1183"), 2);
+    Scheduler->Advance(15.0f);
+    TestTrue(TEXT("Still ready after failures and a success"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    Transport->FailWrites.Add(TEXT("1183"), 2);
+    Scheduler->Advance(15.0f);
+    TestEqual(TEXT("Count restarted after a success"), ConnectionLost, 0);
+
+    // Three in a row mean the device stopped answering: drop the link so the owner reconnects.
+    Transport->FailWrites.Add(TEXT("1183"), 3);
+    Scheduler->Advance(15.0f);
+    TestEqual(TEXT("Link dropped after three failed heartbeats"), ConnectionLost, 1);
+    TestTrue(TEXT("Disconnected"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
+    const int32 Writes = Transport->Writes.Num();
+    Scheduler->Advance(30.0f);
+    TestEqual(TEXT("No heartbeats after the link is dropped"), Transport->Writes.Num(), Writes);
     return true;
 }
 #endif

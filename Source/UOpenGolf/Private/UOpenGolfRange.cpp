@@ -269,8 +269,23 @@ void AUOpenGolfRange::BeginPlay()
 
 FVector AUOpenGolfRange::GetTeeLocation() const
 {
+    const FVector Origin = GetActorLocation();
+    if (!IsValid(Terrain))
+        return Origin;
+    // The player controller asks every frame and the ground is fixed during Play; editing can rebuild it.
+    const bool bCache = GetWorld() && GetWorld()->IsGameWorld();
+    if (bCache && CachedTee.IsSet() && CachedTeeOrigin.Equals(Origin) && CachedTeeTerrain.Get() == Terrain)
+        return CachedTee.GetValue();
     FVector Ground, Normal;
-    return IsValid(Terrain) && Terrain->GroundAt(GetActorLocation(), Ground, Normal) ? Ground : GetActorLocation();
+    if (!Terrain->GroundAt(Origin, Ground, Normal))
+        return Origin;
+    if (bCache)
+    {
+        CachedTee = Ground;
+        CachedTeeOrigin = Origin;
+        CachedTeeTerrain = Terrain;
+    }
+    return Ground;
 }
 
 void AUOpenGolfRange::AlignLayoutToTerrain()
@@ -334,6 +349,7 @@ void AUOpenGolfRange::RefreshPresentation()
     GrassComponents.Reset();
     Grass->ClearInstances();
     bGrassEnabled = false;
+    bTerrainGrassApplied = false;
     Grass->SetStaticMesh(DefaultGrassMesh);
     GrassComponents.Add(Grass);
     if (!GrassMeshes.IsEmpty())
@@ -547,6 +563,9 @@ void AUOpenGolfRange::UpdateGrass()
     const bool bWanted = CVarGrass3D.GetValueOnGameThread() != 0;
     if (IsValid(Terrain))
     {
+        // Applying touches every vegetation component, so it runs again only when the switch changes.
+        if (bTerrainGrassApplied && bWanted == bGrassEnabled)
+            return;
         for (const auto& Actor : Terrain->GeneratedActors)
         {
             if (!IsValid(Actor) || !Actor->ActorHasTag(AOpenGolfTerrainArea::VegetationTag))
@@ -560,6 +579,7 @@ void AUOpenGolfRange::UpdateGrass()
             if (Component->GetInstanceCount() > 0)
                 Component->ClearInstances();
         bGrassEnabled = bWanted;
+        bTerrainGrassApplied = true;
         return;
     }
     if (bWanted == bGrassEnabled)

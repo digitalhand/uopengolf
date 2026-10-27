@@ -1108,3 +1108,98 @@ Not yet verified:
 - the corrected `ObstacleContact` canopy case
 - frame time with the canopy queries
 - how the drag strength looks in Play (owner review; the constants are tunable)
+
+## Project audit fixes — 2026-10-27
+
+Linux, Unreal 5.8.3. The changes were first compile-checked with the Development editor build, then
+tested through MCP in the owner's rebuilt DebugGame editor (see Tests below). No rendered check was run.
+
+Changed:
+- **Launch monitor:**
+  - The transports post back through a weak reference set at creation. `AsWeak()` asserted on the
+    worker when the transport was destroyed during a connect, which happens when Play stops or the
+    game quits mid-connect.
+  - A failed arm is retried twice, a ready delay apart, then the link is dropped so auto-reconnect
+    re-handshakes. Three failed heartbeats in a row also drop it.
+  - An identical unreadable frame after a re-arm re-arms again; readable repeats stay filtered.
+  - Only one reconnect timer can be pending.
+  - A failed BlueZ system-bus connection is reported once and no longer spins the worker.
+  - A Windows read failure completes empty, as on Linux, instead of dropping the link.
+- **Game:**
+  - Play starts with two range controllers, using the first and logging an error.
+  - A shot still moving after `MaxShotSeconds` (30 s) ends as a safety stop.
+  - Re-teeing a moving ball finishes its result as interrupted.
+- **Performance:**
+  - The tee's ground trace is cached during Play.
+  - The flag skips its solve and mesh upload when it has not been drawn for 0.5 s in Play.
+  - The terrain grass switch is applied only when it changes.
+  - HUD text is rebuilt at 10 Hz, while the wind arrow still updates every frame.
+  - The canopy query reuses its buffer.
+- **Robustness:**
+  - Flag cloth: non-finite wind reads as calm, and a jumping pole carries its flag.
+  - `RebuildVegetation` keeps the course grass layer.
+  - Linux recordings fall back to a no-replace rename (`RENAME_NOREPLACE`) where the filesystem
+    has no hard links.
+- **Exporters:**
+  - `png8.load` sets a texture's colour space before scaling or editing. Assigning it in
+    `png8.save`, even to the same value, reloaded the file, so later `scale()` and `premultiply()`
+    calls were silently lost; a Blender 5.0.1 probe confirmed both.
+  - The jacaranda and Nature Essentials exporters now write 8-bit PNGs through `png8`.
+
+Measured:
+- **Builds:** the Development editor build and the full unity build (`-DisableAdaptiveUnity`) pass.
+  - The Windows transport changes are not compiled on Linux.
+- **Python:** `test_export_rules`, `test_ne_rules` and `test_grass_rules` pass (36 tests).
+- **Jacaranda re-export (`ExportJacaranda.py`):**
+  - 10 PNGs, all 8-bit, at the same sizes as before: 2K colour and normal maps, 1K masks.
+  - Source size fell from 110.6 MB to 43.3 MB.
+  - Against the old 16-bit export, trunk colour, normal and roughness differ by at most 1/255.
+  - Leaf colour matches on opaque pixels (mean 0.15/255), but semi-transparent edge pixels are
+    darker. The old near-white fringe (mean 0.83 at alpha 0.05–0.5) is now 0.49.
+- **Nature Essentials re-export:** 40 PNGs, all 8-bit and at the old sizes; 90.7 MB fell to 82.3 MB.
+- **Re-import:** none. The outputs are in `Saved/AssetImport`. The previous exports are kept
+  outside the repository for comparison.
+- **Tests, run later the same day** in the owner's rebuilt DebugGame editor through MCP. Only one editor was running.
+  - **Non-map batch:** 21 of 23 pass, including `LaunchMonitor.TransportTeardown`, `.ArmRecovery`, `.HeartbeatLoss`,
+    `.Session`, `.Cancellation`, `Course.FlagCloth`, `.VegetationRebuild` and the `Physics` core tests. Two new
+    tests failed and were then fixed:
+    - `Range.ShotRecordingFinalize` caught a real bug. The fallback used `IFileManager::Move` with replace off,
+      but on Linux that still renames over an existing record. It now uses `renameat2(RENAME_NOREPLACE)`.
+    - `Course.FlagClothInputs`: the test's "calm" flag kept the 4.47 m/s wind set earlier in the test,
+      because `Reset` keeps the wind. The test now sets calm air and compares against a flag that never moved.
+  - **Map and Play batch:** 10 of 16 pass, including `Range.DuplicateController`, `Physics.ShotInterrupt`,
+    `Range.AutoReset`, `.WindSettings`, `.Shot`, `.ShotTrail`, `.PlayableBounds` and `.ReplaySelection`.
+    - `EditableLayout`, `Presentation` and `RolloutSurfaces` are the known flat-range failures.
+    - `Smoke.UOpenGolf` fails only because `Config/UserEngine.ini` opens the private map here.
+    - `Range.TeeLocation` (new) could not move the range, because its root is Static in Play. The test now
+      makes its throwaway Play copy Movable first.
+  - **After a DebugGame rebuild:** `ShotRecordingFinalize`, `FlagClothInputs` and `TeeLocation` pass.
+  - **`Range.Aim` fails only in the editor's first Play session after startup**, 2 of 2 such runs. It passed
+    all 5 later runs: alone, after a fresh load of the public map, and before or after other tests.
+    - The failure: one frame after a 30° turn, the tee camera is still exactly at its old spot and angle.
+      Its 600 cm distance check passes, and the turn itself succeeded, so the ball counted as on the tee.
+    - The frame pattern is the same in passing runs (Play starts in frame N, the check runs in N+1).
+    - No change in this audit touches the camera, controller or tick code. Whether the failure predates the
+      audit is not proven.
+    - A diagnostic run (the third first-Play failure) showed the check ran 1 frame after the turn
+      (world delta 0.077 s). The ball was still and 0.0 cm from the tee, and the camera yaw was exactly
+      0.000. Any controller tick would have moved it: a snap to 30°, or about 0.13° even mid-return. So
+      the controller did not tick between the two test frames. This is a test timing assumption, not a
+      camera fault.
+    - The test now waits for the camera's first update after the turn (at most 10 frames) and requires
+      that update to be the full 30° turn on the aim line. A lagging camera would still fail.
+      Why the controller skips that frame in the first session was not investigated further.
+
+Not yet verified:
+- **`Range.Aim` with the wait**, run as the editor's first Play session after a DebugGame rebuild.
+- **Hardware:**
+  - quitting during a Square Home connect
+  - link loss and recovery on Linux
+  - the Windows build, connect and quit
+- **Re-importing the jacaranda and Nature Essentials textures**, with the shimmer protocol and
+  owner review of the darker leaf edges.
+- **The committed Poly Haven grass textures were exported through the old `png8.save`.** Their
+  albedo is not premultiplied, and `grass_medium_01_alpha_2k` stayed at 2K against the 1K opacity
+  limit. A re-export would now premultiply and scale as `ExportPolyHavenGrass.py` intends, and needs
+  the shimmer protocol.
+- **Frame-time effect** of the flag, tee and HUD changes; no comparable timing was taken.

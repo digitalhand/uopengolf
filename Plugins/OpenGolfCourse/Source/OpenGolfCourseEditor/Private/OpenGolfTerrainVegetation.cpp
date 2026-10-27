@@ -375,6 +375,12 @@ bool UOpenGolfTerrainBuilder::StartVegetation(AOpenGolfTerrainArea* Area, const 
     return PrepareVegetation(Area, Jobs, Error) && EmitVegetation(Area, OutputFolder, Jobs, Error);
 }
 
+bool UOpenGolfTerrainBuilder::IsReplacedByVegetationRebuild(const AActor& Actor)
+{
+    // Course grass is vegetation too, but PrepareVegetation never places it again.
+    return IsVegetationActor(&Actor) && !Actor.ActorHasTag(CourseGrassTag);
+}
+
 bool UOpenGolfTerrainBuilder::RebuildVegetation(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error)
 {
     Error.Reset();
@@ -403,7 +409,7 @@ bool UOpenGolfTerrainBuilder::RebuildVegetation(AOpenGolfTerrainArea* Area, cons
     for (int32 Index = Area->GeneratedActors.Num() - 1; Index >= 0; --Index)
     {
         AActor* Actor = Area->GeneratedActors[Index];
-        if (IsValid(Actor) && !IsVegetationActor(Actor))
+        if (IsValid(Actor) && !IsReplacedByVegetationRebuild(*Actor))
             continue;
         if (IsValid(Actor))
         {
@@ -412,7 +418,7 @@ bool UOpenGolfTerrainBuilder::RebuildVegetation(AOpenGolfTerrainArea* Area, cons
         }
         Area->GeneratedActors.RemoveAt(Index);
     }
-    UE_LOG(LogTemp, Display, TEXT("OpenGolf vegetation rebuild removed %d actors; terrain, tee and targets were kept."), Removed);
+    UE_LOG(LogTemp, Display, TEXT("OpenGolf vegetation rebuild removed %d actors; terrain, tee, targets and course grass were kept."), Removed);
     if (EmitVegetation(Area, OutputFolder, Jobs, Error))
         return true;
     UE_LOG(LogTemp, Error, TEXT("OpenGolf vegetation rebuild failed: %s"), *Error);

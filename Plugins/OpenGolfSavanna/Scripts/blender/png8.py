@@ -5,9 +5,24 @@ Poly Haven ships 16-bit PNGs, and Image.save() keeps 16 bits. Unreal imports tho
 sources, and colour maps came out washed out (pale grass and jacaranda leaves), so every export
 writes 8 bits per channel instead. Colour maps keep their sRGB encoding and data maps (normal,
 roughness, AO, opacity) are written raw; both match the source within one 8-bit step.
+
+Load each texture with load(), which sets its colour space before anything else touches it:
+assigning Image.colorspace_settings later, even to the same value, reloads the file and silently
+drops any scale() or pixel edits (such as premultiply) made since.
 """
 import bpy
 import numpy
+
+
+def colorspace(color):
+    return "sRGB" if color else "Non-Color"
+
+
+def load(path, color):
+    """Load a texture for export, with its colour space set before it is scaled or edited."""
+    image = bpy.data.images.load(str(path), check_existing=False)
+    image.colorspace_settings.name = colorspace(color)
+    return image
 
 
 def premultiply(image):
@@ -28,8 +43,10 @@ def premultiply(image):
 
 
 def save(image, target, color):
-    """Save image (already scaled) to target as an 8-bit PNG."""
-    image.colorspace_settings.name = "sRGB" if color else "Non-Color"
+    """Save image, loaded with load() and then scaled or edited, to target as an 8-bit PNG."""
+    if image.colorspace_settings.name != colorspace(color):
+        # Setting it here would reload the file and lose the scale and edits; see the module notes.
+        raise RuntimeError(f"{image.name}: load it with png8.load(path, {color}) before scaling or editing it")
     scene = bpy.context.scene
     settings = scene.render.image_settings
     settings.file_format = "PNG"

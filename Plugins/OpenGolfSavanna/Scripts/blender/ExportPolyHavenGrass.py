@@ -111,7 +111,7 @@ def export_texture(source, role):
         return EXPORTED[source]
     if not Path(source).exists():
         raise RuntimeError(f"Texture missing: {source}; run FetchPolyHaven.py")
-    image = bpy.data.images.load(source, check_existing=False)
+    image = png8.load(source, role.startswith("albedo"))
     if role.startswith("albedo"):
         png8.premultiply(image)
     size = rules.export_size(*image.size, rules.EXPORT_LIMITS[role])

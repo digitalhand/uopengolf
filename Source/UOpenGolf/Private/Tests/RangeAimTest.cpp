@@ -44,9 +44,15 @@ public:
         {
         case 0:
             Test->TestTrue(TEXT("Aim turns on the tee"), Controller->SetAimYaw(30.0f));
+            TurnFrame = GFrameCounter;
+            CameraYawBeforeTurn = Controller->GetViewTarget()->GetActorRotation().Yaw;
             break;
         case 1:
-            // The camera updated on the tick after the turn.
+            // In the editor's first Play session the controller can miss the frame after the turn, so wait
+            // for the camera's first update (a few frames at most). That update must already be the full turn.
+            if (FMath::IsNearlyEqual(Controller->GetViewTarget()->GetActorRotation().Yaw, CameraYawBeforeTurn, 1.0e-4) && GFrameCounter - TurnFrame < 10)
+                return false;
+            Test->AddInfo(FString::Printf(TEXT("Tee camera moved %llu frames after the turn."), GFrameCounter - TurnFrame));
             Test->TestEqual(TEXT("Teed ball faces the aim"), Ball->GetActorRotation().Yaw, 30.0, 0.01);
             Test->TestEqual(TEXT("Tee camera faces the aim"), Controller->GetViewTarget()->GetActorRotation().Yaw, 30.0, 0.01);
             {
@@ -100,6 +106,8 @@ public:
 private:
     FAutomationTestBase* Test;
     int32 Stage = 0;
+    uint64 TurnFrame = 0;
+    double CameraYawBeforeTurn = 0.0;
     double StraightBearingDeg = 0.0;
 };
 

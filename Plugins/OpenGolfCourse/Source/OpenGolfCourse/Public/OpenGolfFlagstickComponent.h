@@ -49,6 +49,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OpenGolf|Flag", meta = (ClampMin = "0"))
     float FrictionCoefficient = 0.015f;
 
+    /**
+     * Keep simulating the cloth in Play when it has not been drawn for a while. Off by default: an
+     * unseen flag skips its solve and mesh upload and resumes from the same pose when seen again.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenGolf|Flag")
+    bool bSimulateWhenHidden = false;
+
     /** World wind in m/s; gusts are added on top. The flag's sleeve turns downwind. */
     UFUNCTION(BlueprintCallable, Category = "OpenGolf|Flag")
     void SetWind(const FVector& WindVelocityMps, float AirDensityKgM3 = 1.225f);
