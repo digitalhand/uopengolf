@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Import the Nature Essentials (CC BY 4.0) understory pieces into /OpenGolfSavanna.
 
-    py "<project>/Plugins/OpenGolfSavanna/Scripts/ImportNatureEssentials.py" [--materials-only]
+    py "<project>/Plugins/OpenGolfSavanna/Scripts/ImportNatureEssentials.py" [--materials-only | --textures-only]
 
 Export first with blender/ExportNatureEssentials.py, which writes FBX files and 2K texture copies
 to Saved/AssetImport/NatureEssentials; the editable Blender project stays under the Blender art
@@ -9,6 +9,7 @@ root. Content goes to type-first NatureEssentials folders (Meshes, Materials and
 the attributed pack stays identifiable. Cards and rocks use the shared savanna parents
 (M_SavannaCard, M_SavannaSolid); the grass uses M_SavannaUnderstoryGrass, built here.
 --materials-only keeps the imported textures and meshes and rebuilds only the materials.
+--textures-only re-imports only the textures in place, keeping tuned material instances and meshes.
 Credit and licence: NOTICE.md.
 """
 from pathlib import Path
@@ -86,17 +87,23 @@ def import_texture(path, role, normal=None, reuse=False):
     return s.import_texture(path, TEXTURES, role, normal, opengl_normals=True, reuse=reuse, prefix="T_NE_")
 
 
+def material_textures(roles, reuse=False):
+    """One material's textures by parameter name."""
+    normal = import_texture(roles["normal"], "normal", reuse=reuse) if "normal" in roles else None
+    textures = {"Albedo": import_texture(roles["albedo"], "albedo", reuse=reuse)}
+    if normal:
+        textures["Normal"] = normal
+    for role, parameter in (("roughness", "Roughness"), ("ao", "AmbientOcclusion"), ("opacity", "Opacity")):
+        if role in roles:
+            textures[parameter] = import_texture(roles[role], role, normal, reuse=reuse)
+    return textures
+
+
 def build_materials(manifest, kinds, reuse=False):
     card, solid, grass = s.required(CARD), s.required(SOLID), grass_material()
     result = {}
     for name, roles in manifest["materials"].items():
-        normal = import_texture(roles["normal"], "normal", reuse=reuse) if "normal" in roles else None
-        textures = {"Albedo": import_texture(roles["albedo"], "albedo", reuse=reuse)}
-        if normal:
-            textures["Normal"] = normal
-        for role, parameter in (("roughness", "Roughness"), ("ao", "AmbientOcclusion"), ("opacity", "Opacity")):
-            if role in roles:
-                textures[parameter] = import_texture(roles[role], role, normal, reuse=reuse)
+        textures = material_textures(roles, reuse)
         if name == "NE_Grass":
             colors = {key: a.linear_color(value) for key, value in GRASS_COLORS.items()}
             result[name] = s.instance(MATERIALS, "MI_" + name, grass, {"BladeAtlas": textures["Albedo"]}, colors)
@@ -144,6 +151,12 @@ def load_manifest():
 def main(argv):
     materials_only = "--materials-only" in argv
     manifest, kinds = load_manifest()
+    if "--textures-only" in argv:
+        with s.savanna_helpers():
+            textures = {texture.get_path_name() for roles in manifest["materials"].values()
+                        for texture in material_textures(roles).values()}
+        ue.log(f"NE_IMPORT_COMPLETE textures={len(textures)} textures_only=True")
+        return
     with s.savanna_helpers():
         materials = build_materials(manifest, kinds, reuse=materials_only)
         meshes = [] if materials_only else [import_mesh(item, materials) for item in manifest["meshes"]]

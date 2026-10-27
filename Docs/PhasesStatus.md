@@ -1189,9 +1189,10 @@ Measured:
     - The test now waits for the camera's first update after the turn (at most 10 frames) and requires
       that update to be the full 30° turn on the aim line. A lagging camera would still fail.
       Why the controller skips that frame in the first session was not investigated further.
+    - After a DebugGame rebuild, `Range.Aim` passed as the editor's first Play session (camera moved
+      2 frames after the turn) and again in a later session (1 frame).
 
 Not yet verified:
-- **`Range.Aim` with the wait**, run as the editor's first Play session after a DebugGame rebuild.
 - **Hardware:**
   - quitting during a Square Home connect
   - link loss and recovery on Linux
@@ -1203,3 +1204,53 @@ Not yet verified:
   limit. A re-export would now premultiply and scale as `ExportPolyHavenGrass.py` intends, and needs
   the shimmer protocol.
 - **Frame-time effect** of the flag, tee and HUD changes; no comparable timing was taken.
+
+## Texture re-import (8-bit exports) — 2026-10-27
+
+The jacaranda (10 textures) and Nature Essentials (40 textures) were re-imported in place from the
+8-bit exports in `Saved/AssetImport`, with the new `--textures-only` option of
+`ImportSavannaAssets.py` and `ImportNatureEssentials.py`. Only texture assets changed; material
+instances (and their tuned values) and meshes were not touched. The re-exported Poly Haven grass was
+not imported.
+
+- **Size:** jacaranda assets 111.5 MB → 38.8 MB; Nature Essentials 84.6 MB → 69.8 MB.
+- **Look:** much darker trees. The jacaranda trunk changed from pale grey to dark brown and the leaves
+  to a deeper green without the near-white edges. The old 16-bit exports were the washed-out ones.
+  Owner review is pending.
+
+Unreal Engine 5.8.3, Linux DebugGame editor, one editor via MCP, public map. Stationary
+`UOpenGolf.Visual.CoastalTerrain` sequences, 20 frames per view at 1320 × 959 (FOV 65), measured with
+`Scripts/grass_stability.py --profile coastal`. Pixels changing by more than 3/255, averaged over
+consecutive pairs:
+
+| View | Lower crop before | Lower crop after | Worst band before | Worst band after |
+| --- | ---: | ---: | ---: | ---: |
+| Tee, grass on | 0.002% | 0.002% | 10.343% | 9.225% |
+| Tee, grass off | 0.002% | 0.002% | 10.320% | 9.724% |
+| Edge, grass on | 0.012% | 0.012% | 10.425% | 10.390% |
+| Edge, grass off | 0.003% | 0.003% | 10.415% | 9.863% |
+| Close, grass on | 2.418% | 2.186% | 7.489% | 6.956% |
+| Close, grass off | 0.011% | 0.010% | 6.751% | 6.572% |
+
+The worst bands are the horizon and tree rows. These views show no regression.
+
+**Jacaranda close-up** (not in the standard views): editor viewport, camera at (5700, −4200, 300),
+pitch 15°, yaw 60°, FOV 90°, set once and then 10 captures. Setting the pose on every capture reset
+the temporal history (17–19% change per frame), so it was not used.
+
+| | Full frame | Canopy (top 60%) |
+| --- | ---: | ---: |
+| Before | 3.546% | 5.246% |
+| After | 4.640% | 7.493% |
+
+**The close canopy shimmers more after the change.** The darker leaves contrast more with the sky at
+their cut-out edges, which may account for it; this was not verified.
+
+Evidence: `Saved/Automation/CoastalReview/BeforeTextureReimport-20261027-221111` and
+`AfterTextureReimport-20261027-221740` (frames, `Stability.txt`, `TreeStability.txt`,
+`tree_before_after.png`, `tree_leaves_zoom.png`, `edge_before_after.png`).
+
+Not yet verified:
+- owner review of the darker trees, and whether the close-canopy shimmer increase is acceptable
+- slow camera motion: the test's motion sequence (View 9) was captured but not reviewed
+- the Poly Haven grass re-export and import
