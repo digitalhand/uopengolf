@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
 """Import a savanna export manifest into /OpenGolfSavanna.
 
-    py "<project>/Plugins/OpenGolfSavanna/Scripts/ImportSavannaAssets.py" <export.json> [--materials-only] [--meshes=A,B]
+    py "<project>/Plugins/OpenGolfSavanna/Scripts/ImportSavannaAssets.py" <export.json> [--materials-only | --textures-only] [--meshes=A,B]
 
 The manifest comes from a Blender export script (for example blender/ExportJacaranda.py). It names
 a content folder, the FBX meshes and, per material, its kind (card, solid or grass), texture layers and
 an optional vertex-colour blend. A material with a `category` (for example Grass/Bermuda) uses
 type-first folders: Meshes/<category>, Materials/<category> and Textures/<category>. Older manifests
 name one `folder` holding Meshes, Materials and Textures subfolders. --materials-only keeps the
-imported textures and meshes and rebuilds only the materials. --meshes=A,B imports only those meshes and
+imported textures and meshes and rebuilds only the materials. --textures-only re-imports only the
+textures in place, keeping tuned material instances and meshes. --meshes=A,B imports only those meshes and
 reuses the existing material instances, for example the jacaranda's collision helpers without the tree.
 
 A mesh entry with `nanite: false` and a `collision` mode is a hidden ball-contact helper: "complex"
@@ -97,6 +98,17 @@ def build_materials(manifest, folder, reuse):
             settings["OpacityFromAlbedoAlpha"] = 1.0 if "opacity_alpha" in layers[0] else 0.0
         result[name] = s.instance(target["Materials"], instance_name(name), parents[entry["kind"]], textures, settings)
     return result
+
+
+def import_textures(manifest, folder):
+    """Re-import every texture in place; material instances and meshes keep their references and tuning."""
+    textures = {}
+    for entry in manifest["materials"].values():
+        target = folders(entry, folder)
+        for index, layer in enumerate(entry["layers"][:2]):
+            textures.update({texture.get_path_name(): texture for texture in
+                             layer_textures(layer, target["Textures"], "" if index == 0 else "B", False).values()})
+    return textures
 
 
 def existing_materials(manifest, folder):
@@ -205,6 +217,11 @@ def main(argv):
     if only and not only <= {item["name"] for item in manifest["meshes"]}:
         raise RuntimeError(f"--meshes names a mesh the manifest does not have: {sorted(only)}")
     folder = manifest.get("folder", manifest.get("category"))
+    if "--textures-only" in argv:
+        with s.savanna_helpers():
+            textures = import_textures(manifest, folder)
+        ue.log(f"SAVANNA_IMPORT_COMPLETE folder={folder} textures={len(textures)} textures_only=True")
+        return
     with s.savanna_helpers():
         materials = existing_materials(manifest, folder) if only else build_materials(manifest, folder, reuse)
         meshes = [] if reuse else import_meshes(manifest, folder, materials, only)

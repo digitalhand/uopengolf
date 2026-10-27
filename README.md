@@ -130,6 +130,7 @@ Linux support does not change Unreal Engine's license.
 - Visual Studio 2022 **17.14 or later** with Game development with C++, MSVC v143,
   and a Windows SDK compatible with Unreal 5.8. The initial machine has MSVC
   14.44.35207 and Windows SDK 10.0.26100.0.
+- Git with Git LFS. Git for Windows includes it; run `git lfs install` once.
 - Windows PowerShell 5.1 or PowerShell 7; smoke report checks use Unreal's bundled Python.
 - The Windows SDK's C++/WinRT headers (`Include/<version>/cppwinrt`), installed with
   the Windows SDK component above; the launch-monitor plugin uses them.
@@ -149,6 +150,7 @@ system-wide Visual Studio installation has not been modified by this project.
 - A Linux Unreal Engine **5.8.3** installation or source build, with the engine's
   supported Clang toolchain and required system dependencies. Obtain the engine separately.
 - Bash, Python 3, and GNU coreutils (`timeout`, `mktemp`).
+- Git with Git LFS (for example `sudo apt install git-lfs`); run `git lfs install` once.
 - A supported graphics driver and desktop session for the editor and visual verification.
   The smoke command uses `-nullrhi` and does not test rendering.
 
@@ -164,6 +166,12 @@ running BlueZ (`bluetoothd`) and a user allowed to use it; `libsystemd.so.0` is 
 
 Obtain Unreal Engine separately, clone this repository, and set `UE_ROOT` to the
 directory containing `Engine/`. The project requires no sibling repositories.
+
+Unreal assets (`.uasset`, `.umap`) are stored in Git LFS. Install Git LFS and run
+`git lfs install` before cloning, so the clone downloads the real assets. If a clone was made
+without it, the assets are small text pointer files that the editor cannot open; run
+`git lfs pull` to fetch them. The history was rewritten on 2026-10-27 to move the assets into
+LFS, so clones from before that date must be cloned again.
 
 Windows PowerShell:
 
@@ -608,7 +616,8 @@ branch under **Use workflow from**, then the platform: `linux`, `windows` or `bo
 | Draft release (Linux, Windows) | GitHub-hosted Ubuntu | Tags only, one per platform, as soon as that platform's package succeeds: creates the tag's draft release if needed and uploads that platform's archives with `Scripts/draft_release.sh` |
 
 Each platform job makes a clean checkout in the runner's own work folder. It doesn't
-touch your working copy or its `Intermediate/`. Archives are kept as workflow artifacts
+touch your working copy or its `Intermediate/`. The checkout downloads the Git LFS assets
+(about 340 MB at 2026-10-27), which counts against the account's GitHub LFS bandwidth. Archives are kept as workflow artifacts
 for 14 days. Only the Draft release jobs can write to the repository.
 
 ### Runner setup
@@ -627,7 +636,7 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 | | Linux | Windows |
 | --- | --- | --- |
 | Engine | Unreal Engine 5.8.3, installed or source build | Unreal Engine 5.8.3 |
-| Tools | Git, Bash, Python 3 and GNU coreutils | Git for Windows, Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](#windows) |
+| Tools | Git with Git LFS, Bash, Python 3 and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](#windows) |
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
 Packaging runs the cooker and a headless game, so it competes with an open editor for
