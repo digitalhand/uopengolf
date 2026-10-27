@@ -12,6 +12,8 @@
 #include "ShotDisplay.h"
 #include "ShotRecording.h"
 
+#include <cerrno>
+
 namespace
 {
     FLaunchMonitorShot RecordingTestShot(int32 ShotNumber, const TCHAR* Source)
@@ -307,6 +309,54 @@ bool FShotRecordingStorageTest::RunTest(const FString&)
     TestFalse(TEXT("Existing final file is never replaced"), ShotRecording::WriteRecordingFile(Path, TEXT("replacement"), Error));
     FFileHelper::LoadFileToString(Read, *Path);
     TestEqual(TEXT("Original file preserved"), Read, FString(TEXT("{}")));
+    Files.DeleteDirectory(*Root, false, true);
+    return true;
+}
+namespace ShotRecordingTestDetail
+{
+    /** A hard-link call that fails as it does on exFAT or FAT: the filesystem does not support links. */
+    int UnsupportedLink(const char*, const char*)
+    {
+        errno = EPERM;
+        return -1;
+    }
+} // namespace ShotRecordingTestDetail
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShotRecordingFinalizeTest, "UOpenGolf.Range.ShotRecordingFinalize",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FShotRecordingFinalizeTest::RunTest(const FString&)
+{
+    using namespace ShotRecording;
+    IFileManager& Files = IFileManager::Get();
+    const FString Root = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Automation/RecordingFinalize"), FGuid::NewGuid().ToString());
+    Files.MakeDirectory(*Root, true);
+    auto Write = [](const FString& Path, const TCHAR* Text) { return FFileHelper::SaveStringToFile(FString(Text), *Path); };
+    auto Read = [](const FString& Path)
+    {
+        FString Text;
+        FFileHelper::LoadFileToString(Text, *Path);
+        return Text;
+    };
+
+    // Without hard links the record is still saved, by a move into the free name.
+    const FString Path = FPaths::Combine(Root, TEXT("club_driver_shot_1.json"));
+    TestTrue(TEXT("Temporary file written"), Write(Path + TEXT(".tmp"), TEXT("first")));
+    TestTrue(TEXT("Saved without hard links"), FinalizeWithoutReplacing(Path + TEXT(".tmp"), Path, &ShotRecordingTestDetail::UnsupportedLink));
+    TestEqual(TEXT("Saved record content"), Read(Path), FString(TEXT("first")));
+    TestFalse(TEXT("Temporary file moved"), Files.FileExists(*(Path + TEXT(".tmp"))));
+
+    // An existing record is never replaced, with or without hard links.
+    TestTrue(TEXT("Second temporary file written"), Write(Path + TEXT(".tmp"), TEXT("second")));
+    TestFalse(TEXT("Fallback refuses an existing record"), FinalizeWithoutReplacing(Path + TEXT(".tmp"), Path, &ShotRecordingTestDetail::UnsupportedLink));
+    TestFalse(TEXT("Normal finalize refuses an existing record"), FinalizeWithoutReplacing(Path + TEXT(".tmp"), Path));
+    TestEqual(TEXT("Existing record kept"), Read(Path), FString(TEXT("first")));
+
+    // The normal path still saves a new record.
+    const FString Next = FPaths::Combine(Root, TEXT("club_driver_shot_2.json"));
+    TestTrue(TEXT("Next temporary file written"), Write(Next + TEXT(".tmp"), TEXT("next")));
+    TestTrue(TEXT("Normal finalize saves"), FinalizeWithoutReplacing(Next + TEXT(".tmp"), Next));
+    TestEqual(TEXT("Normal record content"), Read(Next), FString(TEXT("next")));
     Files.DeleteDirectory(*Root, false, true);
     return true;
 }

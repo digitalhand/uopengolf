@@ -38,10 +38,13 @@ public:
     /** Lets the flag fall and swing still in calm air for Seconds, so it starts hanging. */
     void Settle(float Seconds, const FVector& PoleTop);
 
-    /** World wind in m/s and air density in kg/m^3. Gusts are added on top. */
+    /** World wind in m/s and air density in kg/m^3. Gusts are added on top. Non-finite values read as calm, standard air. */
     void SetWind(const FVector& WindMps, float AirDensityKgM3);
 
-    /** Advances by DeltaSeconds (capped at 1/20 s) with the pole top at PoleTop. */
+    /**
+     * Advances by DeltaSeconds (capped at 1/20 s) with the pole top at PoleTop. A pole that jumped
+     * since the last call carries the flag with it rather than dragging it across the gap.
+     */
     void Advance(float DeltaSeconds, const FVector& PoleTop);
 
     static constexpr int32 Index(int32 Column, int32 Row) { return Row * Columns + Column; }
@@ -75,6 +78,7 @@ private:
     float RowCm = 0.0f;
     double TimeSeconds = 0.0;
     float Pending = 0.0f;
+    FVector LastPoleTop = FVector::ZeroVector;
     TArray<FVector> Positions;
     TArray<FVector> Previous;
     TArray<FVector> Velocities;

@@ -68,9 +68,16 @@ namespace
  * every D-Bus call with cancellable, bounded waits; results and device events are posted back
  * to the game thread with connection-generation guards, as in the Windows transport.
  */
-class FLinuxGattTransport final : public IGattTransport, public TSharedFromThis<FLinuxGattTransport>, private FRunnable
+class FLinuxGattTransport final : public IGattTransport, private FRunnable
 {
 public:
+    static TSharedRef<FLinuxGattTransport> Create()
+    {
+        const TSharedRef<FLinuxGattTransport> Transport = MakeShared<FLinuxGattTransport>();
+        Transport->WeakThis = Transport;
+        return Transport;
+    }
+
     FLinuxGattTransport()
     {
         Thread = FRunnableThread::Create(this, TEXT("OpenLaunchMonitorBluetooth"));
@@ -166,6 +173,7 @@ private:
             {
                 Bus->Pump();
                 Bus->WaitForActivity(PollSeconds);
+                ReportBusFailure();
             }
             else
             {
@@ -189,6 +197,18 @@ private:
     }
 
     bool Cancelled() const { return bStopping || ConnectionSerial != JobGeneration; }
+
+    /**
+     * A failed system-bus connection is not reopened: report it once, and fail later jobs at once
+     * with the same message (through InitError) instead of waiting for their deadlines.
+     */
+    void ReportBusFailure()
+    {
+        if (!InitError.IsEmpty() || Bus->GetFailure().IsEmpty())
+            return;
+        InitError = FString::Printf(TEXT("Bluetooth stopped working: %s. Restart the game."), *Bus->GetFailure());
+        PostError(InitError);
+    }
 
     FBlueZWait OperationWait() const
     {
@@ -221,7 +241,7 @@ private:
         if (!Thread)
         {
             if (bCleanup) return;
-            AsyncTask(ENamedThreads::GameThread, [WeakSelf = AsWeak(), Generation]
+            AsyncTask(ENamedThreads::GameThread, [WeakSelf = WeakThis, Generation]
             {
                 if (const auto Self = WeakSelf.Pin(); Self && Self->ConnectionSerial == Generation && Self->OnError)
                     Self->OnError(TEXT("Bluetooth worker could not start."));
@@ -250,7 +270,7 @@ private:
     template <typename FunctorType>
     void PostToGameThread(FunctorType&& Functor)
     {
-        PostGuarded(AsWeak(), JobGeneration, Forward<FunctorType>(Functor));
+        PostGuarded(WeakThis, JobGeneration, Forward<FunctorType>(Functor));
     }
 
     void PostError(const FString& Error)
@@ -297,7 +317,7 @@ private:
             return;
         }
 
-        const TWeakPtr<FLinuxGattTransport> WeakSelf = AsWeak();
+        const TWeakPtr<FLinuxGattTransport> WeakSelf = WeakThis;
         InterfacesMatch = Bus->MatchInterfacesAdded([WeakSelf, Prefix, Scan](const FString& Path, const FInterfaces& Interfaces)
             {
             FGattDeviceInfo Device;
@@ -368,7 +388,7 @@ private:
 
         // Deviation from upstream: IGattTransport reports link loss, so watch Device1.Connected.
         const uint32 ThisConnection = JobGeneration;
-        const TWeakPtr<FLinuxGattTransport> WeakSelf = AsWeak();
+        const TWeakPtr<FLinuxGattTransport> WeakSelf = WeakThis;
         DeviceMatch = Bus->MatchPropertiesChanged(DevicePath, [this, WeakSelf, ThisConnection](const FString& Interface, const FProperties& Changed)
             {
             if (IsLinkLost(Interface, Changed))
@@ -523,7 +543,7 @@ private:
             return FString::Printf(TEXT("Bluetooth characteristic %s is not available."), *Uuid);
         }
 
-        const TWeakPtr<FLinuxGattTransport> WeakSelf = AsWeak();
+        const TWeakPtr<FLinuxGattTransport> WeakSelf = WeakThis;
         const uint32 ThisConnection = JobGeneration;
         const uint64 Match = Bus->MatchPropertiesChanged(*Path, [WeakSelf, Uuid, ThisConnection](const FString& Interface, const FProperties& Changed)
             {
@@ -597,6 +617,11 @@ private:
         bBatterySubscribed = false;
     }
 
+    /**
+     * Set once by Create, before any job is queued. The worker posts through this instead of
+     * AsWeak(), which asserts while the destructor waits for an in-flight job to finish.
+     */
+    TWeakPtr<FLinuxGattTransport> WeakThis;
     FRunnableThread* Thread = nullptr;
     std::atomic<bool> bStopping = false;
     TQueue<TUniqueFunction<void()>, EQueueMode::Mpsc> Jobs;
@@ -628,7 +653,7 @@ private:
 
 TSharedPtr<IGattTransport> CreateLinuxGattTransport()
 {
-    return MakeShared<LinuxGatt::FLinuxGattTransport>();
+    return LinuxGatt::FLinuxGattTransport::Create();
 }
 
 #endif // PLATFORM_LINUX

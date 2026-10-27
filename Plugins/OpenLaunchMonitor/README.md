@@ -181,8 +181,11 @@ for another remote notification-disable write.
 Results, discovery, notifications and link-loss events return to the game thread with
 generation checks, so queued events from an old connection cannot update a new one.
 Worker, apartment and scan initialization failures use the existing error/state path.
-Read exceptions and timeouts also fail the connection sequence instead of silently
-keeping it pending. Missing optional characteristics still return an empty value.
+A read that throws or times out is logged and completes with an empty value, as on Linux,
+so the connection sequence never stays pending and an unreadable battery or firmware value
+does not drop the link. Missing optional characteristics also return an empty value.
+Workers post back through a weak reference set when the transport is created, so a
+transport destroyed during a connection attempt cannot fail an assertion on the worker.
 
 These are application-side wait limits, not a guarantee against a blocking OS/driver
 call inside cancellation or resource release. The cancellation/deadline policy and
@@ -227,11 +230,14 @@ None of these need hardware. `BlueZBus` talks to the local BlueZ daemon when one
   automated coverage but have not been verified on hardware.
 - Linux needs systemd's `libsystemd.so.0` and a running `bluetoothd`; non-systemd
   distributions are not supported.
-- Linux shot recordings finalize with a hard link, so saving to a filesystem without hard
-  links (exFAT, FAT) fails and keeps retrying. `Documents` on a normal Linux filesystem works.
+- Linux shot recordings finalize with a hard link so an existing record is never replaced. On a
+  filesystem without hard links (exFAT, FAT, some network or FUSE mounts) they are renamed with
+  `RENAME_NOREPLACE` instead. A filesystem that supports neither cannot save recordings.
 - Linux: a failed BlueZ signal subscription isn't reported (connection events would then
   be missed silently), signal subscriptions are added synchronously, and libsystemd may
   be unloaded when the last transport is destroyed.
+- Linux: if the system bus connection fails (for example dbus restarts), Bluetooth reports
+  "Bluetooth stopped working" and stays off until the game restarts; the bus is not reopened.
 
 ## Plugin structure
 

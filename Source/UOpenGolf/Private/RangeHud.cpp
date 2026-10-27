@@ -36,6 +36,8 @@ namespace
     constexpr float HudStatusReserve = 56.0f + HudScale::BottomPanelGap;
     /** Version label distance from the bottom edge, inside HudScale::BottomPanelGap. */
     constexpr float HudVersionBottom = 6.0f;
+    /** Shot and status text is rebuilt this often; the wind arrow still turns with the camera every frame. */
+    constexpr double HudTextRefreshSeconds = 0.1;
     const FLinearColor HudShadowColor(0.0f, 0.0f, 0.0f, 0.6f);
 
     FLinearColor HudLabelColor()
@@ -62,7 +64,7 @@ void SRangeHud::Construct(const FArguments& Args)
     Controller = Args._Controller;
     WindIndicator = Args._WindIndicator;
     SetVisibility(TAttribute<EVisibility>::CreateSP(this, &SRangeHud::GetHudVisibility));
-    Refresh();
+    Refresh(true);
 
     // Preserve Slate's layout syntax, which clang-format otherwise collapses.
     // clang-format off
@@ -167,10 +169,16 @@ void SRangeHud::Construct(const FArguments& Args)
 void SRangeHud::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
     SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
-    Refresh();
+    // Formatting every tile cost about as much as the ball's physics per frame, for text that changes far less often.
+    const bool bText = InCurrentTime >= NextTextRefreshTime;
+    if (bText)
+    {
+        NextTextRefreshTime = InCurrentTime + HudTextRefreshSeconds;
+    }
+    Refresh(bText);
 }
 
-void SRangeHud::Refresh()
+void SRangeHud::Refresh(bool bText)
 {
     TRACE_CPUPROFILER_EVENT_SCOPE(UOpenGolf_HudRefresh);
     RangePerformance::FScope Timing(RangePerformance::Hud);
@@ -182,6 +190,10 @@ void SRangeHud::Refresh()
     {
         Indicator->SetWindState(WindDisplay::Read(Ball, Mode ? Mode->GetRange() : nullptr,
             PlayerController && PlayerController->PlayerCameraManager ? PlayerController->PlayerCameraManager->GetCameraRotation().Yaw : 0));
+    }
+    if (!bText)
+    {
+        return;
     }
     const UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
     const UOpenLaunchMonitorSubsystem* LaunchMonitor = GameInstance ? GameInstance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr;

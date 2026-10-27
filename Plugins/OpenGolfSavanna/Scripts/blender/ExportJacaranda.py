@@ -31,6 +31,7 @@ PROJECT = HERE.parents[3]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
 import export_rules as rules
+import png8
 from art_root import art_root
 
 ROOT = art_root()
@@ -128,16 +129,14 @@ def build():
 def export_texture(source, role):
     if source in EXPORTED:
         return EXPORTED[source]
-    image = bpy.data.images.load(source, check_existing=False)
-    image.colorspace_settings.name = "sRGB" if role == "albedo" else "Non-Color"
+    image = png8.load(source, rules.is_colour(role))
     size = rules.export_size(*image.size, rules.EXPORT_LIMITS[role])
     if tuple(image.size) != size:
         image.scale(*size)
     target = OUT / "textures" / (Path(source).stem + ".png")
     target.parent.mkdir(parents=True, exist_ok=True)
-    image.filepath_raw = str(target)
-    image.file_format = "PNG"
-    image.save()
+    # Poly Haven ships 16-bit PNGs; Image.save() would keep 16 bits (see png8).
+    png8.save(image, target, rules.is_colour(role))
     bpy.data.images.remove(image)
     EXPORTED[source] = str(target)
     return EXPORTED[source]

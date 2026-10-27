@@ -29,6 +29,8 @@ import mathutils
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import ne_rules as rules
+import png8
+from export_rules import is_colour
 
 PROJECT = HERE.parents[3]
 sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
@@ -196,16 +198,14 @@ def export_texture(source, role):
     """A copy of source for Unreal, no larger than 2K, as PNG; the full-size original stays in the project."""
     if source in EXPORTED:
         return EXPORTED[source]
-    image = bpy.data.images.load(source, check_existing=False)
-    image.colorspace_settings.name = "sRGB" if role in ("albedo", "opacity_alpha") else "Non-Color"
+    image = png8.load(source, is_colour(role))
     size = rules.export_size(*image.size, rules.EXPORT_LIMITS[role])
     if tuple(image.size) != size:
         image.scale(*size)
     target = OUT / "textures" / (Path(source).stem + ".png")
     target.parent.mkdir(parents=True, exist_ok=True)
-    image.filepath_raw = str(target)
-    image.file_format = "PNG"
-    image.save()
+    # Some pack maps are 16-bit; Image.save() would keep 16 bits (see png8).
+    png8.save(image, target, is_colour(role))
     bpy.data.images.remove(image)
     EXPORTED[source] = str(target)
     return EXPORTED[source]

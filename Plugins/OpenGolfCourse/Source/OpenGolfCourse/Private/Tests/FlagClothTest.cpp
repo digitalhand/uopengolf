@@ -5,6 +5,8 @@
 #include "OpenGolfFlagCloth.h"
 #include "OpenGolfFlagstickComponent.h"
 
+#include <limits>
+
 namespace
 {
     constexpr float MpsPerMph = 0.44704f;
@@ -104,6 +106,63 @@ bool FOpenGolfFlagClothTest::RunTest(const FString& Parameters)
     const FFlagRun Slow = Fly(10.0f, 90.0f, 12.0f, 1.0f / 30.0f);
     const FFlagRun Fast = Fly(10.0f, 90.0f, 12.0f, 1.0f / 144.0f);
     TestEqual(TEXT("30 and 144 fps fly at the same angle"), Slow.MeanDroopDeg, Fast.MeanDroopDeg, 2.0f);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOpenGolfFlagClothInputsTest, "UOpenGolf.Course.FlagClothInputs",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FOpenGolfFlagClothInputsTest::RunTest(const FString& Parameters)
+{
+    constexpr float Frame = 1.0f / 60.0f;
+    auto AllFinite = [](const FOpenGolfFlagCloth& Cloth)
+    {
+        for (const FVector& Point : Cloth.GetPositions())
+            if (Point.ContainsNaN())
+                return false;
+        return true;
+    };
+
+    // A non-finite wind or air density from a bad setting reads as calm air instead of poisoning the cloth.
+    FOpenGolfFlagCloth Cloth;
+    Cloth.Reset(FOpenGolfFlagCloth::FSettings(), PoleTop, 90.0f);
+    constexpr float NaN = std::numeric_limits<float>::quiet_NaN();
+    Cloth.SetWind(FVector(NaN, 0.0, 0.0), NaN);
+    for (int32 Step = 0; Step < 60; ++Step)
+        Cloth.Advance(Frame, PoleTop);
+    TestTrue(TEXT("Non-finite wind keeps the cloth finite"), AllFinite(Cloth));
+    TestTrue(TEXT("Non-finite wind is calm"), Cloth.GetWindMps().IsZero());
+    Cloth.SetWind(FVector(0.0, -4.47, 0.0), 1.2f);
+    for (int32 Step = 0; Step < 60; ++Step)
+        Cloth.Advance(Frame, PoleTop);
+    TestTrue(TEXT("Cloth flies again after a valid wind"), AllFinite(Cloth));
+
+    // A pole that jumps (placed or aligned to the ground) carries its flag instead of whipping it across the gap.
+    // A second flag that never moves is the reference: relative to its pole, the jumped flag must match it.
+    constexpr int32 FreeColumn = FOpenGolfFlagCloth::Columns - 1;
+    FOpenGolfFlagCloth Still;
+    Still.Reset(FOpenGolfFlagCloth::FSettings(), PoleTop, 90.0f);
+    Still.Settle(2.0f, PoleTop);
+    Cloth.Reset(FOpenGolfFlagCloth::FSettings(), PoleTop, 90.0f);
+    Cloth.SetWind(FVector::ZeroVector, 1.225f); // Reset keeps the wind set above.
+    Cloth.Settle(2.0f, PoleTop);
+    const FVector Before = Cloth.GetPosition(FreeColumn, 0) - PoleTop;
+    const FVector Jumped = PoleTop + FVector(1000.0, 0.0, 0.0);
+    Cloth.Advance(Frame, Jumped);
+    Still.Advance(Frame, PoleTop);
+    const FVector After = Cloth.GetPosition(FreeColumn, 0) - Jumped;
+    TestTrue(FString::Printf(TEXT("Free corner keeps its place on the pole (moved %.1f cm)"), FVector::Dist(Before, After)), FVector::Dist(Before, After) < 5.0);
+    for (int32 Step = 0; Step < 60; ++Step)
+    {
+        Cloth.Advance(Frame, Jumped);
+        Still.Advance(Frame, PoleTop);
+    }
+    TestTrue(TEXT("Cloth stays finite after the jump"), AllFinite(Cloth));
+    const FVector Moved = Cloth.GetPosition(FreeColumn, 0) - Jumped;
+    const FVector Reference = Still.GetPosition(FreeColumn, 0) - PoleTop;
+    TestTrue(FString::Printf(TEXT("Moved flag hangs like an unmoved one (%.1f cm apart; corner %.1f cm vs %.1f cm below the top)"),
+                 FVector::Dist(Moved, Reference), -Moved.Z, -Reference.Z),
+        FVector::Dist(Moved, Reference) < 2.0);
     return true;
 }
 

@@ -47,6 +47,16 @@ namespace ShotRecording
     /** Write and close a same-directory temporary file, then rename without replacing a final file. */
     bool WriteRecordingFile(const FString& Path, const FString& Json, FString& Error);
 
+    /** The hard-link call used on Linux; tests pass one that fails. Null uses link(). */
+    using FLinkFunction = int (*)(const char* From, const char* To);
+
+    /**
+     * Moves Temp to Path only when Path does not exist yet. Linux links then unlinks, because rename()
+     * would replace an existing record; on a filesystem without hard links (exFAT, FAT, some network
+     * or FUSE mounts) it renames with RENAME_NOREPLACE, which also refuses an existing record.
+     */
+    bool FinalizeWithoutReplacing(const FString& Temp, const FString& Path, FLinkFunction Link = nullptr);
+
     /** In-memory collection and retry queue. Clock and atomic writer are injectable for tests. */
     class FShotRecorder
     {

@@ -4,8 +4,12 @@
 #if PLATFORM_LINUX
 
 #include "Bluetooth/GattOperationWait.h"
+#include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "OpenLaunchMonitorLog.h"
+
+#include <cerrno>
+#include <cstring>
 
 namespace BlueZBusCodec
 {
@@ -446,14 +450,40 @@ int FBlueZBus::OnSignal(sd_bus_message* Message, void* UserData, sd_bus_error*)
 
 void FBlueZBus::Pump()
 {
-    while (Api->process(Bus, nullptr) > 0)
+    if (!ConnectionFailure.IsEmpty())
     {
+        return;
+    }
+    int Result = 0;
+    while ((Result = Api->process(Bus, nullptr)) > 0)
+    {
+    }
+    if (Result < 0 && Result != -EINTR)
+    {
+        Fail(TEXT("process"), Result);
     }
 }
 
 void FBlueZBus::WaitForActivity(double Seconds)
 {
-    Api->wait(Bus, static_cast<uint64_t>(FMath::Max(0.0, Seconds) * 1000000.0));
+    const double Clamped = FMath::Max(0.0, Seconds);
+    const int Result = ConnectionFailure.IsEmpty() ? Api->wait(Bus, static_cast<uint64_t>(Clamped * 1000000.0)) : -ENOTCONN;
+    if (Result >= 0 || Result == -EINTR)
+    {
+        return;
+    }
+    if (ConnectionFailure.IsEmpty())
+    {
+        Fail(TEXT("wait"), Result);
+    }
+    // A closed connection makes wait return at once; without this sleep the worker would spin.
+    FPlatformProcess::Sleep(static_cast<float>(Clamped));
+}
+
+void FBlueZBus::Fail(const TCHAR* Operation, int Result)
+{
+    ConnectionFailure = FString::Printf(TEXT("the system bus connection failed (%s: %s)"), Operation, UTF8_TO_TCHAR(strerror(-Result)));
+    UE_LOG(LogOpenLaunchMonitor, Error, TEXT("Bluetooth: %s. Restart the game after the system bus is back."), *ConnectionFailure);
 }
 
 #endif // PLATFORM_LINUX
