@@ -293,8 +293,8 @@ swaps the material of every generated surface of its type and updates the matchi
 presets, so a later terrain rebuild keeps it; its material must carry that surface's physical
 material. Course-specific paths belong in the invocation, not in the shared generators.
 `Scripts/InspectCourseSurfaces.py` lists the open map's surface materials and grass counts
-without changing anything. A full `RebuildVegetation` removes the layer, so apply it again
-afterwards.
+without changing anything. A full `RebuildVegetation` keeps the layer; after a terrain change,
+place it again with `RebuildCourseGrass` so it follows the new ground.
 
 Validate with `UOpenGolf.Course.Terrain.TiledGrass` and `UOpenGolf.Course.Terrain.BoundaryGrass`,
 saved-terrain contact and rollout checks, then `UOpenGolf.Visual.CoastalTerrain`. Compare

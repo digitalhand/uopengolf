@@ -27,8 +27,8 @@ public:
     virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
-    /** Reads the ball and the launch monitor once per frame; the text bindings read these copies. */
-    void Refresh();
+    /** Updates the wind arrow, and with bText reads the ball and launch monitor into the copies the text bindings read. */
+    void Refresh(bool bText);
     EVisibility GetHudVisibility() const;
     TSharedRef<SWidget> MakeTile(int32 Index);
     TSharedRef<SWidget> MakeStatusCell(TAttribute<FText> Value, TAttribute<FSlateColor> Color, const TCHAR* Label) const;
@@ -47,6 +47,8 @@ private:
     /** Recording only applies while a launch monitor is connected. */
     bool bShowRecord = false;
     FString KeyTip;
+    /** Slate time of the next text rebuild; the first tick rebuilds at once. */
+    double NextTextRefreshTime = 0.0;
 
     // Translucent gray; the raw launch-monitor tiles are a little darker.
     FSlateRoundedBoxBrush TileBrush{FLinearColor::FromSRGBColor(FColor(72, 72, 76, 170)), 5.0f};

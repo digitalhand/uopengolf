@@ -86,9 +86,16 @@ namespace
  * in the multithreaded apartment with cancellable, bounded waits; results and
  * device events are posted back to the game thread with connection-generation guards.
  */
-class FWindowsGattTransport final : public IGattTransport, public TSharedFromThis<FWindowsGattTransport>, private FRunnable
+class FWindowsGattTransport final : public IGattTransport, private FRunnable
 {
 public:
+    static TSharedRef<FWindowsGattTransport> Create()
+    {
+        const TSharedRef<FWindowsGattTransport> Transport = MakeShared<FWindowsGattTransport>();
+        Transport->WeakThis = Transport;
+        return Transport;
+    }
+
     FWindowsGattTransport()
     {
         WakeEvent = FPlatformProcess::GetSynchEventFromPool(false);
@@ -164,9 +171,10 @@ public:
                 }
                 return FString();
             });
-            if (!Error.IsEmpty())
+            // As on Linux, an unreadable value completes empty instead of failing the connection.
+            if (!Error.IsEmpty() && !Cancelled())
             {
-                if (!Cancelled()) PostError(Error);
+                UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Bluetooth read of %s failed: %s"), *Uuid, *Error);
             }
             PostToGameThread([OnComplete = MoveTemp(OnComplete), Value = MoveTemp(Value)](FWindowsGattTransport&) { OnComplete(Value); }); });
     }
@@ -269,7 +277,7 @@ private:
         if (!Thread)
         {
             if (bCleanup) return;
-            AsyncTask(ENamedThreads::GameThread, [WeakSelf = AsWeak(), Generation]
+            AsyncTask(ENamedThreads::GameThread, [WeakSelf = WeakThis, Generation]
             {
                 if (const auto Self = WeakSelf.Pin(); Self && Self->ConnectionSerial == Generation && Self->OnError)
                     Self->OnError(TEXT("Bluetooth worker could not start."));
@@ -289,7 +297,7 @@ private:
     template <typename FunctorType>
     void PostToGameThread(FunctorType&& Functor)
     {
-        AsyncTask(ENamedThreads::GameThread, [WeakSelf = AsWeak(), Generation = JobGeneration, Functor = Forward<FunctorType>(Functor)]() mutable
+        AsyncTask(ENamedThreads::GameThread, [WeakSelf = WeakThis, Generation = JobGeneration, Functor = Forward<FunctorType>(Functor)]() mutable
         {
             if (const auto Self = WeakSelf.Pin(); Self && !Self->bStopping && Self->ConnectionSerial == Generation)
                 Functor(*Self);
@@ -312,7 +320,7 @@ private:
         StopScanOnWorker();
         const FString Error = RunGuarded([&]()
             {
-            const TWeakPtr<FWindowsGattTransport> WeakSelf = AsWeak();
+            const TWeakPtr<FWindowsGattTransport> WeakSelf = WeakThis;
             AdvertisementWatcher = WinAdvertisement::BluetoothLEAdvertisementWatcher();
             AdvertisementWatcher.ScanningMode(WinAdvertisement::BluetoothLEScanningMode::Active);
             AdvertisementToken = AdvertisementWatcher.Received(
@@ -400,7 +408,10 @@ private:
             {
                 break;
             }
-            RetryDelay();
+            if (Attempt < ServiceDiscoveryAttempts)
+            {
+                RetryDelay();
+            }
         }
         if (!Services || Services.Status() != WinGatt::GattCommunicationStatus::Success)
         {
@@ -434,7 +445,7 @@ private:
         }
 
         const uint32 ThisConnection = JobGeneration;
-        const TWeakPtr<FWindowsGattTransport> WeakSelf = AsWeak();
+        const TWeakPtr<FWindowsGattTransport> WeakSelf = WeakThis;
         ConnectionStatusToken = Device.ConnectionStatusChanged([WeakSelf, ThisConnection](const WinBluetooth::BluetoothLEDevice& Sender, const auto&)
             {
             if (Sender.ConnectionStatus() != WinBluetooth::BluetoothConnectionStatus::Disconnected)
@@ -465,7 +476,7 @@ private:
             return FString::Printf(TEXT("Bluetooth characteristic %s is not available."), *Uuid);
         }
 
-        const TWeakPtr<FWindowsGattTransport> WeakSelf = AsWeak();
+        const TWeakPtr<FWindowsGattTransport> WeakSelf = WeakThis;
         const uint32 ThisConnection = JobGeneration;
         const winrt::event_token Token = Characteristic->ValueChanged([WeakSelf, Uuid, ThisConnection](const WinGatt::GattCharacteristic&, const WinGatt::GattValueChangedEventArgs& Args)
             {
@@ -523,6 +534,11 @@ private:
         }
     }
 
+    /**
+     * Set once by Create, before any job is queued. The worker posts through this instead of
+     * AsWeak(), which asserts while the destructor waits for an in-flight job to finish.
+     */
+    TWeakPtr<FWindowsGattTransport> WeakThis;
     FRunnableThread* Thread = nullptr;
     FEvent* WakeEvent = nullptr;
     std::atomic<bool> bStopping = false;
@@ -546,7 +562,7 @@ private:
 
 TSharedPtr<IGattTransport> CreateWindowsGattTransport()
 {
-    return MakeShared<FWindowsGattTransport>();
+    return FWindowsGattTransport::Create();
 }
 
 #endif // PLATFORM_WINDOWS

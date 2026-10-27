@@ -195,7 +195,7 @@ FString UOpenLaunchMonitorSubsystem::GetReplayShotDescription(int32 Index)
         return FString();
     }
     return FString::Printf(TEXT("%.2f mph   |   VLA %.2f deg   |   HLA %.2f deg\n%d rpm   |   Spin axis %.2f deg\nNegative HLA / axis = left; positive = right.\n\n%s"),
-        Metrics.BallSpeedMps / 0.44704f, Metrics.VerticalAngleDeg, Metrics.HorizontalAngleDeg,
+        Metrics.BallSpeedMps * LaunchMonitorMphPerMps, Metrics.VerticalAngleDeg, Metrics.HorizontalAngleDeg,
         Metrics.TotalSpinRpm, Metrics.SpinAxisDeg, Replay.Note);
 }
 
@@ -374,6 +374,8 @@ void UOpenLaunchMonitorSubsystem::DeliverShot(const FSquareShotMetrics& Metrics,
 
     if (SessionShotId > 0)
     {
+        // Club data only ever follows the newest shot, so older entries could never be claimed.
+        SessionShotNumbers.Reset();
         SessionShotNumbers.Add(SessionShotId, Shot.ShotNumber);
     }
     LastShot = Shot;
@@ -442,7 +444,9 @@ void UOpenLaunchMonitorSubsystem::ReportError(const FString& Message)
 
 void UOpenLaunchMonitorSubsystem::ScheduleReconnect()
 {
-    if (!bAutoReconnect || !Session || ReconnectAttempts >= MaxReconnectAttempts)
+    // A link lost during a reconnect's handshake reports both a state change and a lost
+    // connection. One pending attempt is enough, and CancelReconnect can only remove one.
+    if (!bAutoReconnect || !Session || ReconnectAttempts >= MaxReconnectAttempts || ReconnectHandle.IsValid())
     {
         return;
     }

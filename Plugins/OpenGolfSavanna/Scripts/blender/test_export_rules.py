@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from export_rules import EXPORT_LIMITS, export_size, faces_with_materials, farthest_points, principled_roles
+from export_rules import EXPORT_LIMITS, export_size, faces_with_materials, farthest_points, is_colour, principled_roles
 
 
 class ExportSizeTests(unittest.TestCase):
@@ -15,6 +15,17 @@ class ExportSizeTests(unittest.TestCase):
 
     def test_small_maps_are_kept(self):
         self.assertEqual(export_size(512, 256, EXPORT_LIMITS["ao"]), (512, 256))
+
+
+
+class ColourRoleTests(unittest.TestCase):
+    def test_colour_maps_are_written_as_srgb(self):
+        for role in ("albedo", "albedo_dry", "opacity_alpha"):
+            self.assertTrue(is_colour(role), role)
+
+    def test_data_maps_are_written_raw(self):
+        for role in ("normal", "roughness", "ao", "opacity"):
+            self.assertFalse(is_colour(role), role)
 
 
 class PrincipledRoleTests(unittest.TestCase):

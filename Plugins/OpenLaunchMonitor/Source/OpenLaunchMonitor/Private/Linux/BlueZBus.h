@@ -63,8 +63,11 @@ public:
 
     /** Processes queued messages until idle, dispatching matched signals on this thread. */
     void Pump();
-    /** Blocks for bus activity for at most Seconds. */
+    /** Blocks for bus activity for at most Seconds; sleeps instead once the connection has failed. */
     void WaitForActivity(double Seconds);
+
+    /** Why the connection stopped working (for example a restarted system bus); empty while it works. */
+    const FString& GetFailure() const { return ConnectionFailure; }
 
     FBlueZBus(const FBlueZBus&) = delete;
     FBlueZBus& operator=(const FBlueZBus&) = delete;
@@ -79,11 +82,13 @@ private:
         TFunctionRef<void(sd_bus_message*, FBlueZReply&)> Decode);
     uint64 AddMatch(const char* Path, const char* Interface, const char* Member, TUniquePtr<FMatch> Match);
     static int OnSignal(sd_bus_message* Message, void* UserData, sd_bus_error* RetError);
+    void Fail(const TCHAR* Operation, int Result);
 
     TSharedRef<const FSdBusApi> Api;
     sd_bus* Bus = nullptr;
     TMap<uint64, TUniquePtr<FMatch>> Matches;
     uint64 NextMatchId = 1;
+    FString ConnectionFailure;
 };
 
 #endif // PLATFORM_LINUX

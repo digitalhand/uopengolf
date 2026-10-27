@@ -15,6 +15,9 @@
 #include "Serialization/JsonWriter.h"
 
 #if PLATFORM_LINUX
+#include <cerrno>
+#include <cstdio>
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -234,17 +237,25 @@ namespace ShotRecording
         return Json;
     }
 
-    /** Moves Temp to Path only when Path does not exist yet. */
-    static bool FinalizeWithoutReplacing(const FString& Temp, const FString& Path)
+    bool FinalizeWithoutReplacing(const FString& Temp, const FString& Path, [[maybe_unused]] FLinkFunction Link)
     {
 #if PLATFORM_LINUX
         // POSIX rename() silently replaces the target, so link (which fails on an existing path) and then unlink.
-        if (link(TCHAR_TO_UTF8(*Temp), TCHAR_TO_UTF8(*Path)) != 0)
+        const int Result = (Link ? Link : &link)(TCHAR_TO_UTF8(*Temp), TCHAR_TO_UTF8(*Path));
+        const int LinkError = errno;
+        if (Result == 0)
+        {
+            unlink(TCHAR_TO_UTF8(*Temp));
+            return true;
+        }
+        // Any other failure, an existing record (EEXIST) above all, must not fall through to a move.
+        if (LinkError != EPERM && LinkError != ENOTSUP && LinkError != ENOSYS)
         {
             return false;
         }
-        unlink(TCHAR_TO_UTF8(*Temp));
-        return true;
+        // IFileManager::Move cannot refuse an existing target on Linux (it renames), so ask the kernel.
+        UE_LOG(LogUOpenGolfRecording, Verbose, TEXT("No hard links on this filesystem; moving %s into place."), *Path);
+        return renameat2(AT_FDCWD, TCHAR_TO_UTF8(*Temp), AT_FDCWD, TCHAR_TO_UTF8(*Path), RENAME_NOREPLACE) == 0;
 #else
         return IFileManager::Get().Move(*Path, *Temp, false, false, false, true);
 #endif

@@ -46,8 +46,10 @@ void AUOpenGolfGameMode::StartPlay()
     {
         if (Range)
         {
-            UE_LOG(LogUOpenGolfGameMode, Error, TEXT("The map contains multiple range controllers. Keep exactly one."));
-            return;
+            // Play must still start (every actor's BeginPlay depends on it), so use the first one.
+            UE_LOG(LogUOpenGolfGameMode, Error, TEXT("The map contains multiple range controllers; using %s and ignoring %s. Keep exactly one."),
+                *Range->GetName(), *It->GetName());
+            continue;
         }
         Range = *It;
     }
@@ -55,11 +57,11 @@ void AUOpenGolfGameMode::StartPlay()
         Range = World->SpawnActor<AUOpenGolfRange>(SpawnClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
     else if (SpawnClass != AUOpenGolfRange::StaticClass() && Range->GetClass() == AUOpenGolfRange::StaticClass())
         Range->ApplyPresentationDefaults(*CastChecked<AUOpenGolfRange>(SpawnClass->GetDefaultObject()));
-    if (Range)
+    if (ensure(Range))
+    {
         Range->BuildDefaultLayout();
-    if (!ensure(Range))
-        return;
-    Ball = World->SpawnActor<AUOpenGolfBall>(Range->GetTeeLocation() + FVector::UpVector * 10.0f, FRotator::ZeroRotator, Params);
+        Ball = World->SpawnActor<AUOpenGolfBall>(Range->GetTeeLocation() + FVector::UpVector * 10.0f, FRotator::ZeroRotator, Params);
+    }
     if (Ball)
     {
         Ball->OnBallAtRest.AddDynamic(this, &ThisClass::HandleBallAtRest);

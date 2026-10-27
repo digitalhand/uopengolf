@@ -65,6 +65,7 @@ private:
     void QueueCommand(TArray<uint8> Command, IGattTransport::FCompletion OnComplete = nullptr);
     void PumpWrites();
     void Arm();
+    void HandleArmFailed(const FString& Error);
     void ScheduleHeartbeat();
     void HandleDeviceDiscovered(const FGattDeviceInfo& Device);
     void HandleNotification(const FString& CharacteristicUuid, const TArray<uint8>& Data);
@@ -72,6 +73,8 @@ private:
     void HandleClubFrame(const TArray<uint8>& Data, FSquareClubMetrics Club);
     void RequestClubMetrics(int32 ShotId, int32 Attempt);
     void HandleTransportDisconnected();
+    /** Drops a connected link that stopped working and reports it lost, so the owner reconnects. */
+    void LoseConnection(const TCHAR* Reason, const FString& Message);
     void ReportBattery(int32 Percent);
     void SetStatus(ESquareSessionStatus NewStatus);
     void EmitError(const FString& Message);
@@ -103,6 +106,12 @@ private:
     bool bConnected = false;
     bool bArmed = false;
     bool bShotPendingRearm = false;
+    /** Failed arm commands since the last successful one. */
+    int32 ArmFailures = 0;
+    /** Failed heartbeats in a row. */
+    int32 HeartbeatFailures = 0;
+    /** The last shot frame was unreadable and filtered repeats are still pending a re-arm. */
+    bool bLastFrameRejected = false;
     /** Last battery value logged this connection, so repeated notifications log once; -1 = none. */
     int32 LastLoggedBattery = -1;
 };

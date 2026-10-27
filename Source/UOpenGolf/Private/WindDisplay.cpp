@@ -17,7 +17,7 @@ namespace WindDisplay
         if (WindMps.ContainsNaN())
             return State;
         const FVector Wind(WindMps.X, WindMps.Y, 0);
-        State.SpeedMph = Wind.Size() / 0.44704;
+        State.SpeedMph = Wind.Size() / OpenFairway::MpsPerMph;
         if (Wind.IsNearlyZero())
             return State;
         const FRotator View(0, FMath::IsFinite(ViewYawDeg) ? ViewYawDeg : 0, 0);
@@ -31,7 +31,7 @@ namespace WindDisplay
     {
         const float Speed = FMath::IsFinite(SpeedMph) ? FMath::Max(0.0f, SpeedMph) : 0.0f;
         const float Angle = FMath::DegreesToRadians(FMath::IsFinite(FromDeg) ? FRotator::ClampAxis(FromDeg) : 0.0f);
-        return FromVelocity(FVector(-FMath::Cos(Angle), -FMath::Sin(Angle), 0) * Speed * 0.44704, ViewYawDeg);
+        return FromVelocity(FVector(-FMath::Cos(Angle), -FMath::Sin(Angle), 0) * Speed * OpenFairway::MpsPerMph, ViewYawDeg);
     }
 
     FState Read(const AOpenFairwayBall* Ball, const AUOpenGolfRange* Range, float ViewYawDeg)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Engine/OverlapResult.h"
 #include "GameFramework/Actor.h"
 #include "OpenFairway/ShotSimulator.h"
 #include "OpenFairwayTypes.h"
@@ -31,7 +32,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "OpenFairway")
     bool Launch(const FOpenFairwayLaunch& LaunchData);
 
-    /** Stops the ball and places it on the ground at Location. */
+    /** Stops the ball and places it on the ground at Location. A shot still moving ends as a safety stop where it was. */
     UFUNCTION(BlueprintCallable, Category = "OpenFairway")
     void PlaceAt(const FVector& Location);
 
@@ -165,6 +166,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway")
     float AimYawDeg = 0.0f;
 
+    /**
+     * A shot still moving after this many seconds ends as a safety stop, as the headless simulation
+     * does, so a ball trapped between contacts cannot leave the shot running forever.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway", meta = (ClampMin = "0.1"))
+    float MaxShotSeconds = OpenFairway::ShotSimulator::DefaultMaxTimeSeconds;
+
     /** Channel for contact sweeps and ground traces. */
     UPROPERTY(EditAnywhere, Category = "OpenFairway")
     TEnumAsByte<ECollisionChannel> TraceChannel = ECC_Visibility;
@@ -237,4 +245,7 @@ private:
 
     FVector LastTracerPoint = FVector::ZeroVector;
     uint32 TracerBatchId = 0;
+
+    /** Reused by every in-flight substep's canopy query. */
+    TArray<FOverlapResult> CanopyOverlaps;
 };
