@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Attach files to the GitHub Release for a tag, creating it as a draft first if needed.
-# Used by .github/workflows/package.yml; needs gh with GH_TOKEN and GH_REPO (owner/repo) set.
+# Used by both package workflows; needs gh with GH_TOKEN and GH_REPO (owner/repo) set.
 set -euo pipefail
 
 usage() {

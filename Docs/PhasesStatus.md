@@ -191,6 +191,22 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 
 Newest first. Evidence paths are relative to the repository root.
 
+- **2026-10-27, Linux and Windows package actions (Unreal 5.8.3):**
+  - Split packaging into manual **Package Linux** and **Package Windows** actions, with
+    self-hosted x64 build jobs, one package per platform at a time, and shared draft-release
+    serialization. Small preparation and release-upload jobs still use hosted Ubuntu.
+  - Added checks for engine and build tools, unresolved LFS assets, restricted content,
+    local config and running editors. Local editor-tool plugins are optional and editor-only.
+  - Linux x64: 71 Python tests pass, including 19 runner checks; actionlint 1.7.12, Bash
+    syntax and ShellCheck at warning severity pass. Temporary-file checks pass for Linux
+    archives, symbols, checksums and cleanup. Release-helper checks pass with a mocked
+    GitHub CLI; no release was created. Actual engine checks use 5.8.3, CL 58210709,
+    with Clang 20.1.8; the development checkout correctly fails the private-content check.
+  - Report: `Saved/Automation/20261027-ci-packaging-ksi4isvq/validation.txt`.
+    Full Linux packaging is pending because a host Unreal editor is running. Native Windows
+    checks and packaging, Actions uploads/downloads and a real shared draft remain pending.
+    No rendered performance, shimmer or hardware results are established by these checks.
+
 - **2026-10-18, Linux, green speed and rollout (Unreal 5.8.3):**
   - The ball exposes Green Stimp Feet (8–15, default 10). During Play,
     `uopengolf.GreenStimp` sets it, and the shot log reports the stimp used.
@@ -1246,6 +1262,11 @@ the temporal history (17–19% change per frame), so it was not used.
 **The close canopy shimmers more after the change.** The darker leaves contrast more with the sky at
 their cut-out edges, which may account for it; this was not verified.
 
+> **Correction (later the same day):** do not rely on this close-up comparison. The same pose with the
+> same assets measured 3.136% canopy change an hour later. Editor-viewport captures do not show the
+> settled Play image: soft-shadow noise dominated them but made no difference in Play. Use the
+> CoastalTerrain sequences, which run in Play. See [Tree canopy shimmer](#tree-canopy-shimmer--2026-10-27).
+
 Evidence: `Saved/Automation/CoastalReview/BeforeTextureReimport-20261027-221111` and
 `AfterTextureReimport-20261027-221740` (frames, `Stability.txt`, `TreeStability.txt`,
 `tree_before_after.png`, `tree_leaves_zoom.png`, `edge_before_after.png`).
@@ -1280,3 +1301,46 @@ Still to do:
 - re-clone the Windows checkout with Git LFS
 - install Git LFS on both self-hosted runners and run the Package workflow once
 - check the account's GitHub LFS storage and bandwidth limits; each package job downloads about 340 MB
+
+## Tree canopy shimmer — 2026-10-27
+
+Unreal Engine 5.8.3, Linux DebugGame editor, one editor via MCP, public map.
+`UOpenGolf.Visual.CoastalTerrain` sequences in Play: 20 frames per view, 0.1 s apart, FOV 65.
+
+**Where it shimmers.** Only in the jacaranda canopies, plus a few cut-out understory cards near the
+trees. Turf, greens, sand and bare ground are stable in every view: the lower-crop figures of
+`grass_stability.py` stayed at 0.001–0.015% (2.2–2.4% with close grass on) in every run below. In the
+canopies about 19% of pixels change by more than 3/255 between captures. The change is small (2.2/255
+on average), and 0.7% change by more than 16/255, which reads as sparkle. It is random from capture to
+capture rather than periodic. Leaves and twigs smaller than a pixel at mid and long range do not
+settle under TSR.
+
+**Experiments.** Each was one full sequence. Every one except Preserve Area was a temporary editor
+setting, reverted afterwards. The tree region is a 300 × 180 crop of the edge view's tree row.
+
+| Run (evidence folder) | Tee worst band | Edge worst band | Tree region > 3/255 | > 16/255 |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline (`BeforeShimmerFix-20261027-232405`) | 10.46% | 10.71% | 19.36% | 0.691% |
+| Leaf opacity mips keep coverage at the 0.45 clip (`LeafCoverage045-…`) | 9.59% | 10.02% | 17.85% | 0.615% |
+| …plus `r.TSR.ShadingRejection.Flickering.Period 4` (`LeafCoverageTSRPeriod4-…`) | 9.44% | 9.95% | — | — |
+| Directional soft-shadow rays off (`HardSunShadows-…`) | 10.66% | 11.01% | 20.10% | 0.691% |
+| `r.TSR.History.ScreenPercentage 200` (`TSRHistory200-…`) | 14.26% | 13.89% | 26.12% | — |
+| `SM_Jacaranda` Nanite Preserve Area (`PreserveArea-20261027-234941`) | 14.95% | 12.40% | 20.28% | 0.765% |
+
+- Lumen GI is already off in project config (`r.DynamicGlobalIlluminationMethod=0`).
+- In editor-viewport captures, turning off the soft-shadow rays cut the canopy change from 14% to 2%,
+  but in Play it made no difference. Editor-viewport captures are not a valid shimmer measure.
+- **Preserve Area** (saved on `SM_Jacaranda`; `ImportSavannaAssets.py` now sets it for `tree`
+  meshes) fills the distant crowns: they read as trees in leaf instead of bare twigs (see
+  `before_after_crowns.png` in its folder). It does not reduce shimmer per canopy pixel. The worst
+  bands rise because more of each band is canopy.
+- The Preserve Area run was captured at 1261 × 959 instead of 1320 × 959, because the editor layout
+  changed when the Static Mesh editor opened. The framing differs by about 5%.
+
+Not resolved:
+- The canopy noise itself. Remaining options are larger than a setting: trees beyond a set distance
+  as impostor cards, a coarser Nanite foliage representation (`Voxelize` needs
+  `r.Nanite.AllowVoxels=1` and an editor restart), or softer leaf contrast against the sky.
+- Slow camera motion (View 9): captured each run but not reviewed. Frame differencing does not apply
+  to a moving camera.
+- The owner's review of the fuller distant crowns.

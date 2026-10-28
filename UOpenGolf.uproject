@@ -36,15 +36,21 @@
 		},
 		{
 			"Name": "ModelContextProtocol",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true,
+			"TargetAllowList": [ "Editor" ]
 		},
 		{
 			"Name": "AllToolsets",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true,
+			"TargetAllowList": [ "Editor" ]
 		},
 		{
 			"Name": "Terminal",
-			"Enabled": true
+			"Enabled": true,
+			"Optional": true,
+			"TargetAllowList": [ "Editor" ]
 		}
 	],
 	"TargetPlatforms": [

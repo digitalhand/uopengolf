@@ -12,6 +12,9 @@ imported textures and meshes and rebuilds only the materials. --textures-only re
 textures in place, keeping tuned material instances and meshes. --meshes=A,B imports only those meshes and
 reuses the existing material instances, for example the jacaranda's collision helpers without the tree.
 
+A `tree` mesh gets Nanite shape preservation "Preserve Area", so its leaves keep their coverage in the
+distance instead of thinning to shimmering specks.
+
 A mesh entry with `nanite: false` and a `collision` mode is a hidden ball-contact helper: "complex"
 collides on its triangles (a tree's wood) and "convex" keeps the FBX's single UCX_ hull (a canopy
 volume that overlap queries can see inside).
@@ -188,8 +191,13 @@ def import_meshes(manifest, folder, materials, only=None):
             configure_helper(mesh, item)
         else:
             nanite = mesh.get_editor_property("nanite_settings")
-            if not nanite.get_editor_property("enabled"):
+            # Simplified tree leaves otherwise shrink to sub-pixel specks: distant crowns look bare and shimmer.
+            shape = ue.NaniteShapePreservation.PRESERVE_AREA if item.get("kind") == "tree" else None
+            if not nanite.get_editor_property("enabled") or (
+                    shape and nanite.get_editor_property("shape_preservation") != shape):
                 nanite.set_editor_property("enabled", True)
+                if shape:
+                    nanite.set_editor_property("shape_preservation", shape)
                 mesh.set_editor_property("nanite_settings", nanite)
         meshes.append(a.save(mesh))
         proxy = ue.EditorAssetLibrary.get_metadata_tag(mesh, "OpenGolf.WoodProxy")
