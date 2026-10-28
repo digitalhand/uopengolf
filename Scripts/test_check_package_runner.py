@@ -34,7 +34,7 @@ class PackageRunnerTests(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         return path
 
-    def make_engine(self, system="Linux", patch_version=3):
+    def make_engine(self, system="Linux", patch_version=4):
         self.write("Engine/Build/Build.version", json.dumps({
             "MajorVersion": 5, "MinorVersion": 8, "PatchVersion": patch_version,
         }), root=self.engine)
@@ -56,7 +56,7 @@ class PackageRunnerTests(unittest.TestCase):
 
     def test_rejects_wrong_engine_patch_and_missing_cooker(self):
         self.make_engine(patch_version=2)
-        with self.assertRaisesRegex(ValueError, "does not match 5.8.3"):
+        with self.assertRaisesRegex(ValueError, "does not match Unreal Engine 5.8.4"):
             check_engine(self.engine, "Linux")
         self.make_engine()
         (self.engine / "Engine/Build/BatchFiles/RunUAT.sh").unlink()

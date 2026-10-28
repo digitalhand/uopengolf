@@ -13,7 +13,8 @@ import subprocess
 import sys
 
 
-ENGINE_VERSION = (5, 8, 3)
+ENGINE_VERSION = (5, 8, 4)
+ENGINE_NAME = "Unreal Engine " + ".".join(map(str, ENGINE_VERSION))
 PRIVATE_PATHS = (
     "Plugins/PrivateContent",
     "Content/PN_GrassLibrary",
@@ -39,11 +40,11 @@ def require_files(paths: list[Path], instruction: str) -> None:
 
 def check_engine(engine: Path, system: str) -> None:
     version_file = engine / "Engine/Build/Build.version"
-    require_files([version_file], "Install Unreal Engine 5.8.3 and set UE_ROOT on the runner.")
+    require_files([version_file], f"Install {ENGINE_NAME} and set UE_ROOT on the runner.")
     version = json.loads(version_file.read_text(encoding="utf-8-sig"))
     actual = tuple(version.get(key) for key in ("MajorVersion", "MinorVersion", "PatchVersion"))
     if actual != ENGINE_VERSION:
-        raise ValueError(f"Unreal Engine {actual} does not match 5.8.3. Set UE_ROOT to the correct installation.")
+        raise ValueError(f"Unreal Engine {actual} does not match {ENGINE_NAME}. Set UE_ROOT to the correct installation.")
     tools = (
         ["Binaries/Linux/UnrealEditor", "Build/BatchFiles/Linux/Build.sh", "Build/BatchFiles/RunUAT.sh"]
         if system == "Linux" else
@@ -158,7 +159,7 @@ def main(argv: list[str]) -> int:
         print("Packaging requires a Linux or Windows x64 runner.", file=sys.stderr)
         return 1
     if not args.engine_root:
-        print("Set UE_ROOT on the runner to its Unreal Engine 5.8.3 installation.", file=sys.stderr)
+        print(f"Set UE_ROOT on the runner to its {ENGINE_NAME} installation.", file=sys.stderr)
         return 1
     engine = Path(args.engine_root)
     project = Path(__file__).resolve().parent.parent
@@ -170,7 +171,7 @@ def main(argv: list[str]) -> int:
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"Package runner check failed: {error}", file=sys.stderr)
         return 1
-    print(f"Package runner ready: {system} x64, Unreal Engine 5.8.3.")
+    print(f"Package runner ready: {system} x64, {ENGINE_NAME}.")
     return 0
 
 

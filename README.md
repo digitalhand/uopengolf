@@ -126,7 +126,7 @@ Linux support does not change Unreal Engine's license.
 
 ### Windows
 
-- Unreal Engine **5.8.3**, including its C++ development components.
+- Unreal Engine **5.8.4**, including its C++ development components.
 - Visual Studio 2022 **17.14 or later** with Game development with C++, MSVC v143,
   and a Windows SDK compatible with Unreal 5.8. The initial machine has MSVC
   14.44.35207 and Windows SDK 10.0.26100.0.
@@ -147,7 +147,7 @@ system-wide Visual Studio installation has not been modified by this project.
 
 ### Linux
 
-- A Linux Unreal Engine **5.8.3** installation or source build, with the engine's
+- A Linux Unreal Engine **5.8.4** installation or source build, with the engine's
   supported Clang toolchain and required system dependencies. Obtain the engine separately.
 - Bash, Python 3, and GNU coreutils (`timeout`, `mktemp`).
 - Git with Git LFS (for example `sudo apt install git-lfs`); run `git lfs install` once.
@@ -155,9 +155,9 @@ system-wide Visual Studio installation has not been modified by this project.
   The smoke command uses `-nullrhi` and does not test rendering.
 
 Follow Epic's [Linux development requirements](https://dev.epicgames.com/documentation/en-us/unreal-engine/linux-development-requirements-for-unreal-engine)
-for the engine version being used. The editor build and smoke test were run with the
+for the engine version being used. The editor build and smoke test were first run with the
 prebuilt Linux 5.8.3 engine and its bundled Clang 20.1.8 toolchain on Ubuntu 26.04.1 LTS,
-without installing extra system packages.
+without installing extra system packages. The project now targets 5.8.4.
 
 Bluetooth and BlueZ are **not needed to build**. Connecting a Square Home on Linux needs a
 running BlueZ (`bluetoothd`) and a user allowed to use it; `libsystemd.so.0` is loaded at runtime.
@@ -184,7 +184,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Editor
 Linux Bash:
 
 ```bash
-export UE_ROOT='/path/to/UnrealEngine-5.8.3'
+export UE_ROOT='/path/to/UnrealEngine-5.8.4'
 bash Scripts/ue.sh build
 bash Scripts/ue.sh editor
 ```
@@ -492,9 +492,11 @@ does not render or connect hardware.
 ### Engine version warning
 
 The project uses `"EngineAssociation": "5.8"`; this is the normal release association
-for Unreal **5.8.3**, not a request to downgrade to 5.8.0. The original map was also
-generated with 5.8.3. Do not change the association to `5.8.3` merely to match the
-patch number: it identifies a registered engine installation.
+for Unreal **5.8.4**, not a request to downgrade to 5.8.0. The original map was
+generated with 5.8.3. Do not change the association to `5.8.4` merely to match the
+patch number: it identifies a registered engine installation. Patch updates within 5.8
+(for example 5.8.3 to 5.8.4) keep the same association; the package check requires the
+exact patch named in `Scripts/check_package_runner.py`.
 
 Unreal's project browser shows "This project was made with a different version"
 when the project's engine identifier differs from the running editor's identifier.
@@ -510,7 +512,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Editor -Engin
 ```
 
 This bypasses the project browser's identifier-based conversion prompt. If already
-in that browser, first confirm **Help > About Unreal Editor** reports 5.8.3; then
+in that browser, first confirm **Help > About Unreal Editor** reports 5.8.4; then
 **More Options > Skip conversion** avoids changing the project for this association
 mismatch. For persistent Explorer/browser association, use the `.uproject` file's
 **Switch Unreal Engine version** action, if available, and select the actual 5.8
@@ -639,10 +641,12 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
    your working copy or copy private plugins or local config into it.
 4. Start the runner with `./run.sh` (Linux) or `run.cmd` (Windows) when you want to
    package, and stop it with Ctrl+C afterwards. Installing it as a service is optional.
+5. After an engine patch update, point each runner's `UE_ROOT` at the new installation
+   and update `ENGINE_VERSION` in `Scripts/check_package_runner.py`.
 
 | | Linux | Windows |
 | --- | --- | --- |
-| Engine | Unreal Engine 5.8.3, installed or source build | Unreal Engine 5.8.3 |
+| Engine | Unreal Engine 5.8.4, installed or source build | Unreal Engine 5.8.4 |
 | Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](#windows) |
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
