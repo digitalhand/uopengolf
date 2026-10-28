@@ -201,7 +201,8 @@ class FCheckRangePresentation : public IAutomationLatentCommand
                 }
                 if (PieceName == TEXT("Backdrop"))
                     Test->TestEqual(TEXT("Backdrop has no collision"), Piece->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
-                if (PieceName == TEXT("TeeBox"))
+                // A hidden painted tee leaves the tee to the cut-turf ground (UOpenGolf.Range.EditableLayout).
+                if (PieceName == TEXT("TeeBox") && Piece->IsVisible())
                 {
                     // Textured turf in the tee color (sRGB #406B1F), not a flat untextured slab.
                     const UMaterialInterface *TeeMaterial = Piece->GetMaterial(0);

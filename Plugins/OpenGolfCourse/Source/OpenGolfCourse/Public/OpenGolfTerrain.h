@@ -85,6 +85,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation", meta = (ClampMin = "0", Units = "m"))
     float MinimumDistanceFromPlayM = 0;
 
+    /** Limit distance bands to one surface type, such as fairway for its first cut. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation")
+    bool bUseDistanceSurface = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation", meta = (EditCondition = "bUseDistanceSurface"))
+    EOpenFairwaySurface DistanceSurface = EOpenFairwaySurface::Fairway;
+
+    /** Keep tall rough outside the maintained fairway band. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation", meta = (ClampMin = "0", Units = "m"))
+    float FairwayClearanceM = 0;
+
     /** Farthest placement from fairway, fringe, green or sand outlines; 0 has no limit. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation", meta = (ClampMin = "0", Units = "m"))
     float MaximumDistanceFromPlayM = 0;
@@ -209,8 +220,9 @@ public:
     TArray<FOpenGolfTerrainMound> Mounds;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain", meta = (Units = "m"))
     FVector2D LevelTeeCenterM = FVector2D::ZeroVector;
+    /** Half the tee box's sides in terrain axes: the ground is level across it and grass keeps off it. Zero disables both. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain", meta = (ClampMin = "0", Units = "m"))
-    float LevelTeeRadiusM = 3;
+    FVector2D LevelTeeHalfSizeM = FVector2D(2.5, 2.5);
     // Scattered across the detailed area.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Terrain")
     TArray<TObjectPtr<UOpenGolfVegetationPreset>> Vegetation;
@@ -234,7 +246,7 @@ public:
 
     /**
      * A continuous row of edge strips along the rough side of every play outline (fairway, fringe, green, tee, sand),
-     * turned to follow the edge. Strips overlap slightly so bends leave no gap.
+     * turned to follow the edge with local +Y towards play. Strips overlap slightly so bends leave no gap.
      */
     bool ScatterBoundary(const UOpenGolfVegetationPreset& Preset, FGroundQuery Ground, TArray<FOpenGolfScatterPoint>& OutPoints,
         FString& Error, double TerrainYawDeg = 0) const;
@@ -245,6 +257,10 @@ public:
     UOpenGolfSurfacePreset* SurfaceAt(FVector2D PointM) const;
     /** Distance to the nearest region that is not rough; infinite when there is none. */
     double DistanceFromPlay(FVector2D PointM) const;
+    /** Signed distance from the tee box: negative inside, infinite without one. */
+    double TeeBoxDistance(FVector2D PointM) const;
+    UFUNCTION(BlueprintPure, Category = "Terrain")
+    double DistanceFromSurface(FVector2D PointM, EOpenFairwaySurface Surface) const;
     static bool Contains(const TArray<FVector2D>& Outline, FVector2D Point);
     static double DistanceToOutline(const TArray<FVector2D>& Outline, FVector2D Point);
 

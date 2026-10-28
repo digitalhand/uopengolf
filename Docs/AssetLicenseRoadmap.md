@@ -169,3 +169,33 @@ Rows 5 and 7 are unchanged: this layer does not replace the Nature Essentials gr
 understory around the trees. Results, backups and pending checks are in
 [Phase status](PhasesStatus.md#course-grass-and-surfaces-applied--2026-10-21). No parity
 approval is implied.
+
+## Maintained turf preparation — 2026-10-27
+
+The owner approved an original blade family and matching baked textures for fairway, first
+cut, green collar and putting green. DZ Grasses is a visual reference only; no assets or
+materials from it are imported or derived. The new artwork uses original procedural geometry.
+The existing open rough remains, with boundary coverage adjusted around a 1 m fairway band.
+
+Export/import/apply tools are prepared; editable Blender projects stay in the external art
+root, and texture exports are 2K. Row 8 remains in progress: saved-map application, final
+rendered stability and owner acceptance are still pending. See the maintained turf preparation
+entry in PhasesStatus.md and Docs/TurfWorkflow.md.
+
+## Maintained turf fullness revision — 2026-10-27
+
+The first original turf pass was applied to the public map, then rejected by the owner for
+sparse, regular grass. A denser original family with loose clumps, curved blades and colour
+variation is now exported, baked at 2K and refreshed in the public plugin. No restricted art
+is used. Source and backup locations are documented in [Blender grass handoff](TurfWorkflow.md).
+Row 8 remains in progress: final rendered validation and owner acceptance of this revision
+are pending. Earlier first-pass captures do not establish parity for the denser assets.
+
+### Maintained turf refinement — 2026-10-27
+
+The public original cut-turf art was rebaked through Blender MCP and its maintained-only
+palette/material path applied. First-cut ground relief, filtered short-turf normals, quieter
+olive variation and subtle roughness are now saved. Existing tall rough is unchanged. No new
+third-party assets or licence obligations were introduced. Final coastal contact and rendered
+tests pass; shimmer measurements and remaining performance/owner-review limits are recorded
+in PhasesStatus. This does not change any row to parity approved.

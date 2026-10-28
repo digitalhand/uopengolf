@@ -47,8 +47,13 @@ bool FRangeLayoutTest::RunTest(const FString& Parameters)
     Range->BuildDefaultLayout();
     TestEqual(TEXT("Building again preserves the layout"), Range->GetLayoutActors().Num(), Count);
     for (const UStaticMeshComponent* Piece : Pieces)
+    {
         if (Piece->ComponentHasTag(AUOpenGolfRange::GreenTag))
             TestTrue(TEXT("Green can be selected as its own actor"), Piece->GetOwner() != Range);
+        // The cut-turf shader draws the public tee; the painted box would cover it.
+        if (Piece->GetName() == TEXT("TeeBox"))
+            TestFalse(TEXT("The painted tee box is hidden on the public map"), Piece->IsVisible());
+    }
     for (const FVector Point : {FVector(40000, 0, 100), FVector(20000, 20000, 100), FVector(20000, -20000, 100), FVector(-50000, 0, 100)})
     {
         FHitResult Hit;

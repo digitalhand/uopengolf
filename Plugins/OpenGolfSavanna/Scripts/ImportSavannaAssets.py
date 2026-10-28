@@ -29,6 +29,7 @@ import unreal as ue
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import savanna_assets as s
+import turf_palette as palette
 
 s = importlib.reload(s)
 a = s.a
@@ -36,10 +37,8 @@ a = s.a
 CARD_SETTINGS = {"NormalStrength": 1.0, "NormalFadeStartCm": 3000.0, "NormalFadeEndCm": 8000.0, "AOStrength": 0.0,
                  "RoughnessMin": 0.6}
 SOLID_SETTINGS = {"RoughnessMin": 0.5, "AOStrength": 0.0}
-# Starting look for the rough; tune in the MI after review.
-# Grass Medium's light, low-saturation blades read near white under the range's sun with upward
-# normals and no shadows, so they are darkened and saturated here.
-GRASS_SETTINGS = {"grass_medium_01": {"Brightness": 0.55, "Saturation": 1.6, "Tint": "B4D27E"}}
+# The rough's look is calibrated with the turf palette against the owner's samples.
+GRASS_SETTINGS = {"grass_medium_01": palette.ROUGH_GRASS}
 
 
 def folders(entry, folder):

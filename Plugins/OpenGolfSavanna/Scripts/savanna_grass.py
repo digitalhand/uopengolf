@@ -8,13 +8,17 @@ upward world normals, with the tuft's normal detail only up close, and roughness
 Colour blends from the green diffuse to a dry one (Grass Medium's dry_diff, or the green one times
 DryTint) by distance from play: a course mask (white near play) is sampled in terrain metres. The
 mask texture and its bounds are instance parameters, so one parent serves any range layout;
-the defaults (white mask) keep the grass green.
+the defaults (white mask) keep the grass green. Dryness also drifts with world-space patch noise.
+Nothing varies per instance: the rough is tiled squares of tufts, and a per-instance colour shows
+each square.
 """
 import unreal as ue
 
 # Not reloaded here: reloading savanna_assets reloads course_assets, which would drop the mount that
 # savanna_helpers() set and send new assets to /OpenGolfCourse. Callers reload savanna_assets first.
 import savanna_assets as s
+import BuildTerrainAssets as terrain  # After savanna_assets, which puts the course kit's scripts on sys.path.
+import turf_palette as palette
 
 a = s.a
 
@@ -48,15 +52,14 @@ def grass_material():
     rough = s.sample(material, "Roughness", s.WHITE_MASK, uv, mask=True)
     ao = s.sample(material, "AmbientOcclusion", s.WHITE_MASK, uv, mask=True)
     position = a.node(material, ue.MaterialExpressionWorldPosition, "WorldPosition")
-    # Per-instance position, so every blade of a tuft shares one mask value and colour.
-    pivot = a.node(material, ue.MaterialExpressionObjectPositionWS, "TuftPivot")
-    mask = s.sample(material, "CourseMask", s.WHITE_MASK, course_mask_uv(material, pivot), mask=True)
-    variation = a.node(material, ue.MaterialExpressionPerInstanceRandom, "InstanceRandom")
-    color = a.custom(material, "GrassColor",
-                     "float dryness=saturate(lerp(Far,Near,M)+(Rnd-0.5)*Jit);"
-                     "float3 c=lerp(A,D*DT,dryness)*T*lerp(1,O,S)*B;"
-                     "return lerp(dot(c,float3(0.2126,0.7152,0.0722)).xxx,c,Sat);",
-                     {"A": (albedo, "RGB"), "D": (dry, "RGB"), "M": (mask, "R"), "Rnd": (variation, ""),
+    mask = s.sample(material, "CourseMask", s.WHITE_MASK, course_mask_uv(material, position), mask=True)
+    octaves = {pin: (a.custom(material, "GrassPatchNoise" + pin, terrain.value_noise(cell, seed=21 + i),
+                              {"P": (position, "")}, ue.CustomMaterialOutputType.CMOT_FLOAT1), "")
+               for i, (pin, cell) in enumerate(zip(("A", "B"), palette.GRASS_CELLS_CM))}
+    patches = a.custom(material, "GrassPatches", palette.GRASS_PATCH_HLSL, octaves,
+                       ue.CustomMaterialOutputType.CMOT_FLOAT1)
+    color = a.custom(material, "GrassColor", palette.GRASS_COLOR_HLSL,
+                     {"A": (albedo, "RGB"), "D": (dry, "RGB"), "M": (mask, "R"), "Noise": (patches, ""),
                       "Near": (a.scalar(material, "DryNearPlay", 0.1, "Grass", 0), ""),
                       "Far": (a.scalar(material, "DryFarFromPlay", 0.8, "Grass", 1), ""),
                       "Jit": (a.scalar(material, "DryJitter", 0.3, "Grass", 2), ""),

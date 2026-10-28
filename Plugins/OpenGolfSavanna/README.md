@@ -147,3 +147,9 @@ Then place the course grass with the course kit's `ApplyCourseGrass.py`; the com
 `OPEN_GOLF_SAVANNA_RANGE_COMPLETE` prints the command. The understory alone can be reapplied
 with `Scripts/understory.py` on the open map. Layout rules are pure Python with tests
 (`python3 -m unittest test_savanna_layout test_understory_layout`).
+
+## Maintained turf
+
+The original short-grass pipeline and its scoped import/apply commands are described in
+[Maintained turf workflow](../../Docs/TurfWorkflow.md). Validation status is in
+[Phase status](../../Docs/PhasesStatus.md).

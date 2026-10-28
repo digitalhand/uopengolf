@@ -4,8 +4,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import math
 import shutil
+import sys
 
 import unreal as ue
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Plugins/OpenGolfCourse/Scripts"))
+from outline_smoothing import smooth_outline
 
 MAP = "/Game/UOpenGolf/Maps/UOpenGolf"
 FLAT_MAP = "/Game/UOpenGolf/Maps/RangeFlatRegression"
@@ -34,7 +38,7 @@ def make_definition():
     outlines = [
         ("Fairway", "Fairway", [(-12, -13), (25, -16), (75, -14), (120, -17), (165, -17),
                                 (220, -14), (285, -16), (335, -11), (350, 0), (335, 12),
-                                (280, 15), (220, 17), (160, 16), (110, 15), (60, 17), (10, 14), (-12, 12)], 2.0),
+                                (280, 15), (220, 17), (160, 16), (110, 15), (60, 17), (10, 14), (-12, 12)], 1.0),
         ("Fringe", "Fringe", ellipse(137.16, 0, 16, 12, variation=0.07), 0.5),
         ("Green", "Green", ellipse(137.16, 0, 14, 10, variation=0.07), 0.5),
         ("Bunker", "Sand", ellipse(146, 28, 8, 5, variation=0.1), 0.5),
@@ -44,7 +48,9 @@ def make_definition():
         region = ue.OpenGolfTerrainRegion()
         region.set_editor_property("name", name)
         region.set_editor_property("surface", preset(surface))
-        region.set_editor_property("outline_m", [ue.Vector2D(*p) if isinstance(p, tuple) else p for p in outline])
+        # Curves through the authored corners: the ground, physical surfaces and turf follow the same line.
+        points = [(p.x, p.y) if isinstance(p, ue.Vector2D) else p for p in outline]
+        region.set_editor_property("outline_m", [ue.Vector2D(x, y) for x, y in smooth_outline(points, spacing)])
         region.set_editor_property("spacing_m", spacing)
         regions.append(region)
     definition.set_editor_property("regions", regions)

@@ -18,7 +18,7 @@ namespace TerrainBoundaryGrassTestDetail
         D->DetailMinimumM = FVector2D(-20, -20);
         D->DetailMaximumM = FVector2D(20, 20);
         D->LevelTeeCenterM = FVector2D(-15, -15);
-        D->LevelTeeRadiusM = 1;
+        D->LevelTeeHalfSizeM = FVector2D(1, 1);
         auto* Fairway = NewObject<UOpenGolfSurfacePreset>();
         Fairway->Surface = EOpenFairwaySurface::Fairway;
         FOpenGolfTerrainRegion Region;
@@ -50,6 +50,28 @@ namespace TerrainBoundaryGrassTestDetail
         return FMath::Abs(FVector2D::DotProduct(Offset, Along)) <= Length * 0.5 + 0.001 &&
                FMath::Abs(FVector2D::DotProduct(Offset, Across)) <= Depth * 0.5 + 0.02;
     }
+
+    /** Points every 5 cm along the line Offset metres outside a counter-clockwise outline that no strip covers. */
+    int32 MissedAlong(const TArray<FVector2D>& Outline, const TArray<FOpenGolfScatterPoint>& Strips, double Offset, int32& Samples)
+    {
+        int32 Missed = 0;
+        Samples = 0;
+        for (int32 I = 0; I < Outline.Num(); ++I)
+        {
+            const FVector2D A = Outline[I], Edge = Outline[(I + 1) % Outline.Num()] - A;
+            const FVector2D Out = FVector2D(Edge.Y, -Edge.X).GetSafeNormal();
+            for (double T = 0; T < 1; T += 0.05 / Edge.Size())
+            {
+                const FVector2D Sample = A + Edge * T + Out * Offset;
+                ++Samples;
+                bool bCovered = false;
+                for (const auto& Strip : Strips)
+                    bCovered |= StripCovers(Strip, Sample);
+                Missed += bCovered ? 0 : 1;
+            }
+        }
+        return Missed;
+    }
 } // namespace TerrainBoundaryGrassTestDetail
 
 bool FTerrainBoundaryGrassTest::RunTest(const FString& Parameters)
@@ -69,7 +91,7 @@ bool FTerrainBoundaryGrassTest::RunTest(const FString& Parameters)
         bSame = First[I].Transform.Equals(Again[I].Transform) && First[I].Seed == Again[I].Seed;
     TestTrue(TEXT("The seed reproduces every strip"), bSame);
 
-    bool bOutside = true, bProjected = true, bAlongEdge = true;
+    bool bOutside = true, bProjected = true, bAlongEdge = true, bFacesPlay = true;
     int32 NearBunker = 0;
     for (const auto& Strip : First)
     {
@@ -82,6 +104,9 @@ bool FTerrainBoundaryGrassTest::RunTest(const FString& Parameters)
         const FVector OnGround = Strip.Transform.GetLocation() + Up * 2;
         bProjected &= FMath::IsNearlyEqual(OnGround.Z, OnGround.X * 0.1, 0.001) && Up.X < -0.09;
         NearBunker += UOpenGolfTerrainDefinition::DistanceToOutline(D->Regions[1].OutlineM, XY) < 1 ? 1 : 0;
+        // A graded strip is short at local +Y, so -Y must point into the rough whatever the outline's winding.
+        const FVector2D Into = -FVector2D(Strip.Transform.GetRotation().GetRightVector()).GetSafeNormal();
+        bFacesPlay &= D->DistanceFromPlay(XY + Into * 0.05) > D->DistanceFromPlay(XY - Into * 0.05);
         // The strip runs along the nearest edge, not across it.
         const FVector2D Nearest = XY / FVector2D(6, 4);
         if (UOpenGolfTerrainDefinition::DistanceToOutline(D->Regions[0].OutlineM, XY) < 1)
@@ -94,25 +119,28 @@ bool FTerrainBoundaryGrassTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Strips follow the ground and sink into it"), bProjected);
     TestTrue(TEXT("Strips run along the edge"), bAlongEdge);
     TestTrue(TEXT("A clockwise bunker is edged from outside"), NearBunker > 8);
+    TestTrue(TEXT("Every strip's local +Y faces play"), bFacesPlay);
 
     // Continuity: every point along the strip line around the fairway lies on a strip.
-    int32 Missed = 0, Samples = 0;
-    const TArray<FVector2D>& Outline = D->Regions[0].OutlineM;
-    for (int32 I = 0; I < Outline.Num(); ++I)
-    {
-        const FVector2D A = Outline[I], Edge = Outline[(I + 1) % Outline.Num()] - A;
-        const FVector2D Out = FVector2D(Edge.Y, -Edge.X).GetSafeNormal();
-        for (double T = 0; T < 1; T += 0.05 / Edge.Size())
-        {
-            const FVector2D Sample = A + Edge * T + Out * (Clearance + Depth * 0.5);
-            ++Samples;
-            bool bCovered = false;
-            for (const auto& Strip : First)
-                bCovered |= StripCovers(Strip, Sample);
-            Missed += bCovered ? 0 : 1;
-        }
-    }
+    int32 Samples = 0;
+    int32 Missed = MissedAlong(D->Regions[0].OutlineM, First, Clearance + Depth * 0.5, Samples);
     TestTrue(FString::Printf(TEXT("The edge row is continuous (%d of %d samples missed)"), Missed, Samples), Samples > 500 && Missed == 0);
+
+    // Beyond a first cut: the row moves out by the fairway clearance and stays continuous.
+    constexpr double FirstCut = 1;
+    P->BoundaryClearanceM = 0;
+    P->FairwayClearanceM = FirstCut;
+    TArray<FOpenGolfScatterPoint> BeyondCut;
+    TestTrue(TEXT("Strips beyond a first cut succeed"), D->ScatterBoundary(*P, FlatGround, BeyondCut, Error));
+    bool bBeyondCut = true;
+    for (const auto& Strip : BeyondCut)
+        bBeyondCut &= D->DistanceFromSurface(FVector2D(Strip.Transform.GetLocation()) / 100, EOpenFairwaySurface::Fairway) >= FirstCut + Depth * 0.4;
+    TestTrue(TEXT("Strips stay outside the first cut"), bBeyondCut);
+    Missed = MissedAlong(D->Regions[0].OutlineM, BeyondCut, FirstCut + Depth * 0.5, Samples);
+    TestTrue(FString::Printf(TEXT("The row beyond the first cut is continuous (%d of %d samples missed)"), Missed, Samples),
+        Samples > 500 && Missed == 0);
+    P->BoundaryClearanceM = Clearance;
+    P->FairwayClearanceM = 0;
 
     TArray<FOpenGolfScatterPoint> Turned;
     D->ScatterBoundary(*P, FlatGround, Turned, Error, 90);
