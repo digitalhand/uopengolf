@@ -1406,3 +1406,17 @@ Against R1:
   - The owner's viewing of the GIF is pending.
 
 Not verified: Windows (DX12), packaged builds, and the owner's motion review.
+
+## Distance markers removed — 2026-10-27
+
+The owner decided the range does not need distance markers.
+- `AUOpenGolfRange` no longer builds the 50–300-yard posts and number labels, so a new or empty
+  layout does not bring them back. Their terrain alignment and colouring code is gone too.
+- The 24 marker actors were deleted from the public map and the private map. The tee box, the only
+  other decoration, moved from the `Range/Markers` outliner folder to `Range/Tee`.
+- Checks:
+  - The Development editor build compiles.
+  - On the updated public map, `Range.Shot`, `.TeeLocation`, `.Aim`, `.AutoReset`,
+    `.PlayableBounds` and `.WindSettings` pass. They ran in the DebugGame editor before its rebuild,
+    so with the old code, which builds a layout only when the map has none.
+- Not yet run: the same tests after the owner's DebugGame rebuild.

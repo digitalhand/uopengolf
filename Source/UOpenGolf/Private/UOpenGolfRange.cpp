@@ -8,7 +8,6 @@
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "HAL/IConsoleManager.h"
-#include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -34,7 +33,6 @@ namespace
     TAutoConsoleVariable<float> CVarGreenStimp(TEXT("uopengolf.GreenStimp"), 10.0f,
         TEXT("Green speed for the range ball as a stimp reading in feet (8-15). Applied when it changes, from the next shot."), ECVF_Default);
     constexpr float CmPerM = 100.0f;
-    constexpr float MetersPerYard = 0.9144f;
     constexpr float GroundThicknessM = 1.0f;
     // The public clump's ~1 cm blades drop below two pixels from the tee camera past about
     // 10 m and shimmer under temporal AA, so public grass ends closer than the class defaults.
@@ -49,7 +47,6 @@ namespace
     constexpr float FringeWidthM = 2.0f;
 
     const FLinearColor TeeColor = FLinearColor::FromSRGBColor(FColor(0x40, 0x6B, 0x1F));
-    const FLinearColor MarkerColor(0.95f, 0.95f, 0.95f);
 } // namespace
 
 const FName AUOpenGolfRange::TurfTag(TEXT("UOpenGolf.Turf"));
@@ -146,7 +143,7 @@ void AUOpenGolfRange::BuildDefaultLayout()
     AddBox(TEXT("FringeLeft"), FVector(GreenStart, -FairwayHalfWidthM, 0), FVector(GreenEnd, -GreenHalfSizeM, 0), true, Fairway);
     AddBox(TEXT("FringeRight"), FVector(GreenStart, GreenHalfSizeM, 0), FVector(GreenEnd, FairwayHalfWidthM, 0), true, Fairway);
 
-    // Presentation only (no collision): tee box paint, flag and yardage markers.
+    // Presentation only (no collision): tee box paint and flag.
     AddBox(TEXT("TeeBox"), FVector(-2.5f, -2.5f, 0.0f), FVector(2.5f, 2.5f, 0.005f), false);
     Flagstick = AddLayoutComponent<UOpenGolfFlagstickComponent>(TEXT("Flagstick"), TEXT("Range/Targets"));
     Flagstick->SetRelativeLocation(FVector(GreenDistanceM * CmPerM, 0, 0));
@@ -163,10 +160,6 @@ void AUOpenGolfRange::BuildDefaultLayout()
     PuttingGreen->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
     PuttingGreen->CastShadow = false;
     PuttingGreen->ComponentTags.Add(GreenTag);
-    for (int32 Yards = 50; Yards <= 300; Yards += 50)
-    {
-        AddYardageMarker(Yards);
-    }
 
     // Presentation only (no collision): ground out to the horizon so the void past the
     // range is not visible. It sits just below the ground tops, hidden under the boxes.
@@ -202,7 +195,7 @@ UStaticMeshComponent* AUOpenGolfRange::AddBox(FName Name, const FVector& MinM, c
     const FVector Min = bCollides ? FVector(MinM.X, MinM.Y, -GroundThicknessM) : MinM;
     const FVector Max = bCollides ? FVector(MaxM.X, MaxM.Y, 0.0f) : MaxM;
 
-    UStaticMeshComponent* Box = AddLayoutComponent<UStaticMeshComponent>(Name, bCollides ? TEXT("Range/Ground") : TEXT("Range/Markers"));
+    UStaticMeshComponent* Box = AddLayoutComponent<UStaticMeshComponent>(Name, bCollides ? TEXT("Range/Ground") : TEXT("Range/Tee"));
     Box->SetStaticMesh(CubeMesh);
     // The engine cube is 100 cm (1 m) on a side, centered on its origin.
     Box->SetRelativeLocation((Min + Max) * 0.5f * CmPerM);
@@ -234,26 +227,6 @@ UStaticMeshComponent* AUOpenGolfRange::AddBox(FName Name, const FVector& MinM, c
         Box->SetMaterial(0, ShapeMaterial);
     }
     return Box;
-}
-
-void AUOpenGolfRange::AddYardageMarker(int32 Yards)
-{
-    const float X = Yards * MetersPerYard;
-    for (const float Side : {-1.0f, 1.0f})
-    {
-        const float Y = Side * (FairwayHalfWidthM + 1.0f);
-        AddBox(*FString::Printf(TEXT("Marker%d_%s"), Yards, Side < 0 ? TEXT("L") : TEXT("R")), FVector(X - 0.15f, Y - 0.15f, 0.0f),
-            FVector(X + 0.15f, Y + 0.15f, 1.2f), false);
-
-        UTextRenderComponent* Label = AddLayoutComponent<UTextRenderComponent>(*FString::Printf(TEXT("Label%d_%s"), Yards, Side < 0 ? TEXT("L") : TEXT("R")), TEXT("Range/Markers"));
-        // Text faces back toward the tee.
-        Label->SetRelativeLocation(FVector(X, Y, 1.4f) * CmPerM);
-        Label->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
-        Label->SetHorizontalAlignment(EHTA_Center);
-        Label->SetWorldSize(90.0f);
-        Label->SetTextRenderColor(FColor::White);
-        Label->SetText(FText::AsNumber(Yards));
-    }
 }
 
 void AUOpenGolfRange::BeginPlay()
@@ -300,16 +273,14 @@ void AUOpenGolfRange::AlignLayoutToTerrain()
         Actor->GetComponents(Components);
         for (auto* Component : Components)
         {
-            const FString Name = Component->GetName();
             const bool Flag = Component == Flagstick;
-            const bool Marker = Name.StartsWith(TEXT("Marker")) || Name.StartsWith(TEXT("Label"));
-            if (!Flag && !Marker && Component != TeeBox)
+            if (!Flag && Component != TeeBox)
                 continue;
             FVector Ground, Normal;
             if (Terrain->GroundAt(Component->GetComponentLocation(), Ground, Normal))
             {
-                // Preserve authored label height; painted markers sit just above the ground.
-                const double Offset = Name.StartsWith(TEXT("Label")) ? 150.0 : (Flag ? 0.0 : 0.5);
+                // The painted tee box sits just above the ground.
+                const double Offset = Flag ? 0.0 : 0.5;
                 Component->Modify();
                 Component->SetWorldLocation(Ground + FVector::UpVector * Offset);
             }
@@ -398,16 +369,6 @@ void AUOpenGolfRange::RefreshPresentation()
             Component->SetMaterial(0, GroundMaterialOverride);
         else if (RoughMaterialOverride && Component->ComponentHasTag(RoughTag))
             Component->SetMaterial(0, RoughMaterialOverride);
-    }
-    for (auto* Component : Components)
-    {
-        if (!Component->GetName().StartsWith(TEXT("Marker")))
-            continue;
-        auto* Material = Cast<UMaterialInstanceDynamic>(Component->GetMaterial(0));
-        if (!Material)
-            Material = Component->CreateDynamicMaterialInstance(0);
-        if (Material)
-            Material->SetVectorParameterValue(TEXT("Color"), MarkerColor);
     }
     // A fast follow camera smears the ground with motion blur; the fixed exposure keeps
     // the sunlit grass from washing out.

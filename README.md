@@ -95,7 +95,7 @@ The same shot at rest, with the putting green and flag beyond it:
 - The `OpenGolfCourse` plugin: a reusable course kit whose surface materials declare
   physics surfaces, with a waving flagstick, a marked golf ball and turf grass.
 - The saved, editable range from that kit: a 34 m fairway with rough, optional 3D grass near
-  the tee, yardage markers, follow camera and shot HUD.
+  the tee, follow camera and shot HUD.
 
 Verified by the maintainer with a **real Square Home**: on Windows (2026-10-14/15), the
 Bluetooth connection, battery and firmware readout, shot and club data, club selection
@@ -809,7 +809,7 @@ type.
 ball on the tee, and hits every launch-monitor shot, measured or replayed, from the
 tee. The range is built at runtime using basic shapes for the ground and the
 OpenGolfCourse kit for surfaces and presentation: a 34 m fairway with rough on both
-sides, a target flag at 150 yards, and yardage markers every 50 yards. The fairway strip,
+sides and a target flag at 150 yards. The fairway strip,
 including the former green/fringe area, uses `MI_Fairway` and plays as Fairway for
 test-shot comparisons; the side strips use `MI_Rough` and play as Rough. The ball reads
 the contacted mesh's physical material; there is no replay-specific or global physics

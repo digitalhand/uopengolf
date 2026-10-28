@@ -15,7 +15,7 @@ class AOpenGolfTerrainArea;
 
 /**
  * Driving range built from the OpenGolfCourse kit: a tee, a fairway strip with rough on both
- * sides, a target flagstick, yardage markers every 50 yards and simple daylight.
+ * sides, a target flagstick and simple daylight.
  * Ground pieces declare their physics surface through their surface material's physical
  * material: the fairway and fringe play as Fairway, surrounding ground as Rough, and the putting disc as Green.
  * Optional turf and grass are limited to the fairway strip. The tee is on the ground at the
@@ -184,8 +184,6 @@ private:
     /** A ground piece when SurfaceMaterial is set (MI_Fairway or MI_Rough), else a colored decoration. */
     UStaticMeshComponent* AddBox(FName Name, const FVector& MinM, const FVector& MaxM, bool bCollides,
         UMaterialInterface* SurfaceMaterial = nullptr);
-
-    void AddYardageMarker(int32 Yards);
 
     UPROPERTY()
     TObjectPtr<UStaticMesh> CubeMesh;
