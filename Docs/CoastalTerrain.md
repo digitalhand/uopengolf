@@ -94,7 +94,7 @@ The OpenGolfCourse plugin now contains terrain, surface and vegetation definitio
 height and surface queries, and an editor module for generating detailed surface
 meshes, surrounding Landscape sections and vegetation. Shared kit assets belong in
 the plugin; the range's layout definition belongs in the game. The range can use a
-terrain actor to place the tee and align its existing markers and flag.
+terrain actor to place the tee and align the tee box and flag.
 
 Two original grass meshes have been authored as reusable Blender sources in
 `OpenGolfCourse/Coastal` under the Blender art root (outside the repository; see

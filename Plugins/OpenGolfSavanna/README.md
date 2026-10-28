@@ -132,6 +132,9 @@ The script:
 4. rebuilds the terrain, trees, wood collision (`savanna_trees.py`) and understory
    (`understory.py`), then saves.
 
+The importer sets the tree's Nanite shape preservation to Preserve Area. Without it, simplified
+leaves shrink below a pixel at range: distant crowns look bare and shimmer under TSR.
+
 Tree ball contact uses two hidden helpers exported with the tree by `blender/ExportJacaranda.py`:
 `SM_JacarandaCollision` (the trunk and main limbs, triangle collision) blocks the ball, and
 `SM_JacarandaCanopy` (one convex hull around the branches and leaves) slows a ball flying through

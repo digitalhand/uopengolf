@@ -3,7 +3,7 @@
 ## Current foundation
 
 The game module is `UOpenGolf`. Its C++ GameMode uses the map's saved range controller
-(`AUOpenGolfRange`) and spawns a game-side `AUOpenGolfBall` on its tee. Ground, markers,
+(`AUOpenGolfRange`) and spawns a game-side `AUOpenGolfBall` on its tee. Ground, tee box,
 flagstick and lighting are separate saved actors, selectable before Play. A blank legacy map
 still builds the same layout at runtime. Multiple controllers are rejected to prevent duplicate
 scenes. Every launch-monitor shot starts from the tee. Three

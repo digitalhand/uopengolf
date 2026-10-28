@@ -95,7 +95,7 @@ The same shot at rest, with the putting green and flag beyond it:
 - The `OpenGolfCourse` plugin: a reusable course kit whose surface materials declare
   physics surfaces, with a waving flagstick, a marked golf ball and turf grass.
 - The saved, editable range from that kit: a 34 m fairway with rough, optional 3D grass near
-  the tee, yardage markers, follow camera and shot HUD.
+  the tee, follow camera and shot HUD.
 
 Verified by the maintainer with a **real Square Home**: on Windows (2026-10-14/15), the
 Bluetooth connection, battery and firmware readout, shot and club data, club selection
@@ -599,14 +599,15 @@ Generation also writes a local `.ignore` that excludes `Docs/`, `Scripts/`, `Con
 
 GitHub Actions packages the game for Windows and Linux on your own machines
 (self-hosted runners) and attaches tagged versions to a GitHub Release. Nothing starts
-automatically. You start each package build by hand, one platform or both, so it works
-when only one OS's runner is online.
+automatically. Linux and Windows have separate actions, so you can build whichever
+platform has a runner online. No paid hosted build runners are required.
 
 ### How the pipeline works
 
-The workflow is [`.github/workflows/package.yml`](.github/workflows/package.yml), shown
-as **Package** in the Actions tab. Start it with **Run workflow**. Choose the tag or
-branch under **Use workflow from**, then the platform: `linux`, `windows` or `both`.
+In the Actions tab, choose [**Package Linux**](.github/workflows/package-linux.yml) or
+[**Package Windows**](.github/workflows/package-windows.yml), then **Run workflow**.
+Choose the tag or branch under **Use workflow from**. To build both platforms, run
+each action on the same ref; a dual-boot machine can do this at different times.
 
 | Job | Runs on | What it does |
 | --- | --- | --- |
@@ -614,6 +615,9 @@ branch under **Use workflow from**, then the platform: `linux`, `windows` or `bo
 | Linux package | Self-hosted, labels `self-hosted, Linux, X64, ue-5.8` | Stamps the version, runs `Scripts/ue.sh package` (build, cook, stage, 60 s start check) and archives the result |
 | Windows package | Self-hosted, labels `self-hosted, Windows, X64, ue-5.8` | The same with `Scripts/ue.ps1 Package` |
 | Draft release (Linux, Windows) | GitHub-hosted Ubuntu | Tags only, one per platform, as soon as that platform's package succeeds: creates the tag's draft release if needed and uploads that platform's archives with `Scripts/draft_release.sh` |
+
+Each platform allows one package job at a time, without cancelling an active build.
+Both workflows use the same release lock for a tag, so their uploads cannot race.
 
 Each platform job makes a clean checkout in the runner's own work folder. It doesn't
 touch your working copy or its `Intermediate/`. The checkout downloads the Git LFS assets
@@ -630,24 +634,34 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 2. Create a `.env` file in the runner folder with the engine location, for example
    `UE_ROOT=/path/to/UE_5.8` on Linux. On Windows, `UE_ROOT` is optional when the
    engine is in `C:\Program Files\Epic Games\UE_5.8`.
-3. Start the runner with `./run.sh` (Linux) or `run.cmd` (Windows) when you want to
+3. Keep the runner installation and its work folder separate from your development
+   checkout. Checkout cleans this folder, including ignored files. Never point it at
+   your working copy or copy private plugins or local config into it.
+4. Start the runner with `./run.sh` (Linux) or `run.cmd` (Windows) when you want to
    package, and stop it with Ctrl+C afterwards. Installing it as a service is optional.
 
 | | Linux | Windows |
 | --- | --- | --- |
 | Engine | Unreal Engine 5.8.3, installed or source build | Unreal Engine 5.8.3 |
-| Tools | Git with Git LFS, Bash, Python 3 and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](#windows) |
+| Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](#windows) |
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
-Packaging runs the cooker and a headless game, so it competes with an open editor for
-CPU and memory. Don't measure FPS while a package job is running.
+Before packaging, `Scripts/check_package_runner.py` checks the engine version, build
+tools, Git LFS assets and absence of private content and local `Config/User*.ini` files.
+It also checks for Development, DebugGame and command-line Unreal editors anywhere on
+the machine. Close the editor before starting a build and leave it closed until the
+job finishes. A running editor stops the job; the workflow never closes it for you.
+Packaging and the startup check do not measure rendered FPS.
+
+The optional ModelContextProtocol, AllToolsets and Terminal editor plugins are not
+required on runners. They remain enabled for editor use when installed locally.
 
 ### Public repository safety
 
 This repository is public, so anyone can open a pull request. A self-hosted runner runs
 whatever its workflow asks, so:
 
-- The Package workflow starts only from **Run workflow**, which needs write access. Never
+- Both package workflows start only from **Run workflow**, which needs write access. Never
   add `pull_request` or `pull_request_target` triggers to it, or to any workflow that uses
   the `ue-5.8` runners: a fork could change the workflow in its pull request and run code
   on your machine.
@@ -687,8 +701,8 @@ python3 Scripts/project_version.py for-ref tag v1.2.3 "$(git rev-parse HEAD)"
 
 ### Making a release
 
-1. Make sure the release commit contains the workflow. **Run workflow** only appears once
-   the workflow is on `main`.
+1. Make sure the release commit contains both workflows. **Run workflow** only appears
+   once the workflows are on `main`.
 2. Tag the commit and push the tag:
 
    ```bash
@@ -696,11 +710,11 @@ python3 Scripts/project_version.py for-ref tag v1.2.3 "$(git rev-parse HEAD)"
    git push origin v0.1.0
    ```
 
-3. Start the runner on the OS you're using, then go to Actions → **Package** → **Run
-   workflow**. Under *Use workflow from*, choose **Tags → v0.1.0**, pick the platform, and
-   run it.
-4. When you're on the other OS, start its runner and run the workflow again on the same
-   tag for that platform. Its archives join the same draft. While the release is a draft,
+3. Start the runner on the OS you're using, then go to Actions → **Package Linux** or
+   **Package Windows** → **Run workflow**. Under *Use workflow from*, choose
+   **Tags → v0.1.0** and run it.
+4. When you're on the other OS, start its runner and run the other action on the same
+   tag. Its archives join the same draft. While the release is a draft,
    running a platform again replaces its archives. Once it's published, a run can still
    add a missing platform but never replaces existing files.
 5. Open the draft under **Releases**, check both platforms' assets and the generated
@@ -732,14 +746,14 @@ download those artifacts too.
   in the main archive, because the engine uses them to print readable crash call stacks.
 - **Licenses:** each package includes `LICENSE` and `THIRD_PARTY_NOTICES.md`, as well as the
   engine's `NOTICES.txt`.
-- **Content:** CI checkouts never contain the ignored `Plugins/PrivateContent/`, so release
-  packages hold public content only.
+- **Content:** builds reject the known restricted-content folders and local config files
+  before cooking. Use a clean runner checkout containing public content only.
 
 ### Limitations and troubleshooting
 
 - If a platform's runner is offline, its job waits in the queue, and GitHub cancels it
-  after 24 hours. Start the runner, or cancel the run. With `both`, a platform that has
-  already finished has already reached the draft, so cancelling only stops the other one.
+  after 24 hours. Start the runner, or cancel that platform's run. The other platform's
+  action runs independently.
 - If packaging fails, the run uploads a `package-logs-<platform>` artifact with
   `Saved/Logs/` (including `Package.log`) and the start-check report, kept for 7 days. Like
   other artifacts it is public, and it contains the runner's local paths and machine name.
@@ -747,7 +761,7 @@ download those artifacts too.
   before archiving, so releases don't carry the runner's log or settings.
 - Shipping builds and code signing are not set up. Windows archives are unsigned, so
   SmartScreen may warn on first launch.
-- Not yet verified: a full run of this workflow on either platform, and `ue.ps1 Package`
+- Not yet verified: full runs of the separate workflows on GitHub, and `ue.ps1 Package`
   itself.
 
 ## Project structure and architecture
@@ -795,7 +809,7 @@ type.
 ball on the tee, and hits every launch-monitor shot, measured or replayed, from the
 tee. The range is built at runtime using basic shapes for the ground and the
 OpenGolfCourse kit for surfaces and presentation: a 34 m fairway with rough on both
-sides, a target flag at 150 yards, and yardage markers every 50 yards. The fairway strip,
+sides and a target flag at 150 yards. The fairway strip,
 including the former green/fringe area, uses `MI_Fairway` and plays as Fairway for
 test-shot comparisons; the side strips use `MI_Rough` and play as Rough. The ball reads
 the contacted mesh's physical material; there is no replay-specific or global physics

@@ -1,0 +1,134 @@
+# SPDX-License-Identifier: MIT
+# Start from Actions > Package Linux > Run workflow and choose a branch or version tag.
+# Branch builds produce artifacts; version tags also attach archives to a draft release.
+# This public repository's self-hosted runners must never run pull request workflows.
+name: Package Linux
+run-name: Package Linux @ ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_release: ${{ steps.version.outputs.is_release }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            Config
+            Scripts
+      - name: Test release scripts
+        working-directory: Scripts
+        run: python3 -B -m unittest test_project_version test_check_package_start test_check_package_runner
+      - name: Resolve version
+        id: version
+        # A tag that is not vX.Y.Z[-prerelease] fails here, before any runner is used.
+        run: python3 -B Scripts/project_version.py for-ref "$GITHUB_REF_TYPE" "$GITHUB_REF_NAME" "$GITHUB_SHA" | tee -a "$GITHUB_OUTPUT"
+
+  package-linux:
+    name: Linux package
+    needs: prepare
+    runs-on: [self-hosted, Linux, X64, ue-5.8]
+    timeout-minutes: 120
+    concurrency:
+      group: package-linux
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # .uasset and .umap files are stored in Git LFS; the runner needs git-lfs installed.
+          lfs: true
+      - name: Check build machine and checkout
+        run: |
+          command -v python3 >/dev/null || { echo 'Install Python 3 on the runner.' >&2; exit 1; }
+          python3 -B Scripts/check_package_runner.py
+      - name: Stamp version
+        run: python3 -B Scripts/project_version.py stamp "$VERSION"
+      - name: Package and start check
+        # UE_ROOT comes from the runner's .env file.
+        run: bash Scripts/ue.sh package
+      - name: Archive
+        run: |
+          name="UOpenGolf-$VERSION-Linux-x64"
+          root="$PWD/Packaged"
+          mv "$root/Linux" "$root/$name"
+          # The start check leaves its log and this machine's config in Saved/.
+          rm -rf -- "$root/$name/UOpenGolf/Saved" "$root/$name/Engine/Saved"
+          cp LICENSE THIRD_PARTY_NOTICES.md "$root/$name/"
+          mkdir -p "$root/dist"
+          owner=(--owner=0 --group=0 --numeric-owner)
+          # Keep .sym: the engine reads it to print readable crash call stacks. .debug is for gdb.
+          tar -czf "$root/dist/$name.tar.gz" "${owner[@]}" --exclude='*.debug' -C "$root" "$name"
+          (cd "$root" && find "$name" -name '*.debug' -print0 >debug-files)
+          if [[ -s "$root/debug-files" ]]; then
+              tar -czf "$root/dist/$name-symbols.tar.gz" "${owner[@]}" -C "$root" --null -T "$root/debug-files"
+          fi
+          (cd "$root/dist" && for file in *.tar.gz; do sha256sum "$file" >"$file.sha256"; done)
+          ls -l "$root/dist"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: uopengolf-linux
+          path: Packaged/dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+      - name: Upload package logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-logs-linux
+          path: |
+            Saved/Logs/
+            Saved/Automation/*-package-*/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove package files
+        if: always()
+        run: rm -rf -- Packaged
+
+  release-linux:
+    name: Draft release (Linux)
+    needs: [prepare, package-linux]
+    if: needs.prepare.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: Scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: uopengolf-linux
+          path: dist
+      - name: Attach to the draft release
+        run: bash Scripts/draft_release.sh "$TAG" "$PRERELEASE" dist/*

@@ -191,6 +191,22 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 
 Newest first. Evidence paths are relative to the repository root.
 
+- **2026-10-27, Linux and Windows package actions (Unreal 5.8.3):**
+  - Split packaging into manual **Package Linux** and **Package Windows** actions, with
+    self-hosted x64 build jobs, one package per platform at a time, and shared draft-release
+    serialization. Small preparation and release-upload jobs still use hosted Ubuntu.
+  - Added checks for engine and build tools, unresolved LFS assets, restricted content,
+    local config and running editors. Local editor-tool plugins are optional and editor-only.
+  - Linux x64: 71 Python tests pass, including 19 runner checks; actionlint 1.7.12, Bash
+    syntax and ShellCheck at warning severity pass. Temporary-file checks pass for Linux
+    archives, symbols, checksums and cleanup. Release-helper checks pass with a mocked
+    GitHub CLI; no release was created. Actual engine checks use 5.8.3, CL 58210709,
+    with Clang 20.1.8; the development checkout correctly fails the private-content check.
+  - Report: `Saved/Automation/20261027-ci-packaging-ksi4isvq/validation.txt`.
+    Full Linux packaging is pending because a host Unreal editor is running. Native Windows
+    checks and packaging, Actions uploads/downloads and a real shared draft remain pending.
+    No rendered performance, shimmer or hardware results are established by these checks.
+
 - **2026-10-18, Linux, green speed and rollout (Unreal 5.8.3):**
   - The ball exposes Green Stimp Feet (8–15, default 10). During Play,
     `uopengolf.GreenStimp` sets it, and the shot log reports the stimp used.
@@ -1246,6 +1262,11 @@ the temporal history (17–19% change per frame), so it was not used.
 **The close canopy shimmers more after the change.** The darker leaves contrast more with the sky at
 their cut-out edges, which may account for it; this was not verified.
 
+> **Correction (later the same day):** do not rely on this close-up comparison. The same pose with the
+> same assets measured 3.136% canopy change an hour later. Editor-viewport captures do not show the
+> settled Play image: soft-shadow noise dominated them but made no difference in Play. Use the
+> CoastalTerrain sequences, which run in Play. See [Tree canopy shimmer](#tree-canopy-shimmer--2026-10-27).
+
 Evidence: `Saved/Automation/CoastalReview/BeforeTextureReimport-20261027-221111` and
 `AfterTextureReimport-20261027-221740` (frames, `Stability.txt`, `TreeStability.txt`,
 `tree_before_after.png`, `tree_leaves_zoom.png`, `edge_before_after.png`).
@@ -1280,3 +1301,122 @@ Still to do:
 - re-clone the Windows checkout with Git LFS
 - install Git LFS on both self-hosted runners and run the Package workflow once
 - check the account's GitHub LFS storage and bandwidth limits; each package job downloads about 340 MB
+
+## Tree canopy shimmer — 2026-10-27
+
+Unreal Engine 5.8.3, Linux DebugGame editor, one editor via MCP, public map.
+`UOpenGolf.Visual.CoastalTerrain` sequences in Play: 20 frames per view, 0.1 s apart, FOV 65.
+
+**Where it shimmers.** Only in the jacaranda canopies, plus a few cut-out understory cards near the
+trees. Turf, greens, sand and bare ground are stable in every view: the lower-crop figures of
+`grass_stability.py` stayed at 0.001–0.015% (2.2–2.4% with close grass on) in every run below. In the
+canopies about 19% of pixels change by more than 3/255 between captures. The change is small (2.2/255
+on average), and 0.7% change by more than 16/255, which reads as sparkle. It is random from capture to
+capture rather than periodic. Leaves and twigs smaller than a pixel at mid and long range do not
+settle under TSR.
+
+**Experiments.** Each was one full sequence. Every one except Preserve Area was a temporary editor
+setting, reverted afterwards. The tree region is a 300 × 180 crop of the edge view's tree row.
+
+| Run (evidence folder) | Tee worst band | Edge worst band | Tree region > 3/255 | > 16/255 |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline (`BeforeShimmerFix-20261027-232405`) | 10.46% | 10.71% | 19.36% | 0.691% |
+| Leaf opacity mips keep coverage at the 0.45 clip (`LeafCoverage045-…`) | 9.59% | 10.02% | 17.85% | 0.615% |
+| …plus `r.TSR.ShadingRejection.Flickering.Period 4` (`LeafCoverageTSRPeriod4-…`) | 9.44% | 9.95% | — | — |
+| Directional soft-shadow rays off (`HardSunShadows-…`) | 10.66% | 11.01% | 20.10% | 0.691% |
+| `r.TSR.History.ScreenPercentage 200` (`TSRHistory200-…`) | 14.26% | 13.89% | 26.12% | — |
+| `SM_Jacaranda` Nanite Preserve Area (`PreserveArea-20261027-234941`) | 14.95% | 12.40% | 20.28% | 0.765% |
+
+- Lumen GI is already off in project config (`r.DynamicGlobalIlluminationMethod=0`).
+- In editor-viewport captures, turning off the soft-shadow rays cut the canopy change from 14% to 2%,
+  but in Play it made no difference. Editor-viewport captures are not a valid shimmer measure.
+- **Preserve Area** (saved on `SM_Jacaranda`; `ImportSavannaAssets.py` now sets it for `tree`
+  meshes) fills the distant crowns: they read as trees in leaf instead of bare twigs (see
+  `before_after_crowns.png` in its folder). It does not reduce shimmer per canopy pixel. The worst
+  bands rise because more of each band is canopy.
+- The Preserve Area run was captured at 1261 × 959 instead of 1320 × 959, because the editor layout
+  changed when the Static Mesh editor opened. The framing differs by about 5%.
+
+The owner kept Preserve Area (fuller crowns). The cause and fix are below.
+
+### Cause and fix (later the same day)
+
+Same editor and settings. Every run was captured at 1261 × 959 (the last at 1260 × 959). The tree
+canopy boxes are now printed by `Scripts/grass_stability.py --profile coastal`. Each box is a fixed
+fraction of the frame, so its figure does not grow with canopy area:
+- tee (0, 0.38, 1, 0.52)
+- green (0.45, 0.16, 0.95, 0.34)
+- edge (0.38, 0.19, 0.75, 0.40)
+- bunker (0, 0, 1, 0.18)
+
+"Changed" counts pixels that change by more than 3/255; "sparkle" counts those above 16/255.
+Evidence folders are under `Saved/Automation/CoastalReview/`, named after each run.
+
+| Run | Tee changed / sparkle | Green | Edge | Bunker | Close grass (turf crop) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| R1 baseline | 8.36% / 0.267% | 10.79% / 0.137% | 18.61% / 0.707% | 9.16% / 0.265% | 2.27% |
+| R4 `r.TSR.ThinGeometryDetection 1` | 7.21% / 0.030% | 8.66% / 0.022% | 15.73% / 0.074% | 7.66% / 0.051% | 1.42% |
+| R5 R4 + `Coverage.ShadingRange 2` | 7.35% / 0.069% | 9.17% / 0.029% | 15.93% / 0.096% | 7.91% / 0.087% | 1.34% |
+| R4c `r.TSR.History.SampleCount 32` only | 3.90% / 0.158% | 3.79% / 0.075% | 9.10% / 0.405% | 4.25% / 0.167% | 0.90% |
+| R4b both (thin geometry + 32 samples) | 2.37% / 0.023% | 1.92% / 0.022% | 5.21% / 0.046% | 2.28% / 0.040% | 0.26% |
+| **R9 final repeat of R4b** | **2.44% / 0.024%** | **1.81% / 0.018%** | **5.21% / 0.047%** | **2.24% / 0.039%** | **0.26%** |
+
+**Why it shimmered.** There are two causes, both in how the sub-pixel leaves are rendered over time:
+1. **Sparkle: TSR throws the leaves' history away.**
+   - TSR's debug grid (`r.TSR.Visualize -2`, run R2) shows canopy pixels scattered with freshly reset
+     history.
+   - TSR's anti-flicker heuristic is disabled wherever sky shows through the leaves. That is why a
+     longer flicker window did nothing.
+   - Thin geometry detection is built for this case. It is off by default unless Nanite Foliage is
+     enabled. Turning it on removes 81–90% of the sparkle.
+   - Full relaxation for every material (R5) is no better, so the leaves' shading model does not need
+     to change.
+2. **Faint boiling: per-frame shadow noise on the leaves.**
+   - With temporal AA off (R3), the ground is perfectly still but leaf pixels still change every frame.
+   - Turning off SSAO changed nothing.
+   - Turning off dynamic shadows made the canopy perfectly still. So did turning off only the virtual
+     shadow map's screen-space trace (`r.Shadow.Virtual.ScreenRayLength 0`) together with soft-shadow
+     rays. Both draw new noise every frame.
+   - With TSR on, removing the screen trace alone gave nothing (R8 ≈ R4), because TSR already averages
+     that noise. A longer history (32 samples instead of 16) averages it better.
+
+**Fix.** `Config/DefaultEngine.ini` now sets `r.TSR.ThinGeometryDetection=1` and
+`r.TSR.History.SampleCount=32`. No asset changed.
+
+Against R1:
+- Canopy change falls 71–83% and sparkle 85–93% in all four tree views (R9).
+- The turf crop gets steadier as well: close grass 2.27% → 0.26%; stationary views 0.001–0.003%.
+- Mean canopy colour moved by less than 0.35/255, so the look is unchanged.
+
+**Checks for side effects:**
+- **Ghosting:** `Visual.ShotTrail` (ball and trail in flight with a following camera) and the
+  `Visual.RangeAssets` flag at 10 mph were compared before and after at full resolution. There is no
+  smearing on the trail, flag edges or trees.
+  - Before: ShotTrail `20261027-174338`, flag `20261027-174558-FlagWind10mph.png`.
+  - After: ShotTrail `20261027-174616`, flag `20261027-174830-FlagWind10mph.png`.
+  - `Visual.RangeAssets` fails its old flat-range check that the tee uses `M_Turf` (it is
+    `M_CoastalSurface`); its captures were still written.
+- **Cost:** mean frame time in ShotTrail was 10.39–10.59 ms after, against 10.35–10.54 ms before (DebugGame
+  editor, 1280 × 720 render; p95 sits at the ~8.3 ms frame cap). That is within noise; this is not a
+  controlled FPS measurement.
+- **Slow motion (View 9):** `View9_before_after.gif` in the R9 folder shows before (left) and after (right).
+  - No smearing is visible in the frames.
+  - A second-difference measure on the tree rows is unchanged (6.4% vs 6.2%). It is dominated by the
+    motion itself, so it shows no regression but cannot show an improvement.
+  - The owner's viewing of the GIF is pending.
+
+Not verified: Windows (DX12), packaged builds, and the owner's motion review.
+
+## Distance markers removed — 2026-10-27
+
+The owner decided the range does not need distance markers.
+- `AUOpenGolfRange` no longer builds the 50–300-yard posts and number labels, so a new or empty
+  layout does not bring them back. Their terrain alignment and colouring code is gone too.
+- The 24 marker actors were deleted from the public map and the private map. The tee box, the only
+  other decoration, moved from the `Range/Markers` outliner folder to `Range/Tee`.
+- Checks:
+  - The Development editor build compiles.
+  - On the updated public map, `Range.Shot`, `.TeeLocation`, `.Aim`, `.AutoReset`,
+    `.PlayableBounds` and `.WindSettings` pass. They ran in the DebugGame editor before its rebuild,
+    so with the old code, which builds a layout only when the map has none.
+- Not yet run: the same tests after the owner's DebugGame rebuild.
