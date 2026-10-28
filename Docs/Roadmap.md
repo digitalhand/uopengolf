@@ -8,7 +8,7 @@ Windows and Linux are both supported platforms: each phase's exit requires both.
 
 ## Phase 0 — UOpenGolf foundation
 
-- Create an Unreal 5.8.3 native C++ game with a blank startup map and visible greeting.
+- Create an Unreal 5.8 native C++ game with a blank startup map and visible greeting.
 - Add original-work MIT licensing, third-party/asset policy, architecture, contributor
   guidance, and a README with a maintained linked table of contents.
 - Supply Windows PowerShell and Linux Bash build/run/smoke commands. Keep Linux
@@ -21,7 +21,7 @@ requires no sibling repositories, purchased assets, or hardware.
 
 ## Phase 1 — Linux baseline and integration design
 
-- Build and run the foundation with native Linux Unreal 5.8.3, and validate its smoke test.
+- Build and run the foundation with native Linux Unreal 5.8, and validate its smoke test.
 - Pin reference revisions of `open-lm-connector`, `ogolf-physics` (which superseded
   `openfairway`), and `ogolf`.
 - Evaluate reusing the connector through a bridge versus native adaptation on both

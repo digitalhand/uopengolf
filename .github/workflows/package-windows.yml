@@ -64,7 +64,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $engineRoot = if ($env:UE_ROOT) { $env:UE_ROOT } else { Join-Path $env:ProgramFiles 'Epic Games\UE_5.8' }
           $python = Join-Path $engineRoot 'Engine\Binaries\ThirdParty\Python3\Win64\python.exe'
-          if (-not (Test-Path -LiteralPath $python)) { throw 'Unreal bundled Python is missing. Install Unreal Engine 5.8.3 and set UE_ROOT on the runner.' }
+          if (-not (Test-Path -LiteralPath $python)) { throw 'Unreal bundled Python is missing. Install Unreal Engine 5.8.4 and set UE_ROOT on the runner.' }
           & $python -B Scripts\check_package_runner.py --engine-root $engineRoot
           exit $LASTEXITCODE
       - name: Stamp version

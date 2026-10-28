@@ -8,9 +8,9 @@ tables. When evidence changes, update the phase summary and add a history line t
 includes the engine version, OS and date actually tested.
 
 Test machines:
-- **Windows:** Unreal 5.8.3, MSVC 14.44.35207, Windows SDK 10.0.26100.0.
-- **Linux:** Ubuntu 26.04.1 LTS, kernel 7.0.0-38-generic, prebuilt Unreal 5.8.3 (CL 58210709,
-  bundled Clang 20.1.8), BlueZ 5.85.
+- **Windows:** Unreal 5.8.4 (CL 58902052), MSVC 14.44.35207, Windows SDK 10.0.26100.0.
+- **Linux:** Ubuntu 26.04.1 LTS, kernel 7.0.0-38-generic, prebuilt Unreal 5.8.4
+  (bundled Clang 20.1.8 last confirmed with 5.8.3), BlueZ 5.85.
 
 | Phase | Windows | Linux |
 | --- | --- | --- |
@@ -190,6 +190,13 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 ## History
 
 Newest first. Evidence paths are relative to the repository root.
+
+- **2026-10-28, Windows, Unreal 5.8.4 upgrade:**
+  - The Epic launcher replaced 5.8.3 with 5.8.4 (CL 58902052). `EngineAssociation` stays `5.8`.
+  - `ue.ps1 Build` and `Smoke` pass. Report: `Saved/Automation/20261028-105936-133883c9`.
+  - The package-runner check now requires 5.8.4 on both platforms.
+  - Not yet rerun on 5.8.4: the Linux build and tests, the physics, range and launch-monitor
+    tests, the FlightScope comparison and packaging.
 
 - **2026-10-27, Linux and Windows package actions (Unreal 5.8.3):**
   - Split packaging into manual **Package Linux** and **Package Windows** actions, with
