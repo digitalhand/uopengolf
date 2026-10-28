@@ -16,6 +16,15 @@ public:
     UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
     static bool BuildTerrain(AOpenGolfTerrainArea* Area, const FString& OutputFolder, bool ReplaceGenerated, FString& Error);
 
+    // Rebuilds only the detailed ground meshes from the current definition, for example after its outlines change.
+    // Each generated ground actor keeps its components, material overrides and collision; vegetation, trees,
+    // Landscapes and course grass are untouched. Nothing changes unless every surface mesh builds and saves.
+    UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
+    static bool RebuildSurfaceMeshes(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error);
+
+    // The surface index BuildTerrain gave a generated ground actor's mesh (SM_Surface_<index>), or INDEX_NONE.
+    static int32 SurfaceMeshIndex(const AActor& Actor);
+
     UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
     static bool StartVegetation(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error);
 

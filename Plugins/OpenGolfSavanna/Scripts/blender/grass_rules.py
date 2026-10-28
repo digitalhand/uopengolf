@@ -14,6 +14,10 @@ CELL_M = 1.0 / 16
 WEIGHTS = {"Tall": 4, "Mid": 4, "Small": 4, "Large": 2, "Tiny": 1}
 # The edge strip faces the first cut: no wide Large tufts, fewer Tall ones, and scaled down.
 EDGE_WEIGHTS = {"Tall": 2, "Mid": 4, "Small": 4, "Tiny": 2}
+# The graded strip between the first cut and the tall rough: Blender's -Y faces play. The FBX export mirrors Y, so
+# in Unreal that is local +Y, which ScatterBoundary turns towards play. Tufts grow from `low` to `high`
+# of full size across its depth, and up to `front_gaps` of the front cells stay empty, so the cut line is ragged.
+EDGE_RAMP = {"low": 0.2, "high": 1.0, "front_gaps": 0.5}
 # Dense tiles laid edge to edge give full cover, like a commercial grass pack's
 # SM_Grass_<height>_Dense_* meshes. Placement fills the interior with the largest square that fits
 # and subdivides near play edges and on curved ground (1 m -> 0.5 m -> 0.25 m); edge strips run along
@@ -34,6 +38,9 @@ TILES = (
     # 1 m long along the outline (X) and 0.25 m deep into the rough (Y).
     ("SM_GrassMedium_30cm_Edge_A", MEDIUM, 71, {"lod": 1, "scale": 0.7, "size": (1.0, 0.25), "weights": EDGE_WEIGHTS}),
     ("SM_GrassMedium_30cm_Edge_B", MEDIUM, 73, {"lod": 1, "scale": 0.7, "size": (1.0, 0.25), "weights": EDGE_WEIGHTS}),
+    # 1 m along the outline and 0.5 m deep, rising from the first cut (-Y here, +Y in Unreal) to the tall rough.
+    ("SM_GrassMedium_30cm_EdgeRamp_A", MEDIUM, 79, {**_SQUARE, "size": (1.0, 0.5), "ramp": EDGE_RAMP}),
+    ("SM_GrassMedium_30cm_EdgeRamp_B", MEDIUM, 83, {**_SQUARE, "size": (1.0, 0.5), "ramp": EDGE_RAMP}),
 )
 _TUFT = re.compile(r"^grass_medium_01_([a-z]+)_([a-z])_LOD([0-2])$")
 
@@ -64,13 +71,24 @@ def grid(size, cell=CELL_M):
     return tuple(dims)
 
 
-def tile_points(seed, pieces, size=(TILE_M, TILE_M), scale=1.0, weights=None, cell=CELL_M):
+def _ramp(ramp, t):
+    """Size factor and chance of keeping a cell at depth t (0 at the front, 1 at the back) of a graded strip."""
+    if not ramp:
+        return 1.0, 1.0
+    rise = t * t * (3 - 2 * t)
+    return ramp["low"] + (ramp["high"] - ramp["low"]) * rise, 1 - ramp["front_gaps"] * (1 - t) ** 2
+
+
+def tile_points(seed, pieces, size=(TILE_M, TILE_M), scale=1.0, weights=None, cell=CELL_M, ramp=None):
     """Seeded (x, y, yaw degrees, scale, piece) placements, one per grid cell of the footprint.
 
     pieces maps piece name -> kind (Tall, Mid, ...). Each point stays inside its own cell, so cover
-    is even, every footprint has the same density and the result is repeatable.
+    is even, every footprint has the same density and the result is repeatable. A ramp (see EDGE_RAMP)
+    grades size and cover from the front row (-Y) to the back row instead.
     """
     cols, rows = grid(size, cell)
+    if ramp and not (0 < ramp["low"] <= ramp["high"] and 0 <= ramp["front_gaps"] < 1):
+        raise ValueError(f"A ramp rises from low to high and leaves fewer than all front cells empty: {ramp}")
     rng = random.Random(seed)
     names = sorted(pieces)
     chances = [(weights or WEIGHTS).get(pieces[name], 0) for name in names]
@@ -81,7 +99,12 @@ def tile_points(seed, pieces, size=(TILE_M, TILE_M), scale=1.0, weights=None, ce
         for col in range(cols):
             x = -size[0] / 2 + (col + rng.uniform(0.1, 0.9)) * cell
             y = -size[1] / 2 + (row + rng.uniform(0.1, 0.9)) * cell
-            result.append((x, y, rng.uniform(0, 360), scale * rng.uniform(0.9, 1.15), rng.choices(names, chances)[0]))
+            yaw, jitter, piece = rng.uniform(0, 360), rng.uniform(0.9, 1.15), rng.choices(names, chances)[0]
+            # Only ramps draw this, so the other tiles keep the random sequence they were built from.
+            keep = rng.random() if ramp else 0.0
+            grow, cover = _ramp(ramp, (y + size[1] / 2) / size[1])
+            if keep < cover:
+                result.append((x, y, yaw, scale * grow * jitter, piece))
     return result
 
 

@@ -49,7 +49,7 @@ bool UOpenGolfTerrainDefinition::ScatterTiles(const UOpenGolfVegetationPreset& P
     // A banded preset only looks near play; boxes reject far cells before any outline is measured.
     TArray<FBox2D> Play;
     for (const auto& Region : Regions)
-        if (Region.Surface && Region.Surface->Surface != EOpenFairwaySurface::Rough && Region.OutlineM.Num() >= 3)
+        if (Region.Surface && (P.bUseDistanceSurface ? Region.Surface->Surface == P.DistanceSurface : Region.Surface->Surface != EOpenFairwaySurface::Rough) && Region.OutlineM.Num() >= 3)
             Play.Emplace(Region.OutlineM);
     FRandomStream Random(P.Seed);
     bool bOverBudget = false;
@@ -86,10 +86,13 @@ bool UOpenGolfTerrainDefinition::ScatterTiles(const UOpenGolfVegetationPreset& P
         }
         if (MinimumFromPlay > 0 || MaximumFromPlay > 0)
         {
-            const double FromPlay = DistanceFromPlay(Center);
-            if (FromPlay < MinimumFromPlay || (MaximumFromPlay > 0 && FromPlay > MaximumFromPlay))
+            const double FromPlay = P.bUseDistanceSurface ? DistanceFromSurface(Center, P.DistanceSurface) : DistanceFromPlay(Center);
+            if (!Judge(FitBeyond(FromPlay, MinimumFromPlay, Reach)) ||
+                (MaximumFromPlay > 0 && !Judge(FitBeyond(MaximumFromPlay - FromPlay, 0, Reach))))
                 return;
         }
+        if (P.FairwayClearanceM > 0 && !Judge(FitBeyond(DistanceFromSurface(Center, EOpenFairwaySurface::Fairway), P.FairwayClearanceM, Reach)))
+            return;
         if (AreaOutlineM && !Judge(FitBeyond(Contains(*AreaOutlineM, Center) ? DistanceToOutline(*AreaOutlineM, Center) : -DistanceToOutline(*AreaOutlineM, Center), 0, Reach)))
             return;
         if (SurfaceAt(Center)->Surface != P.Surface)
@@ -110,7 +113,7 @@ bool UOpenGolfTerrainDefinition::ScatterTiles(const UOpenGolfVegetationPreset& P
             if (!Judge(FitBeyond(Edge, Clearance, Reach)))
                 return;
         }
-        if (LevelTeeRadiusM > 0 && !Judge(FitBeyond((Center - LevelTeeCenterM).Size(), LevelTeeRadiusM + Clearance, Reach)))
+        if (!Judge(FitBeyond(TeeBoxDistance(Center), Clearance, Reach)))
             return;
         if (!bSplit && !bSmallest)
         {
@@ -202,6 +205,7 @@ bool UOpenGolfTerrainDefinition::ScatterBoundary(const UOpenGolfVegetationPreset
             Along.Add(Along.Last() + (B - A).Size());
             SignedArea += A.X * B.Y - B.X * A.Y;
         }
+        const double RegionOffset = Offset + (Region.Surface->Surface == EOpenFairwaySurface::Fairway ? P.FairwayClearanceM : 0);
         const double Perimeter = Along.Last();
         if (Perimeter < UE_SMALL_NUMBER)
             continue;
@@ -223,16 +227,20 @@ bool UOpenGolfTerrainDefinition::ScatterBoundary(const UOpenGolfVegetationPreset
             const FVector2D Tangent = (PointAt(S + Strip.X * 0.5) - PointAt(S - Strip.X * 0.5)).GetSafeNormal();
             if (Tangent.IsNearlyZero())
                 continue;
-            const FVector2D Center = PointAt(S) + FVector2D(Tangent.Y, -Tangent.X) * Outward * Offset;
+            const FVector2D Out = FVector2D(Tangent.Y, -Tangent.X) * Outward;
+            const FVector2D Center = PointAt(S) + Out * RegionOffset;
             if (Center.X < DetailMinimumM.X || Center.Y < DetailMinimumM.Y || Center.X > DetailMaximumM.X || Center.Y > DetailMaximumM.Y ||
                 SurfaceAt(Center)->Surface != P.Surface || FromOtherSurfaces(Center) < P.BoundaryClearanceM + Strip.Y * 0.4 ||
-                (LevelTeeRadiusM > 0 && (Center - LevelTeeCenterM).Size() < LevelTeeRadiusM + Offset))
+                TeeBoxDistance(Center) < RegionOffset)
+                continue;
+            // The centre sits exactly FairwayClearanceM + Strip.Y / 2 out, so keep the same slack as above or rounding drops it.
+            if (P.FairwayClearanceM > 0 && DistanceFromSurface(Center, EOpenFairwaySurface::Fairway) < P.FairwayClearanceM + Strip.Y * 0.4)
                 continue;
             FVector Position, Normal;
             if (!Ground(Center, Position, Normal) || Normal.Z < CosSlope)
                 continue;
-            // Either way round keeps the strip's footprint; flipping varies the tufts along an edge.
-            const double Heading = Yaw + FMath::Atan2(Tangent.Y, Tangent.X) + PI * Random.RandHelper(2);
+            // Local +Y faces play and -Y the rough, so a strip graded across its depth rises away from play.
+            const double Heading = Yaw + FMath::Atan2(Out.X, -Out.Y);
             auto& Point = OutPoints.Emplace_GetRef();
             Point.Transform = FTransform(GroundRotation(Normal, Heading), Position - Normal * P.TileSinkM * 100,
                 FVector(Random.FRandRange(P.ScaleRange.X, P.ScaleRange.Y)));

@@ -103,6 +103,10 @@ public:
     UPROPERTY(EditAnywhere, Category = "UOpenGolf|Wind", meta = (DisplayName = "Preview Wind in Editor"))
     bool bPreviewWindInEditor = true;
 
+    /** Show the painted tee box. Turn off where the course ground draws its own tee, as the cut turf does. */
+    UPROPERTY(EditAnywhere, Category = "UOpenGolf|Presentation")
+    bool bShowPaintedTeeBox = true;
+
 protected:
     virtual void BeginPlay() override;
 

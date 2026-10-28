@@ -19,7 +19,7 @@ namespace TerrainTiledGrassTestDetail
         D->DetailMinimumM = FVector2D(-20, -20);
         D->DetailMaximumM = FVector2D(20, 20);
         D->LevelTeeCenterM = FVector2D(0, -8);
-        D->LevelTeeRadiusM = 1;
+        D->LevelTeeHalfSizeM = FVector2D(1, 1);
         auto* Fairway = NewObject<UOpenGolfSurfacePreset>();
         Fairway->Surface = EOpenFairwaySurface::Fairway;
         FOpenGolfTerrainRegion Region;
@@ -94,7 +94,7 @@ bool FTerrainTiledGrassTest::RunTest(const FString& Parameters)
             const FVector2D Check = bSmallestTile ? Center : Center + Corner * Half;
             bClear &= D->SurfaceAt(Check)->Surface == EOpenFairwaySurface::Rough &&
                       UOpenGolfTerrainDefinition::DistanceToOutline(D->Regions[0].OutlineM, Check) >= 0.3 - 0.0001 &&
-                      (Check - D->LevelTeeCenterM).Size() >= D->LevelTeeRadiusM + 0.3 - 0.0001;
+                      D->TeeBoxDistance(Check) >= 0.3 - 0.0001;
         }
         const int32 Cells = FMath::RoundToInt(2 * Half / Smallest);
         const FIntPoint Origin = SmallestCell(Center - FVector2D(Half) + FVector2D(Smallest * 0.5));
@@ -121,7 +121,7 @@ bool FTerrainTiledGrassTest::RunTest(const FString& Parameters)
             const FVector2D XY(X, Y);
             const double FromPlay = D->DistanceFromPlay(XY);
             // The band is judged at tile centres, so its outer edge is ragged by up to half a tile diagonal.
-            if (FromPlay < 0.55 || FromPlay > 4.25 || (XY - D->LevelTeeCenterM).Size() < D->LevelTeeRadiusM + 0.55)
+            if (FromPlay < 0.55 || FromPlay > 4.25 || D->TeeBoxDistance(XY) < 0.55)
                 continue;
             ++Samples;
             Missed += Covered.Contains(SmallestCell(XY)) ? 0 : 1;

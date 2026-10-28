@@ -2,14 +2,16 @@
 """Export dense Poly Haven (CC0) grass tiles from an editable Blender project.
 
     python3 Plugins/OpenGolfSavanna/Scripts/FetchPolyHaven.py grass_medium_01 leafy_grass
-    blender --background --python Plugins/OpenGolfSavanna/Scripts/blender/ExportPolyHavenGrass.py -- [--regenerate] [--art-root DIR]
+    blender --background --python Plugins/OpenGolfSavanna/Scripts/blender/ExportPolyHavenGrass.py -- [--regenerate | --add-missing] [--art-root DIR]
 
 The project, <art root>/Grass/Grass.blend, lives outside the repository. It is built when it is
 missing or with --regenerate (which discards edits) and is opened, never resaved, for every
-export. Its `Tiles` collection holds one tile per Unreal mesh (grass_rules.TILES):
+export. --add-missing builds only the grass_rules.TILES absent from it, keeps every existing tile and
+saves it after copying the previous file to Grass.before-<timestamp>.blend. Its `Tiles` collection holds one tile per Unreal mesh (grass_rules.TILES):
   SM_GrassMedium_30cm_{1m,50cm,25cm}_*  squares of Grass Medium's tufts (the `Pieces` collection,
                                         LOD0-2), one per seeded 1/16 m grid cell
   SM_GrassMedium_30cm_Edge_*            1 x 0.25 m strips of shorter tufts for play edges
+  SM_GrassMedium_30cm_EdgeRamp_*        1 x 0.5 m strips rising from the first cut (-Y; +Y in Unreal) to tall rough
 Edit a tile mesh directly. Laid edge to edge, the squares give full cover; the course kit's tiled
 placement subdivides them near outlines. Leafy Grass textures are exported for the ground under
 them. Textures stay in the downloaded PolyHaven folders.
@@ -17,10 +19,12 @@ them. Textures stay in the downloaded PolyHaven folders.
 Outputs go to Saved/AssetImport/OpenGolfSavanna/Grass: one FBX per tile, 8-bit texture copies
 (2K colour and normal maps, 1K masks) and export.json for ImportSavannaAssets.py.
 """
+from datetime import datetime
 from pathlib import Path
 import json
 import math
 import os
+import shutil
 import sys
 
 import bpy
@@ -65,7 +69,7 @@ def _join_pieces(name, seed, settings, pieces):
              if piece.name.endswith(f"_LOD{settings['lod']}")}
     parts = []
     for x, y, yaw, scale, piece in grass.tile_points(seed, kinds, settings["size"], scale=settings["scale"],
-                                                    weights=settings.get("weights")):
+                                                    weights=settings.get("weights"), ramp=settings.get("ramp")):
         part = bpy.data.objects.new(f"{name}_part", bpy.data.objects[piece].data.copy())
         part.matrix_world = (mathutils.Matrix.Translation((x, y, 0)) @ mathutils.Matrix.Rotation(math.radians(yaw), 4, "Z")
                              @ mathutils.Matrix.Scale(scale, 4))
@@ -104,6 +108,21 @@ def build():
     BLEND.parent.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(BLEND), compress=True, relative_remap=True, check_existing=False)
     print("GRASS_PROJECT_BUILT", BLEND)
+
+
+def add_missing():
+    bpy.ops.wm.open_mainfile(filepath=str(BLEND))
+    tiles, pieces = bpy.data.collections[TILES], bpy.data.collections[PIECES]
+    missing = [tile for tile in grass.TILES if tile[0] not in tiles.objects]
+    if not missing:
+        print("GRASS_TILES_PRESENT")
+        return
+    backup = BLEND.with_name(f"Grass.before-{datetime.now():%Y%m%d-%H%M%S}.blend")
+    shutil.copy2(BLEND, backup)
+    for name, _asset, seed, settings in missing:
+        _medium_tile(name, seed, settings, list(pieces.objects), tiles)
+    bpy.ops.wm.save_as_mainfile(filepath=str(BLEND), compress=True, relative_remap=True, check_existing=False)
+    print("GRASS_TILES_ADDED", [name for name, *_ in missing], "backup", backup)
 
 
 def export_texture(source, role):
@@ -185,6 +204,8 @@ def main():
     args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     if "--regenerate" in args or not BLEND.exists():
         build()
+    elif "--add-missing" in args:
+        add_missing()
     export()
 
 

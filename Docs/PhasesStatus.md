@@ -1420,3 +1420,204 @@ The owner decided the range does not need distance markers.
     `.PlayableBounds` and `.WindSettings` pass. They ran in the DebugGame editor before its rebuild,
     so with the old code, which builds a layout only when the map has none.
 - Not yet run: the same tests after the owner's DebugGame rebuild.
+
+## Maintained turf preparation — 2026-10-27
+
+The owner approved original fairway, first-cut, collar and green assets, with a 1 m visual
+first cut, nearby blade detail and unchanged physical surfaces. Blender MCP 2.2.4 is installed
+at user level for Codex and Claude Code. Live scene inspection and viewport capture worked.
+
+The original blade exporter and matching texture baker are prepared. New native preset fields
+select a distance reference surface and keep tall rough outside the fairway band. DebugGame
+builds succeeded; native automation execution and editor application remain pending a restart.
+Python blade footprint/repeatability and mask boundary/region-order checks pass (four cases).
+No C# files were changed.
+
+Before captures: `Saved/Automation/CoastalReview/Review-20261028-013205`, Unreal 5.8.3 DebugGame,
+Linux, one interactive editor, 1261 x 959 Play captures, 20 frames per view. Analysis:
+`Saved/Automation/CutTurf/before-stability.txt` with `grass_stability.py --profile coastal`.
+
+| View | Lower-frame changed pixels | Worst horizontal band |
+| --- | ---: | ---: |
+| Tee, grass on | 0.001% | 4.083% |
+| Tee, grass off | 0.001% | 4.171% |
+| Edge, grass on | 0.003% | 3.349% |
+| Edge, grass off | 0.000% | 3.385% |
+| Close, grass on | 0.262% | 2.896% |
+| Close, grass off | 0.002% | 2.798% |
+
+These are before-only results, not evidence for the new turf. Final asset imports, repeated
+PCG bakes, terrain/rollout tests, after-change shimmer, slow motion review, and a controlled
+frame-time comparison are pending. Existing close rough already exceeds the 0.05% lower-frame
+target. Preserve the editor layout for a comparable after run. The public map is unchanged
+at this preparation checkpoint; no owner visual acceptance is claimed.
+
+Preparation update: 60 original blade meshes and all four families' 2K colour, normal and
+roughness bakes completed through Blender MCP. The mask is cropped around fairways rather
+than the full detailed terrain. Native import/apply and all after-change evidence remain
+pending the editor restart.
+
+## Maintained turf: fuller Blender revision — 2026-10-27
+
+The owner rejected the first turf pass as sparse and too regular. Its application and tests
+are historical evidence, not visual approval. The Blender source now uses loose clumps,
+scattered filler, curved blades and variation in width, height, bend, twist and colour.
+Nominal fairway/first-cut/collar heights remain 15/30/20 mm.
+
+The revised editable source and explicit previous-version backup live in the external art
+root under `CutTurf/`; source paths, recovery steps and commands are in
+[Blender grass handoff](TurfWorkflow.md). The source has 60 mesh exports and four sets of 2K
+colour, normal and roughness bakes. In a 12.5 cm source patch, seed 1731 measures about 75%
+projected fairway coverage and 85,000 blades/m². This is not a runtime performance figure.
+The three source tests pass, including coverage checks for four variants of all mesh families.
+
+The revised art was reimported with the scoped refresh path, preserving surface tuning and
+placement. `Saved/Automation/CutTurf/fullness-import-status.json` records success, and the editor
+logged `OPEN_GOLF_CUT_TURF_REFRESH_COMPLETE`. The complete first-pass Unreal art backup is
+`Saved/TurfAssetBackups/20261028-024936-before-fullness/`. The `025148` retry backup already
+contains revised textures and must not be treated as a complete first-pass rollback.
+Blender before/after previews are in `Saved/Automation/CutTurf/Fullness/`.
+
+Final rendered inspection, shimmer sequences, slow-motion/fade review, frame-time comparison
+and owner acceptance for this revision remain pending. None of the previous measurements
+establishes stability or performance of the denser grass. `CLAUDE.md`, `CODEX.md` and `AGENTS.md`
+now point agents to the shared handoff; machine-specific details remain in ignored local notes.
+
+## Maintained turf: shared field, smooth edges and square tee — 2026-10-27
+
+The owner reported a different-coloured disc of grass around the camera, jagged fairway and
+first-cut edges, and a square tee inside a circle. Causes found in the previous revision:
+
+- The live blade material was an older graph: flat `TargetColor` with ±16% per-blade tone and no
+  ground texture. The ground used its texture with `TextureMean` set to the target colour, so it
+  rendered about 5% darker than the blades.
+- Blades stopped at the 15–20 m instance cull. Their distance sink used world position offset,
+  which the turf instances never evaluate.
+- The fairway outline had 17 corners. The only blend read an 8-bit mask with
+  18.5 × 4.9 cm texels, and collar, green and bunker edges had none. Tile grass stepped in
+  6.25 cm squares.
+- A painted 5 × 5 m tee box sat inside a 3 m round grass clearance.
+
+Changes (owner-approved plan, decisions: near-only matched blades, square tee, smoothed
+physical outlines; rough↔savanna sand out of scope):
+
+- The tee is a square everywhere: `LevelTeeHalfSizeM` (default 2.5 × 2.5 m) replaces
+  `LevelTeeRadiusM`, so the ground is levelled and grass cleared to the square.
+  `AUOpenGolfRange::bShowPaintedTeeBox` is off on the public map.
+- `UOpenGolfTerrainBuilder::RebuildSurfaceMeshes` swaps only the generated ground meshes.
+  `BuildTerrain` would destroy every generated actor, including trees and vegetation.
+- The outlines pass through their authored corners as centripetal Catmull-Rom curves
+  (`outline_smoothing.py`). Fairway: 17→789 points; fringe, green and bunker:
+  48→212/174/112. The generator `Scripts/UpgradeRangeTerrain.py` uses the same smoothing.
+- `T_CourseSurfaceField` (4096 × 1024 RGBA8) stores signed distances to fairway, green,
+  fringe and sand over every play region.
+  - Ground, rough and blades share one world-space shader (`turf_field.py`): rough, first
+    cut, fairway, bunker lip, collar, green and tee.
+  - Mowing lines blend over 6 cm. The first cut's outer edge blends over 20 cm.
+  - Stripes keep their footprint filter, and green stripes stay off.
+- Blades:
+  - Rebuilt lighter in Blender. Fairway and collar use one tapered quad, with first cut
+    keeping two segments.
+  - A 50 cm fairway tile drops from 85,512 to 21,430 triangles. Coverage checks still pass.
+  - They draw to 10 m (first cut 14 m), with tone variation fading out between 4 and 7 m.
+  - World position offset is removed from the material.
+- `texture-means.json` records each colour bake's measured mean, so the ground's texture
+  average equals its target colour.
+
+Backups: `CutTurf-before-lighter-20261027-210610.blend` and bakes in the art root;
+`Saved/AssetImport/OpenGolfSavanna/CutTurf-before-lighter-20261027-210610/`;
+`Saved/TurfAssetBackups/20261028-042123-before-lighter-refresh/` (Unreal art, map, definition)
+and `…-042659-before-turf-field/` (materials); `Saved/TerrainBackups/20261028-0422*` (map,
+definition).
+
+Applied in the owner's rebuilt DebugGame editor (Unreal 5.8.3, Linux, one editor), each step
+confirmed in `LogPython`:
+`OPEN_GOLF_CUT_TURF_REFRESH_COMPLETE`, `OPEN_GOLF_OUTLINES_SMOOTHED`, then
+`OPEN_GOLF_COURSE_GRASS_COMPLETE course_grass=143573` (previously 142,955), and finally
+`OPEN_GOLF_TURF_FIELD_COMPLETE`. Pixel-shader instructions: ground 763, blades 728, rough 977.
+
+Tests (MCP, same editor):
+
+- Pass:
+  - `Course.Terrain.TiledGrass`, `.BoundaryGrass`, `.FirstCut`, `.Definition`, `.Scatter`
+    and `.RandomScatter`.
+  - `Course.SurfaceRebuild` (new) and `Course.VegetationRebuild`.
+  - `Range.CoastalTerrain`, `Range.TeeLocation` and `Range.Presentation`.
+  - `Physics.GreenStimp`, `Physics.GreenRollout` and `Visual.CoastalTerrain`.
+- `Course.Terrain.TeeBox` (new): levelling, signed distance, clearance, inside checks and
+  validation pass. Its "grass reaches the edge" checks failed because the test left the
+  preset's default 0.5 m clearance; the cut-turf presets use 0. The test now sets 0 and
+  compiles, but needs a DebugGame rebuild to re-run.
+- `Range.EditableLayout` fails only its known flat-range assertions. `bShowPaintedTeeBox` is
+  saved off.
+- Python: outline 8/8, course field 8/8, all course, savanna and Blender script suites
+  pass (13/35/42).
+
+Rendered evidence: `Saved/Automation/CoastalReview/AfterTurfField-20261028-042858` against
+`BeforeEdgeRepair-20261028-032124`, using the same test, editor layout and 1261 × 959 Play
+captures.
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Tee view, grass on − off, mean (lower half, /255) | 2.08 | 0.45 |
+| Tee, grass on − off, column at 6–9 m (RGB) | +4.4/+5.2/+2.3 | 0/0/0 |
+| Tee grass on, stationary mean max diff (/255) | 0.379 | 0.291 |
+| Close grass on, stationary mean max diff (/255) | 0.560 | 0.461 |
+| Close grass on, changed pixels | 0.145% | 0.071% |
+| Slow pan (View 9), second-difference flicker > 16/255 | 15.6% | 8.4% |
+
+Canopy boxes are unchanged (sparkle 0.019–0.045%). Remaining pan flicker is in the tall rough
+and trees, outside this change. Clips: `Saved/Automation/CutTurf/turf-field-motion-before.mp4`
+and `-after.mp4`.
+
+Limits: frame time was not re-measured. The earlier probe read 8.3 ms with grass both on and
+off, which looks frame-capped, so it cannot show the difference. A GPU profile remains pending.
+The previous `SM_Surface_*` build folder is no longer used by the ground actors. `T_FirstCutDistance`
+is no longer wired to any output, but disconnected nodes in the old graphs may still reference it.
+Cleaning up both awaits the owner. Owner visual acceptance is pending.
+
+## Maintained turf relief and palette — 2026-10-27
+
+Applied to the public map in one Unreal 5.8.3 DebugGame editor on Linux/Vulkan SM6.
+The first cut now samples baked relief instead of flattening the ground normal. Maintained
+surface relief follows terrain slopes and fades from 4–18 m. Blender MCP rebaked all four
+existing families at 2K with stronger filtered normals and 0.92–0.96 roughness; meshes and
+placement are unchanged. Fine colour texture has more weight, broad patches less, and the
+mid greens are less saturated. Tall rough parent and instance match their before backups
+byte for byte. Green stripes remain off; physics and lighting were not edited.
+
+The original source and bakes are preserved under the external art root in
+`CutTurf-before-relief-20261028`. Unreal textures and materials are preserved in
+`Saved/TurfAssetBackups/Textures-before-relief-20261028` and
+`Materials-before-relief-20261028`. The maintained-only application option and generator
+changes preserve this result on reapplication. Import completion, field completion and
+`OPEN_GOLF_TURF_RELIEF_TUNED` were confirmed in the editor log.
+
+Validation after the final refinement:
+
+- Python: savanna 45/45, Blender 42/42, course 13/13; changed builders pass syntax checks.
+- `UOpenGolf.Range.CoastalTerrain` and `UOpenGolf.Visual.CoastalTerrain` pass.
+- Before: `Saved/Automation/CoastalReview/AfterPalette3-20261028-052656` (fresh baseline,
+  despite its inherited label). Final: `FinalTurfRelief-20261028-053458` in the same folder.
+  Both are 200 Play frames at 1261 × 959 with the same layout and AA settings.
+- `Saved/Automation/CutTurf/relief-before-stability.txt`, `relief-final-stability.txt` and
+  `relief-comparison.json` contain measurements. The intermediate relief capture is not
+  the final palette result.
+
+| Measure | Before | Final |
+| --- | ---: | ---: |
+| Tee stationary mean max difference (/255) | 0.2918 | 0.3071 |
+| Edge stationary mean max difference (/255) | 0.2940 | 0.2936 |
+| Close stationary changed pixels (>3/255) | 0.116% | 0.113% |
+| Tee worst horizontal band changed pixels | 4.068% | 4.200% |
+| Edge worst horizontal band changed pixels | 3.249% | 3.372% |
+| Close worst horizontal band changed pixels | 2.928% | 2.911% |
+| Slow pan second difference (>16/255, whole frame) | 8.016% | 8.208% |
+
+Final canopy-box sparkle is 0.016–0.042%. Tee grass-on/off lower-frame mean changes by
+0.039/255; close grass-on/off remains about 4.26/255, including the retained tall rough.
+The pan measurement includes trees and rough; it does not establish that all motion shimmer
+is fixed. Stationary results are close to baseline, but repeated runs have not established
+a noise interval for the small increases. Controlled uncapped GPU/frame-time comparison and
+owner visual acceptance remain pending. No performance or visual-parity claim is made.
+Editor background CPU throttling was temporarily disabled for automation and restored.

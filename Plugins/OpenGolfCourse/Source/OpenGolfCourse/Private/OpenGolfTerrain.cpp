@@ -23,7 +23,7 @@ namespace
 
     bool ValidPreset(const UOpenGolfVegetationPreset* Preset)
     {
-        if (!Preset || !FMath::IsFinite(Preset->SpacingM) || Preset->SpacingM < 0.1f || Preset->ScaleRange.X <= 0 ||
+        if (!Preset || !FMath::IsFinite(Preset->FairwayClearanceM) || Preset->FairwayClearanceM < 0 || !FMath::IsFinite(Preset->SpacingM) || Preset->SpacingM < 0.1f || Preset->ScaleRange.X <= 0 ||
             Preset->ScaleRange.Y < Preset->ScaleRange.X || Preset->MaximumSlopeDeg < 0 || Preset->MaximumSlopeDeg > 60)
             return false;
         if (!FMath::IsFinite(Preset->MinimumDistanceFromPlayM) || !FMath::IsFinite(Preset->MaximumDistanceFromPlayM) ||
@@ -121,8 +121,8 @@ bool UOpenGolfTerrainDefinition::Validate(FString& Error) const
     if (Size.X / LandscapeSpacingM * Size.Y / LandscapeSpacingM > 2000000 ||
         (DetailMaximumM - DetailMinimumM).X * (DetailMaximumM - DetailMinimumM).Y / FMath::Square(DetailSpacingM) > 200000)
         return Fail(TEXT("Terrain exceeds the two-million Landscape or 200,000 detail sample budget."));
-    if (!Finite(LevelTeeCenterM) || !FMath::IsFinite(LevelTeeRadiusM) || LevelTeeRadiusM < 0)
-        return Fail(TEXT("The level tee needs a finite center and non-negative radius."));
+    if (!Finite(LevelTeeCenterM) || !Finite(LevelTeeHalfSizeM) || LevelTeeHalfSizeM.X < 0 || LevelTeeHalfSizeM.Y < 0)
+        return Fail(TEXT("The tee box needs a finite center and non-negative half size."));
     for (const auto& Mound : Mounds)
         if (!Finite(Mound.CenterM) || !Finite(Mound.RadiusM) || Mound.RadiusM.X <= 0 || Mound.RadiusM.Y <= 0 || !FMath::IsFinite(Mound.HeightM))
             return Fail(TEXT("Contours need finite centers, heights, and positive radii."));
@@ -210,17 +210,19 @@ bool UOpenGolfTerrainDefinition::Scatter(const UOpenGolfVegetationPreset& Preset
     auto Place = [&](FVector2D P)
     {
         if ((AreaOutlineM && !Contains(*AreaOutlineM, P)) || SurfaceAt(P)->Surface != Preset.Surface ||
-            (P - LevelTeeCenterM).Size() < LevelTeeRadiusM + 0.5)
+            TeeBoxDistance(P) < 0.5)
             return;
         for (const auto& R : Regions)
             if (DistanceToOutline(R.OutlineM, P) < Preset.BoundaryClearanceM)
                 return;
         if (bBanded)
         {
-            const double FromPlay = DistanceFromPlay(P);
+            const double FromPlay = Preset.bUseDistanceSurface ? DistanceFromSurface(P, Preset.DistanceSurface) : DistanceFromPlay(P);
             if (FromPlay < Preset.MinimumDistanceFromPlayM || (Preset.MaximumDistanceFromPlayM > 0 && FromPlay > Preset.MaximumDistanceFromPlayM))
                 return;
         }
+        if (Preset.FairwayClearanceM > 0 && DistanceFromSurface(P, EOpenFairwaySurface::Fairway) < Preset.FairwayClearanceM)
+            return;
         FIntPoint Cell = FIntPoint::ZeroValue;
         if (bRandom)
         {
@@ -297,9 +299,10 @@ double UOpenGolfTerrainDefinition::HeightAt(FVector2D PointM) const
         const FVector2D Delta = (PointM - Mound.CenterM) / Mound.RadiusM;
         Height += Mound.HeightM * FMath::Exp(-Delta.SizeSquared() * 2.0);
     }
-    if (LevelTeeRadiusM > 0)
+    if (const double Tee = TeeBoxDistance(PointM); Tee < TNumericLimits<double>::Max())
     {
-        const double T = FMath::Clamp(((PointM - LevelTeeCenterM).Size() - LevelTeeRadiusM) / LevelTeeRadiusM, 0.0, 1.0);
+        // Level across the box, then ease back to the contours over one half-side.
+        const double T = FMath::Clamp(Tee / LevelTeeHalfSizeM.GetMax(), 0.0, 1.0);
         Height *= T * T * (3 - 2 * T);
     }
     return Height;
@@ -311,6 +314,23 @@ FVector UOpenGolfTerrainDefinition::NormalAt(FVector2D PointM) const
     const double DX = HeightAt(PointM + FVector2D(Step, 0)) - HeightAt(PointM - FVector2D(Step, 0));
     const double DY = HeightAt(PointM + FVector2D(0, Step)) - HeightAt(PointM - FVector2D(0, Step));
     return FVector(-DX / (2 * Step), -DY / (2 * Step), 1).GetSafeNormal();
+}
+
+double UOpenGolfTerrainDefinition::TeeBoxDistance(FVector2D PointM) const
+{
+    if (LevelTeeHalfSizeM.X <= 0 || LevelTeeHalfSizeM.Y <= 0)
+        return TNumericLimits<double>::Max();
+    const FVector2D Q = (PointM - LevelTeeCenterM).GetAbs() - LevelTeeHalfSizeM;
+    return FVector2D::Max(Q, FVector2D::ZeroVector).Size() + FMath::Min(Q.GetMax(), 0.0);
+}
+
+double UOpenGolfTerrainDefinition::DistanceFromSurface(FVector2D PointM, EOpenFairwaySurface Surface) const
+{
+    double Distance = TNumericLimits<double>::Max();
+    for (const auto& Region : Regions)
+        if (Region.Surface && Region.Surface->Surface == Surface)
+            Distance = FMath::Min(Distance, Contains(Region.OutlineM, PointM) ? 0.0 : DistanceToOutline(Region.OutlineM, PointM));
+    return Distance;
 }
 
 UOpenGolfSurfacePreset* UOpenGolfTerrainDefinition::SurfaceAt(FVector2D PointM) const

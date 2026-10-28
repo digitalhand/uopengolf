@@ -307,6 +307,7 @@ void AUOpenGolfRange::ApplyPresentationDefaults(const AUOpenGolfRange& Defaults)
     GrassCullStartCm = Defaults.GrassCullStartCm;
     GrassCullEndCm = Defaults.GrassCullEndCm;
     ExposureBiasEV = Defaults.ExposureBiasEV;
+    // bShowPaintedTeeBox stays with the map: it depends on that map's ground, not on the art set.
     RefreshPresentation();
 }
 
@@ -380,6 +381,7 @@ void AUOpenGolfRange::RefreshPresentation()
     UpdateGrass();
     if (TeeBox)
     {
+        TeeBox->SetVisibility(bShowPaintedTeeBox);
         auto* Material = Cast<UMaterialInstanceDynamic>(TeeBox->GetMaterial(0));
         if (!Material)
             Material = TeeBox->CreateDynamicMaterialInstance(0);

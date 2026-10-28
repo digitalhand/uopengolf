@@ -317,3 +317,105 @@ bool UOpenGolfTerrainBuilder::BuildTerrain(AOpenGolfTerrainArea* Area, const FSt
     UE_LOG(LogTemp, Display, TEXT("OpenGolf terrain built: %d vertices, %d triangles, %d actors. Save the level to keep the result."), Points.Num(), Triangles.Num(), Area->GeneratedActors.Num());
     return true;
 }
+
+int32 UOpenGolfTerrainBuilder::SurfaceMeshIndex(const AActor& Actor)
+{
+    const auto* Ground = Cast<AStaticMeshActor>(&Actor);
+    if (!Ground || !Actor.ActorHasTag(GeneratedTag) || Actor.ActorHasTag(AOpenGolfTerrainArea::VegetationTag))
+        return INDEX_NONE;
+    const UStaticMesh* Mesh = Ground->GetStaticMeshComponent()->GetStaticMesh();
+    const FString Prefix = TEXT("SM_Surface_");
+    const FString Name = Mesh ? Mesh->GetName() : FString();
+    const FString Digits = Name.RightChop(Prefix.Len());
+    if (!Name.StartsWith(Prefix) || Digits.IsEmpty() || !Digits.IsNumeric() || Digits.Contains(TEXT(".")))
+        return INDEX_NONE;
+    return FCString::Atoi(*Digits);
+}
+
+/** One generated ground actor per surface index, or false when the ground no longer matches the surfaces. */
+static bool FindGroundActors(const AOpenGolfTerrainArea& Area, int32 Count, TArray<AStaticMeshActor*>& Grounds, FString& Error)
+{
+    Grounds.Init(nullptr, Count);
+    for (AActor* Actor : Area.GeneratedActors)
+    {
+        const int32 Index = IsValid(Actor) && Actor->GetOwner() == &Area ? UOpenGolfTerrainBuilder::SurfaceMeshIndex(*Actor) : INDEX_NONE;
+        if (Index == INDEX_NONE)
+            continue;
+        if (!Grounds.IsValidIndex(Index) || Grounds[Index])
+        {
+            Error = TEXT("The generated ground no longer matches the definition's surfaces. Rebuild the whole terrain instead.");
+            return false;
+        }
+        Grounds[Index] = Cast<AStaticMeshActor>(Actor);
+    }
+    if (Grounds.Contains(nullptr))
+    {
+        Error = TEXT("A surface has no generated ground actor. Rebuild the whole terrain instead.");
+        return false;
+    }
+    return true;
+}
+
+static bool ReplaceSurfaceMeshes(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error)
+{
+    if (!IsValid(Area) || !Area->Definition || !Area->GetWorld() || Area->GetWorld()->IsGameWorld())
+    {
+        Error = TEXT("Select a terrain area with a definition in an editor world.");
+        return false;
+    }
+    if (!Area->Definition->Validate(Error))
+        return false;
+    if (!FPackageName::IsValidLongPackageName(OutputFolder))
+    {
+        Error = TEXT("Use a valid content folder.");
+        return false;
+    }
+    // Same order as BuildTerrain, which named each mesh after its index here.
+    TArray<UOpenGolfSurfacePreset*> Surfaces = {Area->Definition->DefaultSurface};
+    for (const auto& R : Area->Definition->Regions)
+        Surfaces.AddUnique(R.Surface);
+    for (const auto* Surface : Surfaces)
+        if (!Surface || !Surface->Material || !Physical(Surface))
+        {
+            Error = TEXT("All surface presets need a material and an existing OpenFairway physical material.");
+            return false;
+        }
+    TArray<AStaticMeshActor*> Grounds;
+    if (!FindGroundActors(*Area, Surfaces.Num(), Grounds, Error))
+        return false;
+    TArray<FVector2D> Points;
+    TArray<FIndex3i> Triangles;
+    if (!Triangulate(*Area->Definition, Points, Triangles, Error))
+        return false;
+    const FString Folder = OutputFolder / (TEXT("Build_") + FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    TArray<UStaticMesh*> Meshes;
+    for (int32 I = 0; I < Surfaces.Num(); ++I)
+    {
+        UStaticMesh* Mesh = MakeMesh(*Area->Definition, Surfaces[I], Points, Triangles, Folder / FString::Printf(TEXT("SM_Surface_%d"), I));
+        if (!Mesh)
+        {
+            Error = TEXT("A surface mesh could not be built or saved. The existing ground was preserved.");
+            return false;
+        }
+        Meshes.Add(Mesh);
+    }
+    for (int32 I = 0; I < Surfaces.Num(); ++I)
+    {
+        auto* Component = Grounds[I]->GetStaticMeshComponent();
+        Component->Modify();
+        Component->SetStaticMesh(Meshes[I]);
+        Component->SetPhysMaterialOverride(Physical(Surfaces[I]));
+    }
+    Area->MarkPackageDirty();
+    UE_LOG(LogTemp, Display, TEXT("OpenGolf surfaces rebuilt in %s: %d vertices, %d triangles. Save the level to keep the result."), *Folder, Points.Num(), Triangles.Num());
+    return true;
+}
+
+bool UOpenGolfTerrainBuilder::RebuildSurfaceMeshes(AOpenGolfTerrainArea* Area, const FString& OutputFolder, FString& Error)
+{
+    Error.Reset();
+    if (ReplaceSurfaceMeshes(Area, OutputFolder, Error))
+        return true;
+    UE_LOG(LogTemp, Error, TEXT("OpenGolf surface rebuild failed; the existing ground was kept: %s"), *Error);
+    return false;
+}

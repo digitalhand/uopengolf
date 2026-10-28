@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from grass_rules import (CELL_M, EDGE_WEIGHTS, MEDIUM, TILE_M, TILES, content_folders, grass_maps, grid,
+from grass_rules import (CELL_M, EDGE_RAMP, EDGE_WEIGHTS, MEDIUM, TILE_M, TILES, content_folders, grass_maps, grid,
                          medium_tuft, medium_tuft_kind, tile_points, underlay_maps)
 
 PIECES = {"GrassMedium_TallA_LOD0": "Tall", "GrassMedium_MidA_LOD0": "Mid", "GrassMedium_LargeA_LOD0": "Large",
@@ -28,13 +28,15 @@ class GrassRuleTests(unittest.TestCase):
 
     def test_the_family_has_halving_squares_and_an_edge_strip(self):
         sizes = {settings["size"] for *_, settings in TILES}
-        self.assertEqual(sizes, {(1.0, 1.0), (0.5, 0.5), (0.25, 0.25), (1.0, 0.25)})
+        self.assertEqual(sizes, {(1.0, 1.0), (0.5, 0.5), (0.25, 0.25), (1.0, 0.25), (1.0, 0.5)})
         for name, _, _, settings in TILES:
             square = settings["size"][0] == settings["size"][1]
             self.assertEqual("Edge" not in name, square, name)
 
     def test_every_footprint_has_the_same_density(self):
         for name, _, seed, settings in TILES:
+            if "ramp" in settings:
+                continue  # thinned at its front on purpose
             points = tile_points(seed, PIECES, settings["size"], weights=settings.get("weights"))
             area = settings["size"][0] * settings["size"][1]
             self.assertAlmostEqual(len(points) / area, 1 / CELL_M ** 2, msg=name)
@@ -58,6 +60,32 @@ class GrassRuleTests(unittest.TestCase):
         self.assertEqual(len(points), 64)
         self.assertTrue(all(-0.5 < x < 0.5 and -0.125 < y < 0.125 for x, y, *_ in points))
         self.assertNotIn("GrassMedium_LargeA_LOD0", {name for *_, name in points})
+
+    def test_ramp_strip_rises_from_a_ragged_front_to_full_height(self):
+        ramps = [(seed, settings) for name, _, seed, settings in TILES if "EdgeRamp" in name]
+        self.assertEqual(len(ramps), 2)
+        for seed, settings in ramps:
+            size = settings["size"]
+            points = tile_points(seed, PIECES, size, weights=settings.get("weights"), ramp=settings["ramp"])
+            self.assertEqual(points, tile_points(seed, PIECES, size, weights=settings.get("weights"), ramp=settings["ramp"]))
+            self.assertTrue(all(-0.5 < x < 0.5 and -0.25 < y < 0.25 for x, y, *_ in points))
+            rows = {}
+            for _, y, _, scale, _ in points:
+                rows.setdefault(round((y + 0.25) / CELL_M - 0.5), []).append(scale)
+            front, back = rows[min(rows)], rows[max(rows)]
+            # Blender -Y faces play: short, sparse tufts there, full-size and full cover at the back.
+            self.assertLess(max(front), 0.4)
+            self.assertGreater(min(back), 0.85)
+            self.assertLess(len(front), 0.8 * len(back))
+            self.assertEqual(len(back), round(size[0] / CELL_M))
+            means = [sum(rows[r]) / len(rows[r]) for r in sorted(rows)]
+            self.assertEqual(means, sorted(means), "tufts grow monotonically towards the rough")
+
+    def test_ramp_needs_rising_heights_and_gaps_below_one(self):
+        with self.assertRaises(ValueError):
+            tile_points(1, PIECES, (1.0, 0.5), ramp={"low": 0.9, "high": 0.2, "front_gaps": 0.5})
+        with self.assertRaises(ValueError):
+            tile_points(1, PIECES, (1.0, 0.5), ramp={"low": 0.2, "high": 1.0, "front_gaps": 1.0})
 
     def test_footprints_off_the_cell_grid_are_rejected(self):
         with self.assertRaises(ValueError):
