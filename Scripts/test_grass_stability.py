@@ -89,6 +89,30 @@ class GrassStabilityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             compare_frames(first, last, band=(0.6, 0.4))
 
+    def test_box_selects_columns_and_rows(self):
+        first = self.image("a.png")
+        # The change covers columns 6-9 of rows 0-4: a right-half box sees it, a left-half box does not.
+        last = self.image("b.png", block=((6, 0, 10, 5), (200, 200, 200)))
+        self.assertAlmostEqual(compare_frames(first, last, box=(0.6, 0.0, 1.0, 0.5)).changed_percent, 100.0)
+        self.assertAlmostEqual(compare_frames(first, last, box=(0.5, 0.0, 1.0, 0.5)).changed_percent, 80.0)
+        self.assertEqual(compare_frames(first, last, box=(0.0, 0.0, 0.5, 1.0)).changed_percent, 0.0)
+        with self.assertRaises(ValueError):
+            compare_frames(first, last, box=(0.5, 0.0, 0.4, 1.0))
+
+    def test_sparkle_counts_only_large_changes(self):
+        first = self.image("a.png")
+        # Rows 0-1 change by 10 levels (changed, not sparkle); rows 8-9 by 40 (both).
+        middle = Image.new("RGB", (10, 10), (40, 100, 30))
+        middle.paste((40, 110, 30), (0, 0, 10, 2))
+        middle.paste((40, 140, 30), (0, 8, 10, 10))
+        middle.save(self.root / "b.png")
+        result = compare_frames(first, self.root / "b.png", crop_fraction=1.0)
+        self.assertAlmostEqual(result.changed_percent, 40.0)
+        self.assertAlmostEqual(result.sparkle_percent, 20.0)
+        # Frame 1-2 and 2-3 both differ, so the sequence average keeps the same sparkle.
+        sequence = compare_sequence([first, self.root / "b.png", self.image("c.png")], crop_fraction=1.0)
+        self.assertAlmostEqual(sequence.sparkle_percent, 20.0)
+
     def test_worst_band_finds_localized_flicker_outside_lower_crop(self):
         # A thin horizon strip flickers on every frame; the lower 40% is stable.
         strip = ((0, 4, 10, 5), (200, 200, 200))

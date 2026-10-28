@@ -1337,10 +1337,72 @@ setting, reverted afterwards. The tree region is a 300 × 180 crop of the edge v
 - The Preserve Area run was captured at 1261 × 959 instead of 1320 × 959, because the editor layout
   changed when the Static Mesh editor opened. The framing differs by about 5%.
 
-Not resolved:
-- The canopy noise itself. Remaining options are larger than a setting: trees beyond a set distance
-  as impostor cards, a coarser Nanite foliage representation (`Voxelize` needs
-  `r.Nanite.AllowVoxels=1` and an editor restart), or softer leaf contrast against the sky.
-- Slow camera motion (View 9): captured each run but not reviewed. Frame differencing does not apply
-  to a moving camera.
-- The owner's review of the fuller distant crowns.
+The owner kept Preserve Area (fuller crowns). The cause and fix are below.
+
+### Cause and fix (later the same day)
+
+Same editor and settings. Every run was captured at 1261 × 959 (the last at 1260 × 959). The tree
+canopy boxes are now printed by `Scripts/grass_stability.py --profile coastal`. Each box is a fixed
+fraction of the frame, so its figure does not grow with canopy area:
+- tee (0, 0.38, 1, 0.52)
+- green (0.45, 0.16, 0.95, 0.34)
+- edge (0.38, 0.19, 0.75, 0.40)
+- bunker (0, 0, 1, 0.18)
+
+"Changed" counts pixels that change by more than 3/255; "sparkle" counts those above 16/255.
+Evidence folders are under `Saved/Automation/CoastalReview/`, named after each run.
+
+| Run | Tee changed / sparkle | Green | Edge | Bunker | Close grass (turf crop) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| R1 baseline | 8.36% / 0.267% | 10.79% / 0.137% | 18.61% / 0.707% | 9.16% / 0.265% | 2.27% |
+| R4 `r.TSR.ThinGeometryDetection 1` | 7.21% / 0.030% | 8.66% / 0.022% | 15.73% / 0.074% | 7.66% / 0.051% | 1.42% |
+| R5 R4 + `Coverage.ShadingRange 2` | 7.35% / 0.069% | 9.17% / 0.029% | 15.93% / 0.096% | 7.91% / 0.087% | 1.34% |
+| R4c `r.TSR.History.SampleCount 32` only | 3.90% / 0.158% | 3.79% / 0.075% | 9.10% / 0.405% | 4.25% / 0.167% | 0.90% |
+| R4b both (thin geometry + 32 samples) | 2.37% / 0.023% | 1.92% / 0.022% | 5.21% / 0.046% | 2.28% / 0.040% | 0.26% |
+| **R9 final repeat of R4b** | **2.44% / 0.024%** | **1.81% / 0.018%** | **5.21% / 0.047%** | **2.24% / 0.039%** | **0.26%** |
+
+**Why it shimmered.** There are two causes, both in how the sub-pixel leaves are rendered over time:
+1. **Sparkle: TSR throws the leaves' history away.**
+   - TSR's debug grid (`r.TSR.Visualize -2`, run R2) shows canopy pixels scattered with freshly reset
+     history.
+   - TSR's anti-flicker heuristic is disabled wherever sky shows through the leaves. That is why a
+     longer flicker window did nothing.
+   - Thin geometry detection is built for this case. It is off by default unless Nanite Foliage is
+     enabled. Turning it on removes 81–90% of the sparkle.
+   - Full relaxation for every material (R5) is no better, so the leaves' shading model does not need
+     to change.
+2. **Faint boiling: per-frame shadow noise on the leaves.**
+   - With temporal AA off (R3), the ground is perfectly still but leaf pixels still change every frame.
+   - Turning off SSAO changed nothing.
+   - Turning off dynamic shadows made the canopy perfectly still. So did turning off only the virtual
+     shadow map's screen-space trace (`r.Shadow.Virtual.ScreenRayLength 0`) together with soft-shadow
+     rays. Both draw new noise every frame.
+   - With TSR on, removing the screen trace alone gave nothing (R8 ≈ R4), because TSR already averages
+     that noise. A longer history (32 samples instead of 16) averages it better.
+
+**Fix.** `Config/DefaultEngine.ini` now sets `r.TSR.ThinGeometryDetection=1` and
+`r.TSR.History.SampleCount=32`. No asset changed.
+
+Against R1:
+- Canopy change falls 71–83% and sparkle 85–93% in all four tree views (R9).
+- The turf crop gets steadier as well: close grass 2.27% → 0.26%; stationary views 0.001–0.003%.
+- Mean canopy colour moved by less than 0.35/255, so the look is unchanged.
+
+**Checks for side effects:**
+- **Ghosting:** `Visual.ShotTrail` (ball and trail in flight with a following camera) and the
+  `Visual.RangeAssets` flag at 10 mph were compared before and after at full resolution. There is no
+  smearing on the trail, flag edges or trees.
+  - Before: ShotTrail `20261027-174338`, flag `20261027-174558-FlagWind10mph.png`.
+  - After: ShotTrail `20261027-174616`, flag `20261027-174830-FlagWind10mph.png`.
+  - `Visual.RangeAssets` fails its old flat-range check that the tee uses `M_Turf` (it is
+    `M_CoastalSurface`); its captures were still written.
+- **Cost:** mean frame time in ShotTrail was 10.39–10.59 ms after, against 10.35–10.54 ms before (DebugGame
+  editor, 1280 × 720 render; p95 sits at the ~8.3 ms frame cap). That is within noise; this is not a
+  controlled FPS measurement.
+- **Slow motion (View 9):** `View9_before_after.gif` in the R9 folder shows before (left) and after (right).
+  - No smearing is visible in the frames.
+  - A second-difference measure on the tree rows is unchanged (6.4% vs 6.2%). It is dominated by the
+    motion itself, so it shows no regression but cannot show an improvement.
+  - The owner's viewing of the GIF is pending.
+
+Not verified: Windows (DX12), packaged builds, and the owner's motion review.
