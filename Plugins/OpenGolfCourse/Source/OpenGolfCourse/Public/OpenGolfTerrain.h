@@ -126,6 +126,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation", meta = (ClampMin = "1", Units = "m"))
     float CullDistanceM = 100;
 
+    /**
+     * Evaluate the meshes' World Position Offset, so wind-enabled materials move (see vegetation_wind.py).
+     * How a plant moves belongs to its material; this only lets the placed instances run it.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation|Wind")
+    bool bWindMotion = false;
+
+    /** Beyond this the instances hold still, which keeps distant shadows cached; 0 never stops. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation|Wind", meta = (ClampMin = "0", Units = "m", EditCondition = "bWindMotion"))
+    float WindMotionDisableDistanceM = 150;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Vegetation")
     int32 Seed = 1731;
 

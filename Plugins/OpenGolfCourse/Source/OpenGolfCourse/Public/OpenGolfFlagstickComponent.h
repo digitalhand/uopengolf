@@ -30,6 +30,8 @@ public:
     /** A 20 by 14 inch flag, measured along the flag and down from the pole top. */
     static constexpr float FlagLengthCm = 50.8f;
     static constexpr float FlagHeightCm = 35.56f;
+    /** Centre of the flag above the ground, where it meets the wind. */
+    static constexpr float FlagCentreHeightCm = PoleHeightCm - FlagHeightCm * 0.5f;
     /** Seconds of calm air simulated when the flag is created, so it starts hanging. */
     static constexpr float SettleSeconds = 2.0f;
 
@@ -41,9 +43,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OpenGolf|Flag", meta = (ClampMin = "0.01"))
     float ClothKgPerM2 = 0.11f;
 
-    /** Flat-plate pressure coefficient across the cloth. */
+    /** Pressure coefficient across the cloth; see FOpenGolfFlagCloth::FSettings for why it is below a flat plate's. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OpenGolf|Flag", meta = (ClampMin = "0"))
-    float NormalForceCoefficient = 1.2f;
+    float NormalForceCoefficient = 0.7f;
 
     /** Skin-friction coefficient along the cloth. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "OpenGolf|Flag", meta = (ClampMin = "0"))
@@ -62,6 +64,8 @@ public:
 
     UProceduralMeshComponent* GetFlagCloth() const { return FlagCloth; }
     const FOpenGolfFlagCloth& GetCloth() const { return Cloth; }
+    /** The flag's averaged droop and flap rate while it simulates. */
+    const FOpenGolfFlagMotion& GetMotion() const { return Motion; }
 
     virtual void OnRegister() override;
     virtual void OnUnregister() override;
@@ -73,6 +77,7 @@ private:
     void UpdateFlagMesh(bool bCreate);
 
     FOpenGolfFlagCloth Cloth;
+    FOpenGolfFlagMotion Motion;
     TArray<FVector> MeshVertices;
     TArray<FVector> MeshNormals;
     TArray<FVector2D> MeshUVs;

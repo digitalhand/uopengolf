@@ -7,11 +7,15 @@
 class SWidget;
 class UUserWidget;
 
-/** Range HUD: shot tiles, wind and launch-monitor status. */
+/** Range HUD: shot tiles, wind, launch-monitor status and the optional wind debug overlay. */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfHUD : public AHUD
 {
     GENERATED_BODY()
+
+public:
+    /** Draws the uopengolf.WindDebug overlay when it is on. */
+    virtual void DrawHUD() override;
 
 protected:
     virtual void BeginPlay() override;

@@ -8,6 +8,7 @@
 #include "LaunchMonitorTypes.h"
 #include "Misc/AutomationTest.h"
 #include "OpenFairwayBall.h"
+#include "OpenFairway/WindProfile.h"
 #include "OpenFairwayPhysicalMaterial.h"
 #include "OpenGolfCourse.h"
 #include "Tests/AutomationCommon.h"
@@ -129,6 +130,29 @@ bool FRolloutSurfaceTest::RunTest(const FString& Parameters)
         TestTrue(FString::Printf(TEXT("Green rolls farther than the same path tagged fairway (%.2f vs %.2f yd)"), Yards(OnGreen.RollM), Yards(OnFairway.RollM)),
             OnGreen.RollM > OnFairway.RollM);
     }
+
+    // In wind the live ball flies through the same height profile as the prediction.
+    Ball->WindSpeedMph = 10.0f;
+    Ball->WindFromDeg = 45.0f;
+    TagSurface(*Far, EOpenFairwaySurface::Fairway);
+    FOpenFairwayShotResult InWind;
+    const bool bWindPlayed = Play(*Ball, Launch, InWind, *this);
+    const auto PredictedInWind = Ball->PredictShot(Launch, EOpenFairwaySurface::Fairway);
+    AddInfo(FString::Printf(TEXT("10 mph from 45 deg: live carry %.4f, total %.4f, lateral %.4f yd; headless carry %.4f, total %.4f, lateral %.4f yd."),
+        Yards(InWind.CarryM), Yards(InWind.TotalM), Yards(InWind.LateralM), Yards(PredictedInWind.CarryM), Yards(PredictedInWind.TotalM),
+        Yards(PredictedInWind.LateralM)));
+    if (bWindPlayed)
+    {
+        TestEqual(TEXT("In wind, live carry matches the headless prediction (yd)"), Yards(InWind.CarryM), Yards(PredictedInWind.CarryM), 0.1f);
+        TestEqual(TEXT("In wind, live total matches the headless prediction (yd)"), Yards(InWind.TotalM), Yards(PredictedInWind.TotalM), 0.1f);
+        TestEqual(TEXT("In wind, live lateral matches the headless prediction (yd)"), Yards(InWind.LateralM), Yards(PredictedInWind.LateralM), 0.1f);
+    }
+    // 1 m above the ground gets about 60% of the 10 m wind (UOpenGolf.Physics.WindProfile).
+    const float OneMetreShare = OpenFairway::WindProfile::Factor(1.0f, Ball->GetWindReferenceHeightM(), Ball->GetWindRoughnessM());
+    TestTrue(TEXT("The ball reports the wind at a height through its profile"),
+        Ball->GetWindVelocityAtHeightMps(1.0f).Equals(Ball->GetWindVelocityMps() * OneMetreShare, 0.01));
+    TestEqual(TEXT("The ball's profile is the 10 m standard"), Ball->GetWindReferenceHeightM(), OpenFairway::WindProfile::StandardReferenceHeightM);
+    Ball->WindSpeedMph = 0.0f;
 
     auto LieAt = [Ball](float XM, float YM)
     {

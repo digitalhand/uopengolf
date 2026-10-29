@@ -232,6 +232,9 @@ def main(argv):
     with s.savanna_helpers():
         materials = existing_materials(manifest, folder) if only else build_materials(manifest, folder, reuse)
         meshes = [] if reuse else import_meshes(manifest, folder, materials, only)
+        # Rebuilt instances get their wind back (vegetation_wind_assignments.py).
+        import ApplyVegetationWind
+        importlib.reload(ApplyVegetationWind).apply_materials([mi.get_path_name() for mi in materials.values()])
     ue.log(f"SAVANNA_IMPORT_COMPLETE folder={folder} meshes={len(meshes)} materials={len(materials)} materials_only={reuse}")
 
 

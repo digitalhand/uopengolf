@@ -346,10 +346,19 @@ remain between Play sessions in the same editor process.
 
 Shots are played on flat ground at 75 °F and sea level. Wind is editable before Play;
 wind and green speed also have console controls during Play. There is no in-game weather
-or altitude menu yet. The flag previews wind in the editor and uses the ball's wind during
-Play. In calm air it hangs beside the pole. For editor controls, expected movement and
+or altitude menu yet. The flag previews wind in the editor and uses the ball's wind at flag height
+during Play, about 72% of the authored speed, which is the 10 m reading. In calm air it hangs beside the pole. For editor controls, expected movement and
 optional console commands, see
 [Validate wind and flag movement](Docs/RangeAssets.md#validate-wind-and-flag-movement).
+
+The current flight calibration understates headwinds:
+- **Driver:** into 30 mph the 150 mph replay climbs higher and carries 52 yd shorter.
+  Published aerodynamics predict a loss of 67–87 yd.
+- **Low-launch shots:** these gain carry. The low wood test shot carries 9 yd farther into 30 mph.
+
+The wind's direction is correct. The cause, the measurements and the references are in
+[Headwinds](Plugins/OpenFairwayPhysics/README.md#headwinds); the fix is a recalibration that
+has not been done yet.
 
 ## Developer
 

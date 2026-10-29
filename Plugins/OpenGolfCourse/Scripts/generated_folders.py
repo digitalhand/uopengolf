@@ -7,6 +7,10 @@ ground, but nothing deleted them, so every rebuild added its folders to Git LFS 
 remove_unreferenced after saving the level: the asset registry then matches the saved map, so a folder
 it still uses is kept. Only folders named exactly as the builder names them are considered.
 
+A run baked in this editor session stays loaded, because the engine still holds its point data, and
+force-deleting a loaded package fails part-way and leaves it corrupt. Such a folder is kept and logged;
+the next rebuild, or this script run after restarting the editor, removes it.
+
     py "<project>/Plugins/OpenGolfCourse/Scripts/generated_folders.py" --root /Game/UOpenGolf/Terrain/Generated [--root ...] [--apply]
 
 Without --apply it only lists what it would remove. Save every open level first.
@@ -33,13 +37,23 @@ def run_folders(library, root, prefixes=PREFIXES):
 
 
 def referenced_from_outside(library, folder):
-    """True if any package outside folder references an asset inside it."""
+    """True if any package outside folder references an asset inside it.
+
+    Reads the asset registry without loading the folder's assets, so the check does not itself make them
+    look loaded; the registry matches the map because callers run after saving it.
+    """
     for path in library.list_assets(folder, recursive=True, include_folder=False):
         package = str(path).split(".")[0]
-        for referencer in library.find_package_referencers_for_asset(package, load_assets_to_confirm=True):
+        for referencer in library.find_package_referencers_for_asset(package, load_assets_to_confirm=False):
             if not str(referencer).startswith(folder + "/"):
                 return True
     return False
+
+
+def loaded_in_memory(library, folder):
+    """True if any asset inside folder is loaded in this editor session."""
+    return any(library.find_asset_data(str(path)).is_asset_loaded()
+               for path in library.list_assets(folder, recursive=True, include_folder=False))
 
 
 def remove_unreferenced(library, roots, keep=(), prefixes=PREFIXES, apply=True, log=print):
@@ -51,9 +65,14 @@ def remove_unreferenced(library, roots, keep=(), prefixes=PREFIXES, apply=True, 
     removed, kept = [], []
     for root in roots:
         for folder in sorted(run_folders(library, root, prefixes) - set(keep)):
+            loaded = loaded_in_memory(library, folder)
             if referenced_from_outside(library, folder):
                 kept.append(folder)
                 log(f"Keeping {folder}: it is still referenced")
+            elif loaded:
+                kept.append(folder)
+                log(f"Keeping {folder}: it is still loaded in this editor session; run this script again "
+                    "after restarting the editor")
             elif not apply:
                 removed.append(folder)
                 log(f"Would remove unreferenced generated folder {folder}")

@@ -35,6 +35,7 @@ void UOpenGolfFlagstickComponent::OnRegister()
     // The flag starts laid out along +Y and falls for a moment, so it is already hanging when seen.
     Cloth.Reset(GetClothSettings(), GetPoleTop(), static_cast<float>(GetComponentRotation().Yaw) + 90.0f);
     Cloth.Settle(SettleSeconds, GetPoleTop());
+    Motion.Reset();
     if (!FlagCloth)
     {
         FlagCloth = NewObject<UProceduralMeshComponent>(this, TEXT("FlagCloth"), RF_Transient | RF_TextExportTransient);
@@ -66,7 +67,7 @@ void UOpenGolfFlagstickComponent::TickComponent(float DeltaTime, ELevelTick Tick
     const UWorld* World = GetWorld();
     if (!bSimulateWhenHidden && World && World->IsGameWorld() && FlagCloth && !FlagCloth->WasRecentlyRendered(HiddenSeconds))
         return;
-    Cloth.Advance(DeltaTime, GetPoleTop());
+    Cloth.Advance(DeltaTime, GetPoleTop(), [this](const FOpenGolfFlagCloth& Advanced, float Seconds) { Motion.Sample(Advanced, Seconds); });
     UpdateFlagMesh(false);
 }
 

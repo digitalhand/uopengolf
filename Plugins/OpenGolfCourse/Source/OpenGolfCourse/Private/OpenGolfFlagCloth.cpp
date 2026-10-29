@@ -26,6 +26,8 @@ namespace
     constexpr float StandardAirDensity = 1.225f;
     constexpr float CmPerM = 100.0f;
     constexpr float Cm2PerM2 = 10000.0f;
+    /** The fly end must pass this far beyond its mean line for a crossing to count as a flap. */
+    constexpr float FlapDeadBandCm = 0.5f;
 } // namespace
 
 void FOpenGolfFlagCloth::Reset(const FSettings& InSettings, const FVector& PoleTop, float HeadingYawDeg)
@@ -107,6 +109,11 @@ void FOpenGolfFlagCloth::SetWind(const FVector& InWindMps, float AirDensityKgM3)
 
 void FOpenGolfFlagCloth::Advance(float DeltaSeconds, const FVector& PoleTop)
 {
+    Advance(DeltaSeconds, PoleTop, [](const FOpenGolfFlagCloth&, float) {});
+}
+
+void FOpenGolfFlagCloth::Advance(float DeltaSeconds, const FVector& PoleTop, TFunctionRef<void(const FOpenGolfFlagCloth&, float)> OnSubstep)
+{
     if (Positions.IsEmpty())
         return;
     const FVector Jump = PoleTop - LastPoleTop;
@@ -124,6 +131,7 @@ void FOpenGolfFlagCloth::Advance(float DeltaSeconds, const FVector& PoleTop)
     {
         Substep(SubstepSeconds, PoleTop);
         Pending -= SubstepSeconds;
+        OnSubstep(*this, SubstepSeconds);
     }
 }
 
@@ -136,6 +144,15 @@ float FOpenGolfFlagCloth::GetMaxStretch() const
             Stretch = FMath::Max(Stretch, static_cast<float>(FVector::Dist(Positions[Constraint.A], Positions[Constraint.B])) / Constraint.RestCm - 1.0f);
     }
     return Stretch;
+}
+
+float FOpenGolfFlagCloth::GetDroopDeg() const
+{
+    if (Positions.IsEmpty())
+        return 90.0f;
+    const FVector Span = GetPosition(Columns - 1, Rows / 2) - GetPosition(0, Rows / 2);
+    // In a gale the flapping fly end rises above the hoist; that is still straight out.
+    return FMath::Max(0.0f, FMath::RadiansToDegrees(FMath::Atan2(static_cast<float>(-Span.Z), static_cast<float>(Span.Size2D()))));
 }
 
 FVector FOpenGolfFlagCloth::HoistPoint(int32 Row, const FVector& PoleTop) const
@@ -253,4 +270,38 @@ void FOpenGolfFlagCloth::Substep(float Seconds, const FVector& PoleTop)
         Velocities[Particle] = (Position - Previous[Particle]) / Seconds;
     }
     TimeSeconds += Seconds;
+}
+
+void FOpenGolfFlagMotion::Reset()
+{
+    const float Seconds = AverageSeconds;
+    *this = FOpenGolfFlagMotion();
+    AverageSeconds = Seconds;
+}
+
+void FOpenGolfFlagMotion::Sample(const FOpenGolfFlagCloth& Cloth, float DeltaSeconds)
+{
+    if (Cloth.GetPositions().IsEmpty() || !(DeltaSeconds > 0.0f))
+        return;
+    using FCloth = FOpenGolfFlagCloth;
+    const FVector Span = Cloth.GetPosition(FCloth::Columns - 1, FCloth::Rows / 2) - Cloth.GetPosition(0, FCloth::Rows / 2);
+    const float Heading = Cloth.GetHeadingRad();
+    const float Lateral = static_cast<float>(Span.Y * FMath::Cos(Heading) - Span.X * FMath::Sin(Heading));
+    const float Droop = Cloth.GetDroopDeg();
+    if (!bStarted)
+    {
+        DroopDeg = Droop;
+        LateralMeanCm = Lateral;
+        bStarted = true;
+    }
+    const float Blend = 1.0f - FMath::Exp(-DeltaSeconds / FMath::Max(AverageSeconds, 0.1f));
+    DroopDeg += (Droop - DroopDeg) * Blend;
+    LateralMeanCm += (Lateral - LateralMeanCm) * Blend;
+    const float Offset = Lateral - LateralMeanCm;
+    const int32 NewSide = Offset > FlapDeadBandCm ? 1 : Offset < -FlapDeadBandCm ? -1 : Side;
+    const float Crossings = Side != 0 && NewSide != Side ? 1.0f : 0.0f;
+    Side = NewSide;
+    // An exponentially weighted count of crossings per second; two crossings make one flap.
+    CrossingsPerSecond += (Crossings / DeltaSeconds - CrossingsPerSecond) * Blend;
+    FlapHz = 0.5f * CrossingsPerSecond;
 }

@@ -4,6 +4,7 @@
 // The C# core throws on invalid input; this port has no exceptions, so an invalid contact
 // normal falls back to up and callers validate launch data before simulating.
 #include "OpenFairway/GolfPhysics.h"
+#include "OpenFairway/WindProfile.h"
 
 #include "CoreMath.h"
 
@@ -180,7 +181,9 @@ namespace OpenFairway
 
     FBallState GolfPhysics::StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt)
     {
-        const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(State.Velocity - Environment.Wind, State.Spin, Environment.AirDensity,
+        // The wind where the ball is: State.Position.Y is its height above the launch ground.
+        const FVector3f Wind = WindProfile::At(Environment, State.Position.Y);
+        const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(State.Velocity - Wind, State.Spin, Environment.AirDensity,
             Environment.AirViscosity, Environment.DragScale, Environment.LiftScale, Environment.InitialLaunchAngleDeg, Profile);
         return StepFlight(State, Environment, Sample, Dt);
     }
@@ -190,8 +193,8 @@ namespace OpenFairway
         FVector3f Force(0.0f, -Gravity * Mass, 0.0f);
         if (Sample.HasAerodynamics())
         {
-            // Drag and lift act on the velocity through the air; the sample was taken from it too.
-            const FVector3f AirVelocity = State.Velocity - Environment.Wind;
+            // Drag and lift act on the velocity through the local air; the sample was taken from it too.
+            const FVector3f AirVelocity = State.Velocity - WindProfile::At(Environment, State.Position.Y);
             Force += -0.5f * Sample.DragCoefficient * Environment.AirDensity * CrossSection * AirVelocity * Sample.Speed;
             const float SpinLength = State.Spin.Size();
             if (SpinLength > 0.1f)

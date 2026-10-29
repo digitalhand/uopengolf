@@ -16,14 +16,18 @@ import unreal as ue
 
 PROJECT = Path(ue.Paths.project_dir()).resolve()
 sys.path.insert(0, str(PROJECT / 'Plugins/OpenGolfCourse/Scripts'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import course_assets as a
 import BuildTerrainAssets as terrain
+import vegetation_wind_assignments as wind
 
 MESHES = '/OpenGolfSavanna/Meshes/Grass/Medium/SM_GrassMedium_30cm_'
 TILES = ((1.0, '1m', 'ABCD'), (0.5, '50cm', 'AB'), (0.25, '25cm', 'AB'))
 # Ground cover fades out from 75% of its cull distance onto the matching ground colour.
+# The tiles' material sways them (vegetation_wind_assignments.py) until they fade out.
 COMMON = {'surface': ue.OpenFairwaySurface.ROUGH, 'kind': ue.OpenGolfVegetationKind.GROUND_COVER,
-          'maximum_slope_deg': 35.0, 'seed': 1731}
+          'maximum_slope_deg': 35.0, 'seed': 1731, 'wind_motion': True,
+          'wind_motion_disable_distance_m': wind.mesh_wind_distance_m(MESHES + '1m_A')}
 PRESETS = {
     # Tile footprints keep 0.4 m from play; blades overhang about 0.12 m and the edge strips fill the rest.
     'DA_RoughGrassDense': {'placement_pattern': ue.OpenGolfPlacementPattern.TILED, 'boundary_clearance_m': 0.4,

@@ -105,13 +105,25 @@ public:
     static constexpr float CanopyDecayLengthM = 4.0f;
     static constexpr float CanopyDeflectionDegPerSqrtM = 6.0f;
 
-    /** The wind in world space (X downrange, Y right, Z up), m/s. */
+    /** The wind in world space (X downrange, Y right, Z up), m/s, at its reference height (the authored speed). */
     UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
     FVector GetWindVelocityMps() const;
+
+    /** The wind in world space at HeightM above the ground, m/s; a moving shot keeps its launch wind. */
+    UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
+    FVector GetWindVelocityAtHeightMps(float HeightM) const;
 
     /** Air density from the ball's air settings, kg/m^3. */
     UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
     float GetAirDensityKgM3() const;
+
+    /** Height (m) at which WindSpeedMph is measured; 0 is uniform wind. A moving shot keeps its launch value. */
+    UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
+    float GetWindReferenceHeightM() const;
+
+    /** Roughness length (m) of the ground the wind blows over. A moving shot keeps its launch value. */
+    UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
+    float GetWindRoughnessM() const;
 
     /** Headless prediction of a launch on flat ground of one surface, using this ball's air and profile. */
     OpenFairway::FShotSimulationResult PredictShot(const FOpenFairwayLaunch& LaunchData, EOpenFairwaySurface Surface) const;

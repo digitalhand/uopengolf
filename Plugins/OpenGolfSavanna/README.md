@@ -148,6 +148,26 @@ Then place the course grass with the course kit's `ApplyCourseGrass.py`; the com
 with `Scripts/understory.py` on the open map. Layout rules are pure Python with tests
 (`python3 -m unittest test_savanna_layout test_understory_layout`).
 
+## Wind
+
+The jacarandas, the Grass Medium rough and the Nature Essentials grasses move in the range's wind
+through the course kit's [vegetation wind](../OpenGolfCourse/README.md#vegetation-wind). The savanna
+parents (`M_SavannaCard`, `M_SavannaSolid`, `M_SavannaGrass`, `M_SavannaUnderstoryGrass`) carry its
+hook, switched off. `Scripts/vegetation_wind_assignments.py` lists which material instances turn it
+on with which profile and the largest scale their meshes are placed at (from `savanna_layout.py` and
+`understory_layout.py`), and which placed meshes run it and where they stop. Cut turf, litter, moss,
+rocks and seedlings stay still.
+
+`Scripts/ApplyVegetationWind.py` applies the list on the open map, saved and out of Play. It backs
+up what it saves under `Saved/VegetationWindBackups/`, adds the hook to the parents without
+rebuilding the rest of their graphs, sets each instance's profile sized to its tallest mesh, lets
+the presets and the map's placed meshes run it, and saves only those. It prints
+`OPEN_GOLF_VEGETATION_WIND_APPLIED`. After a change to the profiles, sizes or scales only,
+`--materials-only` rebuilds `MF_VegetationWind` and the listed instances and leaves the parents,
+presets and map alone. The importers and the preset and understory builders apply the
+same list, so a re-import or rebuild keeps the motion. To add wind to other vegetation, add it to
+the list (`python3 -m unittest test_vegetation_wind_assignments` checks it) and run the script again.
+
 ## Maintained turf
 
 The original short-grass pipeline and its scoped import/apply commands are described in

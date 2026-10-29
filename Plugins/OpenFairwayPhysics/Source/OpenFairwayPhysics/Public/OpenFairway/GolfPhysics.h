@@ -73,8 +73,15 @@ namespace OpenFairway
         constexpr float SimulationHz = 120.0f;
         constexpr float SimulationDt = 1.0f / SimulationHz;
 
+        /**
+         * State.Position.Y must be the ball centre's height above the launch ground (it starts at
+         * Radius): with a profiled Environment the wind at height 0 is zero.
+         */
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt);
-        /** Sample must come from the air-relative velocity, State.Velocity - Environment.Wind. */
+        /**
+         * Sample must come from the local air-relative velocity, State.Velocity minus
+         * WindProfile::At(Environment, State.Position.Y) (the wind at the ball's height).
+         */
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightAerodynamicsSample& Sample, float Dt);
 
         /** Contact impulse with spin-dependent restitution, friction-limited tangential response and landing bite. */

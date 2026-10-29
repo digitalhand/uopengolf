@@ -26,6 +26,8 @@ maintainer's own MIT project, so the port is covered by this repository's licens
   - [FlightScope comparisons and replay shots](#flightscope-comparisons-and-replay-shots)
   - [Does the regime limit rollout?](#does-the-regime-limit-rollout)
 - [Flight corrections](#flight-corrections)
+- [Wind and height](#wind-and-height)
+  - [Headwinds](#headwinds)
 - [Shot results](#shot-results)
 - [Units and coordinate frames](#units-and-coordinate-frames)
 - [Tests and golden fixtures](#tests-and-golden-fixtures)
@@ -42,7 +44,7 @@ maintainer's own MIT project, so the port is covered by this repository's licens
 | Area | State |
 | --- | --- |
 | Core equations (flight, impact, ground, rest) | Ported, then corrected for spin decay, calibration continuity, excess low-launch lift, the high-Re drag step and the low-Re lift dead band; historical profile matches 21 C# fixtures |
-| Air | Temperature, altitude, humidity, station pressure and wind |
+| Air | Temperature, altitude, humidity, station pressure, and wind that grows with height; headwinds cost too little carry until recalibration (see [Headwinds](#headwinds)) |
 | Headless simulator (`ShotSimulator`) | Ported from `PhysicsAdapter`; flat ground, one surface |
 | Ball actor (`AOpenFairwayBall`) | Working on Windows and Linux; automated range shot within tolerance of the headless result |
 | Surfaces | All seven presets; assigned by physical materials or tags; green speed set by stimp (`GreenStimpFeet`) |
@@ -60,7 +62,8 @@ Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
   lift bridges the Re 55k-68k band where two inherited fits fall to zero (see
   [Flight corrections](#flight-corrections)).
 - Air density from temperature, altitude or a measured station pressure, and humidity.
-  Wind acts on drag and lift through the ball's velocity relative to the air.
+  Wind acts on drag and lift through the ball's velocity relative to the air, at the ball's
+  height (see [Wind and height](#wind-and-height)).
 - Impact impulses with speed- and spin-dependent restitution, friction-limited tangential
   response and a first-impact "bite" chosen per landing bucket (run, release, check, spin-back).
 - Ground roll with sliding friction until rolling, spin-scaled rolling resistance, grass drag,
@@ -133,6 +136,10 @@ Ball->OnBallAtRest.AddDynamic(this, &AMyRange::HandleBallAtRest);
 clockwise from the world +X target line. The **OpenFairway|Air** properties set
 `TemperatureF`, `AltitudeFt`, `RelativeHumidity` (0-1), `PressurePa` (0 derives it from
 altitude), `WindSpeedMph` and `WindFromDeg`; they apply from the next launch.
+`WindSpeedMph` is the 10 m reading. `GetWindVelocityMps()` returns it, and
+`GetWindVelocityAtHeightMps(HeightM)` returns the wind at a height above the ground.
+`GetWindReferenceHeightM()` and `GetWindRoughnessM()` return the height profile, so scenery can show
+the wind the ball flies through. Like the wind, they come from the launch while a shot moves.
 
 ### C++ headless simulation
 
@@ -161,7 +168,11 @@ const auto IntoWind = OpenFairway::ShotSimulator::Simulate(
 
 Check `bAtRest` before treating `TotalM` as final; false means the 30 s limit ran out.
 The core functions (`GolfPhysics::StepFlight`, `ResolveImpact`, `StepGround`, `CanRest`)
-can also be called directly with `FBallState` in SI units.
+can also be called directly with `FBallState` in SI units. `StepFlight` reads the wind at
+`State.Position.Y`, the ball centre's height above the launch ground (`Radius` on the tee), so pass the
+real position. An `FFlightEnvironment` from `FResolvedShotParams::Resolve` carries the 10 m profile,
+and a zero position there means no wind. A default-constructed `FFlightEnvironment` has uniform wind
+(`WindReferenceHeightM` 0).
 
 ## How it uses Unreal physics
 
@@ -444,8 +455,118 @@ turns both off, so the golden fixtures are unchanged.
 | Low-Re lift bridge | `Flight.bBridgeLowReLift = true` | The 60k and 65k lift fits clamp to zero for spin ratios 0.1-0.2, so lift vanished at about 43-54 mph | Carry mean error 3.78 to 3.70 yd overall over 175 compared shots, better in every carry band |
 
 Wind and humidity are inputs rather than corrections: calm, dry air gives exactly the
-previous results. Wind is uniform with height and has no gusts. Humidity uses the Tetens
+previous results. Wind grows with height (see [Wind and height](#wind-and-height)) and has
+no gusts. Humidity uses the Tetens
 saturation pressure, with the dry air contributing its partial pressure.
+
+## Wind and height
+
+Wind is slowed by the ground: it is close to zero at the grass and grows with height. The
+flight uses the neutral log wind profile over open ground:
+
+`wind(h) = wind_ref * ln(h / z0) / ln(h_ref / z0)`
+
+| Setting (`FAirConditions`) | Default | Meaning |
+| --- | --- | --- |
+| `WindReferenceHeightM` | 10 m | Height of the authored `WindSpeedMph`, as in weather reports. 0 keeps the wind uniform |
+| `WindRoughnessM` | 0.03 m | Roughness length of open, short-grass ground |
+
+| Height | Share of the authored wind |
+| --- | --- |
+| 1 m | 60% |
+| 2 m (the flag) | 72% |
+| 5 m | 88% |
+| 10 m | 100% |
+| 30 m | 119% |
+
+- **Height:** the ball centre's height above the launch ground, not above the ground beneath
+  the ball. The core has no world access. A ball below its launch ground gets no wind.
+- **Limits:** the share is 0 at or below the roughness length and stops growing above 100 m
+  (about 140%). Settings that cannot describe a profile (non-finite, or a reference height
+  inside the roughness) fall back to uniform wind.
+- **Effect:** high shots are pushed slightly more, and a low punch loses less to a tailwind
+  and drifts less in a crosswind. The measured table is in `UOpenGolf.Physics.WindHeight`
+  and `Docs/PhasesStatus.md`. Headwinds have a known calibration gap; see [Headwinds](#headwinds).
+- **Roughness:** 0.03 m is class 3, "open flat terrain; grass, few isolated obstacles", of
+  Davenport's terrain classification as adapted by Wieringa. It is also the roughness the
+  [WMO observing guide](#references) corrects wind readings to, at the 10 m standard height.
+- **Low-level step:** `FFlightEnvironment` defaults to uniform wind. `FResolvedShotParams::Resolve`
+  copies the profile settings, so every simulated and in-world shot uses them. `GolfPhysics::StepFlight`
+  reads the height from `State.Position.Y`.
+
+### Headwinds
+
+A headwind does not push the ball back directly. It raises the ball's speed through the air,
+and both aerodynamic forces grow with that speed:
+- **Drag** acts against the airflow and always shortens the shot.
+- **Lift** comes from backspin (the Magnus effect) and acts across the airflow, so the ball
+  climbs higher. Golfers call this ballooning.
+
+Lift matters as much as drag:
+- At launch, the 150 mph drive below gets lift of 1.22 times its weight.
+- With lift switched off, the same drive carries 145 yd instead of 249 and peaks at 28 ft
+  instead of 84.
+
+A headwind therefore costs carry by adding drag, but it also adds lift. Low-launch shots have
+less lift than their weight, and for them the extra lift can make up part of that loss, or all of it.
+
+**Measured, 2026-10-29** (Linux, Unreal 5.8.4, DebugGame editor, gameplay profile, 75 °F, sea level):
+- **The 30 mph rows** come from replays in Play with the wind from 0°.
+- **The 10 and 20 mph rows** come from an offline replica of the flight loop. The replica is not
+  in the repository. It reproduces the Play results within 1.5 yd of carry and 0.2 ft of apex.
+
+| Shot | Calm | 10 mph | 20 mph | 30 mph |
+| --- | --- | --- | --- | --- |
+| Driver replay: 150 mph, 12.5°, 2,335 rpm | 248.4 yd, apex 83.9 ft | −12 yd, +8 ft | −29 yd, +17 ft | 196.3 yd (−52), apex 110.7 ft, lands at 66.5° |
+| Low wood replay: 114.5 mph, 6.95°, 1,933 rpm | 121.6 yd, apex 15.0 ft | +5 yd | +9 yd | 130.9 yd (+9), apex 21.5 ft |
+| Low punch: 95 mph, 8°, 4,200 rpm (replica only; calm matches `Physics.WindHeight`) | 106.3 yd, apex 19.4 ft | +10 yd | +14 yd | +13 yd |
+
+Hang time shows where the low wood's gain comes from. The calm low wood stays up 2.74 s;
+into 30 mph it stays up 3.56 s and lands at 23.9 m/s instead of 33.7 m/s:
+- **Drag rises:** the ball arrives much slower.
+- **Lift rises too:** at launch, lift is 76% of the ball's weight in calm air and 100% into the wind.
+
+The wind's direction and frame are correct (`UOpenGolf.Physics.Wind`); the error is in the size of the response.
+
+**Comparison with published aerodynamics.** The same replica was run with two independent
+coefficient sets. Each was fitted to the calm carry of each shot by scaling its lift. Every
+column below comes from the replica, so they compare like with like. In Play the low wood
+gained 9 yd rather than 10.
+
+| Change in carry into 30 mph | This model | Smits & Smith spin terms | Constant drag, linear lift |
+| --- | --- | --- | --- |
+| Driver | −52 yd | −87 yd | −67 yd |
+| Low wood | +10 yd | +4 yd | −2 yd |
+| Low punch | +13 yd | +4 yd | +1 yd |
+
+- **Smits & Smith spin terms:** `Cd = 0.24 + 0.18 S`, `CL = 0.54 S^0.4`, from Smits and Smith
+  (1994), without their Reynolds-number drag term.
+- **Constant drag, linear lift:** `Cd = 0.25`, `CL ∝ S`. A simple form chosen for comparison;
+  Bearman and Harvey (1976) give typical measured magnitudes.
+- **Rules of thumb:** for a driver, about 12 yd lost into a 10 mph headwind
+  ([USGTF](#references)), and a 300 yd carry falling to 259 yd into 20 mph
+  ([Golf.com, from a Trackman study](#references)).
+
+Low-launch shots are close to wind-neutral even with the published coefficients, so "always
+shorter" is not a law of physics for them. Still, this model:
+- gives them at least 2.5 times the larger published gain;
+- loses about 20–40% less carry than the published sets for a driver in a strong headwind;
+- loses less than the 20 mph rule of thumb (−12% against −14%).
+
+At 10 mph its driver loss matches the 12 yd rule.
+
+**Cause.** In this model, the drag coefficient at the driver and low-wood Reynolds numbers
+(1.4–1.7 × 10⁵) is about 0.20. The Smits & Smith spin terms give about 0.25 at the same spin.
+The inherited fits pair that low drag with low lift, so calm-air carries still match FlightScope.
+In wind, the extra lift then outweighs the extra drag by more than it should.
+
+**Status: not retuned.** The fix is a recalibration, and it changes every carry. It includes:
+- drag raised to measured levels;
+- lift and the regime overrides refitted against the [FlightScope shot library](#flightscope-shot-library);
+- wind assertions in `UOpenGolf.Physics.Wind`: a driver loses about 25–35% of its carry into 30 mph,
+  as the published sets do, and a low wood stays within ±5 yd of calm.
+
+This joins the open recalibration (D6 in `Docs/PhasesStatus.md`).
 
 ## Shot results
 
@@ -473,7 +594,8 @@ Distances are measured along the shot's horizontal launch direction, like ogolf-
   +Z right (right-handed, as in Godot).
 - **Wind:** `WindFromDeg` is the direction the wind blows from, clockwise seen from above,
   measured from the +X target line: 0 is a headwind, 90 comes from the right and 180 is a
-  tailwind. It is fixed to the world, so it does not turn with `AimYawDeg`.
+  tailwind. It is fixed to the world, so it does not turn with `AimYawDeg`. `WindSpeedMph` is
+  the 10 m reading; the ball meets the wind at its own height.
 - **Unreal:** centimeters with +X forward, +Y right, +Z up (left-handed). The ball actor
   converts positions and directions at its boundary; spin stays in the core frame, so
   cross products keep their physical meaning.
@@ -573,7 +695,9 @@ in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
 - JSON ball profiles (`BallPhysicsProfile.FromJson`) are not ported; change `Profile` in C++.
 - `SurfaceZone` area overrides, Terrain3D height queries and the lie resolver are not ported;
   use physical materials (per material or Landscape layer) or surface tags.
-- Wind is uniform: no change with height and no gusts.
+- Wind has no gusts, and its height is measured from the launch ground, not the terrain below the ball.
+- Headwinds cost too little carry. A driver loses about 20–40% less than published aerodynamics
+  into 30 mph, and low-launch shots gain 5–14 yd. See [Headwinds](#headwinds).
 - No shot camera, tracer styling or HUD here (the game module supplies those).
 - Physical-material surfaces are a possible later addition to tags.
 - Packaged builds are only start-checked headless; ball flight in a rendered packaged game
@@ -621,6 +745,24 @@ Tools/ReferenceHarness/     Optional .NET harness that regenerates golden values
   law. Their reported Reynolds range is roughly 100,000–250,000; extrapolation
   into slower flight still needs validation. This does not identify FlightScope's
   spin-decay implementation.
+- A. J. Smits and D. R. Smith, "A new aerodynamic model of a golf ball in flight," in
+  *Science and Golf II: Proceedings of the 1994 World Scientific Congress on Golf*,
+  A. J. Cochran and M. R. Farrally (eds.), E & FN Spon, London (1994), 340–347. Cited
+  through Nathan's paper above. Source of the spin-decay law and of the spin-dependent drag and
+  lift terms used in the [Headwinds](#headwinds) comparison.
+- World Meteorological Organization,
+  [Guide to Meteorological Instruments and Methods of Observation (WMO-No. 8)](https://www.weather.gov/media/epz/mesonet/CWOP-WMO8.pdf),
+  seventh edition (2008; NOAA-hosted copy), Part I, Chapter 5 "Measurement of surface wind":
+  - the 10 m standard height over open terrain;
+  - the annex table of Davenport's terrain classes as adapted by Wieringa, whose "open" class
+    has z0 = 0.03 m;
+  - the correction of readings to z = 10 m and z0 = 0.03 m.
+- A. Rice, [How weather conditions affect your golf ball](https://golf.com/instruction/weather-conditions-effect-golf-ball/),
+  Golf.com (24 June 2019): from a year-long study with Trackman, a 300 yd drive carries 259 yd
+  into a 20 mph headwind.
+- M. Harman, [Editorial – Wind, Temperature and The Open](https://www.usgtf.com/?p=29996),
+  USGTF (1 August 2021): a driver loses about 12 yd of carry into a 10 mph headwind and gains
+  about 9 yd downwind.
 - NASA Glenn, [Viscosity](https://www.grc.nasa.gov/www/BGH/viscosity.html):
   Sutherland's temperature-dependent viscosity law used in the air model.
 - [FlightScope Trajectory Optimizer](https://trajectory.flightscope.com/):

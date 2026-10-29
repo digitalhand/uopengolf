@@ -14,15 +14,17 @@ Use the Unreal console (**~**) during play:
 | --- | --- |
 | `uopengolf.Grass3D 0` | Clears all decorative grass instances |
 | `uopengolf.Grass3D 1` | Recreates the same deterministic grass population (default) |
-| `uopengolf.WindMph 10` | Sets 10 mph wind for the ball and flag; default is 0 (calm) |
+| `uopengolf.WindMph 10` | Sets 10 mph wind (at 10 m) for the ball, flag, trees and tall grass; default is 0 (calm) |
 | `uopengolf.WindFromDeg 90` | Wind from the right; 0 is headwind, 180 tailwind, 270 from the left |
+| `uopengolf.WindDebug 1` | Shows the wind against the Beaufort scale and the flag's measured droop and flap rate |
 | `uopengolf.GreenStimp 8`–`15` | Green speed as a stimp reading in feet (default 10), from the next shot |
 
 Grass covers a 20 m radius around the tee, clipped to the 34 m fairway strip and the
 range's back edge and excluding the 5 m tee paint. Public clumps contain 16 small triangles, use no collision
 or shadows, and use draw-distance bounds of 7 and 10 m. The toggle is checked every 0.25 s.
 The fairway texture, mowing bands, and physical ground remain when grass is off.
-Grass world-position displacement is disabled.
+Cut turf has no world-position displacement; the tall rough, the grass under the trees and the
+jacarandas move in the wind (see [Wind on trees and grass](#wind-on-trees-and-grass)).
 
 The flag is simulated cloth: gravity drops it, and the wind flies and flaps it (see the
 [kit README](../Plugins/OpenGolfCourse/README.md#flagstick)). Its pole is 213.36 cm above ground,
@@ -41,8 +43,10 @@ mowing contrast is fixed at zero. It plays at stimp 10;
 
 Select **Range settings** in the Outliner and open **Details → UOpenGolf → Wind** to edit
 **Wind Speed (mph)** and **Wind From (degrees)**. These settings save with the map and
-drive the ball and flag during Play. **Preview Wind in Editor** enables cloth animation
-before Play when the viewport has Realtime enabled. Default wind is 0 mph, so a hanging
+drive the ball, flag, trees and tall grass during Play. The speed is the 10 m reading, as in a
+weather report: the ball meets the wind at its own height, and the flag, about 2 m up, flies at
+about 72% of it. The wind display shows the authored speed. **Preview Wind in Editor** enables
+cloth and vegetation animation before Play when the viewport has Realtime enabled. Default wind is 0 mph, so a hanging
 flag at rest is expected. See [Validate wind and flag movement](#validate-wind-and-flag-movement).
 The pole mesh contains no flag faces, and the cloth material has no vertex deformation.
 
@@ -91,12 +95,44 @@ The console commands remain available during Play: enter `uopengolf.WindFromDeg 
 Play-world range controls and the ball; editing the range controls can change them again.
 Console values can remain between Play sessions, but starting Play reapplies the map's wind.
 
-An Unreal `WindDirectionalSource` actor is not connected to this flag. Editing a material's
-old droop parameters does not drive the cloth either. If nothing moves, check that wind
+An Unreal `WindDirectionalSource` actor is not connected to this flag or the vegetation; the range
+publishes its wind through `UOpenGolfWindSubsystem` and `MPC_Wind`. Editing a material's old droop
+parameters does not drive the cloth either. If nothing moves, check that wind
 speed is above zero, editor preview and Realtime are enabled (or Play is running unpaused),
 and the editor has rebuilt the current game modules. Rebuild and restart DebugGame if that
 is your editor configuration; a Development build does not update its modules. The expected
 scene is one pole and one cloth surface.
+
+### Judge the wind against the Beaufort scale
+
+The reference for realistic wind is the Beaufort land scale, which, like the range's controls,
+reads the wind at 10 m. Enter `uopengolf.WindDebug 1` during Play: the overlay shows the authored
+wind, its Beaufort force and land description, the wind at grass, flag and crown height, and the
+flag's measured droop (mean angle below horizontal of its middle row) and flaps per second beside
+the band expected at that force. `UOpenGolf.Course.FlagBeaufort` checks the same bands across
+0–40 mph, and a 60 mph gale, without rendering and writes `Saved/Automation/FlagWind/sweep.csv`.
+
+| 10 m wind | Force | Land | Flag | Trees and tall grass |
+| --- | --- | --- | --- | --- |
+| 0–3 mph | 0–1 | Smoke drifts | Hangs, at least 60° down | Still; calm is exactly still |
+| 4–7 mph | 2 | Leaves rustle | Stirs and lifts, 30–75° | Leaves begin to flutter; grass begins to lean |
+| 8–12 mph | 3 | Leaves and twigs in constant motion | Extended, 35° or less | Leaves in constant flutter; grass leans and waves in gusts |
+| 13–17 mph | 4 | Small branches move | Flaps along its length, 20° or less | Branches move |
+| 18–24 mph | 5 | Small trees sway | Flies out, 15° or less | Whole trees sway |
+| 25+ mph | 6+ | Large branches, then whole trees | Straight out, snapping, 12° or less | Large sway; grass near its full lean |
+
+The flag bands are this project's reading of the descriptions for a light golf flag; they live in
+`OpenGolfBeaufort.h`. The flap rate rises in proportion to the wind (a near-constant Strouhal
+number, as measured on flapping flags), at about 3 flaps per second at 10 mph.
+
+### Wind on trees and grass
+
+The jacarandas, the Grass Medium rough and the Nature Essentials grasses move with World Position
+Offset from the course kit's `MF_VegetationWind`, driven by `MPC_Wind`. Leaves flutter, branches
+sway and the whole plant leans and sways about its base, each from its Beaufort force upward; gusts
+roll downwind at the wind's speed. Trees hold still beyond 150 m and grass where it fades out, so
+distant shadows stay cached. Cut turf, litter, moss, rocks and seedlings stay still. To add wind to
+other vegetation, see the [kit README](../Plugins/OpenGolfCourse/README.md#vegetation-wind).
 
 ## Sources and regeneration
 
@@ -130,9 +166,11 @@ checks the saved range actors, the flag on the green and rough around the course
 `UOpenGolf.Range.RolloutSurfaces` builds flat test ground in a transient world, independent of
 the map: the live ball must match the headless prediction on fairway, roll farther over a green
 than over the same path tagged fairway, and read lies from physical materials. `UOpenGolf.Course.FlagCloth` checks how the
-cloth hangs, flies and flaps across wind speeds.
+cloth hangs, flies and flaps across wind speeds; `UOpenGolf.Course.FlagBeaufort` holds it to the
+Beaufort bands above. `UOpenGolf.Course.WindSubsystem` checks the world wind, its height profile and
+`MPC_Wind`; `UOpenGolf.Range.WindDebug` checks the overlay's text.
 `UOpenGolf.Range.WindSettings` checks saved editor controls, editor cloth preview,
-Play-world wind, active-shot wind retention and console overrides.
+Play-world wind reaching the ball, flag and vegetation, active-shot wind retention and console overrides.
 
 For rendered inspection and a same-camera grass comparison:
 

@@ -142,7 +142,8 @@ stripes. Contours, sand and more varied lies are not started.
 
 The map saves separate actors for editing and reuses its range controller in Play.
 The old mesh flag is removed; one cloth flag responds to the ball's wind and gravity,
-without material displacement. The green surround has an opening beneath the putting
+without material displacement. Trees and tall grass move in the same wind through World Position
+Offset. Their rendered validation, and a Play stop at 20 mph or more, are open (2026-10-29 history). The green surround has an opening beneath the putting
 disc to avoid competing collision surfaces. Interrupted shots report a safety stop
 and omit completed total and roll values. These checks do not establish real-world
 cloth accuracy or a contoured course.
@@ -190,6 +191,201 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 ## History
 
 Newest first. Evidence paths are relative to the repository root.
+
+- **2026-10-29, Linux, Unreal 5.8.4 DebugGame: drag-loaded vegetation wind applied, then review fixes.**
+  This supersedes the oscillator profiles in the three 2026-10-29 vegetation entries below.
+  - **Why the model changed:** the owner rejected the first model. Its plants swung back and forth,
+    because each layer was a fixed sine. Leaves flickered at 20–30 mph, because the tree phase hashed
+    a base rebuilt per vertex in float32, so every vertex got its own phase.
+  - **The current model** (`Plugins/OpenGolfCourse/Scripts/vegetation_wind.py`):
+    - each layer is a damped spring loaded by drag, and it deflects `C / (1 + C)` of its maximum,
+      always downwind;
+    - four frozen-turbulence gust waves pass through each layer's own oscillator;
+    - no hash of a rebuilt position remains.
+  - **Applied profiles:** backup `Saved/VegetationWindBackups/20261029-112354`, five MIs and
+    `MF_VegetationWind`; the map and presets were untouched.
+    - `BroadleafTree`: bend 150 cm, 25 m/s, 0.35 Hz, damping 0.15; limbs 40 cm, 12 m/s, 1.2 Hz;
+      leaves 0.8 cm at 2.5 Hz with a 3 cm stream.
+    - `TallGrass`: 60°, 7 m/s, 1.5 Hz.
+    - `UnderstoryGrass`: 55°, 10 m/s, 1.0 Hz.
+  - **Tests (DebugGame, one editor):** nine pass:
+    - `Course.FlagBeaufort`, `.FlagCloth`, `.FlagClothInputs`, `.VegetationRebuild` and
+      `.WindSubsystem`;
+    - `Physics.WindProfile`;
+    - `Range.Presentation`, `.WindDebug` and `.WindSettings`.
+
+    Log: `Saved/Logs/UOpenGolf-backup-2026.10.29-18.45.15.log`.
+  - **Live flag probe in Play** (`Saved/Automation/FlagWind/live-probe-20261029.txt`):
+    - the live `NormalForceCoefficient` is 0.7;
+    - 0–30 mph from 90° and 10 mph from 225° are all in band;
+    - the flag heading is within 7° of downwind;
+    - the `MPC_Wind` direction matches the controls.
+
+    The 30 mph step from 225° has no reading, because the editor stopped (see below).
+  - **20 mph capture:** `Saved/Automation/CoastalReview/PhysWind20-20261029-182630`. Views 0–4
+    are complete; view 5 stopped at frame 9.
+    - It was compared against the rejected model at the same wind (`WindRepair20-20261029-075545`)
+      with a session script that is not in the repository, not with `grass_stability.py`.
+    - Crown flicker reversals fell from 2.95% to 0.82%, and edge sparkle from 18.1% to 10.4%.
+      Calm air reads 0.008% and 0.03%.
+    - The owner has not yet ruled on whether 10.4% edge sparkle at 20 mph is acceptable.
+  - **Open blocker:** after 1–2 minutes of Play at ≥ 20 mph, the DebugGame editor stops in the
+    owner's debugger.
+    - It happened three times: the 07:57 and 18:27 UTC captures and the 18:45 UTC probe.
+    - Runs at 0 and 15 mph never stopped.
+    - The log has no error, so the call stack is needed.
+  - **Review fixes:** written later on 2026-10-29. The Development editor build passes, also with
+    `-DisableAdaptiveUnity`. They were applied and tested the same afternoon (see below).
+    - **One wind profile:** the range passes the ball's reference height and roughness
+      (`AOpenFairwayBall::GetWindReferenceHeightM`, `GetWindRoughnessM`) to `UOpenGolfWindSubsystem`.
+      The flag and the `uopengolf.WindDebug` overlay read through the same profile, and the overlay
+      takes the Beaufort force from the 10 m wind. With the default profile, the values are unchanged.
+    - **`MPC_Wind` lookup:** a missing `MPC_Wind` is looked for at most once a second, instead of
+      every frame.
+    - **Flag droop:** clamped at 0, because a gale flaps the fly end above the hoist. Before the
+      clamp, 60 mph read −0.56° against its 0–12° band.
+    - **Flap rate:** sampled at every cloth substep, not once per frame. At 30 fps, a 40 mph flag
+      read 6.8 flaps/s against 12.1 at 60 fps; it now reads 14.5 flaps/s at 20, 30 and 60 fps.
+      `Course.FlagBeaufort` adds a 30 fps flap check and a 60 mph gale check (band only).
+    - **New limit:** above about 50 mph, which only the console variable reaches, the cloth stretches
+      past the sweep's 8% limit: 7.9% at 50 mph and 10.7% at 60 mph. The solver was not changed.
+    - **Offline replica of `FlagBeaufort`:** the shipped `OpenGolfFlagCloth.cpp` built against a
+      small UE-type shim, which is not in the repository. Before the fix, 4 checks fail; after it,
+      none do. Strouhal 0.39–0.58.
+    - **Vegetation scale:** deflection now grows with the instance's scale, so grass leans the same
+      angle at any scale. Before, a 0.7-scale grass tile leaned 49.6° at 20 mph against 31.8° at
+      scale 1.
+      - `BroadleafTree`'s centimetres now describe a 9 m tree, the size the range places its
+        jacarandas (0.30–0.62 scale). Map trees therefore move as before: crown top 4.5, 16.6 and
+        32.0 cm at 10, 20 and 30 mph.
+      - Offset bounds are sized for each material's largest instance: trees 236 cm, Grass Medium
+        50 cm (scale 1.3) and the understory 100 cm (scale 1.5).
+    - **Python:** course kit 53 tests and savanna 53, all pass.
+  - **Review fixes applied and tested (21:39–22:05 UTC):**
+    - **Applied:** the owner's rebuilt DebugGame editor ran `ApplyVegetationWind.py --materials-only`.
+      This new mode rebuilds `MF_VegetationWind` and the five MIs and leaves the parents, presets and
+      map alone. The log shows `OPEN_GOLF_VEGETATION_WIND_APPLIED materials=5`, with no material or
+      shader errors. Backup: `Saved/VegetationWindBackups/20261029-143929`. The owner confirmed in the
+      viewport that the trees keep their leaves.
+    - **DebugGame, through MCP:** nine pass:
+      - `Course.FlagBeaufort`, `.FlagCloth`, `.FlagClothInputs`, `.WindSubsystem` and
+        `.VegetationRebuild`;
+      - `Physics.Wind`, `.WindHeight`, `.WindProfile` and `.Fixtures`.
+    - **Editor exit:** about a minute after the run, the editor's log stops at 21:42:35 UTC. It has
+      no crash, ensure or exit line, so whether the editor crashed or was closed is unknown.
+    - **Headless** (`ue.sh test`, Development, no other editor running): `Range.Presentation`
+      (`Saved/Automation/20261029-150346-7Eu12N`), `Range.RolloutSurfaces` (`…150402-piu1tL`),
+      `Range.WindSettings` (`…150427-e2czII`) and `Range.WindDebug` (`…150442-DK8VXP`) all pass,
+      with no warnings.
+  - **Pending:**
+    - 0, 10 and 30 mph Play sequences through `grass_stability.py`;
+    - slow camera motion;
+    - GPU timing (Nanite WPO with virtual shadow maps);
+    - the owner's review.
+  - **Limit:** wind height is measured from the launch ground, not from the terrain under the ball.
+
+- **2026-10-29, vegetation wind application follow-up (Linux, Unreal 5.8.4):** *Superseded by the drag-loaded
+  model above.*
+  The editor log records `OPEN_GOLF_VEGETATION_WIND_APPLIED` at 07:29:37 UTC:
+  5 materials, 40 presets and 51 components. The run used `--keep-map-unsaved`.
+  However, the wind-enabled material instances failed to compile with
+  `Cannot cast from smaller type float3 to larger type float4`; Unreal substituted
+  its default material. This explains the reported lost colour and absent vegetation motion.
+  The generator now connects the vector parameters' explicit RGBA outputs to the
+  four-channel wind inputs, including the flutter switch. Engine source confirms
+  their default output is RGB. The wind maths and assignment tests pass (15 + 6).
+  The repair has not been applied to saved assets: no editor was reachable during
+  this follow-up. Instance compilation, movement, calm/10/20 mph Play shimmer,
+  slow camera motion and GPU timing remain pending. Preserve the original backup
+  in `Saved/VegetationWindBackups/20261029-002924`.
+
+- **2026-10-29, Linux, Unreal 5.8.4: flag held to the Beaufort scale; wind for trees and tall grass
+  (written, not yet run in the editor):** *The flag retune stands; the vegetation profiles are superseded by the
+  drag-loaded model above, and the tests listed as not yet run have since passed.*
+  - **Flag reference:** the Beaufort land scale, which reads the wind at 10 m like the range's
+    controls (`OpenGolfBeaufort.h`, WMO speeds, NOAA land descriptions). Flag bands, the mean droop
+    of the middle row below horizontal: hangs ≥ 60° at force 0–1, stirs 30–75° at 2, extended ≤ 35°
+    at 3, ≤ 20° at 4, ≤ 15° at 5 and ≤ 12° from 6. The flap rate must keep a near-constant Strouhal
+    number (0.1–1, spread ≤ 2×), as reported for flapping flags.
+  - **Retune:** `NormalForceCoefficient` 1.2 → 0.7. With 1.2 the flag was already extended at 6–7 mph
+    (29°, 25°), a force early, and its implied drag coefficient (about 0.57 at 10 mph) was several
+    times Fairthorne's measured flag drag (Cd 0.06–0.2 for aspect ratios 1–4, via Hoerner).
+    Damping, gust strength and veer barely moved the droop; the pressure coefficient is what holds
+    the flag out. 0.65–0.75 all pass; 0.7 is mid-range.
+  - **Offline sweep evidence** (the shipped `OpenGolfFlagCloth.cpp` and `OpenGolfBeaufort.cpp` built
+    with g++ against a small UE-type shim, mirroring `UOpenGolf.Course.FlagBeaufort`'s 15 speeds):
+    `Saved/Automation/FlagWind/offline-sweep-before-cn1.2.txt` (2 failures: 6 and 7 mph) and
+    `offline-sweep-after-cn0.7.txt` (0 failures). After the change: 5 mph 67°, 7 mph 32°,
+    8 mph 28°, 10 mph 21°, 15 mph 14°, 20 mph 9°, 25 mph 8°, 40 mph 2°; about 3.3 flaps/s at
+    10 mph; Strouhal 0.37–0.55. The `FlagCloth` test's checks, replayed the same way, still pass
+    (10 mph at the flag: 15°, 5 cm flap).
+  - **Vegetation:** `UOpenGolfWindSubsystem` holds each world's 10 m wind and writes `MPC_Wind`; the
+    range feeds it. `MF_VegetationWind` (HLSL in `vegetation_wind.py`) bends, sways and flutters the
+    jacarandas, Grass Medium rough and Nature Essentials grasses, each layer fading in between
+    Beaufort forces. Calm is exactly zero offset. Trees hold still beyond 150 m, grass where it
+    fades. The parents' hook is a static switch, off for rocks, litter and moss. The list is
+    `vegetation_wind_assignments.py`; `ApplyVegetationWind.py` applies it.
+  - **Overlay:** `uopengolf.WindDebug 1` shows the wind's Beaufort force, the wind at grass, flag and
+    crown height, and the flag's measured droop and flap rate against its band.
+  - **Checks run:**
+    - Development editor build passes, also with `-DisableAdaptiveUnity`.
+    - Python unit tests: course kit 44, savanna 52 and Blender 44, all pass. These include the
+      vegetation-wind maths (calm, Beaufort onsets, growth, bounds, seamless tiles, joined tree
+      parts) and the registry. Three deliberate mutations each failed the matching test.
+  - **Not yet run:** everything that needs the rebuilt DebugGame editor.
+    - **Tests:** `Course.FlagBeaufort`, `Course.WindSubsystem`, `Course.FlagCloth`,
+      `Range.WindSettings`, `Range.WindDebug` and `Range.Presentation`.
+    - **Assets:** `ApplyVegetationWind.py`, which compiles `MF_VegetationWind`'s HLSL for the first
+      time.
+    - **Rendered checks:** the shimmer sequences at 0, 10 and 20 mph, slow camera motion, GPU timing
+      (Nanite WPO and virtual shadow map cost) and the owner's review with the overlay.
+  - **Pending:** `Range.WindSettings` asserts that `MPC_Wind` exists, so it fails until the asset
+    script has run.
+
+- **2026-10-28, Linux, Unreal 5.8.4: wind grows with height (audit follow-up D4):**
+  - **Change:**
+    - Ball flight uses the neutral log wind profile over open ground. The authored wind is the
+      10 m reading (roughness 0.03 m), and the ball meets it at its height above the launch ground.
+    - The flag flies with the wind at its centre height (1.96 m), about 72% of the authored speed.
+      The wind display and the Details controls keep the authored speed.
+    - Calm air is unchanged: `Physics.Fixtures`, `Physics.ShotLibrary` and `Physics.FlightScopeAnalysis`
+      pass. `HistoricalReference()` was not edited.
+    - Details: [Wind and height](../Plugins/OpenFairwayPhysics/README.md#wind-and-height).
+  - **Measured effect** (headless simulator, 10 mph, `UOpenGolf.Physics.WindHeight`; uniform → with height):
+
+    | Shot (calm carry, apex) | Headwind carry | Tailwind carry | Crosswind drift |
+    | --- | --- | --- | --- |
+    | Driver 167 mph, 10.9°, 2686 rpm (282.2 yd, 31.3 m) | 265.2 → 264.5 yd | 295.0 → 294.5 yd | −18.4 → −19.3 yd |
+    | Wedge 102 mph, 24.2°, 9304 rpm (139.4 yd, 26.2 m) | 129.4 → 128.8 yd | 145.7 → 145.5 yd | −10.5 → −11.1 yd |
+    | Punch 95 mph, 8°, 4200 rpm (106.3 yd, 5.9 m) | 115.3 → 115.9 yd | 90.3 → 94.1 yd | −4.6 → −3.5 yd |
+
+    High shots are pushed slightly more, and the low punch cuts through the tailwind and
+    crosswind.
+  - **Pre-existing finding, not retuned:** in the current aerodynamics this low punch carries
+    *farther* into a headwind (+9 yd at 10 mph, uniform or profiled) and the gain peaks below
+    10 mph. A real punch loses distance into the wind. This is a realism item for the
+    recalibration follow-up (D6).
+  - **Tests** (DebugGame editor through MCP, by name):
+    - **Pass:** all of `UOpenGolf.Physics` except `Sand`, plus `Range.RolloutSurfaces` (live ball
+      against the prediction in 10 mph wind, within 0.1 yd), `Range.Presentation`,
+      `Range.WindIndicator.Direction` and `.Designer`, `Range.Shot` and `Course.FlagCloth`.
+    - **Known failure:** `Physics.Sand` measures 2.48 m against its 2 m target, unchanged, and is
+      not retuned.
+    - **Pending a rebuild:** after the review fixes below, these have not yet run on the final code:
+      - `Range.WindSettings`: it failed one pre-existing assertion that expected the editor-preview
+        flag to receive the full 10 mph. The assertion was updated to the 72% flag share.
+      - `Physics.WindProfile`: a tiny-roughness case was added.
+  - **Review fixes:**
+    - A roughness below about 3e-37 m made the share NaN or infinite. The share is now computed
+      from differences of logarithms. The new case failed against the old source and passes
+      against the fix in a standalone compile of `WindProfile.cpp`.
+    - Doc corrections: the `StepFlight` height requirement, the flag-wind descriptions and the
+      README effect wording.
+  - **Not verified:** the rendered flag view and its motion at the new 72% share.
+    `UOpenGolf.Visual.RangeAssets` and the manual wind checklist in `Docs/RangeAssets.md` were not
+    run. `Course.FlagCloth` covers the cloth response at 5, 10 and 20 mph.
+  - **Limits:** height is measured from the launch ground, not the terrain beneath the ball. There
+    are no gusts.
 
 - **2026-10-28, Linux, Unreal 5.8.4: audit, single public map and asset cleanup:**
   - **Audit:**
@@ -303,10 +499,62 @@ Newest first. Evidence paths are relative to the repository root.
       all discounted, with a $0 net amount. It returns no bandwidth entry. This is
       organization-wide usage to date, not this repository's current stored size;
       an absent bandwidth entry is not a verified zero. No billing settings were changed.
-  - **Not yet done:**
-    - the owner's LFS quota check: current storage, bandwidth and remaining allowance
-      are not established by the billing summary above
-    - an otherwise idle-GPU repeat if an isolated performance comparison is required
+  - **DebugGame confirmation (rebuilt with the boundary fix, one editor, through MCP):** all 12
+    `UOpenGolf.Course` tests pass, including `Course.Terrain.BoundaryGrass`. Physics: 13 of 14 pass;
+    `Physics.Sand` fails as before and was not retuned.
+  - **LFS size, measured locally:** the current tree holds 317 LFS files (399 MB). Every branch together
+    reaches 583 unique LFS objects (744 MB), which is an estimate of what GitHub stores for this
+    repository; `.git/lfs/objects` holds 737 MB.
+  - **LFS allowance:** the owner accepts Codex's billing check above. The idle-GPU timing repeat is
+    dropped.
+  - **Boundary fix applied to the map (DebugGame, one editor):**
+    - The map saved on 2026-10-28 at 04:23 had no rough-edge row. With the old spacing,
+      `DA_TurfRoughEdge` logged "placed nothing", while its unit test still passed.
+    - The course grass was re-placed with the area's existing presets. It went from 143,573 to
+      144,478 pieces: the same 143,573 others plus 905 edge strips (447 `Edge_A`, 458 `Edge_B`).
+      Backup: `Saved/TerrainBackups/20261029-051833-236416-course-grass`.
+    - Shimmer, `Visual.CoastalTerrain` at 1261 × 959, same cameras and settings. Before:
+      `Review-20261029-051605`; after: `Review-20261029-053036` (with `Stability.txt` in each).
+      | View | Lower crop before | Lower crop after | Worst band before | Worst band after |
+      | --- | ---: | ---: | ---: | ---: |
+      | Tee, grass on | 0.001% | 0.001% | 4.264% | 3.948% |
+      | Tee, grass off | 0.000% | 0.000% | 4.246% | 4.132% |
+      | Edge, grass on | 0.003% | 0.003% | 3.348% | 3.236% |
+      | Edge, grass off | 0.000% | 0.000% | 3.307% | 3.132% |
+      | Close, grass on | 0.110% | 0.111% | 2.915% | 2.867% |
+      | Close, grass off | 0.000% | 0.000% | 2.690% | 2.751% |
+    - Canopy sparkle stays within 0.005 points in every box. The readings are within run-to-run
+      noise, so no shimmer change is claimed either way.
+    - Only the close view changes visibly (0.12% of pixels by more than 12/255). Along the rough
+      boundary, short edge tufts now step down from the tall rough to the first cut, where the
+      rough used to end in a hard line.
+    - Frames 0, 10 and 19 of the slow camera-motion view show no trails. Continuous playback review
+      is pending.
+    - Comparison sheets: `edge_row_compare.jpg`, `edge_row_zoom.png` and `view9_motion.jpg` in the
+      after folder.
+    - Tests: `Range.CoastalTerrain`, `.BunkerProbe`, `.ObstacleContact` and all seven
+      `Course.Terrain` tests pass.
+  - **Generated-folder cleanup bug, found while applying:**
+    - After saving, `generated_folders.py` tried to delete the run it had just baked. The engine
+      still held that run's point data, so the force-delete failed part-way. It left 16 `Points_*`
+      packages it reported as possibly corrupt and hit an editor ensure (`ObjectTools.cpp:4051`),
+      and the debugger paused. The map had already been saved and does not use those files.
+    - The module now keeps any run folder that is still loaded and logs it; the next rebuild, or the
+      script run after restarting the editor, removes it.
+    - It also reads references from the asset registry without loading the assets. Loading them for
+      confirmation made every folder look loaded, so a dry run blocked the following apply.
+    - Tests cover both cases. OpenGolfCourse Python now runs 29 tests.
+  - **Leftover run removed after the editor restart:**
+    - Folder: the untracked
+      `Content/UOpenGolf/Terrain/Savanna/CutTurf/Vegetation_01A1861A95DC7B5DA517223911BE0755`.
+    - The dry run reported it unreferenced and not loaded, and `--apply` force-deleted it with no
+      ensure. This also confirms the dry run no longer loads assets.
+    - `Points_7.uasset` stayed on disk: the asset registry had dropped it after the earlier failed
+      delete, so the editor could not remove it. Nothing referenced it in the registry or in any
+      content file, so it was deleted from disk.
+    - The only generated folder left is the tracked current surface build.
+  - **Owner review:** the owner reviewed the restored edge row: the edges are not perfect. Further edge work is deferred; it is not a current priority. Continuous slow-motion
+    playback was not separately reviewed.
 
 - **2026-10-28, Windows, Unreal 5.8.4 upgrade:**
   - The Epic launcher replaced 5.8.3 with 5.8.4 (CL 58902052). `EngineAssociation` stays `5.8`.
@@ -1554,3 +1802,22 @@ is fixed. Stationary results are close to baseline, but repeated runs have not e
 a noise interval for the small increases. Controlled uncapped GPU/frame-time comparison and
 owner visual acceptance remain pending. No performance or visual-parity claim is made.
 Editor background CPU throttling was temporarily disabled for automation and restored.
+
+## Vegetation motion refinement — 2026-10-29
+
+*Superseded: these profile values were replaced by the drag-loaded model; see the newest 2026-10-29 entry in
+[history](#history).*
+
+Linux, Unreal 5.8.4 DebugGame: live inspection found the Nature Essentials grass
+components using MI_NE_Grass with WPO enabled and a 60 m cutoff. The saved range
+reported 10 mph. Missing visible grass motion is not yet established as a wiring fault.
+Branch sway changed from 1.1 to 0.4 Hz; leaf flutter from 4.5 Hz / 2.5 cm to
+1.5 Hz / 0.5 cm. Understory grass now has a separate response (0.45 Hz bend,
+24 cm maximum, full response at force 5); short rough retains its profile.
+
+Applied with a backup at `Saved/VegetationWindBackups/20261029-004740` and
+`OPEN_GOLF_VEGETATION_WIND_APPLIED` confirmed. The map was left unsaved to preserve
+owner edits. Python wind and assignment tests pass (15 + 6), including the new
+profile in displacement-bound checks. The automation batch was stopped; no passing
+rendered result is claimed. Motion isolation, instance compilation validation,
+calm/10/15/20 mph Play sequences, shimmer, slow motion and GPU checks remain pending.

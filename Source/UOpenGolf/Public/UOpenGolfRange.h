@@ -10,8 +10,8 @@ class AOpenFairwayBall;
 class AOpenGolfTerrainArea;
 
 /**
- * Driving range controller on a course terrain area: daylight, the target flagstick, wind and green
- * speed for the ball and flag, and the 3D grass switch. The terrain provides the ground, whose
+ * Driving range controller on a course terrain area: daylight, the target flagstick, wind for the ball,
+ * flag and the world's vegetation (through UOpenGolfWindSubsystem), green speed, and the 3D grass switch. The terrain provides the ground, whose
  * surfaces declare their physics through physical materials. The tee is on the terrain at the actor's
  * origin and the target line is world +X.
  */
@@ -71,7 +71,7 @@ public:
     /** The flag at the green; its cloth flies in the ball's wind. */
     UOpenGolfFlagstickComponent* GetFlagstick() const { return Flagstick; }
 
-    /** Saved wind for the ball and flag. Zero is calm. */
+    /** Saved wind at 10 m for the ball, flag and vegetation. Zero is calm. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UOpenGolf|Wind", meta = (DisplayName = "Wind Speed (mph)", ClampMin = "0", UIMax = "40"))
     float WindSpeedMph = 0.0f;
 
@@ -79,7 +79,7 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UOpenGolf|Wind", meta = (DisplayName = "Wind From (degrees)", ClampMin = "0", ClampMax = "360"))
     float WindFromDeg = 0.0f;
 
-    /** Animate the flag while editing. The viewport must have Realtime enabled. */
+    /** Animate the flag and vegetation while editing. The viewport must have Realtime enabled. */
     UPROPERTY(EditAnywhere, Category = "UOpenGolf|Wind", meta = (DisplayName = "Preview Wind in Editor"))
     bool bPreviewWindInEditor = true;
 
@@ -104,8 +104,8 @@ private:
     /** Writes uopengolf.GreenStimp to the ball when it changed. */
     void ApplyGreenConsoleVariable();
 
-    /** Passes the ball's wind to the flag, when that wind or the air density changed. */
-    void SyncFlagToWind();
+    /** Publishes the ball's wind to the world's wind subsystem, and to the flag when it or the air density changed. */
+    void SyncWindToScene();
 
     /** Unbound range-wide view settings: fixed exposure and no motion blur. */
     UPROPERTY()

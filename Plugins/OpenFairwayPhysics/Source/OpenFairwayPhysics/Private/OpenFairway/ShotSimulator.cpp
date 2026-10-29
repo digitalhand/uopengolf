@@ -2,6 +2,7 @@
 // Ported from ogolf-physics addons/openfairway physics/ShotSetup.cs and
 // PhysicsAdapter.SimulateShotInternal at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
 #include "OpenFairway/ShotSimulator.h"
+#include "OpenFairway/WindProfile.h"
 
 namespace OpenFairway
 {
@@ -140,11 +141,13 @@ namespace OpenFairway
         {
             if (!bOnGround)
             {
-                const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(Velocity - Params.Environment.Wind, Omega, Params.Environment.AirDensity,
+                // Position.Y is the ball centre's height above the flat ground.
+                const FVector3f Wind = WindProfile::At(Params.Environment, Position.Y);
+                const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(Velocity - Wind, Omega, Params.Environment.AirDensity,
                     Params.Environment.AirViscosity, Params.Environment.DragScale, Params.Environment.LiftScale, Params.Environment.InitialLaunchAngleDeg,
                     Params.Flight);
                 const FVector3f Previous = Position;
-                const FBallState Next = GolfPhysics::StepFlight(FBallState{FVector3f::ZeroVector, Velocity, Omega}, Params.Environment, Sample, Dt);
+                const FBallState Next = GolfPhysics::StepFlight(FBallState{Position, Velocity, Omega}, Params.Environment, Sample, Dt);
                 Velocity = Next.Velocity;
                 Omega = Next.Spin;
                 Position += Velocity * Dt;

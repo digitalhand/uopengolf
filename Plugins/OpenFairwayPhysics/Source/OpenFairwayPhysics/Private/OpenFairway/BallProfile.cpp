@@ -306,6 +306,11 @@ namespace OpenFairway
         return -WindSpeedMph * MpsPerMph * FVector3f(FMath::Cos(FromRadians), 0.0f, FMath::Sin(FromRadians));
     }
 
+    FVector3f FAirConditions::WindVelocityAt(float HeightM) const
+    {
+        return WindProfile::At(WindVelocity(), HeightM, WindReferenceHeightM, WindRoughnessM);
+    }
+
     FResolvedShotParams FResolvedShotParams::Resolve(const FBallPhysicsProfile& Profile, const FAirConditions& Air, float SpeedMph,
         float LaunchAngleDeg, float TotalSpinRpm)
     {
@@ -318,6 +323,8 @@ namespace OpenFairway
         Params.Environment.LiftScale = Profile.LiftScaleMultiplier * Params.Regime.LiftScaleMultiplier;
         Params.Environment.InitialLaunchAngleDeg = LaunchAngleDeg;
         Params.Environment.Wind = Air.WindVelocity();
+        Params.Environment.WindReferenceHeightM = Air.WindReferenceHeightM;
+        Params.Environment.WindRoughnessM = Air.WindRoughnessM;
         Params.Flight = Profile.Flight;
         Params.Bounce = Profile.Bounce;
         Params.Rollout = Profile.Rollout;
