@@ -16,8 +16,8 @@ namespace ShotRecording
 }
 
 /**
- * Range mode: builds the whitebox range, tees up an OpenFairway ball and hits every
- * launch-monitor shot (device or replay) from the tee. A stopped ball goes back to the
+ * Range mode: uses the map's range controller (or spawns one with daylight and a flag), tees up an
+ * OpenFairway ball on its terrain and hits every launch-monitor shot (device or replay) from the tee. A stopped ball goes back to the
  * tee after ResetDelayS; its shot result stays available until the next launch. While shot
  * recording is on, device shots are saved as JSON under Documents/UOpenGolf/Saved/ShotRecordings.
  */
@@ -72,14 +72,6 @@ protected:
     /** Optional map-owned presentation variant; public maps use the native range. */
     UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|Range")
     TSubclassOf<AUOpenGolfRange> RangeClass;
-
-    /**
-     * Optional per-machine range subclass, set in the ignored Config/UserGame.ini. Used only
-     * when the map keeps the native range and not during automation; if it fails to load,
-     * the native range is used.
-     */
-    UPROPERTY(Config)
-    FSoftClassPath LocalRangeClass;
 
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

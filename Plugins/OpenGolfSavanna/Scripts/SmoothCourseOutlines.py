@@ -67,8 +67,10 @@ def smooth():
     def finished():
         ue.log('OPEN_GOLF_OUTLINES_SMOOTHED ' + ', '.join(changed))
 
-    # Course grass places against the new outlines and tee box; course.apply saves the map when PCG finishes.
-    course.apply(apply_turf.MAP, apply_turf.GENERATED, grass, boundary, finished=finished)
+    # Course grass places against the new outlines and tee box; course.apply saves the map when PCG finishes,
+    # then deletes the replaced ground build and grass runs.
+    course.apply(apply_turf.MAP, apply_turf.GENERATED, grass, boundary, finished=finished,
+                 cleanup=[apply_turf.GENERATED, SURFACE_FOLDER])
 
 
 if __name__ == '__main__':

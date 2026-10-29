@@ -13,7 +13,8 @@ ImportNatureEssentials.py). The script:
 3. moves the bunker onto the approach, sets the Grass008/Ground093C surfaces, the savanna ground
    (course mask, rough and outer-ground instances) and 36 seeded jacaranda patches, and drops
    scattered grass presets;
-4. rebuilds the terrain, then the trees, wood collision and understory, and saves the map.
+4. rebuilds the terrain, then the trees, wood collision and understory, saves the map and deletes the
+   generated folders it no longer uses.
 
 Then place the course grass with the course kit's ApplyCourseGrass.py (logged below). Completion is
 logged as OPEN_GOLF_SAVANNA_RANGE_COMPLETE. Running it again rebuilds the same course.
@@ -249,7 +250,8 @@ def main(argv):
         ue.log(f"OPEN_GOLF_SAVANNA_RANGE_COMPLETE {result}; backup={backup}. Next: ApplyCourseGrass.py --map {args.map} "
                f"--generated {args.generated} {grass} --boundary-preset {BOUNDARY_GRASS}")
 
-    vegetation.rebuild(args.map, args.generated, remove=False, finished=finished)
+    # After the save, the replaced ground build and the vegetation runs' PCG folders are deleted.
+    vegetation.rebuild(args.map, args.generated, finished=finished)
 
 
 if __name__ == "__main__":

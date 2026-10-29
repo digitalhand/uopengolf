@@ -1,43 +1,38 @@
 # Asset licence roadmap
 
-This roadmap is for replacing the restricted art in the private graphics baseline with
-redistributable equivalents. The aim is to release the desert-savanna range on the public
-map without losing its look. It lists each restricted dependency with its open replacement,
-the obligations that replacement carries, and the evidence needed before the swap counts as
-done. Licence policy is in [Licensing](Licensing.md); imported third-party work is recorded in
+This roadmap records the third-party art on the desert-savanna range, the licence each item
+carries, and the checks it still needs. The range is the public map,
+`/Game/UOpenGolf/Maps/UOpenGolf`, which is the project's only map. Licence policy is in
+[Licensing](Licensing.md); imported third-party work is recorded in
 [third-party notices](../THIRD_PARTY_NOTICES.md).
 
-Owner decisions (2026-10-20):
+Owner decisions:
 
-- The whole range becomes releasable. The public default map, `/Game/UOpenGolf/Maps/UOpenGolf`,
-  becomes the savanna range.
-- The private range stays as the visual reference until every row below has parity sign-off.
-  After that it is retired.
+- 2026-10-20: the whole range is releasable, so every asset on it must be redistributable.
+- 2026-10-28: the public map is the only map. Open review items below are public-map work.
 - Only assets Unreal needs live in this repository. Blender projects and full-resolution
   sources stay outside it, under the Blender art root (`UOPENGOLF_BLENDER_ROOT`, default
   `~/Code/3D/blender/uopengolf`).
 
 ## Inventory
 
-Status values: **Planned**, **In progress**, **Parity approved** (the owner signed off),
-**Replaced** (the public map uses the replacement and the restricted item is no longer
-referenced), and **Deferred** (open already; an upgrade is scheduled for later).
+Status values: **In progress** (on the map, owner review or checks pending), **Approved** (the
+owner signed off), and **Deferred** (an upgrade is scheduled for later).
 
-| # | Restricted item (licence) | Use in the private baseline | Open replacement (licence) | Parity check | Status |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Cork oak, DZ Sample Trees (Fab) | 296 trees in 36 seeded patches | [Jacaranda Tree](https://polyhaven.com/a/jacaranda_tree), Poly Haven ([CC0](https://polyhaven.com/license)), scaled to the oak's canopy | Tee, edge and close views; oak close-up poses; probe frame time | In progress |
-| 2 | Hidden oak wood-collision proxy (derived from the Fab oak) | Ball collision with trunk and branches, leaves passable | Jacaranda trunk-and-main-limb collider exported from Blender, plus a convex canopy volume that slows the ball (CC0 derivatives) | Ball-sized sweeps hit wood and pass through branches, leaves and gaps; airborne contact shots | In progress: trunk-only collider and 296 canopy volumes on the public map (296/296 hits, 888 clear; trunk rebounds and canopy slows in Play, 2026-10-21); owner review pending |
-| 3 | Sand colour and normal, MW Landscape Auto Material (Fab) | Desert outer ground and the dry part of the rough blend | Poly Haven [`red_sand`](https://polyhaven.com/a/red_sand) (CC0) | Edge and tee captures beside the baseline; owner picks | In progress: replaced on the private map 2026-10-21 by Poly Haven `red_sand` (CC0, owner's pick over `aerial_sand`, whose dunes repeated every 2.5 m) in the public `M_SavannaGround`; brightness matched to MW within about 3%. Owner parity sign-off pending |
-| 4 | Dirt colour, MW Landscape Auto Material (Fab) | Desert ground variation | ambientCG [Rock029](https://ambientcg.com/view?id=Rock029) (CC0), as rock patches | As row 3 | In progress: Rock029 (ambientCG, CC0) patches over the sand, owner's choice 2026-10-21, in `M_SavannaGround`. Owner parity sign-off pending |
-| 5 | Grass clumps A–D, MW Landscape Auto Material (Fab) | Three distance bands, 19,716 clumps | Nature Essentials grass clump, seedy grass and small grass (CC BY 4.0) | Same cameras; worst-band shimmer within run-to-run noise of the baseline | In progress: the MW clumps are gone. Poly Haven Grass Medium tiles cover the rough to 12 m, and Nature Essentials grass (public since 2026-10-21) sits under the trees. Shimmer and owner parity pending |
-| 6 | Grass blade atlas, MW Landscape Auto Material (Fab) | Default texture of the private grass material | Nature Essentials bentgrass colour texture (CC BY 4.0), already used by the understory grass | Material references contain no restricted package | In progress: Nature Essentials grass now uses the public `M_SavannaUnderstoryGrass` (2026-10-21). Only the unused private `M_PrivateDesertGrass` and `SM_PrivateGrassA–D` still reference the atlas; they go when the private range retires |
-| 7 | — (already open-licence) | Oak understory: litter, moss, tufts, rocks and seedlings from Nature Essentials | Moves unchanged to the public content plugin (CC BY 4.0) | Instance counts match; grass switch hides the understory | In progress: moved to `/OpenGolfSavanna` with CC BY 4.0 notices and licence text 2026-10-21 (18 meshes, 10 materials). The private map's 18,185 understory pieces use the public meshes. The understory scripts are public, and the public map carries the same 18,185 pieces (2026-10-21) |
-| 8 | — (already public) | Fairway, green, fringe and tee turf: ambientCG Grass004 (CC0) | Keep for now. Later: tiles rendered from Nature Essentials bentgrass (CC BY 4.0) | Turf shimmer within the tracked limits; green stripe contrast stays zero | Grass008 applied 2026-10-21 to the private map's fairway and, lighter and finer, its green; owner review, shimmer sequences and Play checks pending. Fringe and tee remain deferred |
-| 9 | — (already public) | Bunker sand: the course kit's coastal sand material | [Ground093C](https://ambientcg.com/view?id=Ground093C), ambientCG ([CC0](https://docs.ambientcg.com/license/)), keeping `PM_Sand` | Bunker edge and close views; bunker contact and plow tests unchanged | Applied to the private map 2026-10-21; owner review pending |
+| # | Use on the range | Asset (licence) | Review check | Status |
+| --- | --- | --- | --- | --- |
+| 1 | 296 trees in 36 seeded patches | [Jacaranda Tree](https://polyhaven.com/a/jacaranda_tree), Poly Haven ([CC0](https://polyhaven.com/license)) | Tee, edge and close views; tree close-up poses; probe frame time | In progress: distant canopies and leaf tint need owner review |
+| 2 | Ball collision with trees | Jacaranda trunk-and-main-limb collider exported from Blender, plus a convex canopy volume that slows the ball (CC0 derivatives) | Ball-sized sweeps hit wood and pass through branches, leaves and gaps; airborne contact shots | In progress: 296 trunk colliders and 296 canopy volumes (296/296 hits, 888 clear; trunk rebounds and canopy slows in Play, 2026-10-21); owner review pending |
+| 3 | Desert outer ground and the dry part of the rough blend | Poly Haven [`red_sand`](https://polyhaven.com/a/red_sand) (CC0) in `M_SavannaGround` | Edge and tee captures; owner review | In progress: owner's pick over `aerial_sand`, whose dunes repeated every 2.5 m (2026-10-21) |
+| 4 | Desert ground variation | ambientCG [Rock029](https://ambientcg.com/view?id=Rock029) (CC0), as rock patches in `M_SavannaGround` | As row 3 | In progress: owner's choice 2026-10-21 |
+| 5 | Rough grass | Poly Haven Grass Medium tiles (CC0) to 12 m from the play outlines; Nature Essentials grass clump, seedy grass and small grass (CC BY 4.0) under the trees | Same cameras; worst-band shimmer within run-to-run noise | In progress: shimmer and owner review pending |
+| 6 | Understory grass material | Nature Essentials bentgrass colour texture (CC BY 4.0) in `M_SavannaUnderstoryGrass` | Material references contain only project, engine or open-licence packages | In progress since 2026-10-21 |
+| 7 | Tree understory: litter, moss, tufts, rocks and seedlings | Nature Essentials (CC BY 4.0) in `/OpenGolfSavanna`, 18 meshes and 10 materials | Instance counts match; grass switch hides the understory | In progress: 18,185 pieces on the public map (2026-10-21) |
+| 8 | Fairway, first cut, collar, green and tee turf | Original project cut-turf art (MIT); Grass008, ambientCG (CC0), as the earlier fairway and green texture | Turf shimmer within the tracked limits; green stripe contrast stays zero | In progress: the denser original turf was applied 2026-10-27; rendered validation and owner acceptance pending |
+| 9 | Bunker sand | [Ground093C](https://ambientcg.com/view?id=Ground093C), ambientCG ([CC0](https://docs.ambientcg.com/license/)), keeping `PM_Sand` | Bunker edge and close views; bunker contact and plow tests unchanged | In progress: owner review pending |
 
-Nothing else in the private baseline is restricted: terrain shape, layout, lighting, kit code
-and scripts are already public or engine content. Rocks planned for the rough rework use
-Nature Essentials rocks, not MW stones.
+Terrain shape, layout, lighting, kit code and scripts are project work or engine content. Rocks
+planned for the rough rework use Nature Essentials rocks.
 
 ## Licence obligations
 
@@ -68,35 +63,20 @@ Nature Essentials rocks, not MW stones.
 ## Gates
 
 1. **Licence confirmation.** Before the first push of Nature Essentials content, the owner
-   confirms the licence on the order page. If it is not CC BY 4.0 (or more permissive), Nature
-   Essentials stays private: rows 5–7 and the later turf tiles in row 8 need CC0 alternatives
-   instead. The owner confirmed CC BY 4.0 on 2026-10-21.
-2. **Clean references.** No public asset may reference `/DZSampleTrees/`,
-   `/MWLandscapeAutoMaterial/` or `/UOpenGolfPrivateRange/`. Check the dependencies of the public
-   plugin and map in the editor before committing.
+   confirms the licence on the order page. If it is not CC BY 4.0 (or more permissive), rows 5–7
+   need CC0 alternatives instead. The owner confirmed CC BY 4.0 on 2026-10-21.
+2. **Clean references.** Every package the public map and plugins depend on is project, engine or
+   open-licence content listed here. Check the dependencies of the public plugins and map in the
+   editor before committing.
 3. **Notices.** Third-party notices, licence texts and this table change in the same commit as
    the imported content.
 4. **Repository size.** Committed texture sources are 2K, because an imported texture asset
    keeps its full source image. Higher-resolution originals stay with the Blender projects.
-5. **Clean history (blocks any public release).** Restricted packs were committed in the past.
-   Deleting them from the working tree leaves them in Git history, where anyone can download them:
 
-   | Folder | Files | Commits | Branches |
-   | --- | ---: | --- | --- |
-   | `Content/PN_GrassLibrary` (Project Nature, Fab) | 626 | added `59d074c`, deleted `c645f87` | `main` and every branch |
-   | `Content/DZ_Assets` (DZ Sample Trees, Fab) | 177 | `4898a93` | `feature/improving-terrain-game-play` |
-   | `Content/MWLandscapeAutoMaterial` (Fab) | 100 | `4898a93` | `feature/improving-terrain-game-play` |
+## Review method
 
-   Owner decision (2026-10-21): the public release goes out as a new repository started from a
-   clean tree, so none of this history is carried over. Done 2026-10-21: the owner re-initialised
-   the repository without its history.
-   Before that first push, check the clean tree with Gate 2 and confirm that none of the folders
-   above, nor `Plugins/PrivateContent/`, is included.
-
-## Parity method
-
-A replacement is approved only when the owner signs off on evidence gathered the same way for
-the private baseline and the open version:
+An item is approved only when the owner signs off on evidence gathered the same way before and
+after a change:
 
 - **Cameras.** `UOpenGolf.Visual.CoastalTerrain` cameras at the same resolution and AA, with
   grass on and off, plus fixed viewport poses 3–9 m from a tree trunk.
@@ -110,92 +90,26 @@ the private baseline and the open version:
 
 Results go in [Phase status](PhasesStatus.md), and the row's status changes here.
 
-## Sequence
+## Next steps
 
-1. Move Blender projects out of the repository and make the export scripts resolve the art root.
-2. Replace the oak with the jacaranda (rows 1–2) in the existing authored range, with map and asset backups first. The owner chose in-place conversion on 2026-10-20; do not create a scratch map. Retain oak captures and backups for comparison.
-3. Move Nature Essentials into the public content plugin with its CC BY 4.0 notices (owner
-   decision 2026-10-20), then replace the ground and grass (rows 3–6) with spikes compared
-   against the baseline.
-4. Convert the public map, moving the understory scripts into the public plugin (row 7).
-   Done 2026-10-21 with `OpenGolfSavanna/Scripts/BuildSavannaRange.py` and `ApplyCourseGrass.py`
-   (see [Phase status](PhasesStatus.md#savanna-range-on-the-public-map--2026-10-21)); range tests
-   on the public map and parity sign-off remain.
-5. Get parity sign-off for every row, then retire the private range. Turf (row 8) and the rough rework continue on the public map.
-6. Later: trees sway with the range wind. Trees stay static until then; their wood collision
+1. Owner review of every row, using the review method above.
+2. Turf (row 8) and the rough rework continue on the public map.
+3. Later: trees sway with the range wind. Trees stay static until then; their wood collision
    stays static too.
 
-## Jacaranda checkpoint — 2026-10-20
+## History
 
-The in-place migration and regeneration scripts are prepared. The imported tree keeps
-Nanite; its hidden wood proxy disables Nanite and enables triangle collision only on
-trunk and branch sections. Native vegetation presets now support an optional collision
-mesh at the visible tree transform. Development builds successfully.
-
-The existing map still contains 296 oaks and 296 oak colliders. Applying the migration
-requires rebuilding and restarting the running DebugGame editor to load the new field.
-The owner rebuilt and restarted DebugGame on 2026-10-20 and the field loaded, but at
-17:57 the presets and the saved map still used the oak. The migration had not run yet.
-It was applied later that day; results are in [Phase status](PhasesStatus.md)
-("Jacaranda applied in place"). Rows 1–2 stay In progress until owner review.
-Before captures contain 200 frames; measurements and pending checks are in
-[Phase status](PhasesStatus.md). No jacaranda gameplay, final shimmer or parity approval
-is claimed at this checkpoint.
-
-## Fairway and boundary checkpoint — 2026-10-21
-
-The owner brought rough-edge gap filling and fairway texture work forward on the current
-savanna range, with reusable tools and README instructions. Grass008 (ambientCG, CC0) is
-now imported at 2K as a separate fairway candidate in OpenGolfSavanna. The putting green
-is excluded. Boundary fill reuses the existing Poly Haven Grass Medium tile family;
-this does not complete the earlier restricted-grass or understory migration rows.
-
-Both saved maps remain unchanged pending confirmation of the latest grass placements.
-See the rough boundary/fairway checkpoint in `PhasesStatus.md` for build/test evidence,
-before-only shimmer measurements and remaining visual checks. No parity approval is implied.
-
-## Course grass and surfaces applied — 2026-10-21
-
-Superseding the checkpoint above, the private map now carries the open-licence course layer:
-
-- **Rough:** Poly Haven Grass Medium (CC0) tiles cover the rough from the play outlines out to
-  12 m, plus a row of shorter edge strips along the outlines. The rough ground fades to the
-  desert from 12 to 16 m. Scattered tiles further out were tried and dropped at the owner's
-  request.
-- **Fairway and green:** Grass008 (ambientCG, CC0), row 8.
-- **Bunkers:** Ground093C (ambientCG, CC0), row 9.
-
-Rows 5 and 7 are unchanged: this layer does not replace the Nature Essentials grass and
-understory around the trees. Results, backups and pending checks are in
-[Phase status](PhasesStatus.md#course-grass-and-surfaces-applied--2026-10-21). No parity
-approval is implied.
-
-## Maintained turf preparation — 2026-10-27
-
-The owner approved an original blade family and matching baked textures for fairway, first
-cut, green collar and putting green. DZ Grasses is a visual reference only; no assets or
-materials from it are imported or derived. The new artwork uses original procedural geometry.
-The existing open rough remains, with boundary coverage adjusted around a 1 m fairway band.
-
-Export/import/apply tools are prepared; editable Blender projects stay in the external art
-root, and texture exports are 2K. Row 8 remains in progress: saved-map application, final
-rendered stability and owner acceptance are still pending. See the maintained turf preparation
-entry in PhasesStatus.md and Docs/TurfWorkflow.md.
-
-## Maintained turf fullness revision — 2026-10-27
-
-The first original turf pass was applied to the public map, then rejected by the owner for
-sparse, regular grass. A denser original family with loose clumps, curved blades and colour
-variation is now exported, baked at 2K and refreshed in the public plugin. No restricted art
-is used. Source and backup locations are documented in [Blender grass handoff](TurfWorkflow.md).
-Row 8 remains in progress: final rendered validation and owner acceptance of this revision
-are pending. Earlier first-pass captures do not establish parity for the denser assets.
-
-### Maintained turf refinement — 2026-10-27
-
-The public original cut-turf art was rebaked through Blender MCP and its maintained-only
-palette/material path applied. First-cut ground relief, filtered short-turf normals, quieter
-olive variation and subtle roughness are now saved. Existing tall rough is unchanged. No new
-third-party assets or licence obligations were introduced. Final coastal contact and rendered
-tests pass; shimmer measurements and remaining performance/owner-review limits are recorded
-in PhasesStatus. This does not change any row to parity approved.
+- **2026-10-20:** Blender projects moved out of the repository; the export scripts resolve the
+  art root. The jacaranda (rows 1–2) was prepared with a hidden wood proxy that keeps the visible
+  tree on Nanite. See [Phase status](PhasesStatus.md) ("Jacaranda applied in place").
+- **2026-10-21:** Grass008 (fairway, green) and Ground093C (bunkers) applied, with Poly Haven
+  Grass Medium tiles covering the rough to 12 m. `red_sand` and Rock029 replaced the desert
+  ground, and Nature Essentials moved into `/OpenGolfSavanna` with its CC BY 4.0 notices. The
+  public map was built with `OpenGolfSavanna/Scripts/BuildSavannaRange.py` and `ApplyCourseGrass.py`
+  (see [Phase status](PhasesStatus.md#savanna-range-on-the-public-map--2026-10-21)).
+- **2026-10-27:** the owner approved an original blade family and matching baked textures for
+  fairway, first cut, green collar and putting green. The first pass was rejected as sparse; the
+  denser revision was baked at 2K, refreshed in the public plugin and refined (first-cut relief,
+  filtered short-turf normals, quieter olive variation). It introduces no third-party assets. See
+  [Blender grass handoff](TurfWorkflow.md).
+- **2026-10-28:** the public map became the only map.

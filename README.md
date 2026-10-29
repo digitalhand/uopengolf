@@ -35,7 +35,6 @@ the [MIT license](LICENSE). Unreal Engine and third-party content retain their o
 - [Plugins](#plugins)
 - [Driving range and ball physics](#driving-range-and-ball-physics)
   - [Grass and golf assets](#grass-and-golf-assets)
-  - [Optional range visuals](#optional-range-visuals)
   - [FlightScope comparison](#flightscope-comparison)
   - [Shot library vs FlightScope](#shot-library-vs-flightscope)
   - [Hitting shots on the range](#hitting-shots-on-the-range)
@@ -425,8 +424,8 @@ The report validator and the FlightScope comparison script also have engine-free
 `python Scripts/test_automation_report.py` and `python Scripts/test_flightscope_compare.py`
 (Windows), or the same with `python3` (Linux).
 
-The original blank map is committed. `Scripts/CreateUOpenGolfMap.py` is a maintainer
-generation utility, not a setup step; it refuses to replace an existing map.
+The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
+committed with its terrain, vegetation and range actors.
 
 ### Package (Windows and Linux)
 
@@ -476,14 +475,6 @@ choose the `Packaged` folder.
 In the packaged game, **Escape** quits. Shot recordings still go to
 `Documents/UOpenGolf/Saved/ShotRecordings`, and a Square Home connects the same way as
 in the editor (Linux needs `bluetoothd`; see the plugin README).
-
-**Private content is packaged too.** Every enabled plugin with content is cooked,
-including optional packs under the ignored `Plugins/PrivateContent/` (for example
-`ProjectNatureRange`, whose assets were in the 2026-10-15 Windows package). Such a
-package is for your own machine only. For a package you can distribute, move
-`Plugins/PrivateContent/` out of the project (or disable those plugins) and package
-again. See [Optional range visuals](#optional-range-visuals). The 2026-10-18 Linux
-package was built without private content.
 
 Not yet verified: connecting a Square Home from a packaged build (either platform), and
 Shipping builds. The start check proves the game starts and loads the map headless; it
@@ -638,7 +629,7 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
    engine is in `C:\Program Files\Epic Games\UE_5.8`.
 3. Keep the runner installation and its work folder separate from your development
    checkout. Checkout cleans this folder, including ignored files. Never point it at
-   your working copy or copy private plugins or local config into it.
+   your working copy or copy local-only plugins or local config into it.
 4. Start the runner with `./run.sh` (Linux) or `run.cmd` (Windows) when you want to
    package, and stop it with Ctrl+C afterwards. Installing it as a service is optional.
 5. After an engine patch update, point each runner's `UE_ROOT` at the new installation
@@ -651,7 +642,7 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
 Before packaging, `Scripts/check_package_runner.py` checks the engine version, build
-tools, Git LFS assets and absence of private content and local `Config/User*.ini` files.
+tools, Git LFS assets and absence of local `Config/User*.ini` files.
 It also checks for Development, DebugGame and command-line Unreal editors anywhere on
 the machine. Close the editor before starting a build and leave it closed until the
 job finishes. A running editor stops the job; the workflow never closes it for you.
@@ -750,8 +741,7 @@ download those artifacts too.
   in the main archive, because the engine uses them to print readable crash call stacks.
 - **Licenses:** each package includes `LICENSE` and `THIRD_PARTY_NOTICES.md`, as well as the
   engine's `NOTICES.txt`.
-- **Content:** builds reject the known restricted-content folders and local config files
-  before cooking. Use a clean runner checkout containing public content only.
+- **Content:** builds reject local config files before cooking. Use a clean runner checkout.
 
 ### Limitations and troubleshooting
 
@@ -844,13 +834,11 @@ and a 14 by 20 inch red flag that waves in its material. The assets are included
 plugin, with editable Blender sources; playing requires no downloads or Blender
 installation.
 
-Original short grass clumps appear within 20 meters of the tee, excluding the tee
-paint. They have no collision or shadows and cull at distance. Open the Unreal
-console with **~** during play and enter `uopengolf.Grass3D 0` to release the grass
-instances if performance is poor. Enter `uopengolf.Grass3D 1` to restore them.
-The textured fairway remains visible with either setting; 3D grass defaults to on.
-Grass displacement is disabled for this calm range. The local private variant
-uses static, denser short turf with material fading across its cull distance.
+The cut turf, rough grass and ground cover under the trees are 3D instances on the terrain.
+They have no collision or shadows and cull at distance. Open the Unreal console with **~**
+during play and enter `uopengolf.Grass3D 0` to hide them if performance is poor. Enter
+`uopengolf.Grass3D 1` to restore them. The textured surfaces remain visible with either
+setting; 3D grass defaults to on. Grass displacement is disabled for this calm range.
 The ball continues to simulate at 120 Hz, capped at 12 steps per rendered frame.
 Long stalls discard excess catch-up time; sustained rates below about 10 FPS slow
 simulation relative to wall time. The timestep and collision behavior are unchanged.
@@ -860,7 +848,7 @@ stays constant. Camera movement still updates the ribbon orientation. Rendered
 performance comparisons can be run with:
 
 ```powershell
-python Scripts/check_range_variant.py --render --shot-trail --trail-timing --map /Game/UOpenGolf/Maps/UOpenGolf --engine-root "<UE_ROOT>"
+python Scripts/check_range_render.py --shot-trail --trail-timing --map /Game/UOpenGolf/Maps/UOpenGolf --engine-root "<UE_ROOT>"
 ```
 
 Add `--legacy-trail` to compare the previous mesh-building path in a development build.
@@ -883,18 +871,6 @@ See [range asset sources and regeneration](Docs/RangeAssets.md) for licenses,
 conversion details, and the rendered validation command. Presentation is owned by
 the game module; the physics plugin uses its existing ball radius and collision
 queries.
-
-### Optional range visuals
-
-The range supports optional map-specific grass meshes and turf materials through
-private content plugins. Private turf and grass cover only the fairway strip; the
-rough keeps the public material. Private materials change only the look; contact surfaces
-stay those of the course kit. The public range remains the default; a local,
-ignored `Config/UserGame.ini` can make an installed private range the default on
-one machine. See
-[optional range visuals](Docs/OptionalRange.md) for setup, asset boundaries and
-paired replay/rendered verification. Each installed private plugin supplies its
-own map and README; restricted assets are not part of the public distribution.
 
 ### FlightScope comparison
 
@@ -967,8 +943,8 @@ runs on Windows (through `Scripts/ue.ps1`) and Linux (through `Scripts/ue.sh`; f
 The first replay is the reference wood (114.5 mph, VLA 6.95°, 1933 rpm). On flat
 fairway it carries about 121.5 yards with current defaults (124 with the historical
 C# profile). The controlled single-fairway fixture gives about 37.7 yd roll and
-159.2 yd total. The public range includes a putting green and rough, so live rollout
-depends on the surfaces the ball crosses and the selected green speed.
+159.2 yd total. The savanna range has a green, a bunker on the approach and rough,
+so live rollout depends on the surfaces the ball crosses and the selected green speed.
 
 The log's `override interpolated` describes launch calibration, not a roll-distance
 limit. For this wood, regime contact multipliers are neutral. Its single-fairway
@@ -1092,7 +1068,6 @@ Original uopengolf code, documentation, and original assets are licensed under
 [MIT](LICENSE). Unreal Engine is separately licensed. See
 [Licensing](Docs/Licensing.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-Purchased or otherwise restricted assets belong in separately maintained private
-content packs under the ignored `Plugins/PrivateContent/` directory. Public code,
-maps, and defaults must not depend on them. Adding an MIT license to this repository
+Purchased or otherwise restricted assets are never committed. The project uses only
+redistributable art; public code, maps and defaults must not depend on restricted packs. Adding an MIT license to this repository
 does not grant redistribution rights to purchased assets or their derivatives.

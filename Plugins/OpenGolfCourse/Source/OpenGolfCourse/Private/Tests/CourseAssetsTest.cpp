@@ -2,7 +2,6 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Engine/StaticMesh.h"
-#include "PhysicsEngine/BodySetup.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/AutomationTest.h"
@@ -60,17 +59,6 @@ bool FOpenGolfCourseAssetsTest::RunTest(const FString& Parameters)
     }
     TestEqual(TEXT("Flagstick has no collision"), Flagstick->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
 
-    const UStaticMesh* GreenDisc = LoadObject<UStaticMesh>(nullptr, OpenGolfCourse::GreenDiscMeshPath);
-    if (TestNotNull(TEXT("Green disc mesh"), GreenDisc))
-    {
-        const FBox Bounds = GreenDisc->GetBoundingBox();
-        TestEqual(TEXT("Green radius in cm"), Bounds.Max.X, static_cast<double>(OpenGolfCourse::GreenDiscRadiusCm), 0.5);
-        TestEqual(TEXT("Green top 1 mm above the ground"), Bounds.Max.Z, 0.1, 0.01);
-        // One convex hull: flat inside, beveled down to the ground at the edge, so a rolling ball meets no step.
-        const UBodySetup* Body = GreenDisc->GetBodySetup();
-        TestTrue(TEXT("Green disc has convex collision"), Body && Body->AggGeom.ConvexElems.Num() == 1);
-        TestEqual(TEXT("Green disc material"), GreenDisc->GetMaterial(0) ? GreenDisc->GetMaterial(0)->GetPathName() : FString(), FString(OpenGolfCourse::GreenMaterialPath));
-    }
     // Putting greens are not striped.
     float GreenStripes = -1.0f;
     const UMaterialInterface* Green = LoadObject<UMaterialInterface>(nullptr, OpenGolfCourse::GreenMaterialPath);

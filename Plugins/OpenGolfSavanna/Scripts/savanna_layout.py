@@ -21,8 +21,8 @@ def relocate_bunker(outline, mound_centers, target=(108.0, 0.0)):
     return moved, centers
 
 
-# Jacaranda canopies scaled to match the range's earlier oak: each patch kind's scale range times
-# the canopy ratio measured when the oak was replaced (2026-10-20).
+# Jacaranda canopy scale: each patch kind's scale range times the canopy ratio measured on
+# 2026-10-20.
 CANOPY_RATIO = 0.5368158485
 TREE_SETTINGS = {
     "Near": dict(spacing_m=12.0, minimum_separation_m=9.0, scale_range=(0.55 * CANOPY_RATIO, 0.78 * CANOPY_RATIO),

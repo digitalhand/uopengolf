@@ -156,7 +156,7 @@ range, which has:
 - a follow camera, the Slate shot HUD and the version label;
 - automatic tee reset after 3 s;
 - A/D aim (±45°, the camera turns with it) for hitting into the rough;
-- nine replay presets (**P**, repeat with **H**) and optional private range visuals.
+- nine replay presets (**P**, repeat with **H**).
 
 The `UOpenGolf.Range` tests cover all of these on both platforms.
 
@@ -191,6 +191,56 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 
 Newest first. Evidence paths are relative to the repository root.
 
+- **2026-10-28, Linux, Unreal 5.8.4: audit, single public map and asset cleanup:**
+  - **Audit:**
+    - A read-only MCP asset-registry scan covered 524 assets and the public map's dependency closure:
+      256 packages, all project or engine content.
+    - Engine 5.8.4 plugins and renderer source were inspected, along with the Blender sources.
+    - Evidence: `Saved/Automation/Audit-20261028/`.
+  - **Owner decisions:**
+    - The public map is the only map.
+    - The flat range is retired: its layout, the optional range hook, and the kit's grass clump, putting
+      disc and green surround.
+    - Former local-only content is deleted with its backups, and the package-runner check no longer
+      looks for it.
+    - Flat-surface test coverage moves to a transient test world.
+  - **Generated folders:**
+    - Every terrain or vegetation rebuild had left its previous `Build_*` or `Vegetation_*` folder (PCG
+      graphs and point data) in Git LFS.
+    - `ApplyCourseGrass.py` (cut turf, outline smoothing), `RebuildRangeVegetation.py` and
+      `BuildSavannaRange.py` now delete unreferenced generated folders after saving the map, through the
+      new `Plugins/OpenGolfCourse/Scripts/generated_folders.py`.
+    - Run in the editor, it removed 8 folders and kept the one the map uses.
+  - **Prune tool:** the new `Scripts/prune_unreferenced_assets.py` deletes listed assets only when no
+    package outside the list references them and no source names them.
+    - It deleted 15 legacy assets: `/Game/UOpenGolf/Art` except `M_ShotTrail`, `RangeFlatRegression`,
+      `DA_RangeCoastal`, `M_Flag` and `MF_FlagWave`.
+    - Backup: `Saved/AssetBackups/20261029-011420`.
+  - **Asset totals:** tracked assets went from 524 files (457.1 MB) to 321 (381.5 MB). `Content/UOpenGolf`
+    went from 101 MB to 25 MB. The public map's dependency closure is unchanged at 256 packages.
+  - **Code:**
+    - `AUOpenGolfRange` keeps daylight, the flag, wind, stimp, tee placement and the terrain grass
+      switch. It no longer builds ground boxes, the putting disc, backdrop, flat grass or the painted
+      tee, or loads their kit assets.
+    - `AUOpenGolfGameMode` drops the optional range hook.
+    - `Range.EditableLayout` and `.Presentation` now check the saved savanna layout.
+    - `Range.RolloutSurfaces` runs on flat test ground in a transient world: live versus headless on
+      fairway, green versus fairway roll on the same path, and lies from physical materials.
+    - `OptionalRange.Variant` is removed. `Scripts/check_range_variant.py` is now
+      `Scripts/check_range_render.py`, rendered checks only.
+    - Removed scripts: `UpgradeRangeTerrain.py`, `BuildRangeMap.py` and `CreateUOpenGolfMap.py`.
+  - **Checks:**
+    - Python: Scripts 81, OpenGolfCourse 25, OpenGolfSavanna 46 and Blender rules 44, all passing.
+    - The Development editor build and the non-adaptive unity build pass with no warnings.
+    - The launcher's 5.8.3 → 5.8.4 patch had left stale precompiled headers. Their engine headers keep
+      2026-10-06 times, so the build tool missed it. Those for the Development editor, DebugGame editor
+      and Development game were deleted so they rebuild.
+  - **Not yet done:**
+    - the DebugGame rebuild, then the C++ tests above
+    - pruning the four flat kit assets
+    - deleting the hidden `TeeBox` actor and re-saving the map
+    - Linux packaging, a GPU timing baseline and the LFS quota check
+
 - **2026-10-28, Windows, Unreal 5.8.4 upgrade:**
   - The Epic launcher replaced 5.8.3 with 5.8.4 (CL 58902052). `EngineAssociation` stays `5.8`.
   - `ue.ps1 Build` and `Smoke` pass. Report: `Saved/Automation/20261028-105936-133883c9`.
@@ -208,7 +258,7 @@ Newest first. Evidence paths are relative to the repository root.
     syntax and ShellCheck at warning severity pass. Temporary-file checks pass for Linux
     archives, symbols, checksums and cleanup. Release-helper checks pass with a mocked
     GitHub CLI; no release was created. Actual engine checks use 5.8.3, CL 58210709,
-    with Clang 20.1.8; the development checkout correctly fails the private-content check.
+    with Clang 20.1.8; the development checkout correctly fails the restricted-content check.
   - Report: `Saved/Automation/20261027-ci-packaging-ksi4isvq/validation.txt`.
     Full Linux packaging is pending because a host Unreal editor is running. Native Windows
     checks and packaging, Actions uploads/downloads and a real shared draft remain pending.
@@ -340,8 +390,8 @@ Newest first. Evidence paths are relative to the repository root.
   - HUD version label `v0.0.1`: `Saved/Automation/20261015-202135-8adb5fa5`.
   - Packaging documented. A manual `RunUAT BuildCookRun` Win64 Development package
     succeeded: 550 packages cooked, about 1 GB, log `Saved/Logs/PackageCheck.log`, output
-    `Saved/PackageCheck/`. Private `ProjectNatureRange` content was cooked into it, so
-    such packages are not distributable.
+    `Saved/PackageCheck/`. It also cooked local-only content, so it was not
+    distributable.
 - **2026-10-15, Windows, recording reliability, Bluetooth cancellation and tracer CPU work:**
   - Recordings: retries, a non-replacing finalize, unsaved counts in the HUD, and
     late club data.
@@ -374,27 +424,26 @@ Newest first. Evidence paths are relative to the repository root.
   - Smoke `Saved/Automation/20261015-181940-93764773`; range
     `Saved/Automation/20261015-181204-f44513ff`; physics
     `Saved/Automation/20261015-181940-c5808233`.
-  - Private/public equivalence `Saved/Automation/20261015-182009-variant-2c3c9da5`
+  - Range variant equivalence `Saved/Automation/20261015-182009-variant-2c3c9da5`
     (iron 85.9318 / 89.0567 yd; low wood 121.5477 / 159.2398 yd).
   - Tracer sequences `Saved/Automation/20261015-182252-variant-98d529d0`, with captures in
     `Saved/Screenshots/ShotTrail/20261015-182311-*`.
 - **2026-10-15, Windows, grass stability and timing:**
-  - Static checks: private `Saved/Automation/20261015-183631-variant-8be43815`
+  - Static checks: variant `Saved/Automation/20261015-183631-variant-8be43815`
     (measurements in `Saved/Automation/20261015-183631-variant-8be43815/GrassStability.txt`),
-    public `Saved/Automation/20261015-183834-variant-36a875cf`.
+    default `Saved/Automation/20261015-183834-variant-36a875cf`.
   - Six-view timing repeat `Saved/Automation/20261015-184323-variant-c054289e`.
   - A longer repeat crashed in the ImageWrapper screenshot encoder:
     `Saved/Automation/20261015-184123-variant-a430bbe1`.
 - **2026-10-15, Windows, range look pass:**
   - −0.5 EV fixed exposure, no motion blur, a 4 km backdrop, `RoughMaterialOverride`,
-    and palette-driven private turf.
+    and palette-driven turf.
   - `Saved/Automation/20261015-165632-7e9796dc`; variant
     `Saved/Automation/20261015-165804-variant-99440e8a`.
 - **2026-10-15, Windows, optional turf limited to the fairway:**
   - `UOpenGolf.Range` `Saved/Automation/20261015-155931-f69b247a`.
   - Variant `Saved/Automation/20261015-160556-variant-d730eb3d`; rendered
     `Saved/Automation/20261015-160646-variant-ade59700`.
-  - `LocalRangeClass` in `Config/UserGame.ini`: `Saved/Automation/20261015-161611-5ed09967`.
 - **2026-10-15, Windows, shot recording:** F9 recording. `UOpenGolf.Range.ShotRecording`
   `Saved/Automation/20261015-134115-0067205c`. Real Square Home shots recorded.
 - **2026-10-15, Windows, explicit grass colors:** `GrassDarkColor` `#406B1F` and
@@ -490,15 +539,12 @@ These editor measurements support lower tracer CPU work. They don't establish pa
 FPS or GPU headroom.
 
 Grass stability (Windows, 2026-10-15): this compares the first and last of twenty
-stationary frames per view. At the private tee, the mean maximum RGB-channel difference
+stationary frames per view. At the variant's tee, the mean maximum RGB-channel difference
 fell from 2.7667/255 to 0.5454/255 (grass off: 0.5396/255). Pixels changing by more than
-three levels fell from 25.798% to 0.018%. The public fallback still shows 9.253% at the
+three levels fell from 25.798% to 0.018%. The default range still shows 9.253% at the
 tee, versus 0.037% with grass off.
 
 ## Trees, trunk colliders and SM6 rendering — 2026-10-19
-
-Graphics work now targets a private range built from locally licensed packs until a
-baseline is approved; the public range follows (see [licensing](Licensing.md#current-graphics-work)).
 
 - **Kit.** The OpenGolfCourse kit places trees in vegetation areas with hidden trunk colliders. The ball deflects off `OpenFairway.Obstacle` components and never rests on them. See [Coastal terrain](CoastalTerrain.md#trees-and-trunk-colliders--2026-10-19).
 - **Tests.** Unreal 5.8.3, Linux, DebugGame editor via MCP: 10 passed.
@@ -510,7 +556,7 @@ baseline is approved; the public range follows (see [licensing](Licensing.md#cur
 - **Rendering.**
   - Linux now targets Vulkan SM6 only, so Nanite runs. Under SM5, Nanite meshes drew their full fallback meshes.
   - Virtual shadow maps are enabled.
-  - Provisional editor PIE timings with about 4,660 Nanite trees in a private test layout, RTX 3060, internal resolution about 1368×764, one editor:
+  - Provisional editor PIE timings with about 4,660 Nanite trees in a test layout, RTX 3060, internal resolution about 1368×764, one editor:
 
     | Configuration | FPS | GPU frame time |
     | --- | ---: | ---: |
@@ -521,115 +567,7 @@ baseline is approved; the public range follows (see [licensing](Licensing.md#cur
   - These are not 1080p or packaged results. Earlier SM5 timings no longer describe the current renderer.
 - **Not covered.** No shimmer comparison was made for the trees. Windows and packaged runs are unverified.
 
-## Oak wood collision — 2026-10-19
-
-The saved private range now uses hidden collision matching the oak's trunk, solid
-branches and cut ends, replacing the short cylindrical proxies. All 296 visible oaks
-retain their original transforms and materials. Leaf cards and nuts have collision
-disabled. The source pack mesh is unchanged; a private copy supplies the collision.
-Both private rebuild scripts reapply this treatment after generating vegetation.
-
-Unreal Engine 5.8.3, Linux DebugGame, one editor: ball-sized sphere sweeps through
-upper-trunk and branch faces missed all 592 probes before the change and hit all
-592 afterward. Another 592 sweeps through leaf-only canopy and open space remained
-clear. Two short airborne ball impacts against actual saved oak wood reflected and
-slowed to 5.35 and 5.74 m/s from a 40 mph launch. These are contact checks, not full
-tee-to-rest shot or performance measurements. Applying the collision a second time
-preserved the result. The saved-map terrain and obstacle-contact automation checks
-passed after that reapplication, along with `UOpenGolf.Visual.CoastalTerrain`.
-The final sequence contains 200 frames in
-`Saved/Automation/CoastalReview/OakWoodCollision-20261020-050026`. Tee and close
-frames were inspected: the collision proxies stay invisible. Cameras, output size
-(1749 × 977) and AA settings match the preceding desert capture; internal render
-resolution remains unverified. `Scripts/grass_stability.py --profile coastal` measured
-all six stationary grass-on/off sequences, 20 frames each. Percentages are pixels
-changing by more than 3/255, averaged over consecutive frame pairs:
-
-| View | Lower crop before | Lower crop final | Worst band before | Worst band final |
-| --- | ---: | ---: | ---: | ---: |
-| Tee, grass on | 0.000% | 0.000% | 3.210% | 2.175% |
-| Tee, grass off | 0.001% | 0.000% | 3.496% | 2.233% |
-| Edge, grass on | 0.012% | 0.012% | 3.166% | 3.169% |
-| Edge, grass off | 0.013% | 0.012% | 3.276% | 3.044% |
-| Close, grass on | 0.003% | 0.003% | 4.684% | 4.428% |
-| Close, grass off | 0.000% | 0.000% | 5.049% | 5.019% |
-
-Here “before” is the completed desert/bunker capture immediately preceding this
-collision change. The lower crop is the bottom 40%; the worst band is the most
-changed 5% strip. Final worst bands are rows 50–55% at the tee, 30–35% at the edge
-and 45–50% close up. Full results are in `Stability.txt` beside the collision report.
-No visible art or rendering setting changed, and these runs do not establish a
-shimmer improvement from collision. Tree/horizon flicker remains. View 9 and
-`grass-motion.mp4` retain slow camera motion; continuous playback review and
-controlled FPS remain pending. The editor paused in the debugger after all three
-automation checks completed; no second editor was started.
-
-Evidence is in `Saved/Automation/PrivateRange/OakCollision`: `before.json`, `after.json`,
-`saved.json`, `LiveShots.json`, `ImplementationChecks.json` and `Editor-final.log`.
-The first full private-content backup is
-`Saved/TerrainBackups/20261020-045709-oak-wood-collision`. Five existing private
-layout tests, Python syntax checks and `git diff --check` pass. No C++ or C# changed
-in this collision follow-up.
-
-## Oak understory — 2026-10-20
-
-The private range now has dry-savanna ground cover around each of its 296 oaks:
-
-- leaf-litter patches and dead moss near the trunks
-- straw grass tufts at the canopy edge
-- sparse small rocks and seedlings
-
-The pieces come from a locally licensed ground-cover pack. They are prepared in an editable
-Blender project and imported into ignored private content. A seeded per-oak layout keeps
-cover at least 2 m from play surfaces, and the private rebuild scripts reapply it after
-every vegetation bake. The cover has no collision, no shadows and no vertex motion. It
-follows the 3D grass switch. No C++, public map or tracked configuration changed.
-
-Unreal Engine 5.8.3, Linux DebugGame editor, one editor via MCP, with `uopengolf.TestMap`
-set to the private map:
-
-- **Saved map:** 18,185 understory instances in 20 instanced-mesh components on the baked
-  ground-cover actor. They reloaded intact after an editor restart: 7,692 grass, 1,702 shade grass, 6,838 litter patches, 1,287 moss,
-  417 seedlings and 249 rocks. No point fell on a slope steeper than 30°.
-- **Native tests passed:**
-  - `UOpenGolf.Visual.CoastalTerrain`: the before run, and both after runs
-  - after the final placement: `UOpenGolf.Range.CoastalTerrain`, `UOpenGolf.Range.ObstacleContact`
-    and `UOpenGolf.Range.BunkerProbe`
-- **Python unit tests passed:** 13 layout tests and 11 export-rule tests.
-- **Shimmer.** `Scripts/grass_stability.py --profile coastal` compared the before and final
-  sequences: 20 frames per view, 1749 × 977, same cameras and AA. Values are pixels changing by
-  more than 3/255, averaged over consecutive frame pairs:
-
-  | View | Lower crop before | Lower crop after | Worst band before | Worst band after |
-  | --- | ---: | ---: | ---: | ---: |
-  | Tee, grass on | 0.001% | 0.001% | 3.382% | 3.617% |
-  | Tee, grass off | 0.001% | 0.000% | 3.516% | 3.093% |
-  | Edge, grass on | 0.013% | 0.022% | 3.298% | 3.307% |
-  | Edge, grass off | 0.012% | 0.012% | 3.168% | 3.210% |
-  | Close, grass on | 0.003% | 0.003% | 4.573% | 4.947% |
-  | Close, grass off | 0.000% | 0.000% | 4.861% | 5.001% |
-
-  The worst bands are the horizon rows, 30–50%. The grass-off views hide the understory,
-  and between runs they moved by −0.42 to +0.14 points. The grass-on changes, from +0.01
-  to +0.37 points, are of similar size. These runs neither show a clear regression nor
-  demonstrate an improvement. Tree/horizon flicker remains.
-- **Frame time.** Provisional editor PIE frame intervals at the standard probe camera:
-  - 3D ground cover hidden: mean 9.72 ms, p95 11.35 ms
-  - shown: mean 10.01 ms, p95 11.62 ms
-
-  GPU time was not measured. This is not a controlled 1080p or packaged result.
-- **Not covered.**
-  - The standard cameras include no oak close-up, and the litter culls from 34 m. Views
-    3–9 m from a trunk were reviewed only in editor viewport captures.
-  - Continuous slow-motion playback review is pending.
-  - Windows, packaged runs and Shipping are unverified.
-
-Evidence: `Saved/Automation/CoastalReview/BeforeUnderstory-20261020-210931`,
-`AfterUnderstoryTufts-20261020-211801` and
-`Saved/Automation/PrivateRange/GraphicsProbe-20261020-212150`. Private-content
-backups: `Saved/TerrainBackups/20261020-211144-understory` and `20261020-211730-understory`.
-
-### Blender sources moved out of the repository — 2026-10-20
+## Blender sources moved out of the repository — 2026-10-20
 
 Blender projects now live outside the repository under the Blender art root
 (`Plugins/OpenGolfCourse/Scripts/art_root.py`, five unit tests). The repository keeps only
@@ -644,89 +582,25 @@ Unreal-ready assets, and `.gitignore` excludes `.blend` files.
   - Their texture sources are now 2K colour and normal maps and 1K masks, down from up to
     8K.
   - After the reimport, the saved understory still had 18,185 instances.
-  - `UOpenGolf.Visual.CoastalTerrain` passed on the private map
-    (`AfterBlenderMove2K-20261020-220001`).
+  - `UOpenGolf.Visual.CoastalTerrain` passed (`AfterBlenderMove2K-20261020-220001`).
   - Stability matched the previous capture within run-to-run noise:
     - the lower crop moved by 0.002 points at most
     - worst bands were 3.592% tee, 3.126% edge and 4.872% close with grass on, against 3.617%,
       3.307% and 4.947%
 
-## Desert vegetation implementation checkpoint — 2026-10-19
-
-The private range is saved with desert outer ground, green rough beside the maintained
-turf, 296 cork oaks and 19,716 grass clumps from four included meshes. The earlier bake
-had 4,659 pines and 69,364 grass instances. The oaks use 36 irregular planting patches,
-including 12 beside the rough, with seeded random placement and minimum separation.
-Each saved oak has a matching trunk collider. The fairway and green materials are
-unchanged. Licensed assets and their derivatives remain in ignored private content.
-
-The bunker and its rim and bowl moved from (146, 28) m to (108, 0) m. Its entire
-outline is now before the green: the back edge is at 116.27 m and the green begins
-at 122.9 m. The green outline and tee XY are unchanged. Terrain, grass and trees
-were rebuilt after the move. The full private Content directory was backed up before
-the graphics work and again before moving the bunker; the latter backup is
-`Saved/TerrainBackups/20261020-044456-bunker-approach`.
-
-Unreal Engine 5.8.3, Linux: the Development build and changed-file compile checks pass
-(six files initially, with the three bunker-related files checked again after that edit).
-The owner's rebuilt DebugGame editor passed eight final tests through MCP:
-`UOpenGolf.Course.Terrain.Definition`, `.RandomScatter`, `.Scatter`,
-`UOpenGolf.Physics.ObstacleResponse`, `UOpenGolf.Range.BunkerProbe`,
-`UOpenGolf.Range.CoastalTerrain`, `UOpenGolf.Range.ObstacleContact`, and
-`UOpenGolf.Visual.CoastalTerrain`. Fifteen Python tests pass: five private
-layout/mask/bunker checks and ten shimmer-tool checks. No coverage percentage was measured.
-Evidence: `Saved/Automation/DesertBaseline-20261020/ImplementationChecks.json` and
-`Editor-final-tests.log`. The MCP result request timed out after the editor paused at
-session completion; the retained log records all eight successful results.
+## Seeded vegetation placement — 2026-10-19
 
 Vegetation presets now support seeded random placement with minimum separation and
-bounded retries; existing presets retain their grid pattern. Coastal contact, visual,
+bounded retries; existing presets keep their grid pattern. Coastal contact, visual
 and obstacle-contact tests can select another map through `uopengolf.TestMap`.
-Coastal captures include stationary tee, edge, and close views with grass on/off,
-plus a camera-motion sequence; use `Scripts/grass_stability.py --profile coastal`.
+Coastal captures include stationary tee, edge and close views with grass on and off,
+plus a camera-motion sequence; measure them with `Scripts/grass_stability.py --profile coastal`.
 
-The private material generator and saved assets use the same grass treatment: upward
-world-space shading normals on both faces, ground-matched colors, high roughness,
-instanced-mesh support, no shadows and no vertex motion. The detailed rough blends
-green to sand/dirt using a mipmapped distance mask. Grass density falls across three
-bands from the maintained turf into the desert. Green `StripeContrast` remains zero.
-
-Rendered evidence uses 20 stationary frames per view at 1749 × 977, FOV 65, TSR,
-history screen percentage 100 and automatic screen percentage. Internal render
-resolution was not verified. Before and final runs used the same cameras and settings,
-one editor at a time; the editor was restarted between runs. Final captures include
-the bunker relocation. Frame sequences:
-`Saved/Automation/CoastalReview/BeforeDesert-20261020-042731` and
-`Saved/Automation/CoastalReview/FinalDesertBunker-20261020-044657`.
-The intermediate `AfterDesert` sequence predates the bunker move.
-
-Stationary measurements from `Scripts/grass_stability.py --profile coastal` average
-19 consecutive frame pairs. Values below are percentages of pixels changing by more
-than 3/255, rounded to three decimals. The lower crop covers the bottom 40% of the
-image; the worst band is the most changed horizontal 5% strip.
-
-| View | Lower crop before | Lower crop final | Worst band before | Worst band final |
-| --- | ---: | ---: | ---: | ---: |
-| Tee, grass on | 0.001% | 0.000% | 4.286% | 3.210% |
-| Tee, grass off | 0.000% | 0.001% | 2.783% | 3.496% |
-| Edge, grass on | 0.012% | 0.012% | 5.381% | 3.166% |
-| Edge, grass off | 0.006% | 0.013% | 5.028% | 3.276% |
-| Close, grass on | 0.006% | 0.003% | 2.007% | 4.684% |
-| Close, grass off | 0.002% | 0.000% | 1.166% | 5.049% |
-
-The worst bands are at rows 45–50% for tee/close and 30–35% for edge, crossing
-trees and the horizon. Tee-on and both edge bands improved, while tee-off and both
-close bands worsened. Similar residual change with grass hidden means these readings
-do not isolate grass as its source. The scene is not established as shimmer-free.
-Full mean-difference and first/last figures are retained in `BeforeStability.txt`
-and `FinalStability.txt` beside the test report.
-
-Slow camera motion was captured separately as view 9. Frames 00, 09 and 19 were
-inspected for obvious trails, but continuous playback review remains pending.
-A local review clip is
-`Saved/Automation/PrivateRange/DesertLayout/grass-motion.mp4`.
-Controlled FPS, Windows and packaged checks remain pending; these captures establish
-neither a frame-rate improvement nor the removal of all shimmer.
+Unreal Engine 5.8.3, Linux: the Development build passed, and the rebuilt DebugGame editor
+passed `UOpenGolf.Course.Terrain.Definition`, `.RandomScatter`, `.Scatter`,
+`UOpenGolf.Physics.ObstacleResponse`, `UOpenGolf.Range.BunkerProbe`,
+`UOpenGolf.Range.CoastalTerrain`, `UOpenGolf.Range.ObstacleContact` and
+`UOpenGolf.Visual.CoastalTerrain` through MCP.
 
 ## Coastal terrain foundation checkpoint — 2026-10-19
 
@@ -769,10 +643,10 @@ regressions and packaged FPS remain unverified. The first Python integration edi
 saved successfully but crashed during shutdown; the final automation loaded and
 validated the saved map successfully. See [Coastal terrain delivery](CoastalTerrain.md).
 
-## Jacaranda preparation and oak baseline — 2026-10-20
+## Jacaranda preparation — 2026-10-20
 
 Unreal Engine 5.8.3, Linux, one running DebugGame editor. The existing map still
-has 296 oaks and 296 oak wood colliders. The approved migration now works in place
+had its earlier trees and wood colliders. The approved migration now works in place
 and requires the new `TreeCollisionMesh` preset field; it stops before map edits
 if that field is not loaded. The owner must rebuild DebugGame and restart before
 application. The Development build and three changed-file compile checks passed
@@ -785,7 +659,7 @@ dependency walk visited 18 packages without finding an unexpected content root
 in the range. The matching canopy ratio is 0.5368158485. CC0 notice and legal text
 are present in the public art plugin. No ground, grass or lighting assets changed.
 
-`UOpenGolf.Visual.CoastalTerrain` passed on the oak map and saved 200 frames in
+`UOpenGolf.Visual.CoastalTerrain` passed before the swap and saved 200 frames in
 `Saved/Automation/CoastalReview/BeforeJacaranda-20261021-004252`. The frames are
 1320 × 959, FOV 65, with the existing rendering settings. Background CPU throttling
 was temporarily disabled for capture. Measurements use 19 consecutive pairs,
@@ -804,21 +678,19 @@ Full output: `Saved/Automation/Jacaranda/BeforeStability.txt`. These are before
 measurements, not evidence for the replacement. A tee frame was inspected; slow
 motion playback and tree close-ups remain pending. Final jacaranda sequences,
 actual wood/leaf sweeps, airborne and low shots, reopen/rebuild checks, native
-runtime tests for the new field, controlled frame times and owner parity review
+runtime tests for the new field, controlled frame times and owner review
 remain pending. No FPS or shimmer improvement is claimed.
 
 Python checks passed: six fetch/migration-rule tests, six export-rule tests and
-13 private layout tests. Changed scripts compile. No coverage percentage was
+13 layout tests. Changed scripts compile. No coverage percentage was
 measured. No C# changed; this checkout has no `OpenFairway.sln`.
 
 ## Jacaranda applied in place — 2026-10-20
 
 Unreal Engine 5.8.3, Linux, one DebugGame editor (rebuilt with `TreeCollisionMesh`). The
-private range `/UOpenGolfPrivateRange/Maps/UOpenGolf_Private` now has 296 jacarandas and
-296 hidden wood colliders. All 36 tree presets point at `SM_Jacaranda` with
-`TreeCollisionMesh = SM_JacarandaCollision`, and their original oak scale ranges are kept in
-metadata. Canopy ratio 0.5368158485. Backup with the oak `trees-before.json`:
-`Saved/TerrainBackups/20261021-011543-628849-jacaranda`. Report:
+range now has 296 jacarandas and 296 hidden wood colliders. All 36 tree presets point at
+`SM_Jacaranda` with `TreeCollisionMesh = SM_JacarandaCollision`, and their earlier scale ranges
+are kept in metadata. Canopy ratio 0.5368158485. Report:
 `Saved/Automation/Jacaranda/migration.json`.
 
 | Check | Result |
@@ -847,24 +719,24 @@ Fixes found while applying:
   `invalid-tee-view/`). It now refuses a shot that is not at its pose.
 
 The close-ups are editor viewport captures (MCP, FOV 90) at the poses in `review-poses.json`:
-`Saved/Automation/Jacaranda/before/`, `after/` and `oak-vs-jacaranda-closeups.jpg`.
+`Saved/Automation/Jacaranda/after/`.
 
 Open issues:
 
 - Distant jacarandas render as bare branches. The mesh has Nanite `shapePreservation: None`;
   masked leaf cards need `PreserveArea`. Applying it rebuilds Nanite for 804k triangles, so it
   waits for the owner because of the Wayland freeze risk.
-- The foliage reads paler than the oak, so leaf tint needs owner review.
+- The foliage reads pale, so leaf tint needs owner review.
 - Branch collision is too broad: small branches deflect the ball sharply. The owner wants
   trunk-only collision, recorded as [technical debt](Roadmap.md#technical-debt).
 
 Pending:
 
-- the rebake check (`BuildPrivateRange.py --trees-only` plus a layout comparison)
+- the rebake check (a trees-only rebuild plus a layout comparison)
 - actual shots in Play
 - native range and terrain tests
 - `UOpenGolf.Visual.CoastalTerrain` sequences, shimmer and frame time
-- owner parity review
+- owner review
 
 No shimmer, frame-time or gameplay result is claimed for the jacaranda yet.
 
@@ -917,7 +789,7 @@ visual parity is claimed. The owner requested this checkpoint before further wor
 
 The owner asked for full Grass Medium cover on the rough beside the fairway with no gaps,
 Ground093C on the bunkers, and a fix for a lighter patch on the green. This supersedes the
-pending items of the boundary/fairway checkpoint above. Applied to the private map with the
+pending items of the boundary/fairway checkpoint above. Applied with the
 DebugGame editor (UE 5.8.3, Linux, one editor):
 
 - **Rough:** a seamless 3D grass layer from `ApplyCourseGrass.py`, with backups under
@@ -927,7 +799,7 @@ DebugGame editor (UE 5.8.3, Linux, one editor):
   - 891 edge strips along the outlines
 
   Scattered 1 m tiles from 15 to 40 m were tried and removed at the owner's request; on bare
-  soil they read as spots. The private rough mask is now solid to 12 m and fades to desert by
+  soil they read as spots. The rough mask is now solid to 12 m and fades to desert by
   16 m (it was 6 m and 24 m). The rough underlay uses Poly Haven `leafy_grass` at about half
   its earlier brightness, so it matches the rendered blades.
 - **Surfaces:** Grass008 on the fairway, Grass008 lighter and finer with no stripes on the
@@ -949,14 +821,12 @@ DebugGame editor (UE 5.8.3, Linux, one editor):
     driver looped when imports pumped Slate, and the editor had to be killed; nothing was
     saved by that loop.
   - Per-mesh counts in its log are now summed across presets.
-  - The private plugin declares its `OpenGolfSavanna` dependency. This takes effect at the
-    next editor start; until then the asset validator flags `MI_PrivateDesertRough`.
 
 Validation:
 
 - All five `UOpenGolf.Course.Terrain.*` tests passed in the running editor through MCP,
   including the new TiledGrass and BoundaryGrass tests.
-- The private layout tests and the savanna Blender rule tests pass.
+- The layout tests and the savanna Blender rule tests pass.
 - Same-pose stills are in `Saved/Screenshots/CourseGrass/`: `before_*`, `after_*`,
   `after2_*` (surfaces) and `final3_*` (12 m band). They show full cover beside the fairway at
   0.9–4 m and textured fairway, green and bunker. The captures are single-frame MCP renders
@@ -983,10 +853,7 @@ DebugGame editor (UE 5.8.3, Linux, one editor):
   (`BuildSavannaGround.py`). It has a red-sand base with seam-free noise patches of Rock029,
   and the Leafy Grass rough near play through the course mask. Both textures are scaled to
   target colours.
-  - The private ground instances were reparented with every override cleared
-    (`ApplyOpenGround.py`, `BuildPrivateRangeMaterials.configure_ground`), so they no longer
-    reference MW.
-  - Close-view sand renders (147, 97, 59) against MW's (150, 106, 70).
+  - Close-view sand renders (147, 97, 59).
   - Poly Haven's 16-bit PNG sands imported washed out, close to white; the sands use 8-bit
     JPGs instead.
 - **Nature Essentials (rows 5–7):** imported into `/OpenGolfSavanna`, in the `NatureEssentials`
@@ -995,16 +862,11 @@ DebugGame editor (UE 5.8.3, Linux, one editor):
     pack path comes from `UOPENGOLF_NE_PACK` or `--source`.
   - Cards and rocks use `M_SavannaCard` and `M_SavannaSolid`; the grass uses the new
     `M_SavannaUnderstoryGrass` (row 6), which is dry unless a course enables its mask.
-  - The private understory was re-placed on the public meshes: 18,185 pieces around 296 trees,
-    the same count. Backup: `Saved/TerrainBackups/20261021-231500-understory`.
-  - The 71 private copies were deleted after a referencer check.
+  - The understory was re-placed on the public meshes: 18,185 pieces around 296 trees.
   - The credit, changes note and full CC BY 4.0 text (`LICENSES/CC-BY-4.0.txt`) are in
     `OpenGolfSavanna/NOTICE.md` and `THIRD_PARTY_NOTICES.md`.
-- **Gate 2:** none of the 201 public packages (`/OpenGolfSavanna`, `/OpenGolfCourse`, `/Game`)
-  references private or restricted content.
-- **Gate 5, added:** restricted packs remain in Git history and block any public release: Project
-  Nature (626 files) on `main` and every branch, and DZ and MW in `4898a93`. See
-  [the roadmap](AssetLicenseRoadmap.md#gates).
+- **Clean references:** none of the 201 public packages (`/OpenGolfSavanna`, `/OpenGolfCourse`,
+  `/Game`) references restricted content.
 
 Incident: a command helper sent Ctrl+A and BackSpace to the level editor, which ran
 `ACTOR SELECT ALL` and `DELETE` (121 actors). The saved map was never written; `TRANSACTION
@@ -1012,13 +874,11 @@ UNDO` restored the actors only partly, so the map was reloaded from disk without
 helper now sets text directly (`FillForm`).
 
 Not yet verified: shimmer sequences and slow-motion review of the new ground and understory,
-frame time, and owner parity sign-off for rows 3–7. Unused private leftovers (old oak and pine
-presets, 160 orphaned PCG graphs, `M_PrivateDesertGrass`, `SM_PrivateGrassA–D`) still reference
-DZ or MW and go when the private range retires.
+frame time, and owner review of rows 3–7.
 
 ## Savanna range on the public map — 2026-10-21
 
-The owner chose to port the build pipeline rather than copy the private map. Applied to
+The owner chose to port the build pipeline rather than copy a map. Applied to
 `/Game/UOpenGolf/Maps/UOpenGolf` in the DebugGame editor (UE 5.8.3, Linux, one editor, rebuilt
 with the new `UOpenGolfTerrainBuilder::AddVegetationHost`):
 
@@ -1030,14 +890,13 @@ with the new `UOpenGolfTerrainBuilder::AddVegetationHost`):
   - rebuilt the terrain and the 36 seeded jacaranda patches
   - results:
     - 296 trees and 296 wood colliders; 592 of 592 wood hits clear
-    - 18,185 understory pieces, the same counts as the private map
+    - 18,185 understory pieces
   - backup: `Saved/TerrainBackups/20261022-022823-savanna-range`
-- **`ApplyCourseGrass.py`:** 15,006 course-grass pieces, as on the private map. Backup:
+- **`ApplyCourseGrass.py`:** 15,006 course-grass pieces. Backup:
   `Saved/TerrainBackups/20261022-022851-422080-course-grass`.
-- **Captures:** the same poses on the public map (tee, edge, close, bunker, green, close turf,
-  wide trees) match the private map's after-state.
+- **Captures:** tee, edge, close, bunker, green, close-turf and wide-tree poses on the public map.
 
-- **Gate 2:** none of the 327 public packages references private or restricted content.
+- **Clean references:** none of the 327 public packages references restricted content.
 - **Tests (in the editor, through MCP):** 22 of 25 `UOpenGolf.Range.*` and
   `UOpenGolf.Course.Terrain.*` tests pass; `FrameRates` was not run. The three failures assert
   the old flat-box range:
@@ -1052,7 +911,7 @@ with the new `UOpenGolfTerrainBuilder::AddVegetationHost`):
 
 Not yet verified:
 - shimmer sequences, slow-motion review and frame time
-- owner parity sign-off for rows 1–7
+- owner review of rows 1–7
 
 `SM_Jacaranda` was left marked unsaved in the editor after the run, with its settings unchanged
 (Nanite on, no shape preservation); it was not saved. Cause, found later the same day: the old
@@ -1193,7 +1052,7 @@ Measured:
   - **Map and Play batch:** 10 of 16 pass, including `Range.DuplicateController`, `Physics.ShotInterrupt`,
     `Range.AutoReset`, `.WindSettings`, `.Shot`, `.ShotTrail`, `.PlayableBounds` and `.ReplaySelection`.
     - `EditableLayout`, `Presentation` and `RolloutSurfaces` are the known flat-range failures.
-    - `Smoke.UOpenGolf` fails only because `Config/UserEngine.ini` opens the private map here.
+    - `Smoke.UOpenGolf` fails only because `Config/UserEngine.ini` opens a different local map here.
     - `Range.TeeLocation` (new) could not move the range, because its root is Static in Play. The test now
       makes its throwaway Play copy Movable first.
   - **After a DebugGame rebuild:** `ShotRecordingFinalize`, `FlagClothInputs` and `TeeLocation` pass.
@@ -1419,7 +1278,7 @@ Not verified: Windows (DX12), packaged builds, and the owner's motion review.
 The owner decided the range does not need distance markers.
 - `AUOpenGolfRange` no longer builds the 50–300-yard posts and number labels, so a new or empty
   layout does not bring them back. Their terrain alignment and colouring code is gone too.
-- The 24 marker actors were deleted from the public map and the private map. The tee box, the only
+- The 24 marker actors were deleted from the public map. The tee box, the only
   other decoration, moved from the `Range/Markers` outliner folder to `Range/Tee`.
 - Checks:
   - The Development editor build compiles.

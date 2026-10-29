@@ -52,7 +52,7 @@ ASSETS = {
         ("maps/leafy_grass_rough_1k.png", _TEXTURES + "png/1k/leafy_grass/leafy_grass_rough_1k.png",
          "5dff12e1e81532a92d074e63473ab127", 2444449),
     ],
-    # Desert sand, replacing the restricted MW sand (licence roadmap row 3).
+    # Desert sand (licence roadmap row 3).
     # 8-bit JPGs: Unreal imports Poly Haven's 16-bit PNGs as linear data and washes the colour out.
     "red_sand": [
         ("maps/red_sand_diff_2k.jpg", _TEXTURES + "jpg/2k/red_sand/red_sand_diff_2k.jpg",

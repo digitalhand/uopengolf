@@ -4,7 +4,7 @@ import unittest
 
 from outline_smoothing import crossing_outlines, smooth_outline
 
-# The range's authored fairway (UpgradeRangeTerrain.py): 17 corners joined by straight edges.
+# The range's original authored fairway (from the retired UpgradeRangeTerrain.py): 17 corners joined by straight edges.
 FAIRWAY = [(-12, -13), (25, -16), (75, -14), (120, -17), (165, -17), (220, -14), (285, -16), (335, -11), (350, 0),
            (335, 12), (280, 15), (220, 17), (160, 16), (110, 15), (60, 17), (10, 14), (-12, 12)]
 

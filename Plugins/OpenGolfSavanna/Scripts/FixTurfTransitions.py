@@ -9,7 +9,7 @@ Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. First export and bake the
         Saved/AssetImport/OpenGolfSavanna/CutTurf/course-field.json \\
         Saved/AssetImport/OpenGolfSavanna/CutTurf/T_CourseSurfaceField.tga
 The ground, rough and blade materials then evaluate one field, so seams and blades match the ground.
-The painted tee box is hidden: the field draws the tee. Assets are backed up to Saved/TurfAssetBackups.
+The field also draws the tee. Assets are backed up to Saved/TurfAssetBackups.
 """
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,16 +46,6 @@ def backup():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
     return folder
-
-
-def hide_painted_tee():
-    ranges = [actor for actor in ue.get_editor_subsystem(ue.EditorActorSubsystem).get_all_level_actors()
-              if isinstance(actor, ue.UOpenGolfRange)]
-    if len(ranges) != 1:
-        raise RuntimeError('Expected one range controller in the public map')
-    ranges[0].modify()
-    ranges[0].set_editor_property('show_painted_tee_box', False)
-    ranges[0].refresh_presentation()
 
 
 def statistics(folder):
@@ -101,9 +91,8 @@ def fix():
                 turf.a.MAT.set_material_instance_scalar_parameter_value(instance, 'Roughness', .90)
                 turf.a.MAT.update_material_instance(instance)
                 turf.a.save(instance)
-            hide_painted_tee()
             if not ue.get_editor_subsystem(ue.LevelEditorSubsystem).save_current_level():
-                raise RuntimeError('Could not save the map with the painted tee hidden')
+                raise RuntimeError('Could not save the map')
             ue.log('OPEN_GOLF_TURF_FIELD_COMPLETE ' + str(folder) + ' ' + str(statistics(folder)))
     finally:
         turf.a.SOURCE = previous

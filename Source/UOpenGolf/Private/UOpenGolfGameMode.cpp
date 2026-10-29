@@ -30,18 +30,6 @@ void AUOpenGolfGameMode::StartPlay()
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     UClass* SpawnClass = RangeClass ? RangeClass.Get() : AUOpenGolfRange::StaticClass();
-    if (SpawnClass == AUOpenGolfRange::StaticClass() && LocalRangeClass.IsValid() && !GIsAutomationTesting)
-    {
-        if (UClass* LocalClass = LocalRangeClass.TryLoadClass<AUOpenGolfRange>())
-        {
-            SpawnClass = LocalClass;
-            UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Using local range %s"), *LocalRangeClass.ToString());
-        }
-        else
-        {
-            UE_LOG(LogUOpenGolfGameMode, Warning, TEXT("Local range %s did not load; using the public range"), *LocalRangeClass.ToString());
-        }
-    }
     for (TActorIterator<AUOpenGolfRange> It(World); It; ++It)
     {
         if (Range)
@@ -55,8 +43,6 @@ void AUOpenGolfGameMode::StartPlay()
     }
     if (!Range)
         Range = World->SpawnActor<AUOpenGolfRange>(SpawnClass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
-    else if (SpawnClass != AUOpenGolfRange::StaticClass() && Range->GetClass() == AUOpenGolfRange::StaticClass())
-        Range->ApplyPresentationDefaults(*CastChecked<AUOpenGolfRange>(SpawnClass->GetDefaultObject()));
     if (ensure(Range))
     {
         Range->BuildDefaultLayout();

@@ -31,43 +31,26 @@ Third-party dependencies or assets inside those projects are not the maintainer'
 check their licenses before importing and record them in
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
-## Public and private content
+## Content
 
 | Content | Location / treatment |
 | --- | --- |
 | Original MIT assets | `Content/UOpenGolf/`, with editable sources included when available |
 | Redistributable third-party work | A documented public location, with its own license/notices; not automatically MIT |
-| Purchased or restricted packs and derivatives | Separate private storage; locally installed under ignored `Plugins/PrivateContent/` |
+| Purchased or restricted packs and derivatives | Not used by the project and never committed |
 | Generated builds, caches and reports | Ignored `Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/` |
 
-Public default maps, code and configuration must work with private packs absent.
-Private maps/plugins may reference restricted content; do not introduce those
-references into public maps. The intended layout is a private content plugin per
-pack under the reserved directory, created when a real pack is introduced.
+Maps, code and configuration use only project, engine and open-licence content. The
+[asset licence roadmap](AssetLicenseRoadmap.md) lists the third-party art on the public map and
+the obligations each item carries.
 
-### Current graphics work
-
-The current graphics baseline was built from restricted packs installed locally in private
-content plugins (see [third-party notices](../THIRD_PARTY_NOTICES.md)). Those packs and
-anything derived from them stay out of this repository and are used only for local play and
-private builds. Kit, physics, script and rendering changes made along the way are public.
-
-Replacing that restricted art with redistributable equivalents is now in progress, so the
-public default map can carry the same look. The [asset licence roadmap](AssetLicenseRoadmap.md)
-lists each replacement, its licence obligations and the parity evidence required before the
-private version is retired.
-
-Do not force-add restricted files or upload them to public Git LFS. `.gitignore`
-prevents ordinary accidental adds at the reserved location; it is not a license
-scanner and cannot detect restricted files placed elsewhere. Review every content import.
-
-Fab's [license summary](https://www.fab.com/eula) distinguishes incorporated project
-distribution and certain collaborator sharing from standalone asset redistribution.
-Use the actual license applicable to each asset; packs may have different terms.
+Do not force-add restricted files or upload them to public Git LFS. `.gitignore` is not a
+license scanner and cannot detect restricted files. Review every content import, and use the
+actual license applicable to each asset; packs may have different terms.
 
 ## Import record
 
 For every future third-party import, record its source URL, pinned revision/version,
-license, required attribution, public/private status, and destination in the third-party
-notices or the private pack's own manifest. Preserve full notices where required.
+license, required attribution and destination in the third-party notices. Preserve full
+notices where required.
 Do not record credentials, purchase receipts, or private account identifiers publicly.
