@@ -5,6 +5,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "OpenFairway/WindProfile.h"
 
 /**
  * OpenFairway core: plain C++ on Unreal's Core module only, with no UObjects, worlds or
@@ -31,6 +32,10 @@ namespace OpenFairway
         float InitialLaunchAngleDeg = 0.0f;
         /** Air velocity (m/s, OpenFairway frame). Drag and lift act on the ball's speed through the air. */
         FVector3f Wind = FVector3f::ZeroVector;
+        /** Height (m) at which Wind is measured; 0 keeps the wind uniform with height. See WindProfile. */
+        float WindReferenceHeightM = 0.0f;
+        /** Roughness length (m) of the ground the wind blows over. */
+        float WindRoughnessM = WindProfile::OpenGrassRoughnessM;
     };
 
     /** Aerodynamic constants: drag polynomial, lift caps and the calibrated spin/launch corrections. */

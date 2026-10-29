@@ -94,8 +94,10 @@ Results go in [Phase status](PhasesStatus.md), and the row's status changes here
 
 1. Owner review of every row, using the review method above.
 2. Turf (row 8) and the rough rework continue on the public map.
-3. Later: trees sway with the range wind. Trees stay static until then; their wood collision
-   stays static too.
+3. Tree and tall-grass wind uses the drag-loaded model applied on 2026-10-29, including its
+   scale fix. The rest is pending: the 0, 10 and 30 mph shimmer sequences, slow motion, GPU
+   timing and the owner's review. A Play stop at 20 mph or more is
+   also open. See the newest 2026-10-29 entry in phase status. Wood collision stays static.
 
 ## History
 

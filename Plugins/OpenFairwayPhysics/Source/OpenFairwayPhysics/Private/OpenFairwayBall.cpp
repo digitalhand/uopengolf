@@ -2,6 +2,7 @@
 // Collision handling follows ogolf-physics game/GolfBall.cs at e6d793ae9477efaf55dc9078d7260f76bb532a7d,
 // with Godot/Jolt MoveAndCollide and ray casts replaced by Chaos sphere sweeps and line traces.
 #include "OpenFairwayBall.h"
+#include "OpenFairway/WindProfile.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/LineBatchComponent.h"
@@ -273,9 +274,24 @@ FVector AOpenFairwayBall::GetWindVelocityMps() const
     return ToUnreal(IsMoving() ? ShotParams.Environment.Wind : GetAirConditions().WindVelocity());
 }
 
+FVector AOpenFairwayBall::GetWindVelocityAtHeightMps(float HeightM) const
+{
+    return ToUnreal(IsMoving() ? WindProfile::At(ShotParams.Environment, HeightM) : GetAirConditions().WindVelocityAt(HeightM));
+}
+
 float AOpenFairwayBall::GetAirDensityKgM3() const
 {
     return IsMoving() ? ShotParams.Environment.AirDensity : GetAirConditions().Density();
+}
+
+float AOpenFairwayBall::GetWindReferenceHeightM() const
+{
+    return IsMoving() ? ShotParams.Environment.WindReferenceHeightM : GetAirConditions().WindReferenceHeightM;
+}
+
+float AOpenFairwayBall::GetWindRoughnessM() const
+{
+    return IsMoving() ? ShotParams.Environment.WindRoughnessM : GetAirConditions().WindRoughnessM;
 }
 
 FShotSimulationResult AOpenFairwayBall::PredictShot(const FOpenFairwayLaunch& LaunchData, EOpenFairwaySurface Surface) const
@@ -415,7 +431,9 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
 {
     const bool bWasOnGround = bOnGround;
     const FVector3f PreviousVelocity = Velocity;
-    const FBallState State{FVector3f::ZeroVector, Velocity, Omega};
+    // Flight reads the height above the launch ground: ShotStart is the ball centre, one radius up.
+    const FVector3f Position = ToCore(GetActorLocation() - ShotStart) / CmPerM + FVector3f(0.0f, GolfPhysics::Radius, 0.0f);
+    const FBallState State{Position, Velocity, Omega};
     const FBallState Next = bWasOnGround ? GolfPhysics::StepGround(State, FloorNormal, SurfaceSettings, ShotParams.Rollout, RolloutImpactSpinRpm, Dt)
                                          : GolfPhysics::StepFlight(State, ShotParams.Environment, ShotParams.Flight, Dt);
     Velocity = Next.Velocity;

@@ -14,6 +14,7 @@
 #include "Misc/Paths.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "OpenFairway/WindProfile.h"
 #include "OpenGolfFlagstickComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -102,8 +103,10 @@ class FCheckRangePresentation : public IAutomationLatentCommand
         {
             // UOpenGolf.Course.FlagCloth checks how the cloth flies; here the wind must reach it.
             Test->TestEqual(TEXT("Wind console variable reaches the ball"), Mode->GetBall()->WindSpeedMph, 10.0f, 1e-4f);
-            Test->TestTrue(TEXT("Ball wind reaches the flag"),
-                           Range->GetFlagstick()->GetCloth().GetWindMps().Equals(Mode->GetBall()->GetWindVelocityMps(), 1e-3));
+            const float FlagShare = OpenFairway::WindProfile::Factor(UOpenGolfFlagstickComponent::FlagCentreHeightCm / 100.0f,
+                Mode->GetBall()->GetWindReferenceHeightM(), Mode->GetBall()->GetWindRoughnessM());
+            Test->TestTrue(TEXT("Ball wind at flag height reaches the flag"),
+                           Range->GetFlagstick()->GetCloth().GetWindMps().Equals(Mode->GetBall()->GetWindVelocityMps() * FlagShare, 0.01));
             Test->TestEqual(TEXT("Green stimp console variable reaches the ball"), Mode->GetBall()->GreenStimpFeet, 13.0f, 1e-4f);
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindMph"))->Set(0.0f, ECVF_SetByConsole);
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindFromDeg"))->Set(0.0f, ECVF_SetByConsole);

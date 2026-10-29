@@ -5,6 +5,7 @@
 #pragma once
 
 #include "OpenFairway/Surfaces.h"
+#include "OpenFairway/WindProfile.h"
 
 namespace OpenFairway
 {
@@ -114,12 +115,19 @@ namespace OpenFairway
          * target line: 0 is a headwind, 90 comes from the player's right, 180 is a tailwind.
          */
         float WindFromDeg = 0.0f;
+        /** Height (m) at which WindSpeedMph is measured: the weather-report height. 0 keeps the wind uniform. */
+        float WindReferenceHeightM = WindProfile::StandardReferenceHeightM;
+        /** Roughness length (m) of the ground the wind blows over. */
+        float WindRoughnessM = WindProfile::OpenGrassRoughnessM;
 
         /** Air density in kg/m^3. */
         OPENFAIRWAYPHYSICS_API float Density() const;
 
-        /** Wind velocity in the OpenFairway frame (+X downrange, +Y up, +Z right), m/s. */
+        /** Wind velocity at the reference height in the OpenFairway frame (+X downrange, +Y up, +Z right), m/s. */
         OPENFAIRWAYPHYSICS_API FVector3f WindVelocity() const;
+
+        /** Wind velocity at HeightM above the ground, m/s. */
+        OPENFAIRWAYPHYSICS_API FVector3f WindVelocityAt(float HeightM) const;
     };
 
     /** Everything about a shot that is fixed at launch: air, scales, profiles and the landing response. */

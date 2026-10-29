@@ -23,8 +23,9 @@ sys.path.insert(0, str(HERE))
 import savanna_layout
 import savanna_trees as trees
 import understory_layout as layout
+import vegetation_wind_assignments as wind
 
-savanna_layout, trees, layout = [importlib.reload(module) for module in (savanna_layout, trees, layout)]
+savanna_layout, trees, layout, wind = [importlib.reload(module) for module in (savanna_layout, trees, layout, wind)]
 TAG = "OpenGolfSavanna.Understory"
 VEGETATION_TAG = "OpenGolf.Terrain.Vegetation"
 MAX_SLOPE_DEG = 30.0
@@ -119,7 +120,11 @@ def add_component(actor, name, mesh, cull_m):
     component.set_static_mesh(mesh)
     component.set_collision_profile_name("NoCollision")
     component.set_cast_shadow(False)
-    component.set_editor_property("evaluate_world_position_offset", False)
+    # Grass runs its material's wind (vegetation_wind_assignments.py); litter, moss and rocks hold still.
+    wind_m = wind.mesh_wind_distance_m(mesh.get_path_name())
+    component.set_editor_property("evaluate_world_position_offset", wind_m is not None)
+    if wind_m is not None:
+        component.set_editor_property("world_position_offset_disable_distance", int(round(min(wind_m, cull_m) * 100)))
     component.set_editor_property("component_tags", [TAG])
     component.set_cull_distances(cull_m * 75.0, cull_m * 100.0)
     return component

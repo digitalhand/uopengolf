@@ -7,6 +7,7 @@ their description and updated in place. Shared parents:
                   normal detail fading over distance, the grass stability treatment for cover.
   M_SavannaSolid  opaque surfaces (bark, rocks), optionally blending a second texture layer by
                   the mesh's vertex colour red channel (Poly Haven's trunk does this).
+Both carry the course kit's vegetation wind, off until an instance turns it on (ApplyVegetationWind.py).
 """
 from contextlib import contextmanager
 from pathlib import Path
@@ -23,6 +24,9 @@ sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
 import course_assets as a
 
 a = importlib.reload(a)
+import vegetation_wind_assets as wind  # After course_assets, which it shares.
+
+wind = importlib.reload(wind)
 MOUNT = "/OpenGolfSavanna"
 OWNER = "OpenGolfSavanna.v1"
 WHITE = "/Engine/EngineResources/WhiteSquareTexture"
@@ -142,6 +146,7 @@ def card_material():
     a.output(material, mask, ue.MaterialProperty.MP_OPACITY_MASK)
     a.output(material, roughness, ue.MaterialProperty.MP_ROUGHNESS)
     a.output(material, a.scalar(material, "Specular", 0.2, "Card"), ue.MaterialProperty.MP_SPECULAR)
+    wind.add_vegetation_wind(material)
     return a.finish_material(material)
 
 
@@ -180,6 +185,7 @@ def solid_material():
     a.output(material, color, ue.MaterialProperty.MP_BASE_COLOR)
     a.output(material, shading, ue.MaterialProperty.MP_NORMAL)
     a.output(material, roughness, ue.MaterialProperty.MP_ROUGHNESS)
+    wind.add_vegetation_wind(material)
     return a.finish_material(material)
 
 

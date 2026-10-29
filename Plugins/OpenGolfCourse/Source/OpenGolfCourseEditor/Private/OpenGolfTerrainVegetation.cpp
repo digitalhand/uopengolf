@@ -282,7 +282,8 @@ namespace
                 // Trees block the ball through separate trunk colliders, never through their meshes.
                 Entry.Descriptor.BodyInstance.SetCollisionProfileName(TEXT("NoCollision"));
                 Entry.Descriptor.bCastShadow = bTree;
-                Entry.Descriptor.bEvaluateWorldPositionOffset = false;
+                Entry.Descriptor.bEvaluateWorldPositionOffset = Preset.bWindMotion;
+                Entry.Descriptor.WorldPositionOffsetDisableDistance = Preset.bWindMotion ? FMath::RoundToInt(Preset.WindMotionDisableDistanceM * 100) : 0;
                 // Trees are never culled, so a visible tree always matches its trunk collider.
                 Entry.Descriptor.InstanceStartCullDistance = bTree ? 0 : Preset.CullDistanceM * 75;
                 Entry.Descriptor.InstanceEndCullDistance = bTree ? 0 : Preset.CullDistanceM * 100;

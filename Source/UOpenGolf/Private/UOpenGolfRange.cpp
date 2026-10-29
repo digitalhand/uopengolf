@@ -11,6 +11,7 @@
 #include "OpenFairwayBall.h"
 #include "OpenGolfFlagstickComponent.h"
 #include "OpenGolfTerrain.h"
+#include "OpenGolfWindSubsystem.h"
 #include "UOpenGolfGameMode.h"
 
 namespace
@@ -18,7 +19,7 @@ namespace
     TAutoConsoleVariable<int32> CVarGrass3D(TEXT("uopengolf.Grass3D"), 1,
         TEXT("3D grass and ground cover on the terrain: 0 hides it, 1 shows it."), ECVF_Default);
     TAutoConsoleVariable<float> CVarWindMph(TEXT("uopengolf.WindMph"), 0.0f,
-        TEXT("Wind speed in mph for the range ball and flag. Applied when it changes."), ECVF_Default);
+        TEXT("Wind speed in mph at 10 m for the range ball, flag and vegetation. Applied when it changes."), ECVF_Default);
     TAutoConsoleVariable<float> CVarWindFromDeg(TEXT("uopengolf.WindFromDeg"), 0.0f,
         TEXT("Direction the wind blows from, degrees clockwise from the target line: 0 headwind, 90 from the right, 180 tailwind."), ECVF_Default);
     TAutoConsoleVariable<float> CVarGreenStimp(TEXT("uopengolf.GreenStimp"), 10.0f,
@@ -166,7 +167,7 @@ void AUOpenGolfRange::RefreshPresentation()
     for (auto* Light : Lights)
         Light->RecaptureSky();
     bFlagWindApplied = false;
-    SyncFlagToWind();
+    SyncWindToScene();
 }
 
 void AUOpenGolfRange::ApplyWindSettings()
@@ -216,24 +217,38 @@ void AUOpenGolfRange::ApplyGreenConsoleVariable()
     AppliedGreenStimpVar = StimpFeet;
 }
 
-void AUOpenGolfRange::SyncFlagToWind()
+void AUOpenGolfRange::SyncWindToScene()
 {
-    if (!IsValid(Flagstick))
+    UWorld* World = GetWorld();
+    if (!World)
         return;
-    Flagstick->bTickInEditor = GetWorld() && GetWorld()->WorldType == EWorldType::Editor && bPreviewWindInEditor;
     OpenFairway::FAirConditions PreviewAir;
     PreviewAir.WindSpeedMph = WindSpeedMph;
     PreviewAir.WindFromDeg = WindFromDeg;
     const FVector3f PreviewWind = PreviewAir.WindVelocity();
-    const AUOpenGolfGameMode* Mode = GetWorld() ? GetWorld()->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
+    const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
     const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    // The ball's wind and height profile, which a moving shot keeps from its launch; before there is a ball,
+    // the saved wind. The flag and vegetation then meet the wind the ball flies through.
     const FVector Wind = Ball ? Ball->GetWindVelocityMps() : FVector(PreviewWind.X, PreviewWind.Z, PreviewWind.Y);
     const float AirDensity = Ball ? Ball->GetAirDensityKgM3() : PreviewAir.Density();
-    if (bFlagWindApplied && Wind.Equals(AppliedWindMps, 0.01) && FMath::IsNearlyEqual(AirDensity, AppliedAirDensityKgM3, 0.001f))
+    const float ReferenceHeightM = Ball ? Ball->GetWindReferenceHeightM() : PreviewAir.WindReferenceHeightM;
+    const float RoughnessM = Ball ? Ball->GetWindRoughnessM() : PreviewAir.WindRoughnessM;
+    // Vegetation animates in any Realtime viewport, so outside Play it sees wind only while previewing.
+    if (UOpenGolfWindSubsystem* WorldWind = World->GetSubsystem<UOpenGolfWindSubsystem>())
+        WorldWind->SetWind(World->IsGameWorld() || bPreviewWindInEditor ? Wind : FVector::ZeroVector, AirDensity, ReferenceHeightM, RoughnessM);
+
+    if (!IsValid(Flagstick))
         return;
-    Flagstick->SetWind(Wind, AirDensity);
+    Flagstick->bTickInEditor = World->WorldType == EWorldType::Editor && bPreviewWindInEditor;
+    // The flag meets the wind at its own height, below the 10 m reading the controls author.
+    constexpr float FlagHeightM = UOpenGolfFlagstickComponent::FlagCentreHeightCm / 100.0f;
+    const FVector FlagWind = Wind * OpenFairway::WindProfile::Factor(FlagHeightM, ReferenceHeightM, RoughnessM);
+    if (bFlagWindApplied && FlagWind.Equals(AppliedWindMps, 0.01) && FMath::IsNearlyEqual(AirDensity, AppliedAirDensityKgM3, 0.001f))
+        return;
+    Flagstick->SetWind(FlagWind, AirDensity);
     bFlagWindApplied = true;
-    AppliedWindMps = Wind;
+    AppliedWindMps = FlagWind;
     AppliedAirDensityKgM3 = AirDensity;
 }
 
@@ -243,13 +258,13 @@ void AUOpenGolfRange::Tick(float DeltaSeconds)
     if (GetWorld() && !GetWorld()->IsGameWorld())
     {
         ApplyWindSettings();
-        SyncFlagToWind();
+        SyncWindToScene();
         return;
     }
     UpdateGrass();
     ApplyWindSettings();
     ApplyGreenConsoleVariable();
-    SyncFlagToWind();
+    SyncWindToScene();
 }
 
 int32 AUOpenGolfRange::GetGrassInstanceCount() const

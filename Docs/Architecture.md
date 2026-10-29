@@ -64,13 +64,29 @@ plugin for the surface type, and the game depends on both.
 The saved range exposes `WindSpeedMph`, `WindFromDeg` and `bPreviewWindInEditor` under
 UOpenGolf → Wind in Details. Before Play, the range's wind drives the flag preview when
 Realtime is enabled; it uses the default air density. During Play, authored settings
-initialize the ball, and the range sends the ball's wind and air density to the cloth.
+initialize the ball, and the range sends the ball's wind at flag height and air density to the cloth.
 Changed `uopengolf.WindMph` and `uopengolf.WindFromDeg` commands update the Play-world
 range controls. Console values left from a previous Play session do not replace the
 map's settings on startup. A moving shot retains its launch environment, so the flag
 keeps showing that wind until the shot ends. Default wind is zero.
 `WindDirectionalSource` is not connected. See the
 [wind validation steps](RangeAssets.md#validate-wind-and-flag-movement).
+
+Wind has one owner per world:
+- **Ball.** The range's controls set the ball's wind, and the ball is authoritative because its
+  physics uses that wind. Its speed is the 10 m reading, which the log profile slows near the
+  ground.
+- **Scenery.** Every frame the range copies the ball's wind, air density and height profile to the
+  world's `UOpenGolfWindSubsystem` (course kit). Before there is a ball, it copies the saved
+  controls.
+- **Vegetation.** The subsystem writes `MPC_Wind`. Vegetation materials read it through
+  `MF_VegetationWind`, so trees and tall grass need no actor of their own. In the editor they see
+  wind only while **Preview Wind in Editor** is on.
+- **Flag.** The range gives the cloth the same wind, slowed to the flag's centre height.
+
+A moving shot keeps its launch environment, so the ball, flag and vegetation all keep that wind
+until the shot ends. `uopengolf.WindDebug 1` shows the wind at each height against the Beaufort
+scale.
 
 Green speed is the ball's `GreenStimpFeet` (8–15, default 10); during Play,
 `uopengolf.GreenStimp` changes it from the next shot. OpenFairway solves the green's rolling

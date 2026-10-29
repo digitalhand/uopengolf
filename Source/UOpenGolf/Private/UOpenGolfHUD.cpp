@@ -1,13 +1,29 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfHUD.h"
 
+#include "Engine/Canvas.h"
+#include "Engine/Engine.h"
+#include "Engine/Font.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "RangeHud.h"
+#include "UOpenGolfGameMode.h"
 #include "UOpenGolfPlayerController.h"
+#include "UOpenGolfRange.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "OpenGolfFlagstickComponent.h"
 #include "OpenGolfWindIndicator.h"
+#include "OpenGolfWindSubsystem.h"
+#include "WindDebug.h"
+
+namespace
+{
+    TAutoConsoleVariable<int32> CVarWindDebug(TEXT("uopengolf.WindDebug"), 0,
+        TEXT("1 shows the wind against the Beaufort scale, the wind at grass, flag and crown height, and the flag's measured droop and flap rate."),
+        ECVF_Default);
+} // namespace
 
 void AUOpenGolfHUD::BeginPlay()
 {
@@ -45,4 +61,36 @@ void AUOpenGolfHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
     WindWidget = nullptr;
     Super::EndPlay(EndPlayReason);
+}
+
+void AUOpenGolfHUD::DrawHUD()
+{
+    Super::DrawHUD();
+    if (CVarWindDebug.GetValueOnGameThread() == 0 || !Canvas || !GEngine)
+        return;
+    const UWorld* World = GetWorld();
+    const UOpenGolfWindSubsystem* Wind = World ? World->GetSubsystem<UOpenGolfWindSubsystem>() : nullptr;
+    if (!Wind)
+        return;
+    WindDebug::FInput Input;
+    Input.WindMps = Wind->GetWindMps();
+    Input.ReferenceHeightM = Wind->GetReferenceHeightM();
+    Input.RoughnessM = Wind->GetRoughnessM();
+    const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
+    const AUOpenGolfRange* Range = Mode ? Mode->GetRange() : nullptr;
+    if (const UOpenGolfFlagstickComponent* Flag = Range ? Range->GetFlagstick() : nullptr)
+    {
+        Input.bHasFlag = true;
+        Input.FlagDroopDeg = Flag->GetMotion().DroopDeg;
+        Input.FlagFlapHz = Flag->GetMotion().FlapHz;
+    }
+    // Left edge, below the top tiles; the canvas draws under the Slate HUD.
+    UFont* Font = GEngine->GetMediumFont();
+    const float Scale = FMath::Max(1.0f, Canvas->ClipY / 1080.0f);
+    float Y = Canvas->ClipY * 0.3f;
+    for (const FString& Line : WindDebug::Lines(Input))
+    {
+        DrawText(Line, FLinearColor::White, 24.0f, Y, Font, Scale);
+        Y += Font->GetMaxCharHeight() * Scale * 1.2f;
+    }
 }

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from generated_folders import is_run_folder, referenced_from_outside, remove_unreferenced, run_folders
+from generated_folders import is_run_folder, loaded_in_memory, referenced_from_outside, remove_unreferenced, run_folders
 
 ROOT = "/Game/Range/Generated"
 BUILD = f"{ROOT}/Build_01A180BF3EDD7F0386ED0462654019FB"
@@ -13,17 +13,24 @@ MAP = "/Game/Range/Maps/Range"
 class FakeLibrary:
     """The EditorAssetLibrary calls the module makes, over an in-memory registry."""
 
-    def __init__(self, assets, referencers, undeletable=()):
+    def __init__(self, assets, referencers, undeletable=(), loaded=()):
         self.assets = list(assets)
         self.referencers = referencers
         self.undeletable = set(undeletable)
+        self.loaded = set(loaded)
         self.deleted = []
 
     def list_assets(self, folder, recursive=True, include_folder=False):
         return [a for a in self.assets if a.startswith(folder + "/")]
 
     def find_package_referencers_for_asset(self, package, load_assets_to_confirm=False):
+        # Confirming would load the referenced asset, which would then look loaded in this session.
+        if load_assets_to_confirm:
+            self.loaded.update(a for a in self.assets if a.split(".")[0] == package)
         return self.referencers.get(package, [])
+
+    def find_asset_data(self, path):
+        return FakeAssetData(path in self.loaded)
 
     def delete_directory(self, folder):
         if folder in self.undeletable:
@@ -31,6 +38,14 @@ class FakeLibrary:
         self.deleted.append(folder)
         self.assets = [a for a in self.assets if not a.startswith(folder + "/")]
         return True
+
+
+class FakeAssetData:
+    def __init__(self, loaded):
+        self.loaded = loaded
+
+    def is_asset_loaded(self):
+        return self.loaded
 
 
 def asset(folder, name):
@@ -76,12 +91,19 @@ class ReferenceTests(unittest.TestCase):
         self.assertTrue(referenced_from_outside(library, BUILD))
 
 
+class LoadedTests(unittest.TestCase):
+    def test_a_folder_with_any_loaded_asset_is_loaded(self):
+        graph, points = asset(VEGETATION, "PCG_Vegetation_0"), asset(VEGETATION, "Points_0")
+        self.assertTrue(loaded_in_memory(FakeLibrary([graph, points], {}, loaded=[points]), VEGETATION))
+        self.assertFalse(loaded_in_memory(FakeLibrary([graph, points], {}), VEGETATION))
+
+
 class RemoveTests(unittest.TestCase):
-    def library(self, undeletable=()):
+    def library(self, undeletable=(), loaded=()):
         current, old = asset(BUILD, "SM_Surface_0"), asset(OLD_BUILD, "SM_Surface_0")
         graph, points = asset(VEGETATION, "PCG_Vegetation_0"), asset(VEGETATION, "Points_0")
         return FakeLibrary([current, old, graph, points, asset(f"{ROOT}/Materials", "MI_Ground")],
-                           {current.split(".")[0]: [MAP], points.split(".")[0]: [graph.split(".")[0]]}, undeletable)
+                           {current.split(".")[0]: [MAP], points.split(".")[0]: [graph.split(".")[0]]}, undeletable, loaded)
 
     def test_unreferenced_runs_go_and_the_map_keeps_its_build(self):
         library, lines = self.library(), []
@@ -107,6 +129,26 @@ class RemoveTests(unittest.TestCase):
         removed, kept = remove_unreferenced(library, [ROOT], log=lambda _line: None)
         self.assertEqual(removed, [VEGETATION])
         self.assertEqual(sorted(kept), sorted([BUILD, OLD_BUILD]))
+
+    def test_a_run_still_loaded_in_this_session_is_kept_not_deleted(self):
+        # The editor can still hold a run it just baked; deleting it then fails part-way and corrupts it.
+        library, lines = self.library(loaded=[asset(VEGETATION, "Points_0")]), []
+        removed, kept = remove_unreferenced(library, [ROOT], log=lines.append)
+        self.assertEqual(removed, [OLD_BUILD])
+        self.assertEqual(sorted(kept), sorted([BUILD, VEGETATION]))
+        self.assertNotIn(VEGETATION, library.deleted)
+        self.assertTrue(any(VEGETATION in line and "loaded" in line for line in lines))
+
+    def test_a_referenced_build_is_reported_as_referenced_even_when_loaded(self):
+        library, lines = self.library(loaded=[asset(BUILD, "SM_Surface_0")]), []
+        remove_unreferenced(library, [ROOT], log=lines.append)
+        self.assertTrue(any(BUILD in line and "referenced" in line for line in lines))
+
+    def test_a_dry_run_leaves_runs_unloaded_so_apply_can_remove_them(self):
+        library = self.library()
+        remove_unreferenced(library, [ROOT], apply=False, log=lambda _line: None)
+        removed, _kept = remove_unreferenced(library, [ROOT], log=lambda _line: None)
+        self.assertEqual(sorted(removed), sorted([OLD_BUILD, VEGETATION]))
 
     def test_other_folders_are_never_touched(self):
         library = self.library()

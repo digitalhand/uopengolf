@@ -17,8 +17,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import savanna_layout as layout
 import tree_wood_collision as wood
+import vegetation_wind_assignments as wind
 
-layout, wood = [importlib.reload(module) for module in (layout, wood)]
+layout, wood, wind = [importlib.reload(module) for module in (layout, wood, wind)]
 SOURCE = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_Jacaranda"
 PROXY = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_JacarandaCollision"
 CANOPY = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_JacarandaCanopy"
@@ -47,6 +48,14 @@ def has_canopy_support():
     return hasattr(ue.OpenGolfTerrainBuilder, "rebuild_tree_canopy")
 
 
+def has_wind_support():
+    try:
+        ue.get_default_object(ue.OpenGolfVegetationPreset).get_editor_property("wind_motion")
+        return True
+    except Exception:
+        return False
+
+
 def configure(preset, kind, seed):
     """Set a tree preset to jacarandas for one patch kind (Near, Outer or Backdrop)."""
     settings = layout.TREE_SETTINGS[kind]
@@ -57,6 +66,9 @@ def configure(preset, kind, seed):
     values.update(settings)
     if has_canopy_support():
         values["tree_canopy_mesh"] = required(CANOPY)
+    if has_wind_support():
+        # The jacaranda's materials sway it (vegetation_wind_assignments.py); far trees hold still.
+        values.update(wind_motion=True, wind_motion_disable_distance_m=wind.mesh_wind_distance_m(SOURCE))
     preset.modify()
     for key, value in values.items():
         preset.set_editor_property(key, ue.Vector2D(*value) if key == "scale_range" else value)

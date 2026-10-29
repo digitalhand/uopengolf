@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 """The rough grass parent material, M_SavannaGrass, for Poly Haven grass tufts.
 
-Masked two-sided blades (both Poly Haven grasses cut blades from cards with an alpha map), Nanite,
-no World Position Offset. The grass stability rules from the course kit apply: shading uses mostly
+Masked two-sided blades (both Poly Haven grasses cut blades from cards with an alpha map), Nanite.
+World Position Offset is the course kit's vegetation wind, off until an instance turns it on. The grass stability rules from the course kit apply: shading uses mostly
 upward world normals, with the tuft's normal detail only up close, and roughness stays high.
 
 Colour blends from the green diffuse to a dry one (Grass Medium's dry_diff, or the green one times
@@ -90,4 +90,5 @@ def grass_material():
     a.output(material, opacity, ue.MaterialProperty.MP_OPACITY_MASK, "R")
     a.output(material, roughness, ue.MaterialProperty.MP_ROUGHNESS)
     a.output(material, a.scalar(material, "Specular", 0.15, "Shading", 4), ue.MaterialProperty.MP_SPECULAR)
+    s.wind.add_vegetation_wind(material)
     return a.finish_material(material)

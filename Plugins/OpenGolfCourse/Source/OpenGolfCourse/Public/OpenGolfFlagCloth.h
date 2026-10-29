@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Templates/Function.h"
 
 /**
  * Cloth for a flag on a round, upright pole: a small position-based (XPBD) solver in world space,
@@ -26,8 +27,13 @@ public:
         float PoleRadiusCm = 0.635f;
         /** Cloth weight per area; a nylon flag is about 0.11 kg/m^2. */
         float ClothKgPerM2 = 0.11f;
-        /** Flat-plate pressure across the cloth, per unit of normal airspeed. */
-        float NormalForceCoefficient = 1.2f;
+        /**
+         * Pressure across the cloth, per unit of normal airspeed. Below an isolated flat plate's 1.2:
+         * every triangle meets free-stream air, unsheltered by the cloth upwind of it. 0.7 holds the
+         * flag to the Beaufort bands (UOpenGolf.Course.FlagBeaufort); 0.65-0.75 all pass, and 1.2 lifted
+         * the flag to "extended" a force early, at 6 mph.
+         */
+        float NormalForceCoefficient = 0.7f;
         /** Skin friction along the cloth. */
         float FrictionCoefficient = 0.015f;
     };
@@ -46,6 +52,8 @@ public:
      * since the last call carries the flag with it rather than dragging it across the gap.
      */
     void Advance(float DeltaSeconds, const FVector& PoleTop);
+    /** As Advance, calling OnSubstep with the cloth and the substep's seconds after each fixed substep. */
+    void Advance(float DeltaSeconds, const FVector& PoleTop, TFunctionRef<void(const FOpenGolfFlagCloth&, float)> OnSubstep);
 
     static constexpr int32 Index(int32 Column, int32 Row) { return Row * Columns + Column; }
     const TArray<FVector>& GetPositions() const { return Positions; }
@@ -53,8 +61,12 @@ public:
     /** Triangle corner indices, three per triangle; laid out along +Y, the normals face +X. */
     const TArray<int32>& GetTriangles() const { return Triangles; }
     const FVector& GetWindMps() const { return WindMps; }
+    /** Direction the hoist sleeve faces, radians from +X; it turns downwind. */
+    float GetHeadingRad() const { return HeadingRad; }
     /** Largest relative stretch of any along or down edge; 0.02 is 2%. */
     float GetMaxStretch() const;
+    /** Angle of the middle row below horizontal, from hoist to fly end: 0 is straight out (or above), 90 hangs. */
+    float GetDroopDeg() const;
 
 private:
     struct FConstraint
@@ -86,4 +98,30 @@ private:
     TArray<float> InverseMass;
     TArray<FConstraint> Constraints;
     TArray<int32> Triangles;
+};
+
+/**
+ * Live readings of a flying flag, for comparing it with real wind: the flag's droop and how often its fly
+ * end flaps across the wind, both averaged over about AverageSeconds. A flap is two crossings of the fly
+ * end's mean line, each by more than a small dead band, so ripples near the line do not count.
+ */
+struct OPENGOLFCOURSE_API FOpenGolfFlagMotion
+{
+    float AverageSeconds = 3.0f;
+    /** Mean of FOpenGolfFlagCloth::GetDroopDeg. */
+    float DroopDeg = 90.0f;
+    float FlapHz = 0.0f;
+
+    void Reset();
+    /**
+     * Call after each substep of the cloth (Advance's OnSubstep), with its seconds. Once a frame would miss
+     * crossings of a flag flapping faster than about a quarter of the frame rate.
+     */
+    void Sample(const FOpenGolfFlagCloth& Cloth, float DeltaSeconds);
+
+private:
+    float CrossingsPerSecond = 0.0f;
+    float LateralMeanCm = 0.0f;
+    int32 Side = 0;
+    bool bStarted = false;
 };

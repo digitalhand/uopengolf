@@ -13,6 +13,8 @@ namespace OpenGolfCourse
     inline const TCHAR* FlagstickMeshPath = TEXT("/OpenGolfCourse/Flagstick/SM_Flagstick.SM_Flagstick");
     inline const TCHAR* FlagMaterialPath = TEXT("/OpenGolfCourse/Flagstick/MI_Flag_Red.MI_Flag_Red");
     inline const TCHAR* GolfBallMeshPath = TEXT("/OpenGolfCourse/Ball/SM_GolfBall.SM_GolfBall");
+    /** The world's wind for vegetation materials; written by UOpenGolfWindSubsystem. */
+    inline const TCHAR* WindParameterCollectionPath = TEXT("/OpenGolfCourse/Wind/MPC_Wind.MPC_Wind");
 
     /** Object path of the physical material for a surface name, such as "Rough" for PM_Rough. */
     inline FString SurfacePhysicalMaterialPath(const FString& SurfaceName)

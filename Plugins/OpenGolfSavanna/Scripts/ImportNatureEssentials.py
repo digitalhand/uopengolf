@@ -47,7 +47,7 @@ def grass_material():
 
     A course can set CourseMask (white near play), MaskBounds (terrain-local minimum and size in
     metres), TerrainFrame (origin x, y in cm and forward x, y) and UseCourseMask = 1 to turn the
-    grass green near play.
+    grass green near play. Wind is the course kit's vegetation wind, off until an instance turns it on.
     """
     material = a.material("Materials", "M_SavannaUnderstoryGrass")
     for key, value in (("two_sided", True), ("tangent_space_normal", False), ("used_with_instanced_static_meshes", True),
@@ -79,6 +79,7 @@ def grass_material():
                              constant=ue.LinearColor(0, 0, 1, 1)), ue.MaterialProperty.MP_NORMAL)
     a.output(material, a.scalar(material, "Roughness", 0.95, "Grass"), ue.MaterialProperty.MP_ROUGHNESS)
     a.output(material, a.scalar(material, "Specular", 0.06, "Grass"), ue.MaterialProperty.MP_SPECULAR)
+    s.wind.add_vegetation_wind(material)
     return a.finish_material(material)
 
 
@@ -160,6 +161,9 @@ def main(argv):
     with s.savanna_helpers():
         materials = build_materials(manifest, kinds, reuse=materials_only)
         meshes = [] if materials_only else [import_mesh(item, materials) for item in manifest["meshes"]]
+        # Rebuilt instances get their wind back (vegetation_wind_assignments.py).
+        import ApplyVegetationWind
+        importlib.reload(ApplyVegetationWind).apply_materials([mi.get_path_name() for mi in materials.values()])
     ue.log(f"NE_IMPORT_COMPLETE meshes={len(meshes)} materials={len(materials)} materials_only={materials_only}")
 
 
