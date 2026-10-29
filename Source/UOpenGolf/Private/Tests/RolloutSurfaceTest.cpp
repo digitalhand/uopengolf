@@ -3,204 +3,157 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
-#include "Editor.h"
+#include "Engine/StaticMeshActor.h"
 #include "Engine/World.h"
-#include "FileHelpers.h"
+#include "LaunchMonitorTypes.h"
 #include "Misc/AutomationTest.h"
 #include "OpenFairwayBall.h"
-#include "Tests/AutomationEditorCommon.h"
+#include "OpenFairwayPhysicalMaterial.h"
+#include "OpenGolfCourse.h"
+#include "Tests/AutomationCommon.h"
 #include "UOpenGolfGameMode.h"
-#include "UOpenGolfPlayerController.h"
-#include "UOpenGolfRange.h"
 
-// Verify the default range (fairway strip, rough sides, putting green) by its physical materials, then
-// reconstruct the historical mixed surfaces with component tags in this disposable PIE world to retain
-// the rollout comparison. Component tags override physical materials. The putting green stays out of
-// the comparison (no collision) so the reference rollouts remain flat single-surface runs.
-class FCompareRolloutSurfaces : public IAutomationLatentCommand
+namespace RolloutSurfaceTestDetail
 {
-public:
-    explicit FCompareRolloutSurfaces(FAutomationTestBase* InTest)
-        : Test(InTest) {}
-
-    virtual bool Update() override
+    /**
+     * Replay shot 0, the low wood, decoded from its Square Home frame: 51.17 m/s, 6.95 degrees up, 0.63 left,
+     * 1933 rpm (1932 back, 48 left) on a 1.42-degree left axis. The game converts it the same way.
+     */
+    FOpenFairwayLaunch LowWood()
     {
-        if (GetCurrentRunTime() > 90.0)
-        {
-            Test->AddError(TEXT("Timed out comparing rollout surfaces."));
-            return true;
-        }
-        UWorld* World = GEditor->PlayWorld;
-        auto* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
-        auto* Controller = World ? Cast<AUOpenGolfPlayerController>(World->GetFirstPlayerController()) : nullptr;
-        if (!World || !World->HasBegunPlay() || !Mode || !Mode->GetRange() || !Mode->GetBall() || !Controller)
-        {
-            return false;
-        }
-        if (!bLaunched)
-        {
-            TArray<UStaticMeshComponent*> Pieces;
-            Mode->GetRange()->GetLayoutComponents(Pieces);
-            for (UStaticMeshComponent* Piece : Pieces)
-            {
-                if (Case == 0)
-                {
-                    OriginalTags.Add(Piece->GetFName(), Piece->ComponentTags);
-                    if (Piece->GetFName() == TEXT("PuttingGreen"))
-                    {
-                        Test->TestTrue(TEXT("PuttingGreen plays as green"), Mode->GetBall()->ResolveSurface(Piece) == EOpenFairwaySurface::Green);
-                        OriginalGreenMesh = Piece->GetStaticMesh();
-                        Piece->SetMobility(EComponentMobility::Movable);
-                        // This test compares a flat calibration surface, without the raised putting green.
-                        Piece->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
-                        Piece->SetRelativeScale3D(FVector(30, 30, 1));
-                        Piece->AddRelativeLocation(FVector(0, 0, -50));
-                        Piece->ComponentTags.AddUnique(AOpenFairwayBall::GetSurfaceTag(EOpenFairwaySurface::Fairway));
-                    }
-                    else if (Piece->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
-                    {
-                        const bool bRough = Piece->GetName().StartsWith(TEXT("Rough"));
-                        Test->TestTrue(Piece->GetName() + (bRough ? TEXT(" plays as rough") : TEXT(" plays as fairway")),
-                            Mode->GetBall()->ResolveSurface(Piece) == (bRough ? EOpenFairwaySurface::Rough : EOpenFairwaySurface::Fairway));
-                    }
-                }
-                Piece->ComponentTags = OriginalTags[Piece->GetFName()];
-                if (Piece->GetFName() == TEXT("PuttingGreen"))
-                    Piece->ComponentTags.AddUnique(AOpenFairwayBall::GetSurfaceTag(Case == 1 ? EOpenFairwaySurface::Green : EOpenFairwaySurface::Fairway));
-                EOpenFairwaySurface Surface = EOpenFairwaySurface::Fairway;
-                if (Case > 0 && Piece->GetName().StartsWith(TEXT("Fringe")))
-                    Surface = EOpenFairwaySurface::Fringe;
-                else if (Case == 1 && Piece->GetFName() == TEXT("Green"))
-                    Surface = EOpenFairwaySurface::Green;
-                else if (Case == 1 && Piece->GetName().StartsWith(TEXT("Rough")))
-                    Surface = EOpenFairwaySurface::Rough;
-                if (Surface != EOpenFairwaySurface::Fairway)
-                    Piece->ComponentTags.AddUnique(AOpenFairwayBall::GetSurfaceTag(Surface));
-            }
-            Controller->SelectReplayShot(0);
-            Controller->InjectReplayShot();
-            LastSurface = EOpenFairwaySurface::Fairway;
-            bLaunched = true;
-            return false;
-        }
-        FOpenFairwayShotResult Result;
-        if (!Mode->GetBall()->GetShotResult(Result))
-            return false;
-        if (Result.Surface != LastSurface)
-        {
-            Test->AddInfo(FString::Printf(TEXT("%s transition to %s at %.3f yd, t %.3f s"), Label(),
-                *StaticEnum<EOpenFairwaySurface>()->GetNameStringByValue(static_cast<int64>(Result.Surface)),
-                Result.TotalM * OpenFairway::YardsPerMeter, Result.ElapsedS));
-            LastSurface = Result.Surface;
-        }
-        if (!Result.bAtRest)
-            return false;
-        Results.Add(Result);
-        Test->AddInfo(FString::Printf(TEXT("%s: carry %.4f, roll %.4f, total %.4f yd, time %.3f s"), Label(),
-            Result.CarryM * OpenFairway::YardsPerMeter, Result.RollM * OpenFairway::YardsPerMeter,
-            Result.TotalM * OpenFairway::YardsPerMeter, Result.ElapsedS));
-        Test->TestEqual(TEXT("Surface tags cannot change first-contact carry"), Result.CarryM * OpenFairway::YardsPerMeter, 121.5477f, 0.02f);
-        if (++Case < 3)
-        {
-            bLaunched = false;
-            return false;
-        }
-        Test->TestTrue(TEXT("Default range ends on fairway"), Results[0].Surface == EOpenFairwaySurface::Fairway);
-        Test->TestTrue(TEXT("Historical mixed range ends on green"), Results[1].Surface == EOpenFairwaySurface::Green);
-        // Case 2 is case 1 with the green tagged fairway, so the difference is the green alone.
-        Test->TestTrue(FString::Printf(TEXT("Green rolls farther than the same path tagged fairway (%.2f vs %.2f yd)"),
-                           Results[1].RollM * OpenFairway::YardsPerMeter, Results[2].RollM * OpenFairway::YardsPerMeter),
-            Results[1].RollM > Results[2].RollM);
-        Test->TestEqual(TEXT("Default fairway actor matches flat headless rollout"), Results[0].RollM * OpenFairway::YardsPerMeter, 37.6923f, 0.1f);
-        Test->TestEqual(TEXT("Default fairway total"), Results[0].TotalM * OpenFairway::YardsPerMeter, 159.2375f, 0.1f);
-        CheckLies(Mode);
-
-        const OpenFairway::FBallPhysicsProfile Profile;
-        const auto Params = OpenFairway::FResolvedShotParams::Resolve(Profile, OpenFairway::FAirConditions(), 51.17f / OpenFairway::MpsPerMph, 6.95f, 1933.0f);
-        Test->TestEqual(TEXT("Regime kinetic friction neutral"), Params.Regime.KineticFrictionMultiplier, 1.0f, 1e-6f);
-        Test->TestEqual(TEXT("Regime rolling friction neutral"), Params.Regime.RollingFrictionMultiplier, 1.0f, 1e-6f);
-        Test->TestEqual(TEXT("Regime grass drag neutral"), Params.Regime.GrassViscosityMultiplier, 1.0f, 1e-6f);
-        Test->TestEqual(TEXT("Run adds no bite"), Params.Landing.SpinBiteScale, 0.0f);
-        for (auto Surface : {OpenFairway::ESurface::Fairway, OpenFairway::ESurface::Fringe, OpenFairway::ESurface::Green})
-        {
-            const auto Contact = Params.ResolveSurface(Surface, Profile);
-            Test->AddInfo(FString::Printf(TEXT("%s: kinetic %.5f, rolling %.5f, viscosity %.5f, rolling spin scale %.3f"),
-                OpenFairway::SurfaceCatalog::GetName(Surface), Contact.KineticFriction, Contact.RollingFriction,
-                Contact.GrassViscosity, Contact.RollingSpinScale));
-        }
-
-        // The same shot on rough carries the same and runs out much shorter.
-        const auto OnFairway = Mode->GetBall()->PredictShot(Results[0].Launch, EOpenFairwaySurface::Fairway);
-        const auto OnRough = Mode->GetBall()->PredictShot(Results[0].Launch, EOpenFairwaySurface::Rough);
-        const float FairwayRollYd = (OnFairway.TotalM - OnFairway.CarryM) * OpenFairway::YardsPerMeter;
-        const float RoughRollYd = (OnRough.TotalM - OnRough.CarryM) * OpenFairway::YardsPerMeter;
-        Test->AddInfo(FString::Printf(TEXT("Headless roll: fairway %.2f yd, rough %.2f yd"), FairwayRollYd, RoughRollYd));
-        Test->TestEqual(TEXT("Rough carry matches fairway"), OnRough.CarryM, OnFairway.CarryM, 0.01f);
-        Test->TestTrue(TEXT("Rough rolls much shorter than fairway"), RoughRollYd < 0.8f * FairwayRollYd);
-        return true;
+        FLaunchMonitorShot Shot;
+        Shot.BallSpeedMps = 51.17f;
+        Shot.VerticalLaunchDeg = 6.95f;
+        Shot.HorizontalLaunchDeg = -0.63f;
+        Shot.TotalSpinRpm = 1933;
+        Shot.SpinAxisDeg = -1.42f;
+        Shot.BackSpinRpm = 1932;
+        Shot.SideSpinRpm = -48;
+        for (ELaunchMonitorValueSource* Source : {&Shot.BallSpeedSource, &Shot.VerticalLaunchSource, &Shot.HorizontalLaunchSource,
+                 &Shot.TotalSpinSource, &Shot.SpinAxisSource, &Shot.BackSpinSource, &Shot.SideSpinSource})
+            *Source = ELaunchMonitorValueSource::Measured;
+        FOpenFairwayLaunch Launch;
+        AUOpenGolfGameMode::ToLaunch(Shot, Launch);
+        return Launch;
     }
 
-private:
-    /** A real ground probe on the untagged range finds each lie through the surface materials. */
-    UStaticMesh* OriginalGreenMesh = nullptr;
-
-    void CheckLies(AUOpenGolfGameMode* Mode)
+    /** A level slab whose top is at Z = 0, from MinM to MaxM in metres. */
+    UStaticMeshComponent* AddGround(UWorld& World, const FVector2D& MinM, const FVector2D& MaxM)
     {
-        TArray<UStaticMeshComponent*> Pieces;
-        Mode->GetRange()->GetLayoutComponents(Pieces);
-        for (UStaticMeshComponent* Piece : Pieces)
-        {
-            Piece->ComponentTags = OriginalTags[Piece->GetFName()];
-            if (Piece->GetFName() == TEXT("PuttingGreen"))
-            {
-                Piece->SetStaticMesh(OriginalGreenMesh);
-                Piece->SetRelativeScale3D(FVector::OneVector);
-                Piece->AddRelativeLocation(FVector(0, 0, 50));
-                Piece->SetMobility(EComponentMobility::Static);
-            }
-        }
-        AOpenFairwayBall* Ball = Mode->GetBall();
-        const FVector Tee = Mode->GetRange()->GetTeeLocation();
-        auto LieAt = [Ball, Tee](float YMeters, float XMeters = 30.0f)
-        {
-            Ball->PlaceAt(Tee + FVector(XMeters * 100.0, YMeters * 100.0, 50.0));
-            FOpenFairwayShotResult Lie;
-            Ball->GetShotResult(Lie);
-            return Lie.Surface;
-        };
-        Test->TestTrue(TEXT("Fairway lie"), LieAt(0.0f) == EOpenFairwaySurface::Fairway);
-        Test->TestTrue(TEXT("Fairway lie just inside the edge"), LieAt(AUOpenGolfRange::FairwayHalfWidthM - 0.5f) == EOpenFairwaySurface::Fairway);
-        Test->TestTrue(TEXT("Rough lie right"), LieAt(AUOpenGolfRange::FairwayHalfWidthM + 8.0f) == EOpenFairwaySurface::Rough);
-        Test->TestTrue(TEXT("Rough lie left"), LieAt(-AUOpenGolfRange::FairwayHalfWidthM - 8.0f) == EOpenFairwaySurface::Rough);
-        // The putting green is 20 feet (6.1 m) in radius around the flag; fairway surrounds it.
-        Test->TestTrue(TEXT("Green lie near the flag"), LieAt(1.0f, AUOpenGolfRange::GreenDistanceM) == EOpenFairwaySurface::Green);
-        Test->TestTrue(TEXT("Green lie inside the edge"), LieAt(5.5f, AUOpenGolfRange::GreenDistanceM) == EOpenFairwaySurface::Green);
-        Test->TestTrue(TEXT("Fairway lie off the green"), LieAt(7.0f, AUOpenGolfRange::GreenDistanceM) == EOpenFairwaySurface::Fairway);
+        const FVector2D Center = (MinM + MaxM) * 0.5;
+        const FVector2D Size = MaxM - MinM;
+        // The engine cube is 1 m on a side, centred on its origin.
+        const FTransform Transform(FRotator::ZeroRotator, FVector(Center.X * 100, Center.Y * 100, -50), FVector(Size.X, Size.Y, 1));
+        auto* Actor = World.SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Transform);
+        UStaticMeshComponent* Ground = Actor->GetStaticMeshComponent();
+        Ground->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
+        Ground->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+        return Ground;
     }
 
-    const TCHAR* Label() const { return Case == 0 ? TEXT("Default all fairway") : Case == 1 ? TEXT("Historical mixed range")
-                                                                                            : TEXT("Fringe retained, green replaced"); }
-    FAutomationTestBase* Test;
-    int32 Case = 0;
-    bool bLaunched = false;
-    EOpenFairwaySurface LastSurface = EOpenFairwaySurface::Fairway;
-    TMap<FName, TArray<FName>> OriginalTags;
-    TArray<FOpenFairwayShotResult> Results;
-};
+    void TagSurface(UStaticMeshComponent& Ground, EOpenFairwaySurface Surface)
+    {
+        Ground.ComponentTags = {AOpenFairwayBall::GetSurfaceTag(Surface)};
+    }
 
+    /** Hits the shot from the tee at the origin and steps the ball at 60 fps until it rests. */
+    bool Play(AOpenFairwayBall& Ball, const FOpenFairwayLaunch& Launch, FOpenFairwayShotResult& Result, FAutomationTestBase& Test)
+    {
+        Ball.PlaceAt(FVector(0, 0, 50));
+        if (!Test.TestTrue(TEXT("Shot launches"), Ball.Launch(Launch)))
+            return false;
+        for (int32 Step = 0; Ball.IsMoving() && Step < 7200; ++Step)
+            Ball.Tick(1.0f / 60.0f);
+        const bool bHasResult = Ball.GetShotResult(Result);
+        return Test.TestTrue(TEXT("Shot comes to rest"), bHasResult && Result.bAtRest && Result.TerminationReason == EOpenFairwayShotTermination::Rest);
+    }
+
+    float Yards(float Meters)
+    {
+        return Meters * OpenFairway::YardsPerMeter;
+    }
+} // namespace RolloutSurfaceTestDetail
+
+// The live ball on flat test ground, independent of any map: on fairway it matches the headless prediction,
+// tags cannot change first-contact carry, and a green rolls farther than the same path tagged fairway.
+// Untagged ground plays its physical material.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRolloutSurfaceTest, "UOpenGolf.Range.RolloutSurfaces",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FRolloutSurfaceTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    using namespace RolloutSurfaceTestDetail;
+    FTestWorldWrapper Wrapper;
+    if (!Wrapper.CreateTestWorld(EWorldType::EditorPreview))
     {
-        AddError(TEXT("Could not load the range map."));
+        Wrapper.ForwardErrorMessages(this);
         return false;
     }
-    ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
-    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCompareRolloutSurfaces>(this));
-    ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+    UWorld& World = *Wrapper.GetTestWorld();
+    // The ball lands on the approach about 111 m out and runs out across the far strip.
+    UStaticMeshComponent* Approach = AddGround(World, FVector2D(-10, -30), FVector2D(120, 30));
+    UStaticMeshComponent* Far = AddGround(World, FVector2D(120, -30), FVector2D(250, 30));
+    AddGround(World, FVector2D(0, 60), FVector2D(10, 70))
+        ->SetPhysMaterialOverride(LoadObject<UOpenFairwayPhysicalMaterial>(nullptr, *OpenGolfCourse::SurfacePhysicalMaterialPath(TEXT("Rough"))));
+    AddGround(World, FVector2D(0, -70), FVector2D(10, -60))
+        ->SetPhysMaterialOverride(LoadObject<UOpenFairwayPhysicalMaterial>(nullptr, *OpenGolfCourse::SurfacePhysicalMaterialPath(TEXT("Green"))));
+    Wrapper.TickTestWorld(1.0f / 60.0f);
+    FHitResult Probe;
+    if (!TestTrue(TEXT("The test ground answers scene queries"),
+            World.LineTraceSingleByChannel(Probe, FVector(0, 0, 100), FVector(0, 0, -100), ECC_Visibility)))
+    {
+        Wrapper.DestroyTestWorld(false);
+        return false;
+    }
+
+    AOpenFairwayBall* Ball = World.SpawnActor<AOpenFairwayBall>();
+    const FOpenFairwayLaunch Launch = LowWood();
+    FOpenFairwayShotResult OnFairway, OnGreen;
+    TagSurface(*Approach, EOpenFairwaySurface::Fairway);
+    TagSurface(*Far, EOpenFairwaySurface::Fairway);
+    const bool bFairwayPlayed = Play(*Ball, Launch, OnFairway, *this);
+    TagSurface(*Far, EOpenFairwaySurface::Green);
+    const bool bGreenPlayed = Play(*Ball, Launch, OnGreen, *this);
+    const auto Predicted = Ball->PredictShot(Launch, EOpenFairwaySurface::Fairway);
+    const auto OnRough = Ball->PredictShot(Launch, EOpenFairwaySurface::Rough);
+    AddInfo(FString::Printf(TEXT("Fairway: carry %.4f, roll %.4f, total %.4f yd. Green: carry %.4f, roll %.4f, total %.4f yd. Headless fairway: carry %.4f, total %.4f yd."),
+        Yards(OnFairway.CarryM), Yards(OnFairway.RollM), Yards(OnFairway.TotalM), Yards(OnGreen.CarryM), Yards(OnGreen.RollM),
+        Yards(OnGreen.TotalM), Yards(Predicted.CarryM), Yards(Predicted.TotalM)));
+    if (bFairwayPlayed && bGreenPlayed)
+    {
+        TestTrue(TEXT("The shot runs out across the far strip"), OnFairway.TotalM > 125.0f && OnFairway.CarryM < 120.0f);
+        TestEqual(TEXT("Live carry matches the headless prediction (yd)"), Yards(OnFairway.CarryM), Yards(Predicted.CarryM), 0.1f);
+        TestEqual(TEXT("Live total matches the headless prediction (yd)"), Yards(OnFairway.TotalM), Yards(Predicted.TotalM), 0.1f);
+        TestEqual(TEXT("Surface tags cannot change first-contact carry (yd)"), Yards(OnGreen.CarryM), Yards(OnFairway.CarryM), 0.02f);
+        TestEqual(TEXT("The green run ends on green"), OnGreen.Surface, EOpenFairwaySurface::Green);
+        TestTrue(FString::Printf(TEXT("Green rolls farther than the same path tagged fairway (%.2f vs %.2f yd)"), Yards(OnGreen.RollM), Yards(OnFairway.RollM)),
+            OnGreen.RollM > OnFairway.RollM);
+    }
+
+    auto LieAt = [Ball](float XM, float YM)
+    {
+        Ball->PlaceAt(FVector(XM * 100, YM * 100, 50));
+        FOpenFairwayShotResult Lie;
+        Ball->GetShotResult(Lie);
+        return Lie.Surface;
+    };
+    TestEqual(TEXT("Untagged PM_Rough ground plays as rough"), LieAt(5, 65), EOpenFairwaySurface::Rough);
+    TestEqual(TEXT("Untagged PM_Green ground plays as green"), LieAt(5, -65), EOpenFairwaySurface::Green);
+    Wrapper.DestroyTestWorld(false);
+
+    const OpenFairway::FBallPhysicsProfile Profile;
+    const auto Params = OpenFairway::FResolvedShotParams::Resolve(Profile, OpenFairway::FAirConditions(), 51.17f / OpenFairway::MpsPerMph, 6.95f, 1933.0f);
+    TestEqual(TEXT("Regime kinetic friction neutral"), Params.Regime.KineticFrictionMultiplier, 1.0f, 1e-6f);
+    TestEqual(TEXT("Regime rolling friction neutral"), Params.Regime.RollingFrictionMultiplier, 1.0f, 1e-6f);
+    TestEqual(TEXT("Regime grass drag neutral"), Params.Regime.GrassViscosityMultiplier, 1.0f, 1e-6f);
+    TestEqual(TEXT("Run adds no bite"), Params.Landing.SpinBiteScale, 0.0f);
+
+    // The same shot on rough carries the same and runs out much shorter.
+    const float FairwayRollYd = Yards(Predicted.TotalM - Predicted.CarryM);
+    const float RoughRollYd = Yards(OnRough.TotalM - OnRough.CarryM);
+    AddInfo(FString::Printf(TEXT("Headless roll: fairway %.2f yd, rough %.2f yd"), FairwayRollYd, RoughRollYd));
+    TestEqual(TEXT("Rough carry matches fairway"), OnRough.CarryM, Predicted.CarryM, 0.01f);
+    TestTrue(TEXT("Rough rolls much shorter than fairway"), RoughRollYd < 0.8f * FairwayRollYd);
     return true;
 }
 #endif

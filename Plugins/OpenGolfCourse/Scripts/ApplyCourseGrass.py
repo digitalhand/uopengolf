@@ -11,14 +11,19 @@ every generated surface of that preset's type (fairway, green, sand, ...) and up
 presets, so a later terrain rebuild keeps it. Physical materials come with the preset's material.
 
 The map must be open with Play stopped. Its saved map and terrain definition are backed up first, so save
-wanted edits before running. Completion is logged as OPEN_GOLF_COURSE_GRASS_COMPLETE.
+wanted edits before running. Completion is logged as OPEN_GOLF_COURSE_GRASS_COMPLETE. After the map is saved,
+generated folders under --generated that nothing references any more are deleted (generated_folders.py).
 """
 import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 import shutil
+import sys
 import time
 import unreal as ue
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import generated_folders
 
 LIB = ue.EditorAssetLibrary
 COURSE_GRASS_TAG = 'OpenGolf.Terrain.CourseGrass'
@@ -87,7 +92,8 @@ def backup(map_path, definition):
     return folder
 
 
-def apply(map_path, generated, grass_presets=(), boundary_preset=None, surface_presets=(), finished=None):
+def apply(map_path, generated, grass_presets=(), boundary_preset=None, surface_presets=(), finished=None, cleanup=None):
+    """cleanup lists the folders whose unreferenced generated runs are deleted after saving; default [generated]."""
     area = terrain_area(map_path)
     definition = area.definition
     grass = load_presets(grass_presets, ue.OpenGolfVegetationPreset, 'Grass preset')
@@ -126,6 +132,8 @@ def apply(map_path, generated, grass_presets=(), boundary_preset=None, surface_p
         ue.log(f'OPEN_GOLF_COURSE_GRASS_COMPLETE {summary}')
         if finished:
             finished()
+        # Every save is done, so the registry now matches the map: earlier runs' folders are unused.
+        generated_folders.remove_unreferenced(LIB, [generated] if cleanup is None else cleanup, log=ue.log)
 
     if not grass and not boundary:
         save()

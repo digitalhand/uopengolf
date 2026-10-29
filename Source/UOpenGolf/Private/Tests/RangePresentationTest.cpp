@@ -2,23 +2,18 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
-#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/GameViewportClient.h"
-#include "StaticMeshResources.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
-#include "Materials/Material.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
-#include "OpenGolfCourse.h"
 #include "OpenGolfFlagstickComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -41,24 +36,6 @@ class FCheckRangePresentation : public IAutomationLatentCommand
     ~FCheckRangePresentation()
     {
         GrassVar->Set(OriginalGrass, ECVF_SetByConsole);
-    }
-
-    /** Mowing bands split the fairway into an odd count, so one is centered on the target line and the edges fall on band boundaries. */
-    void CheckStripeBands(const UMaterialInterface *Fairway, const AUOpenGolfRange *Range)
-    {
-        float BandCm = 0.0f;
-        if (!Test->TestTrue(TEXT("Fairway has a stripe width"), Fairway && Fairway->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("StripeWidthCm")), BandCm) && BandCm > 0.0f))
-            return;
-        const double Bands = AUOpenGolfRange::FairwayHalfWidthM * 200.0 / BandCm;
-        const int64 Rounded = FMath::RoundToInt64(Bands);
-        Test->TestEqual(TEXT("Whole mowing bands across the fairway"), Bands, static_cast<double>(Rounded), 1e-3);
-        Test->TestTrue(TEXT("Odd band count centers a band on the target line"), Rounded % 2 == 1);
-        TArray<UHierarchicalInstancedStaticMeshComponent *> GrassParts;
-        Range->GetLayoutComponents(GrassParts);
-        float BladeBandCm = 0.0f;
-        const UMaterialInterface *Blades = GrassParts.IsEmpty() ? nullptr : GrassParts[0]->GetMaterial(0);
-        if (Blades && Blades->GetScalarParameterValue(FHashedMaterialParameterInfo(TEXT("StripeWidthCm")), BladeBandCm))
-            Test->TestEqual(TEXT("Grass blades stripe with the turf"), BladeBandCm, BandCm, 1e-3f);
     }
 
     bool Update() override
@@ -108,20 +85,6 @@ class FCheckRangePresentation : public IAutomationLatentCommand
                     Test->TestTrue(FString::Printf(TEXT("Calm flag hangs (free corner %.1f cm below the top)"), PoleTop.Z - FreeCorner.Z),
                                    FreeCorner.Z < PoleTop.Z - 30.0);
                 }
-                if (Part->GetFName() == TEXT("PuttingGreen"))
-                {
-                    const FVector Hole = Range->GetFlagstick()->GetComponentLocation();
-                    Test->TestTrue(TEXT("Putting green is centered on the flag"), Part->GetComponentLocation().Equals(Hole, 0.01));
-                    Test->TestEqual(TEXT("Putting green radius in cm"), Part->Bounds.BoxExtent.X, static_cast<double>(OpenGolfCourse::GreenDiscRadiusCm), 0.5);
-                    Test->TestTrue(TEXT("Putting green collides"), Part->GetCollisionEnabled() != ECollisionEnabled::NoCollision);
-                    Test->TestFalse(TEXT("Putting green casts no shadow onto the turf under it"), Part->CastShadow);
-                    Test->TestTrue(TEXT("Putting green tag"), Part->ComponentHasTag(AUOpenGolfRange::GreenTag) && !Part->ComponentHasTag(AUOpenGolfRange::TurfTag));
-                    const UMaterialInterface *GreenSurface = Part->GetMaterial(0);
-                    const UMaterialInterface *GreenKit = GreenSurface && GreenSurface->IsA<UMaterialInstanceDynamic>()
-                                                             ? Cast<UMaterialInstanceDynamic>(GreenSurface)->Parent.Get()
-                                                             : GreenSurface;
-                    Test->TestEqual(TEXT("Putting green surface material"), GreenKit ? GreenKit->GetName() : FString(), FString(TEXT("MI_Green")));
-                }
             }
             // A 10 mph wind from the right through the console variables reaches the ball and then the flag;
             // a 13 ft green speed reaches the ball.
@@ -145,78 +108,9 @@ class FCheckRangePresentation : public IAutomationLatentCommand
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindMph"))->Set(0.0f, ECVF_SetByConsole);
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindFromDeg"))->Set(0.0f, ECVF_SetByConsole);
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.GreenStimp"))->Set(10.0f, ECVF_SetByConsole);
+            // The switch shows and hides the terrain's 3D grass and ground cover; its instances stay saved in the map.
             InitialCount = Range->GetGrassInstanceCount();
             Test->TestTrue(TEXT("Grass is instantiated"), InitialCount > 1000);
-            int32 Outside = 0;
-            TArray<UHierarchicalInstancedStaticMeshComponent *> GrassParts;
-            Range->GetLayoutComponents(GrassParts);
-            for (const auto *Part : GrassParts)
-            {
-                for (int32 Index = 0; Index < Part->GetInstanceCount(); ++Index)
-                {
-                    FTransform Instance;
-                    Part->GetInstanceTransform(Index, Instance, false);
-                    const FVector Location = Instance.GetLocation();
-                    if (FMath::Abs(Location.Y) > AUOpenGolfRange::FairwayHalfWidthM * 100 || Location.X < -1000)
-                        ++Outside;
-                }
-            }
-            Test->TestEqual(TEXT("Grass stays on the fairway strip"), Outside, 0);
-            for (const auto *Part : GrassParts)
-            {
-                // Public blades are ~1 cm wide and end before they fall below two pixels from the tee camera.
-                const UStaticMesh *Clump = Part->GetStaticMesh();
-                if (!Clump || Clump->GetName() != TEXT("SM_GrassClump"))
-                    continue;
-                Test->TestEqual(TEXT("Public clump blade count"), Clump->GetRenderData()->LODResources[0].GetNumTriangles(), 16);
-                Test->TestTrue(TEXT("Public clump blades 2-3 cm tall"), Clump->GetBoundingBox().Max.Z > 2.2 && Clump->GetBoundingBox().Max.Z < 3.1);
-                Test->TestEqual(TEXT("Public grass cull start in cm"), Part->InstanceStartCullDistance, 700);
-                Test->TestEqual(TEXT("Public grass cull end in cm"), Part->InstanceEndCullDistance, 1000);
-                const UMaterial *Material = Part->GetMaterial(0) ? Part->GetMaterial(0)->GetMaterial() : nullptr;
-                if (Test->TestNotNull(TEXT("Public grass material"), Material))
-                {
-                    Test->TestTrue(TEXT("Public grass material supports instances"), Material->GetUsageByFlag(MATUSAGE_InstancedStaticMeshes));
-                    Test->TestFalse(TEXT("Public grass normals use world space"), Material->bTangentSpaceNormal != 0);
-                }
-            }
-            TArray<UStaticMeshComponent *> Pieces;
-            Range->GetLayoutComponents(Pieces);
-            for (const auto *Piece : Pieces)
-            {
-                const FString PieceName = Piece->GetName();
-                const bool bTurf = PieceName.StartsWith(TEXT("Fairway")) || PieceName.StartsWith(TEXT("Fringe")) || PieceName == TEXT("Green");
-                const bool bRough = PieceName.StartsWith(TEXT("Rough")) || PieceName == TEXT("Backdrop");
-                if (bTurf || bRough)
-                {
-                    Test->TestEqual(*FString::Printf(TEXT("Turf tag on %s"), *PieceName), Piece->ComponentHasTag(AUOpenGolfRange::TurfTag), bTurf);
-                    Test->TestEqual(*FString::Printf(TEXT("Rough tag on %s"), *PieceName), Piece->ComponentHasTag(AUOpenGolfRange::RoughTag), bRough);
-                    // The public range has no material overrides, so each piece shows its kit surface.
-                    const UMaterialInterface *Surface = Piece->GetMaterial(0);
-                    Test->TestEqual(*FString::Printf(TEXT("Surface material on %s"), *PieceName), Surface ? Surface->GetName() : FString(),
-                                    FString(bTurf ? TEXT("MI_Fairway") : TEXT("MI_Rough")));
-                    Test->TestEqual(*FString::Printf(TEXT("Turf parent on %s"), *PieceName),
-                                    Surface && Surface->GetMaterial() ? Surface->GetMaterial()->GetName() : FString(), FString(TEXT("M_Turf")));
-                    if (PieceName == TEXT("FairwayFront"))
-                        CheckStripeBands(Surface, Range);
-                }
-                if (PieceName == TEXT("Backdrop"))
-                    Test->TestEqual(TEXT("Backdrop has no collision"), Piece->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
-                // A hidden painted tee leaves the tee to the cut-turf ground (UOpenGolf.Range.EditableLayout).
-                if (PieceName == TEXT("TeeBox") && Piece->IsVisible())
-                {
-                    // Textured turf in the tee color (sRGB #406B1F), not a flat untextured slab.
-                    const UMaterialInterface *TeeMaterial = Piece->GetMaterial(0);
-                    const UMaterial *TeeBase = TeeMaterial ? TeeMaterial->GetMaterial() : nullptr;
-                    Test->TestEqual(TEXT("Tee uses the turf material"), TeeBase ? TeeBase->GetName() : FString(), FString(TEXT("M_Turf")));
-                    const FLinearColor TeeColor = FLinearColor::FromSRGBColor(FColor(0x40, 0x6B, 0x1F));
-                    for (const TCHAR *Parameter : {TEXT("GrassDarkColor"), TEXT("GrassLightColor")})
-                    {
-                        FLinearColor Color;
-                        const bool bFound = TeeMaterial && TeeMaterial->GetVectorParameterValue(FHashedMaterialParameterInfo(Parameter), Color);
-                        Test->TestTrue(*FString::Printf(TEXT("Tee %s is the tee color"), Parameter), bFound && Color.Equals(TeeColor, 1e-4f));
-                    }
-                }
-            }
             GrassVar->Set(0, ECVF_SetByConsole);
             ReadyAt = GetCurrentRunTime() + 0.5;
             Stage = 2;
@@ -274,7 +168,7 @@ class FCheckRangePresentation : public IAutomationLatentCommand
         {
             if (++Frames < 120)
                 return false;
-            Test->AddInfo(FString::Printf(TEXT("View %d: mean editor frame %.3f ms over 119 intervals; grass clumps %d"),
+            Test->AddInfo(FString::Printf(TEXT("View %d: mean editor frame %.3f ms over 119 intervals; grass instances %d"),
                                           View, (FPlatformTime::Seconds() - SampleStart) * 1000 / 119, Range->GetGrassInstanceCount()));
             const FIntPoint Size = World->GetGameViewport()->Viewport->GetSizeXY();
             Test->AddInfo(FString::Printf(TEXT("Capture size %dx%d; camera FOV %.1f"), Size.X, Size.Y,

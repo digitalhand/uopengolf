@@ -15,12 +15,6 @@ import sys
 
 ENGINE_VERSION = (5, 8, 4)
 ENGINE_NAME = "Unreal Engine " + ".".join(map(str, ENGINE_VERSION))
-PRIVATE_PATHS = (
-    "Plugins/PrivateContent",
-    "Content/PN_GrassLibrary",
-    "Content/DZ_Assets",
-    "Content/MWLandscapeAutoMaterial",
-)
 
 
 def run(command: list[str], cwd: Path | None = None) -> str:
@@ -56,10 +50,6 @@ def check_engine(engine: Path, system: str) -> None:
 
 
 def check_checkout(project: Path) -> None:
-    for name in PRIVATE_PATHS:
-        path = project / name
-        if path.exists() or path.is_symlink():
-            raise ValueError(f"Restricted content found at {name}. Use a separate, clean runner checkout.")
     if any((project / "Config").glob("User*.ini")):
         raise ValueError("Local Config/User*.ini files found. Use a separate, clean runner checkout.")
     assets = run(["git", "ls-files", "-z", "--", "*.uasset", "*.umap"], cwd=project).split("\0")

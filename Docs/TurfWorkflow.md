@@ -2,8 +2,7 @@
 
 Read this before changing the maintained turf. The current editable source is
 `<art root>/CutTurf/CutTurf.blend`. Do not start a new grass project or regenerate the source
-just to inspect it. All grass in this workflow is original project artwork; DZ is a visual
-reference only.
+just to inspect it. All grass in this workflow is original project artwork.
 
 ## Current state — 2026-10-27
 
@@ -19,7 +18,7 @@ The current revision fixes those and is applied to the public range:
 - **Smooth outlines.** Play outlines are curves through their authored corners
   (`outline_smoothing.py`); physics, ground meshes and turf follow the same curve.
 - **Square tee.** `LevelTeeHalfSizeM` (2.5 × 2.5 m) levels the ground and clears grass. The field
-  draws a lighter, finely mown tee, and the range's painted tee box is hidden on the public map.
+  draws a lighter, finely mown tee; the range has no painted tee box.
 - **Light, near-only blades.**
   - Fairway and collar blades are one tapered quad, 4–4.4 mm wide. First cut keeps two segments.
   - A 50 cm fairway tile has 21,430 triangles, down from 85,512.
@@ -74,9 +73,10 @@ The live Unreal assets are in the public plugin:
 - `/OpenGolfSavanna/Materials/CutTurf/` and `/OpenGolfSavanna/Materials/M_CutTurfSurface`
 - `/OpenGolfSavanna/Terrain/CutTurf/`
 
-The public range is `/Game/UOpenGolf/Maps/UOpenGolf`. The editor can reopen the private reference
-map by default: confirm the current map and Play state before doing anything. This work does
-not modify the private map, terrain layout, physical surface types or ball tuning.
+The public range, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map. Confirm the
+current map and Play state before doing anything. This work does not modify the terrain layout,
+physical surface types or ball tuning. Scripts that rebuild course grass or ground meshes delete the
+generated folders they replace once the map is saved.
 
 ## Scripts and controls
 
@@ -91,7 +91,7 @@ All paths below are under `Plugins/OpenGolfSavanna/Scripts/`.
 | `BuildCutTurf.py` | Import meshes/textures and build the turf materials and presets |
 | `ApplyCutTurf.py` | First installation of the turf on the public range; `--export-mask` writes `course-field.json` |
 | `SmoothCourseOutlines.py` | Smooth the play outlines, rebuild only the ground meshes, re-place course grass |
-| `FixTurfTransitions.py` | Import the course field, build the field materials, configure every instance, hide the painted tee |
+| `FixTurfTransitions.py` | Import the course field, build the field materials, configure every instance |
 | `turf_field.py` / `turf_shading.py` | Shared field shader and per-family profiles / wiring and instance configuration |
 | `turf_mask.py` | Bake `T_CourseSurfaceField` (signed distances to fairway, green, fringe, sand); requires NumPy |
 | `../../OpenGolfCourse/Scripts/outline_smoothing.py` | Curves through authored corners; crossing check |
@@ -265,9 +265,9 @@ probe was frame-capped. `UOpenGolf.Range.RolloutSurfaces` fails because its flat
 assumptions send the fixed shot into the saved coastal bunker; do not alter physics to make that
 layout match the flat fixture.
 
-Record final results and limits in `Docs/PhasesStatus.md`, and update the asset roadmap and
-ignored graphics plan when the status changes. Owner review is required before claiming visual
-parity or retiring the private reference. See [AGENTS.md](../AGENTS.md) for the shared rules.
+Record final results and limits in `Docs/PhasesStatus.md`, and update the asset roadmap when
+the status changes. Owner review is required before claiming visual
+acceptance. See [AGENTS.md](../AGENTS.md) for the shared rules.
 
 ## Maintained turf relief and quieter palette — 2026-10-27
 

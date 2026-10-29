@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Surface assets: physical materials, mowing stripes, turf and grass-blade materials."""
+"""Surface assets: physical materials, mowing stripes and turf materials."""
 import unreal as ue
 
 from course_assets import (connect, custom, finish_function, finish_material, function_call, function_input,
@@ -8,7 +8,6 @@ from course_assets import (connect, custom, finish_function, finish_material, fu
 
 SURFACES = ("Fairway", "FairwaySoft", "Rough", "Firm", "Green", "Sand", "Fringe")
 FOLDER = "Surfaces"
-GRASS_FOLDER = "Grass"
 
 # Turf palette (sRGB). Fairway: subtle bands between two close greens.
 FAIRWAY_DARK_HEX, FAIRWAY_LIGHT_HEX = "406B1F", "4D7E20"
@@ -18,9 +17,8 @@ ROUGH_DARK_HEX, ROUGH_LIGHT_HEX = "2C4F16", "46711F"
 # with no procedural bands nothing on it can alias.
 GREEN_DARK_HEX, GREEN_LIGHT_HEX = "4C8228", "5A9332"
 GREEN_TEXTURE_SIZE_CM, GREEN_DETAIL = 70.0, 0.08
-# Nine bands across the range's 34 m fairway (AUOpenGolfRange::FairwayHalfWidthM = 17): an odd
-# count centers a band on the target line and puts the fairway edges on band boundaries.
-# UOpenGolf.Range.Presentation checks that the two stay in step.
+# Nine bands across a 34 m fairway: an odd count centers a band on the target line and puts the
+# fairway edges on band boundaries.
 STRIPE_WIDTH_CM = 3400.0 / 9.0
 STRIPE_CONTRAST = 0.5
 TEXTURE_SIZE_CM = 140.0
@@ -141,27 +139,6 @@ def build_surface_instances(turf, physical):
     return fairway, rough, green
 
 
-def build_grass_blades(stripes):
-    blades = material(GRASS_FOLDER, "M_GrassBlades")
-    blades.set_editor_property("two_sided", True)
-    blades.set_editor_property("used_with_instanced_static_meshes", True)
-    # Both blade sides use upward world normals, matching the turf's lighting; world normals
-    # avoid the back-face flip used by tangent-space normals, which flickered under TAA.
-    blades.set_editor_property("tangent_space_normal", False)
-    variation = node(blades, ue.MaterialExpressionPerInstanceRandom, "InstanceRandom")
-    palette = custom(blades, "BladePalette",
-                     "float detail = (R - 0.5) * 0.08;\nreturn lerp(DarkGreen, LightGreen, saturate(Stripe + detail));",
-                     {"Stripe": (stripe_parameters(blades, stripes), "Stripe"), "R": (variation, ""),
-                      "DarkGreen": (vector(blades, "GrassDarkColor", linear_color(FAIRWAY_DARK_HEX), "Grass appearance", 0), "RGB"),
-                      "LightGreen": (vector(blades, "GrassLightColor", linear_color(FAIRWAY_LIGHT_HEX), "Grass appearance", 1), "RGB")},
-                     ue.CustomMaterialOutputType.CMOT_FLOAT3)
-    output(blades, palette, ue.MaterialProperty.MP_BASE_COLOR)
-    output(blades, node(blades, ue.MaterialExpressionConstant3Vector, "GrassUp", constant=ue.LinearColor(0, 0, 1, 1)),
-           ue.MaterialProperty.MP_NORMAL)
-    output(blades, node(blades, ue.MaterialExpressionConstant, "GrassRoughness", r=0.9), ue.MaterialProperty.MP_ROUGHNESS)
-    return finish_material(blades)
-
-
 def import_textures():
     textures = {}
     for slot, suffix, sampler in (("Color", "Color", ue.MaterialSamplerType.SAMPLERTYPE_COLOR),
@@ -182,23 +159,7 @@ def build_surfaces():
     physical = build_physical_materials()
     stripes = build_stripes()
     turf = build_turf(stripes, import_textures())
-    fairway, _, green = build_surface_instances(turf, physical)
-    blades = build_grass_blades(stripes)
-    clump = import_asset("SM_GrassClump.fbx", GRASS_FOLDER, "SM_GrassClump", mesh=True)
-    clump.set_material(0, blades)
-    save(clump)
-    # The FBX carries its own convex hull (UCX_SM_GreenDisc_00); see PrepareCourseAssets.py.
-    disc = import_asset("SM_GreenDisc.fbx", FOLDER, "SM_GreenDisc", mesh=True, collision=True)
-    disc.set_material(0, green)
-    hulls = ue.get_editor_subsystem(ue.StaticMeshEditorSubsystem).get_convex_collision_count(disc)
-    if hulls != 1:
-        raise RuntimeError(f"SM_GreenDisc imported {hulls} convex hulls; expected its one UCX_ hull")
-    save(disc)
-    surround = import_asset("SM_GreenSurround.fbx", FOLDER, "SM_GreenSurround", mesh=True, collision=True)
-    surround.set_material(0, fairway)
-    if ue.get_editor_subsystem(ue.StaticMeshEditorSubsystem).get_convex_collision_count(surround) != 64:
-        raise RuntimeError("Green surround must retain its 64 separate collision wedges")
-    save(surround)
+    _, _, green = build_surface_instances(turf, physical)
     if MAT.get_material_instance_scalar_parameter_value(green, "StripeContrast") != 0.0:
         raise RuntimeError("The putting green still has mowing stripes")
-    ue.log(f"Surfaces built: {len(physical)} physical materials, M_Turf, MI_Fairway, MI_Rough, MI_Green, M_GrassBlades, SM_GreenDisc")
+    ue.log(f"Surfaces built: {len(physical)} physical materials, M_Turf, MI_Fairway, MI_Rough, MI_Green")

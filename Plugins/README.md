@@ -11,6 +11,4 @@
 Each plugin README covers its features, API, tests, limitations and structure. See
 [architecture](../Docs/Architecture.md) for how they fit together.
 
-`PrivateContent/` is reserved for separately obtained restricted content plugins
-and ignored by Git. Public code, maps, and default configuration must never require
-those plugins. Do not force-add their files or put them in public Git LFS.
+Restricted packs are never committed or put in Git LFS.

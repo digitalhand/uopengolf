@@ -12,7 +12,7 @@ underlay (Poly Haven leafy_grass, CC0) through a per-course mask texture. Each t
 scaled so its mean lands on a target colour, so a sand can be swapped without retuning the
 rest. Instances choose the sand (SAND_TEXTURES) and set the course mask and its bounds;
 NativeOnly=1 drops the rough for ground outside the course. Parameter names match the
-earlier private ground material, so instances can be reparented in place.
+earlier ground material, so instances can be reparented in place.
 """
 from pathlib import Path
 import importlib
@@ -42,7 +42,7 @@ SANDS = {
 }
 ROCK_MEAN = '7D5538'
 LEAFY_GRASS = '/OpenGolfSavanna/Textures/Ground/LeafyGrass/T_leafy_grass_'
-# Matched to the private baseline's rendered desert (MW sand renders about 96 6A 46 in the close view).
+# Target colours for the rendered desert in the close view.
 SAND_TARGET = '835D45'
 ROCK_TARGET = '87583C'
 LUMA = 'float3(0.2126,0.7152,0.0722)'

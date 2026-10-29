@@ -11,8 +11,6 @@ The editable .blend projects live outside the repository in <art root>/OpenGolfC
 from pathlib import Path
 import hashlib
 import os
-import math
-import random
 import sys
 import urllib.request
 import zipfile
@@ -27,12 +25,6 @@ OUT = WORK / "Prepared"
 # Editable Blender sources, kept outside the repository.
 ART = art_root() / "OpenGolfCourse"
 USER_AGENT = "UOpenGolf-PrepareCourseAssets/1 (+https://github.com/digitalhand/uopengolf)"
-# Putting green: 20 feet in radius (OpenGolfCourse::GreenDiscRadiusCm), its top 1 mm above the
-# ground so it draws and collides over the turf under it. The collision hull bevels from that
-# 1 mm down to the ground over the outer 30 cm, so a ball rolling on or off meets a 0.2 degree
-# ramp, not a step.
-GREEN_RADIUS_M, GREEN_TOP_M, GREEN_BEVEL_M = 6.096, 0.001, 0.3
-GREEN_SEGMENTS, GREEN_RINGS, GREEN_COLLISION_SEGMENTS = 128, 8, 64
 SOURCES = [
     ("Grass004_2K-JPG.zip", "https://ambientcg.com/get?file=Grass004_2K-JPG.zip",
      "d7d3f08e8bb1e59aed0c3dbb85ea0b46d5308481f89b6a3fd62c0ec9e862245b"),
@@ -96,106 +88,7 @@ def build_flagstick(bpy):
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
 
-def build_grass_clump(bpy):
-    rng = random.Random(20261015)
-    vertices, faces = [], []
-    # Blades 0.8-1.2 cm wide at the base: at least two pixels wherever the public
-    # grass renders (it is culled 7-10 m from the camera; see UOpenGolfRange.cpp).
-    # Thinner blades shimmer under temporal AA.
-    for _ in range(16):
-        x, y = rng.uniform(-0.1, 0.1), rng.uniform(-0.1, 0.1)
-        angle = rng.uniform(0, 2 * math.pi)
-        width, height = rng.uniform(0.004, 0.006), rng.uniform(0.020, 0.030)
-        dx, dy = math.cos(angle) * width, math.sin(angle) * width
-        start = len(vertices)
-        vertices.extend([(x-dx, y-dy, 0), (x+dx, y+dy, 0),
-                         (x + dx*0.5, y + dy*0.5, height)])
-        faces.append((start, start+1, start+2))
-    mesh = bpy.data.meshes.new("GrassClump")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.update()
-    obj = bpy.data.objects.new("GrassClump", mesh)
-    bpy.context.collection.objects.link(obj)
-
-
-def build_green_disc(bpy):
-    import bmesh
-    # Concentric rings rather than one fan, so no triangle is a long sliver. 128 segments leave
-    # the edge within 0.2 mm of the circle. Planar UVs; the turf material is world-aligned anyway.
-    ring = lambda radius, segments, z: [(radius * math.cos(2 * math.pi * i / segments),
-                                         radius * math.sin(2 * math.pi * i / segments), z) for i in range(segments)]
-    vertices = [(0.0, 0.0, GREEN_TOP_M)]
-    for r in range(1, GREEN_RINGS + 1):
-        vertices.extend(ring(GREEN_RADIUS_M * r / GREEN_RINGS, GREEN_SEGMENTS, GREEN_TOP_M))
-    index = lambda r, i: 1 + (r - 1) * GREEN_SEGMENTS + i % GREEN_SEGMENTS
-    faces = [(0, index(1, i), index(1, i + 1)) for i in range(GREEN_SEGMENTS)]
-    faces += [(index(r, i), index(r + 1, i), index(r + 1, i + 1), index(r, i + 1))
-              for r in range(1, GREEN_RINGS) for i in range(GREEN_SEGMENTS)]
-    mesh = bpy.data.meshes.new("GreenDisc")
-    mesh.from_pydata(vertices, [], faces)
-    uv_layer = mesh.uv_layers.new(name="UVMap")
-    for poly in mesh.polygons:
-        poly.use_smooth = True
-        for loop_index in poly.loop_indices:
-            x, y, _ = vertices[mesh.loops[loop_index].vertex_index]
-            uv_layer.data[loop_index].uv = (0.5 + x / (2 * GREEN_RADIUS_M), 0.5 + y / (2 * GREEN_RADIUS_M))
-    mesh.update()
-    # The render object's name is the one the UCX_ collision hull below must match on import.
-    obj = bpy.data.objects.new("SM_GreenDisc", mesh)
-    bpy.context.collection.objects.link(obj)
-    obj.data.materials.append(bpy.data.materials.new("Green"))
-
-    # One convex hull: flat at the top inside the bevel, down to the ground at the edge, then a
-    # meter deep so a fast ball cannot tunnel through it.
-    points = (ring(GREEN_RADIUS_M - GREEN_BEVEL_M, GREEN_COLLISION_SEGMENTS, GREEN_TOP_M)
-              + ring(GREEN_RADIUS_M, GREEN_COLLISION_SEGMENTS, 0.0)
-              + ring(GREEN_RADIUS_M, GREEN_COLLISION_SEGMENTS, -1.0))
-    hull = bmesh.new()
-    for point in points:
-        hull.verts.new(point)
-    bmesh.ops.convex_hull(hull, input=list(hull.verts))
-    collision_mesh = bpy.data.meshes.new("GreenDiscCollision")
-    hull.to_mesh(collision_mesh)
-    hull.free()
-    collision = bpy.data.objects.new("UCX_SM_GreenDisc_00", collision_mesh)
-    bpy.context.collection.objects.link(collision)
-
-
-def build_green_surround(bpy):
-    """Fairway square with an open center matching the green's collision edge."""
-    import bmesh
-    count = GREEN_COLLISION_SEGMENTS
-    vertices, faces = [], []
-    for i in range(count):
-        corners = []
-        for j in (i, i + 1):
-            angle = 2 * math.pi * j / count
-            x, y = math.cos(angle), math.sin(angle)
-            outer = 15.0 / max(abs(x), abs(y))
-            corners.append(((x * GREEN_RADIUS_M, y * GREEN_RADIUS_M, 0), (x * outer, y * outer, 0)))
-        quad = [corners[0][0], corners[0][1], corners[1][1], corners[1][0]]
-        base = len(vertices)
-        vertices.extend(quad)
-        faces.append(tuple(base + j for j in range(4)))
-        hull = bmesh.new()
-        for point in quad + [(x, y, -1.0) for x, y, _ in quad]:
-            hull.verts.new(point)
-        bmesh.ops.convex_hull(hull, input=list(hull.verts))
-        collision = bpy.data.meshes.new(f"SurroundCollision{i}")
-        hull.to_mesh(collision)
-        hull.free()
-        obj = bpy.data.objects.new(f"UCX_SM_GreenSurround_{i:02d}", collision)
-        bpy.context.collection.objects.link(obj)
-    mesh = bpy.data.meshes.new("GreenSurround")
-    mesh.from_pydata(vertices, [], faces)
-    mesh.update()
-    obj = bpy.data.objects.new("SM_GreenSurround", mesh)
-    bpy.context.collection.objects.link(obj)
-    obj.data.materials.append(bpy.data.materials.new("Fairway"))
-
-
-MESHES = (("SM_GolfBall", build_ball), ("SM_Flagstick", build_flagstick), ("SM_GrassClump", build_grass_clump),
-          ("SM_GreenDisc", build_green_disc), ("SM_GreenSurround", build_green_surround))
+MESHES = (("SM_GolfBall", build_ball), ("SM_Flagstick", build_flagstick))
 
 
 def convert(regenerate=False):

@@ -12,8 +12,9 @@ its last shot result until the next launch. The HUD
 adds a Slate widget (`SRangeHud`) with shot tiles and a launch-monitor status box; the player controller
 binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D held
 to turn the aim) and runs the shot camera along the ball's aim line. There is no pawn, course or scoring. `UOpenGolf`
-is the saved range map used for editor and game startup. `Scripts/BuildRangeMap.py` adds
-missing default layout only when no layout exists; it does not overwrite existing object edits.
+is the saved range map used for editor and game startup, and the project's only map. A world
+without a range controller gets one with daylight and a flag; the ground always comes from a
+terrain area.
 
 The top-center wind readout shows whole mph and an arrow pointing where wind blows relative
 to the camera. Down means headwind, up means tailwind. It uses the ball's effective wind,
@@ -39,13 +40,10 @@ switched off; shutdown makes a final attempt. This queue does not recover across
 Play sessions or application restarts. The HUD exposes its saved count and failures.
 
 The range builds from the `OpenGolfCourse` plugin, the course/surface layer. A surface is
-declared by the ground's material: `MI_Fairway` and `MI_Rough` point at
-`UOpenFairwayPhysicalMaterial` assets, and the ball reads the contact's physical material.
-Component or actor `OpenFairway.Surface.*` tags remain an explicit override. The range's
-34 m fairway strip and the fringe around the putting disc play as Fairway; the disc
-plays as Green, and the side strips and surrounding ground play as Rough. The range pins each piece's physical
-material at Begin Play, so optional private turf materials change only the look. No
-replay-specific surface override is used.
+declared by the physical material on the terrain's surface meshes (`PM_Fairway`, `PM_Green`,
+`PM_Sand`, `PM_Rough` and the other `UOpenFairwayPhysicalMaterial` assets), and the ball reads
+the contact's physical material. Component or actor `OpenFairway.Surface.*` tags remain an
+explicit override. No replay-specific surface override is used.
 
 The course kit owns the CC0 grass textures, golf ball, waving flagstick and turf
 materials, with editable Blender sources (see the
@@ -56,9 +54,10 @@ collision-free procedural ribbon with a translucent material. It samples the
 simulated path and fades during rollout; launch/reset clears the ribbon. CPU buffers
 are reused, topology is recreated only when sample count changes, and camera-facing
 vertices update an existing section otherwise. Unchanged geometry, opacity and
-visibility updates are skipped. The inherited debug tracer is disabled on the game ball. Ground collision uses basic shapes and the green kit meshes. Surrounding rough reaches beyond the ball's 1,000 m safety envelope. The fairway surround has an opening for the putting green, with no overlapping ground below it. Decorative grass
-uses collision-free hierarchical instances near the tee; `uopengolf.Grass3D`
-clears or recreates those instances at runtime. The physics plugin has no
+visibility updates are skipped. The inherited debug tracer is disabled on the game ball. Ground collision comes from the terrain's
+generated surface meshes and outer landscapes, which reach beyond the ball's 1,000 m safety envelope.
+The terrain's 3D grass and ground cover are collision-free instances; `uopengolf.Grass3D` hides or
+shows them at runtime. The physics plugin has no
 dependency on these assets or on the game module; the course kit depends on the physics
 plugin for the surface type, and the game depends on both.
 
@@ -203,13 +202,8 @@ package and start check from one command.
 
 ## Content boundary
 
-Public maps/defaults must reference only distributable project content or separately
-installed engine resources. Optional restricted content lives in private content
-plugins under ignored `Plugins/PrivateContent/`, with private maps owning those
-references. The public baseline must open, compile, and run when that directory is absent.
+Maps, code and defaults reference only distributable project content or engine resources.
+Restricted packs are never committed.
 
-The game mode's editable `RangeClass` defaults to the native range. Private maps
-can select a Blueprint game-mode subclass whose range subclass supplies grass
-mesh variants, a ground material and scatter settings. C++ applies those settings
-at startup, limiting the material and grass to the fairway strip, and retains ownership of grass toggling and all gameplay. See
-[optional range visuals](OptionalRange.md) for the content boundary and verification.
+The game mode's editable `RangeClass` defaults to the native range; a map's game-mode subclass can
+choose a range subclass.

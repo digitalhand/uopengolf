@@ -31,15 +31,9 @@ CLAUDE.local.md
 # Agent Docs
 /Docs/superpowers/*
 
-# Restricted assets must live outside public history, including Git LFS.
+# Local-only content must stay out of public history, including Git LFS.
 /Plugins/PrivateContent/
-# Fab's default import destination for the optional Project Nature pack.
-/Content/PN_GrassLibrary/
-# Fab's default import destinations for the optional DZ Sample Trees and
-# MW Landscape Auto Material packs. Installed copies live in Plugins/PrivateContent/.
-/Content/DZ_Assets/
-/Content/MWLandscapeAutoMaterial/
-# Per-machine config layer, e.g. LocalRangeClass for an installed private range.
+# Per-machine config layer.
 /Config/User*.ini
 
 # Blender projects live outside the repository under the Blender art root

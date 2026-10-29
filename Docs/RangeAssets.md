@@ -2,8 +2,9 @@
 
 ## Playing and performance
 
-The public range includes fairway and rough materials, optional short 3D grass, a dimpled
-and marked golf ball, a putting green, and a red target flagstick whose cloth flag flies in the wind. Open the project, press Play, and press
+The public range is the savanna course: cut turf on the fairway, collar, first cut and green,
+tall rough, jacaranda trees and understory, a dimpled and marked golf ball, and a red target
+flagstick on the green whose cloth flag flies in the wind. Open the project, press Play, and press
 **H** for a replay shot. The imported `.uasset` files are included; players need
 neither a network connection nor Blender to use them.
 
@@ -32,15 +33,10 @@ The pole dimensions meet the [flagstick dimensional constraints](https://www.usg
 The ball carries a dark alignment line and a blue dot; it turns as it rolls along the
 ground and re-tees with the line toward the target. It shows no spin in flight.
 
-The fairway is 34 m wide (`AUOpenGolfRange::FairwayHalfWidthM` = 17 m), with rough strips out to
-70 m on both sides and surrounding playable rough to 1,100 m from the tee. Fairway, fringe and the former green use `MI_Fairway` and play as
-Fairway; the side strips and the backdrop use `MI_Rough`, and the strips play as Rough.
-A putting green 20 ft (6.1 m) in radius surrounds the flag (`PuttingGreen`, the kit's
-`SM_GreenDisc` with `MI_Green`) and plays as Green. Its top sits 1 mm above the fairway
-surround, which has an open center. Its collision hull bevels down to the fairway over its outer 30 cm, so a
-rolling ball meets a 0.2 degree ramp rather than a step. Fairway surrounds it, so calibration
-shots that finish off the green are unchanged. The green has no mowing stripes; it is a lighter,
-turf material with mowing contrast fixed at zero. It plays at stimp 10;
+The ground is the terrain area's generated surfaces and outer landscapes; each surface plays
+through its physical material (fairway, fringe, green, sand and rough). The flag stands on the
+green 150 yards out (`AUOpenGolfRange::GreenDistanceM`). The green has no mowing stripes; its
+mowing contrast is fixed at zero. It plays at stimp 10;
 `uopengolf.GreenStimp` changes the speed from the next shot.
 
 Select **Range settings** in the Outliner and open **Details → UOpenGolf → Wind** to edit
@@ -128,11 +124,12 @@ These are game-side presentation changes; physics still runs at 120 Hz.
 Build and run Smoke, `UOpenGolf.Physics`, `UOpenGolf.Course` and `UOpenGolf.Range` with the
 project scripts. `UOpenGolf.Range.Presentation` checks the imported ball's source diameter,
 non-colliding visuals, the course-kit flagstick, its hanging cloth flag, the wind console
-variables reaching the ball and the flag, the green-stimp console variable reaching the ball, the putting green around the flag, each piece's
-surface material, the odd mowing-band count across the fairway, and grass disable/re-enable
-behavior. `UOpenGolf.Range.RolloutSurfaces` checks that the fairway, rough and green lies
-resolve through their physical materials. It keeps the putting green out of its reference
-rollouts, so they stay flat single-surface runs. `UOpenGolf.Course.FlagCloth` checks how the
+variables reaching the ball and the flag, the green-stimp console variable reaching the ball, and
+the 3D grass switch hiding and restoring the terrain's grass. `UOpenGolf.Range.EditableLayout`
+checks the saved range actors, the flag on the green and rough around the course.
+`UOpenGolf.Range.RolloutSurfaces` builds flat test ground in a transient world, independent of
+the map: the live ball must match the headless prediction on fairway, roll farther over a green
+than over the same path tagged fairway, and read lies from physical materials. `UOpenGolf.Course.FlagCloth` checks how the
 cloth hangs, flies and flaps across wind speeds.
 `UOpenGolf.Range.WindSettings` checks saved editor controls, editor cloth preview,
 Play-world wind, active-shot wind retention and console overrides.
@@ -169,14 +166,14 @@ distant moire near the horizon that the lower-40% figure misses.
 
 `UOpenGolf.Range.ShotTrail`
 checks path creation, monotonic rollout fade, disappearance at rest and reset for
-driver, iron and slow shots. Use `check_range_variant.py --map <map> --render
+driver, iron and slow shots. Use `check_range_render.py --map <map>
 --shot-trail` for matching moving captures under `Saved/Screenshots/ShotTrail/`.
 For a CPU comparison without screenshot encoding, set `UE_ROOT`, build the editor,
 and run these sequentially on an otherwise idle machine:
 
 ```powershell
-python Scripts/check_range_variant.py --map /Game/UOpenGolf/Maps/UOpenGolf --render --shot-trail --trail-timing --legacy-trail
-python Scripts/check_range_variant.py --map /Game/UOpenGolf/Maps/UOpenGolf --render --shot-trail --trail-timing
+python Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing --legacy-trail
+python Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing
 ```
 
 `--legacy-trail` selects the previous geometry implementation in development automation

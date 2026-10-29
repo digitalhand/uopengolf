@@ -26,8 +26,6 @@ import understory_layout as layout
 
 savanna_layout, trees, layout = [importlib.reload(module) for module in (savanna_layout, trees, layout)]
 TAG = "OpenGolfSavanna.Understory"
-# Components added before the understory moved to this plugin carry the private range's tag.
-REPLACED_TAGS = {TAG, "UOpenGolfPrivate.Understory"}
 VEGETATION_TAG = "OpenGolf.Terrain.Vegetation"
 MAX_SLOPE_DEG = 30.0
 # Rocks sit partly buried; litter pieces get a small random lift so overlapping patches don't flicker.
@@ -103,7 +101,7 @@ def remove_understory(terrain):
         subsystem, found = handles(actor)
         for handle in found[1:]:
             component = component_of(handle)
-            if isinstance(component, ue.InstancedStaticMeshComponent) and REPLACED_TAGS & {str(t) for t in component.component_tags}:
+            if isinstance(component, ue.InstancedStaticMeshComponent) and TAG in {str(t) for t in component.component_tags}:
                 actor.modify()
                 removed += subsystem.delete_subobject(found[0], handle, None)
     return removed

@@ -36,8 +36,9 @@ it has no tree presets or tree areas yet, so nothing new appears in Play.
   failure leaves the existing vegetation in place. Terrain, tee, targets and the course
   grass layer are kept.
   `Scripts/RebuildRangeVegetation.py` wraps it for the public map: it backs the map up
-  to `Saved/TerrainBackups`, bakes and saves. With `--remove-orphans` it then deletes
-  older `Generated/Vegetation_*` folders that nothing on disk references.
+  to `Saved/TerrainBackups`, bakes and saves. It then deletes generated `Build_*` and
+  `Vegetation_*` folders that nothing on disk references (`--keep-generated` keeps them); see
+  `Plugins/OpenGolfCourse/Scripts/generated_folders.py`.
 
 Rebuilding vegetation draws the same ground-cover placement as before: the jittered
 grid and random sequence are unchanged for presets without a distance band.
@@ -46,8 +47,8 @@ grid and random sequence are unchanged for presets without a distance band.
 
 The existing `/Game/UOpenGolf/Maps/UOpenGolf` range now contains generated coastal
 terrain, green, fringe, shallow bunker and 69,364 baked vegetation instances.
-The original range is retained at `/Game/UOpenGolf/Maps/RangeFlatRegression`, with
-an additional disk backup under `Saved/TerrainBackups`. Shared assets and presets
+The original range was kept at `/Game/UOpenGolf/Maps/RangeFlatRegression` until 2026-10-28,
+when the public map became the project's only map; a disk backup stays under `Saved/TerrainBackups`. Shared assets and presets
 live in OpenGolfCourse; the range definition and generated terrain live in the game.
 
 Unreal 5.8.3 on Linux passed the definition, saved-map contact and rendered coastal
@@ -67,19 +68,13 @@ The stationary comparison shows reduced flicker, with measurements in Phase stat
 Slow camera motion still needs review. AGENTS.md and CLAUDE.md now require shimmer
 checks after asset edits; these two instruction files are locally ignored by Git.
 
-### Existing asset packs
+### Imported art
 
-The user prefers an existing art library for the quality baseline. A search including
-ignored project content found neither Project Nature's Temperate Vegetation grass
-library nor MW Landscape Auto Material installed in this checkout. The ignore rules
-already reserve `Content/PN_GrassLibrary` and `Plugins/PrivateContent` for optional
-content. A Fab account library or a different checkout was not inspected.
-
-Use the existing reusable definitions to evaluate imported grass meshes. Evaluate
-MW on the surrounding Landscape first: detailed playing surfaces are static meshes,
-so a Landscape-only material is not a direct replacement for every surface. Keep
-optional vendor dependencies within the existing private-content pattern. The
-current original assets are a working fallback, not an approved AAA art baseline.
+Use the existing reusable definitions to evaluate imported grass meshes. Detailed playing
+surfaces are static meshes, so a Landscape-only material is not a direct replacement for
+every surface. Imported art must be redistributable (see the
+[asset licence roadmap](AssetLicenseRoadmap.md)). The current original assets are a working
+fallback, not an approved AAA art baseline.
 
 The following section records the earlier framework-only checkpoint; it is superseded
 by this delivery.
@@ -108,8 +103,8 @@ Prepared scripts:
   original grass sources. Executed successfully.
 - `Plugins/OpenGolfCourse/Scripts/BuildTerrainAssets.py`: creates separate coastal
   materials and reusable presets. Not executed.
-- `Scripts/UpgradeRangeTerrain.py`: backs up the range, retains a flat regression
-  map, generates the coastal terrain and bakes vegetation. Not executed.
+- `Scripts/UpgradeRangeTerrain.py` (removed 2026-10-28): backed up the range, kept a flat
+  regression map, generated the coastal terrain and baked vegetation.
 
 ## Evidence and limits
 

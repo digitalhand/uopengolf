@@ -3,7 +3,6 @@
 
 Run with UnrealEditor-Cmd -ExecutePythonScript, or py "<path>" in the editor. Course assets
 (flagstick, ball, turf) belong to the OpenGolfCourse plugin; see its Scripts/BuildCourseAssets.py.
-Does not touch private assets; their Setup.py is run separately.
 """
 import unreal as u
 

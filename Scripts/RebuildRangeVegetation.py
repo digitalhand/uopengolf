@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
 """Rebuild only a range map's vegetation, trees and trunk colliders from its terrain definition.
 Terrain, tee and targets are kept. The map is backed up first and saved only after the bake succeeds.
-With --remove-orphans, older generated vegetation folders that nothing on disk references are then
-deleted. Save any other open levels first, and review the log: deleted folders are not backed up.
+Then generated folders (Build_ and Vegetation_) under --generated that nothing on disk references are
+deleted, unless --keep-generated is given. Save any other open levels first, and review the log: deleted
+folders are not backed up, but they stay in Git history.
 
-    py "<project>/Scripts/RebuildRangeVegetation.py" [--remove-orphans] [--map PATH --generated PATH]
+    py "<project>/Scripts/RebuildRangeVegetation.py" [--keep-generated] [--map PATH --generated PATH]
 
 --map and --generated select another range map (for example a private copy in a plugin) and the
 content folder its generated vegetation is written to.
@@ -15,6 +16,9 @@ import shutil
 import sys
 
 import unreal as ue
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Plugins/OpenGolfCourse/Scripts"))
+import generated_folders
 
 MAP = "/Game/UOpenGolf/Maps/UOpenGolf"
 GENERATED = "/Game/UOpenGolf/Terrain/Generated"
@@ -35,35 +39,10 @@ def map_file(map_path):
 
 
 def vegetation_folders(generated):
-    folders = set()
-    for path in LIB.list_assets(generated, recursive=True, include_folder=False):
-        relative = path[len(generated) + 1:]
-        if relative.startswith("Vegetation_"):
-            folders.add(f"{generated}/{relative.split('/')[0]}")
-    return folders
+    return generated_folders.run_folders(LIB, generated, prefixes=("Vegetation_",))
 
 
-def referenced_from_outside(folder):
-    for asset in LIB.list_assets(folder, recursive=True, include_folder=False):
-        package = asset.split(".")[0]
-        for referencer in LIB.find_package_referencers_for_asset(package, load_assets_to_confirm=True):
-            if not str(referencer).startswith(folder + "/"):
-                return True
-    return False
-
-
-def remove_orphans(generated, keep):
-    for folder in sorted(vegetation_folders(generated) - {keep}):
-        if referenced_from_outside(folder):
-            ue.log(f"Keeping {folder}: it is still referenced")
-            continue
-        if LIB.delete_directory(folder):
-            ue.log(f"Removed unreferenced vegetation folder {folder}")
-        else:
-            ue.log_warning(f"Could not remove {folder}")
-
-
-def rebuild(map_path=MAP, generated=GENERATED, remove=False, prepare=None, finished=None):
+def rebuild(map_path=MAP, generated=GENERATED, remove=True, prepare=None, finished=None):
     """Rebuilds vegetation in map_path. prepare(range_actor, area) may adjust the level before the rebuild."""
     levels = ue.get_editor_subsystem(ue.LevelEditorSubsystem)
     actors = ue.get_editor_subsystem(ue.EditorActorSubsystem)
@@ -122,9 +101,11 @@ def rebuild(map_path=MAP, generated=GENERATED, remove=False, prepare=None, finis
         if len(created) != 1:
             ue.log_warning(f"Expected one new vegetation folder, found {sorted(created)}; no folders removed")
         elif remove:
-            remove_orphans(generated, next(iter(created)))
+            # Baked trees and cover reference their meshes, not the run's PCG graphs, so the new run's folder
+            # goes too, along with any ground build the saved map no longer uses.
+            generated_folders.remove_unreferenced(LIB, [generated], log=ue.log)
         else:
-            ue.log("Older vegetation folders kept; rerun with --remove-orphans to delete unreferenced ones")
+            ue.log("Generated folders kept (--keep-generated)")
         (backup / "completed.txt").write_text(f"Vegetation folders: {sorted(created)}\n", encoding="utf-8")
         ue.log("OPEN_GOLF_RANGE_VEGETATION_COMPLETE")
 
@@ -138,4 +119,4 @@ def option(name, default):
 
 
 if __name__ == "__main__":
-    rebuild(option("--map", MAP), option("--generated", GENERATED), "--remove-orphans" in sys.argv[1:])
+    rebuild(option("--map", MAP), option("--generated", GENERATED), "--keep-generated" not in sys.argv[1:])

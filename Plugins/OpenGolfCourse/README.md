@@ -1,8 +1,8 @@
 # Open Golf Course
 
 Reusable course kit for uopengolf maps: surface materials that declare OpenFairway physics
-surfaces, a putting green, a flagstick whose cloth flag flies in the wind, a marked golf ball
-and turf grass. The range uses it, and new
+surfaces, terrain generation with vegetation scatter, a flagstick whose cloth flag flies in the wind
+and a marked golf ball. The range uses it, and new
 course designs can use the same pieces without range code.
 
 The plugin depends on [OpenFairway Physics](../OpenFairwayPhysics/README.md) for the surface
@@ -26,10 +26,8 @@ type. Its content mounts at `/OpenGolfCourse/`.
 | `Surfaces/PM_<Surface>` | One `UOpenFairwayPhysicalMaterial` per surface: Fairway, FairwaySoft, Rough, Firm, Green, Sand, Fringe |
 | `Surfaces/M_Turf` | Parent turf material: world-aligned grass textures, mowing bands, a two-color palette |
 | `Surfaces/MI_Fairway`, `MI_Rough`, `MI_Green` | Turf instances; each points at its physical material, so assigning one sets look and physics together |
-| `Surfaces/SM_GreenDisc` | Putting green 20 ft in radius with `MI_Green`; its top sits 1 mm above the ground and its collision bevels down to it at the edge |
 | `Surfaces/MF_MowStripes` | Mowing-band mask for any direction and band width, filtered against moire |
 | `Surfaces/T_Grass_*` | ambientCG Grass 004 color, normal and roughness maps |
-| `Grass/SM_GrassClump`, `M_GrassBlades` | 16-blade clump for instanced scatter; blades share the turf's bands |
 | `Flagstick/SM_Flagstick`, `M_Pole` | Seven-foot, half-inch pole |
 | `Flagstick/M_FlagCloth`, `MI_Flag_Red` | Two-sided flag cloth material (`FlagColor`, `FlagRoughness`) and its red instance |
 | `Ball/SM_GolfBall`, `M_GolfBall`, `MF_BallMarking` | Dimpled ball (three LODs) with an alignment line and a logo dot |
@@ -59,9 +57,7 @@ README's [surfaces](../OpenFairwayPhysics/README.md#surfaces) for the resolution
 | Texture | `TurfColor`, `TurfNormal`, `TurfRoughness`, `TextureSizeCm` | Grass 004, 140 cm | Swap for sand or other surfaces |
 
 `MI_Green` is a lighter, finer bentgrass: sRGB #4C8228 to #5A9332, a 70 cm texture tile and
-0.08 detail, with no mowing stripes (`StripeContrast` 0). Place `SM_GreenDisc` with its origin on
-the ground at the hole, over turf whose top is at that height. The disc casts no useful shadow
-onto turf 1 mm below it; turn its shadow off.
+0.08 detail, with no mowing stripes (`StripeContrast` 0).
 
 Bands are procedural, so they get no mip filtering. Their edges widen with the pixel
 footprint, and their contrast fades to the mean as bands narrow toward the horizon, which
@@ -152,10 +148,8 @@ broader rebuild is intended.
 
 **Editable Blender sources** are kept outside the repository, in `OpenGolfCourse/` under the
 Blender art root:
-`SM_GolfBall.blend`, `SM_Flagstick.blend`, `SM_GrassClump.blend`, `SM_GreenDisc.blend`,
-`SM_GreenSurround.blend`, and `Coastal/` for the coastal grass.
-- The green's collision hull is `UCX_SM_GreenDisc_00`, and the surround has separate hulls
-  around its open center.
+`SM_GolfBall.blend`, `SM_Flagstick.blend`, and `Coastal/` for the coastal grass. The putting-disc,
+green-surround and grass-clump sources there served the retired flat range and are no longer exported.
 - The art root is `--art-root PATH`, else `$UOPENGOLF_BLENDER_ROOT`, else
   `~/Code/3D/blender/uopengolf`; see `Scripts/art_root.py`.
 - The repository holds only the imported Unreal assets, so the first export creates any
@@ -200,8 +194,6 @@ Python commandlet, because LOD generation needs editor subsystems.
 | ambientCG `Grass004_2K-JPG.zip` (CC0) | Color as sRGB, NormalDX as a normal map without flipping green, Roughness as linear masks. World-space UVs repeat every 140 cm; world-space normals match the flat ground. |
 | jpsweber `golf_0.zip`, `Golf_ball.obj` (CC0) | Centered and normalized to a 100 cm diameter, smooth normals. LODs at 100%, 25% and 5% of 61,672 source triangles, screen sizes 1.0, 0.1 and 0.025. |
 | Original flagstick (MIT) | 32-sided half-inch pole, seven feet above ground plus 10 cm buried. The flag is generated cloth. |
-| Original putting green (MIT) | 128-segment disc, 20 ft in radius, 1 mm high, with a single convex `UCX_` collision hull beveled to the ground over its outer 30 cm. |
-| Original grass clump (MIT) | 16 deterministic blades over a 20 cm square, 2-3 cm tall, 0.8-1.2 cm wide at the base. |
 
 Archive SHA-256 checksums pin the downloads in `Scripts/PrepareCourseAssets.py`. See the
 repository's [third-party notices](../../THIRD_PARTY_NOTICES.md). Material graphs are
@@ -214,7 +206,6 @@ original MIT contributions.
 - A physical material exists for every surface.
 - `MI_Fairway`, `MI_Rough` and `MI_Green` play as Fairway, Rough and Green and share `M_Turf`;
   the green has no stripes.
-- `SM_GreenDisc` is 20 ft in radius, 1 mm high, with one convex hull.
 - The flagstick mesh is the pole alone, with the right height and no collision; its flag material is
   two-sided, with no world-position offset.
 - The ball material exposes its marking parameters.

@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "UOpenGolfRange.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/PostProcessComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
 #include "Engine/World.h"
@@ -9,6 +13,7 @@
 #include "Misc/AutomationTest.h"
 #include "OpenFairwayBall.h"
 #include "OpenGolfFlagstickComponent.h"
+#include "OpenGolfTerrain.h"
 #include "ProceduralMeshComponent.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UOpenGolfGameMode.h"
@@ -26,9 +31,22 @@ bool FRangeLayoutTest::RunTest(const FString& Parameters)
     if (!TestEqual(TEXT("One saved range controller"), Ranges.Num(), 1))
         return false;
     AUOpenGolfRange* Range = Ranges[0];
+    TestNotNull(TEXT("The range plays on its terrain"), Range->Terrain.Get());
+    // Daylight and view settings are saved as separate actors, so they can be selected before Play.
+    TArray<UDirectionalLightComponent*> Suns;
+    TArray<USkyAtmosphereComponent*> Skies;
+    TArray<USkyLightComponent*> SkyLights;
+    TArray<UPostProcessComponent*> Views;
+    Range->GetLayoutComponents(Suns);
+    Range->GetLayoutComponents(Skies);
+    Range->GetLayoutComponents(SkyLights);
+    Range->GetLayoutComponents(Views);
+    TestEqual(TEXT("One sun"), Suns.Num(), 1);
+    TestEqual(TEXT("One sky atmosphere"), Skies.Num(), 1);
+    TestEqual(TEXT("One sky light"), SkyLights.Num(), 1);
+    TestEqual(TEXT("One range view"), Views.Num(), 1);
     TArray<UStaticMeshComponent*> Pieces;
     Range->GetLayoutComponents(Pieces);
-    TestTrue(TEXT("Visible scene is saved in the map"), Pieces.Num() > 20);
     TArray<UOpenGolfFlagstickComponent*> Flags;
     Range->GetLayoutComponents(Flags);
     if (TestEqual(TEXT("One flagstick in the saved scene"), Flags.Num(), 1))
@@ -46,20 +64,37 @@ bool FRangeLayoutTest::RunTest(const FString& Parameters)
                             .Num();
     Range->BuildDefaultLayout();
     TestEqual(TEXT("Building again preserves the layout"), Range->GetLayoutActors().Num(), Count);
+    // The cut-turf ground draws the tee, so no painted tee box is left in the layout.
     for (const UStaticMeshComponent* Piece : Pieces)
-    {
-        if (Piece->ComponentHasTag(AUOpenGolfRange::GreenTag))
-            TestTrue(TEXT("Green can be selected as its own actor"), Piece->GetOwner() != Range);
-        // The cut-turf shader draws the public tee; the painted box would cover it.
-        if (Piece->GetName() == TEXT("TeeBox"))
-            TestFalse(TEXT("The painted tee box is hidden on the public map"), Piece->IsVisible());
-    }
-    for (const FVector Point : {FVector(40000, 0, 100), FVector(20000, 20000, 100), FVector(20000, -20000, 100), FVector(-50000, 0, 100)})
+        TestNotEqual(TEXT("No painted tee box"), Piece->GetName(), FString(TEXT("TeeBox")));
+    const auto* DefaultBall = GetDefault<AOpenFairwayBall>();
+    // Traces start well above the terrain's mounds, which rise about 5 m, and pass through tree colliders to the ground.
+    auto SurfaceAt = [World, DefaultBall](const FVector& Point, bool& bHit)
     {
         FHitResult Hit;
-        TestTrue(TEXT("Surrounding rough has collision"), World->LineTraceSingleByChannel(Hit, Point, Point - FVector(0, 0, 300), ECC_Visibility));
-        const auto* Ball = GetDefault<AOpenFairwayBall>();
-        TestEqual(TEXT("Surrounding ground plays as rough"), Ball->ResolveSurface(Hit.GetComponent()), EOpenFairwaySurface::Rough);
+        FCollisionQueryParams Params(SCENE_QUERY_STAT(RangeLayoutSurface), false);
+        Params.bReturnPhysicalMaterial = true;
+        for (int32 Attempt = 0; Attempt < 8; ++Attempt)
+        {
+            bHit = World->LineTraceSingleByChannel(Hit, Point + FVector(0, 0, 5000), Point - FVector(0, 0, 5000), ECC_Visibility, Params);
+            if (!bHit || !Hit.GetComponent() || !Hit.GetComponent()->ComponentHasTag(AOpenFairwayBall::GetObstacleTag()))
+                break;
+            Params.AddIgnoredComponent(Hit.GetComponent());
+        }
+        return bHit ? DefaultBall->ResolveSurface(Hit.GetComponent(), Hit.PhysMaterial.Get()) : EOpenFairwaySurface::Fairway;
+    };
+    if (Flags.Num() == 1)
+    {
+        bool bHit = false;
+        const EOpenFairwaySurface UnderFlag = SurfaceAt(Flags[0]->GetComponentLocation(), bHit);
+        TestTrue(TEXT("The flag stands on the green"), bHit && UnderFlag == EOpenFairwaySurface::Green);
+    }
+    for (const FVector Point : {FVector(40000, 0, 0), FVector(20000, 20000, 0), FVector(20000, -20000, 0), FVector(-50000, 0, 0)})
+    {
+        bool bHit = false;
+        const EOpenFairwaySurface Surface = SurfaceAt(Point, bHit);
+        TestTrue(TEXT("Surrounding ground has collision"), bHit);
+        TestEqual(TEXT("Surrounding ground plays as rough"), Surface, EOpenFairwaySurface::Rough);
     }
     auto* Ball = World->SpawnActor<AOpenFairwayBall>();
     FOpenFairwayLaunch Launch;

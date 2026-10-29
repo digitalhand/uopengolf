@@ -50,41 +50,6 @@ required full license texts next to the imported work or in a documented license
 Purchased assets and their derivatives must not enter public Git or Git LFS history
 unless their license explicitly permits that redistribution.
 
-## Optional Project Nature content (not distributed)
-
-The locally acquired **temperate Vegetation: optimized Grass Library** by Project
-Nature is used only in the ignored `Plugins/PrivateContent/ProjectNatureRange/`
-plugin. [Fab listing](https://www.fab.com/listings/8b68642e-35f4-438e-82b4-799fc2228303).
-The installed download was selected for UE 5.4 and converted locally for UE 5.8.3
-on 2026-10-15. It is restricted content, not CC0 or MIT. The
-[Fab Standard License summary](https://www.fab.com/eula) was reviewed; the public
-listing does not expose the acquisition-specific license/version, so the account's
-acquisition terms must be retained and checked before any distribution. No new
-rights are asserted here. The private manifest records source hashes and changes.
-
-The imported folder was already tracked when integration began. Moving it out of
-the working tree does not remove its earlier Git history; public release requires
-a separate history review/remediation. No history rewrite was performed.
-
-## Optional DZ Sample Trees and MW Landscape Auto Material content (not distributed)
-
-Two locally acquired Fab packs are used only in ignored private content plugins:
-
-| Pack | Source | Local plugin |
-| --- | --- | --- |
-| **DZ Sample Trees** by DZ Studios | [Fab listing](https://www.fab.com/listings/7c95ac5f-246e-42fb-9d2a-4807db87f69d) | `Plugins/PrivateContent/DZSampleTrees/` |
-| **MW Landscape Auto Material** | Fab (listing recorded in the private manifest) | `Plugins/PrivateContent/MWLandscapeAutoMaterial/` |
-
-Both are treated as restricted content under the Fab Standard License, not CC0 or
-MIT. The account's acquisition terms must be checked before any distribution. No
-new rights are asserted here. Each private plugin's `MANIFEST.md` records its source,
-version, license and local changes. Public maps, code and configuration do not
-reference either pack.
-
-Both packs were briefly committed under `Content/` on a feature branch (2026-10-19)
-before they were moved to the private plugins. Removing that commit from the
-published branch history is a separate maintainer step.
-
 See [licensing and asset policy](Docs/Licensing.md).
 
 ### ambientCG surface candidates

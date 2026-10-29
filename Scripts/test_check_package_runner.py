@@ -10,7 +10,6 @@ import unittest
 from unittest.mock import patch
 
 from check_package_runner import (
-    PRIVATE_PATHS,
     check_checkout,
     check_engine,
     check_no_editor,
@@ -68,15 +67,6 @@ class PackageRunnerTests(unittest.TestCase):
         self.write("Engine/Build/Build.version", "broken", root=self.engine)
         with self.assertRaises(ValueError):
             check_engine(self.engine, "Linux")
-
-    def test_rejects_each_restricted_content_location(self):
-        for name in PRIVATE_PATHS:
-            with self.subTest(path=name):
-                path = self.root / name
-                path.mkdir(parents=True)
-                with self.assertRaisesRegex(ValueError, "Restricted content"):
-                    check_checkout(self.root)
-                path.rmdir()
 
     def test_checks_real_git_index_and_downloaded_asset(self):
         self.write("Content/Range.umap", "downloaded map")
