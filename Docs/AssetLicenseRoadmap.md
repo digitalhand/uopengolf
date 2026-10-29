@@ -113,3 +113,6 @@ Results go in [Phase status](PhasesStatus.md), and the row's status changes here
   filtered short-turf normals, quieter olive variation). It introduces no third-party assets. See
   [Blender grass handoff](TurfWorkflow.md).
 - **2026-10-28:** the public map became the only map.
+- **2026-10-28, validation:** Linux 5.8.4 packaging and its startup check pass. A packaged
+  1080p tee-view timing reference is recorded in [Phase status](PhasesStatus.md), including
+  background GPU activity and measurement limits. No art approval or shimmer result is implied.

@@ -235,11 +235,78 @@ Newest first. Evidence paths are relative to the repository root.
     - The launcher's 5.8.3 → 5.8.4 patch had left stale precompiled headers. Their engine headers keep
       2026-10-06 times, so the build tool missed it. Those for the Development editor, DebugGame editor
       and Development game were deleted so they rebuild.
+  - **After the DebugGame rebuild (same day, one editor, through MCP):**
+    - The map loaded with no missing packages or constructor load errors.
+    - The prune tool deleted the four flat kit assets: `SM_GrassClump`, `M_GrassBlades`, `SM_GreenDisc`
+      and `SM_GreenSurround`. Backup: `Saved/AssetBackups/20261029-023242`.
+    - The hidden `TeeBox` actor was deleted and the map saved once: 107 → 106 actors. Map backup:
+      `Saved/TerrainBackups/20261028-193330-remove-teebox`.
+    - After-scan: 317 assets, no orphaned generated folders, and `/Game` holds only the `UOpenGolf` map.
+      The map's closure is 254 project packages; the two that dropped out were used only by the tee box.
+      Evidence: `referencers-after.json` and `public-closure-after.json` beside the audit.
+    - Tests:
+      - Course, Physics and LaunchMonitor: 34 of 36 pass.
+        - `Physics.Sand` fails as before ("stops within 2 m"; it measured 2.48 m). Not retuned.
+        - `Course.Terrain.BoundaryGrass` fails: "The row beyond the first cut is continuous (20 of 660
+          samples missed)". It passed on 2026-10-27, and no terrain code has changed since. Not yet
+          investigated.
+      - Range and Smoke: 25 of 25 pass, including the rewritten `EditableLayout`, `Presentation` and
+        `RolloutSurfaces`, and the `ObstacleContact` re-run.
+        - `RolloutSurfaces` low wood on flat test ground: carry 121.5477 yd and total 159.2398 yd. Those
+          match the 2026-10-15 flat-range figures; the headless figures are 121.5451 and 159.2375 yd.
+        - Roll: 45.60 yd on green against 37.69 yd on fairway; headless rough roll 22.20 yd.
+      - `Visual.CoastalTerrain` and `Visual.RangeAssets` pass. No rendered content changed, so no
+        shimmer result is claimed.
+  - **Handoff continuation, Linux, Unreal 5.8.4:**
+    - Completed the approved remaining content cleanup and removed its final ignore rule.
+    - Reproduced `BoundaryGrass` in Development: 20 of 660 samples missed. Report:
+      `Saved/Automation/20261028-194803-4h90xp`. A standalone geometry probe reproduces
+      the same 20 misses without Unreal; evidence is under
+      `Saved/Automation/Audit-20261028/BoundaryGrass`. Strip spacing followed the original
+      outline, so moving the row past the first cut opened gaps at the tighter bends.
+    - The generator now measures spacing along the offset row. The original test and its
+      tolerances are unchanged. Development and DebugGame editor builds pass. All seven
+      `UOpenGolf.Course.Terrain` tests pass; report:
+      `Saved/Automation/20261028-195036-hDd8sH`. All 12 `UOpenGolf.Course` tests then
+      pass in `Saved/Automation/20261028-195623-gHZPlZ`. No coverage percentage was measured.
+      The saved map was not regenerated: applying new placements and checking their rendered
+      shimmer remain separate work. These tests do not establish visual stability.
+    - The package-runner check passes in `Saved/PackageValidation`, a detached validation
+      worktree containing the current tracked files and deletions, without local config.
+      No branch or commit was created. Linux Development packaging and the 60-second headless
+      startup check pass. Report:
+      `Saved/PackageValidation/Saved/Automation/20261028-195330-package-gkRlIW`;
+      build/cook log: `Saved/PackageValidation/Saved/Logs/Package.log`.
+    - The package totals 1,382,218,800 bytes (1.382 GB), against 1,117,444,471 bytes
+      (1.117 GB) in the retained October 18 package, including debug files in both.
+      The largest files are the 446.2 MB content container, 298.6 MB game executable,
+      163.4 MB debug file, 124.1 MB symbols and 109.1 MB Vulkan API-dump library.
+      The full top-30 list and both totals are in
+      `Saved/Automation/Audit-20261028/package-sizes.json`. This comparison includes
+      intervening range and engine changes; it does not isolate the cleanup's size impact.
+    - Packaged rendering: Linux Vulkan SM6, RTX 3060, NVIDIA 595.91.07, 1920 x 1080,
+      fixed starting tee view, `t.MaxFPS 0`, `r.VSync 0`, `stat unit` and `stat gpu` enabled.
+      No editor was running. The owner confirmed no other GPU services were running;
+      desktop background readings before/after were still 30–32% GPU activity at about
+      18 W in P8, so this is a desktop reference, not proof of an otherwise idle GPU.
+      Project TSR settings were preserved. The inspected screenshot is 1920 x 1080.
+    - From 4,800 captured frames, rows 1,200–3,999 give 2,800 warm frames, excluding
+      the later GPU profile and screenshot: mean frame 8.49 ms (about 118 FPS), game
+      thread 1.48 ms, render thread 2.48 ms, RHI thread 3.35 ms, GPU 8.17 ms.
+      Frame p95 is 9.01 ms; GPU p95 is 8.31 ms. Mean GPU passes: TSR 2.10 ms,
+      Nanite visibility 1.91 ms, shadow depth 1.03 ms. `ProfileGPU` reports 8.28 ms
+      for its single frame. These are one fixed-view run, not whole-course performance
+      or a shimmer check. Evidence: `Saved/Automation/Audit-20261028/PackagedTiming/`
+      (`frames.csv`, `summary.json`, `Game.log`, `tee.png`).
+    - GitHub CLI authentication now works. The organization billing summary for October
+      2026, filtered to Git LFS, reports 17.257229638 gigabyte-hours of storage usage,
+      all discounted, with a $0 net amount. It returns no bandwidth entry. This is
+      organization-wide usage to date, not this repository's current stored size;
+      an absent bandwidth entry is not a verified zero. No billing settings were changed.
   - **Not yet done:**
-    - the DebugGame rebuild, then the C++ tests above
-    - pruning the four flat kit assets
-    - deleting the hidden `TeeBox` actor and re-saving the map
-    - Linux packaging, a GPU timing baseline and the LFS quota check
+    - the owner's LFS quota check: current storage, bandwidth and remaining allowance
+      are not established by the billing summary above
+    - an otherwise idle-GPU repeat if an isolated performance comparison is required
 
 - **2026-10-28, Windows, Unreal 5.8.4 upgrade:**
   - The Epic launcher replaced 5.8.3 with 5.8.4 (CL 58902052). `EngineAssociation` stays `5.8`.
@@ -1374,7 +1441,7 @@ physical outlines; rough↔savanna sand out of scope):
   `BuildTerrain` would destroy every generated actor, including trees and vegetation.
 - The outlines pass through their authored corners as centripetal Catmull-Rom curves
   (`outline_smoothing.py`). Fairway: 17→789 points; fringe, green and bunker:
-  48→212/174/112. The generator `Scripts/UpgradeRangeTerrain.py` uses the same smoothing.
+  48→212/174/112. The range generator of the time (`UpgradeRangeTerrain.py`, since removed) used the same smoothing.
 - `T_CourseSurfaceField` (4096 × 1024 RGBA8) stores signed distances to fairway, green,
   fringe and sand over every play region.
   - Ground, rough and blades share one world-space shader (`turf_field.py`): rough, first
