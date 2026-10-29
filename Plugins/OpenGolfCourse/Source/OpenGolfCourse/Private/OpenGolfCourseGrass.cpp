@@ -218,13 +218,42 @@ bool UOpenGolfTerrainDefinition::ScatterBoundary(const UOpenGolfVegetationPreset
             const double Length = Along[I + 1] - Along[I];
             return FMath::Lerp(Outline[I], Outline[(I + 1) % Outline.Num()], Length > UE_SMALL_NUMBER ? (S - Along[I]) / Length : 0.0);
         };
-        const int32 Count = FMath::Max(1, FMath::CeilToInt(Perimeter / Step));
-        const double Spacing = Perimeter / Count;
+        auto TangentAt = [&](double S)
+        {
+            return (PointAt(S + Strip.X * 0.5) - PointAt(S - Strip.X * 0.5)).GetSafeNormal();
+        };
+        auto CenterAt = [&](double S)
+        {
+            const FVector2D Tangent = TangentAt(S);
+            return PointAt(S) + FVector2D(Tangent.Y, -Tangent.X) * Outward * RegionOffset;
+        };
+        // Measure the outer row: spacing on the original outline leaves gaps around bends.
+        const int32 MeasureCount = FMath::Max(1, FMath::CeilToInt(Perimeter / (Step * 0.25)));
+        TArray<double> RowAlong = {0};
+        FVector2D Previous = CenterAt(0);
+        for (int32 I = 1; I <= MeasureCount; ++I)
+        {
+            const FVector2D Center = CenterAt(Perimeter * I / MeasureCount);
+            RowAlong.Add(RowAlong.Last() + (Center - Previous).Size());
+            Previous = Center;
+        }
+        const double RowLength = RowAlong.Last();
+        if (RowLength / Step + OutPoints.Num() > MaxScatterPoints)
+        {
+            OutPoints.Reset();
+            Error = TEXT("Boundary grass exceeds 100,000 strips. Use longer strips.");
+            return false;
+        }
+        const int32 Count = FMath::Max(1, FMath::CeilToInt(RowLength / Step));
         for (int32 Index = 0; Index < Count; ++Index)
         {
-            const double S = (Index + 0.5) * Spacing;
+            const double Distance = (Index + 0.5) * RowLength / Count;
+            const int32 Segment = FMath::Clamp(Algo::UpperBound(RowAlong, Distance) - 1, 0, MeasureCount - 1);
+            const double SegmentLength = RowAlong[Segment + 1] - RowAlong[Segment];
+            const double Fraction = SegmentLength > UE_SMALL_NUMBER ? (Distance - RowAlong[Segment]) / SegmentLength : 0;
+            const double S = Perimeter * (Segment + Fraction) / MeasureCount;
             // The tangent spans the whole strip, so a strip lies along the edge rather than one short segment.
-            const FVector2D Tangent = (PointAt(S + Strip.X * 0.5) - PointAt(S - Strip.X * 0.5)).GetSafeNormal();
+            const FVector2D Tangent = TangentAt(S);
             if (Tangent.IsNearlyZero())
                 continue;
             const FVector2D Out = FVector2D(Tangent.Y, -Tangent.X) * Outward;

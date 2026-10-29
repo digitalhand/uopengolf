@@ -31,8 +31,6 @@ CLAUDE.local.md
 # Agent Docs
 /Docs/superpowers/*
 
-# Local-only content must stay out of public history, including Git LFS.
-/Plugins/PrivateContent/
 # Per-machine config layer.
 /Config/User*.ini
 
