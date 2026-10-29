@@ -236,7 +236,7 @@ does not take clicks: clicking the club name or a tile does nothing.
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
   from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
-  currently **v0.0.1**. Change the version there; packaged builds use the same value.
+  currently **v0.0.3**. Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](#versioning)).
 
 A stopped ball stays put for 3 seconds with its result shown, then goes back to the
@@ -476,7 +476,7 @@ choose the `Packaged` folder.
 | --- | --- | --- |
 | Map to cook | `Config/DefaultGame.ini`, `[/Script/UnrealEd.ProjectPackagingSettings]` `+MapsToCook` | Cooks `/Game/UOpenGolf/Maps/UOpenGolf` |
 | Startup map and game mode | `Config/DefaultEngine.ini`, `[/Script/EngineSettings.GameMapsSettings]` | `GameDefaultMap` and `GlobalDefaultGameMode` used by the packaged game |
-| Project name and version | `Config/DefaultGame.ini`, `[/Script/EngineSettings.GeneralProjectSettings]` | Package metadata and the HUD version label (`ProjectVersion=0.0.1`, shown as **v0.0.1**); CI release builds stamp it from the tag ([Versioning](#versioning)) |
+| Project name and version | `Config/DefaultGame.ini`, `[/Script/EngineSettings.GeneralProjectSettings]` | Package metadata and the HUD version label (`ProjectVersion=0.0.3`, shown as **v0.0.3**); CI release builds stamp it from the tag ([Versioning](#versioning)) |
 | Game target | `Source/UOpenGolf.Target.cs` | The `UOpenGolf` game target that `-build` compiles |
 | Build configuration | `-clientconfig=` | `Development` is verified; `Shipping` has not been tried |
 | Cook order logs | `Build/<platform>/FileOpenOrder/` | Written by packaging; ignored by Git |
