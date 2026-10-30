@@ -3,7 +3,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "OpenFairway/ShotSimulator.h"
-#include "WindDebug.h"
+#include "UI/WindDebug.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindDebugTest, "UOpenGolf.Range.WindDebug",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

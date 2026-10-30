@@ -10,11 +10,15 @@
 #include "InputCoreTypes.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "OpenFairwayBall.h"
+#include "Hole/OpenGolfCupComponent.h"
+#include "OpenGolfTerrain.h"
+#include "Play/OpenGolfPlayRules.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
-#include "ReplayShotPanel.h"
+#include "UI/HudLayers.h"
+#include "UI/ReplayShotPanel.h"
 #include "Framework/Application/SlateApplication.h"
 
 namespace
@@ -40,17 +44,30 @@ namespace
     // with the horizon in view.
     constexpr float FollowFramingPitch = 8.0f;
     constexpr float FollowSpeed = 2.5f;
+    // Respond promptly near the cup, where a firm putt can cross the zoom region in under a second.
+    const FVector CupZoomOffset(-250.0f, 0.0f, 80.0f);
+    constexpr float CupZoomInSpeed = 6.0f;
+    constexpr float CupZoomOutSpeed = 2.0f;
+    constexpr float CupCameraFollowSpeed = 10.0f;
     // The camera holds the tee view this long after the ball leaves the tee.
     constexpr float FollowDelaySeconds = 0.5f;
     constexpr float TeeReturnSeconds = 2.0f;
-    // Turn rate while A or D is held.
-    constexpr float AimTurnDegPerSecond = 20.0f;
+    // Short game: low and close behind the ball, looking along the putt at the cup's height.
+    const FVector ShortGameCameraOffset(-280.0f, 0.0f, 95.0f);
+    constexpr float ShortGameMinLookCm = 300.0f;
+    // Clicks reach this far to place the ball.
+    constexpr float PlaceReachCm = 100000.0f;
 
-    // At rest and not moved away from the tee: waiting for the next shot.
-    bool IsBallOnTee(const AUOpenGolfGameMode& Mode, const AOpenFairwayBall& Ball)
+    // At rest and waiting for the next shot.
+    bool IsBallOnTee(const AUOpenGolfGameMode& Mode, const AOpenFairwayBall&)
     {
-        const bool bAwayFromTee = Mode.GetRange() && FVector::Dist2D(Ball.GetActorLocation(), Mode.GetRange()->GetTeeLocation()) > 200.0f;
-        return !Ball.IsMoving() && !bAwayFromTee;
+        return Mode.IsBallAtAddress();
+    }
+
+    // The aim turns around the target line on the range, and around the line to the cup on the hole.
+    float AimCenterDeg(const AUOpenGolfGameMode& Mode, const AOpenFairwayBall& Ball)
+    {
+        return Mode.GetPlayMode() == EOpenGolfPlayMode::Hole ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
     }
 } // namespace
 
@@ -77,7 +94,7 @@ void AUOpenGolfPlayerController::BeginPlay()
     if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
     {
         ReplayPanel = SNew(SReplayShotPanel).Controller(this);
-        Viewport->AddViewportWidgetContent(ReplayPanel.ToSharedRef(), 10);
+        Viewport->AddViewportWidgetContent(ReplayPanel.ToSharedRef(), HudLayers::TestShotPanel);
         bShowMouseCursor = true;
         FInputModeGameAndUI InputMode;
         InputMode.SetHideCursorDuringCapture(false);
@@ -108,9 +125,78 @@ void AUOpenGolfPlayerController::SetupInputComponent()
     InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ThisClass::ToggleReplayPanel);
     InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::SelectNextClub);
     InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ThisClass::ResetBallToTee);
-    // A and D are held to turn the aim; PlayerTick reads them.
+    InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ThisClass::TogglePlayMode);
+    InputComponent->BindKey(EKeys::B, IE_Pressed, this, &ThisClass::TogglePlacingBall);
+    InputComponent->BindKey(EKeys::W, IE_Pressed, this, &ThisClass::ToggleWindPanel);
+    InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ThisClass::HandleLeftClick);
+    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ThisClass::CancelPlacingBall);
+    // A tap of A or D turns one step; holding them turns faster the longer they are down (PlayerTick).
+    InputComponent->BindKey(EKeys::A, IE_Pressed, this, &ThisClass::NudgeAimLeft);
+    InputComponent->BindKey(EKeys::D, IE_Pressed, this, &ThisClass::NudgeAimRight);
     InputComponent->BindKey(EKeys::F9, IE_Pressed, this, &ThisClass::ToggleRecordShots);
-    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::QuitGame);
+    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::HandleEscape);
+}
+
+void AUOpenGolfPlayerController::HandleEscape()
+{
+    if (bPlacingBall)
+        SetPlacingBall(false);
+    else if (bWindPanelOpen)
+        SetWindPanelOpen(false);
+    else
+        QuitGame();
+}
+
+void AUOpenGolfPlayerController::TogglePlayMode()
+{
+    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->TogglePlayMode())
+    {
+        SetPlacingBall(false);
+        // A new hole or range session starts with a clean view of the tee.
+        if (auto* PresentedBall = Cast<AUOpenGolfBall>(Mode->GetBall()))
+            PresentedBall->ClearShotTrailHistory();
+    }
+}
+
+void AUOpenGolfPlayerController::SetPlacingBall(bool bPlacing)
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    bPlacingBall = bPlacing && Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
+    CurrentMouseCursor = bPlacingBall ? EMouseCursor::Crosshairs : EMouseCursor::Default;
+}
+
+void AUOpenGolfPlayerController::HandleLeftClick()
+{
+    FVector2D ScreenPosition;
+    if (bPlacingBall && GetMousePosition(ScreenPosition.X, ScreenPosition.Y) && PlaceBallAtScreen(ScreenPosition))
+        SetPlacingBall(false);
+}
+
+bool AUOpenGolfPlayerController::PlaceBallAtScreen(const FVector2D& ScreenPosition)
+{
+    AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    const AUOpenGolfRange* Range = Mode ? Mode->GetRange() : nullptr;
+    FVector Origin, Direction;
+    if (!Range || !IsValid(Range->Terrain) || !DeprojectScreenPositionToWorld(ScreenPosition.X, ScreenPosition.Y, Origin, Direction))
+        return false;
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(UOpenGolfPlaceBall), false, Mode->GetBall());
+    FHitResult Hit;
+    if (!GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Direction * PlaceReachCm, ECC_Visibility, Params))
+        return false;
+    // The terrain's own query finds the ground under the point, through trees.
+    FVector Ground, Normal;
+    return Range->Terrain->GroundAt(Hit.ImpactPoint, Ground, Normal) && Normal.Z > 0.7 && Mode->PlaceBallAt(Ground);
+}
+
+bool AUOpenGolfPlayerController::IsShortGameView() const
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    if (!Ball || Mode->GetPlayMode() != EOpenGolfPlayMode::Hole)
+        return false;
+    FOpenFairwayShotResult Result;
+    Ball->GetShotResult(Result);
+    return OpenGolfPlay::IsShortGame(Mode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green);
 }
 
 void AUOpenGolfPlayerController::QuitGame()
@@ -123,11 +209,15 @@ void AUOpenGolfPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
     const float TurnInput = (IsInputKeyDown(EKeys::D) ? 1.0f : 0.0f) - (IsInputKeyDown(EKeys::A) ? 1.0f : 0.0f);
+    AimHeldSeconds = TurnInput != 0.0f ? AimHeldSeconds + DeltaTime : 0.0f;
     if (TurnInput != 0.0f)
     {
-        SetAimYaw(GetAimYaw() + TurnInput * AimTurnDegPerSecond * DeltaTime);
+        SetAimYaw(GetAimYaw() + TurnInput * OpenGolfPlay::AimTurnDegPerSecond(AimHeldSeconds, IsFineAim()) * DeltaTime);
     }
     UpdateShotCamera(DeltaTime, false);
+    AdoptRangeWind();
+    if (const AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->GetRange() && Mode->GetRange()->GetCup() && Mode->GetBall())
+        Mode->GetRange()->GetCup()->UpdatePinLift(Mode->GetBall()->GetActorLocation(), DeltaTime);
 }
 
 void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
@@ -144,10 +234,15 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
     const FRotator Aim(0.0f, Ball->AimYawDeg, 0.0f);
     if (IsBallOnTee(*Mode, *Ball))
     {
-        const FVector Desired = BallLocation + Aim.RotateVector(TeeCameraOffset);
+        const bool bShortGame = IsShortGameView();
+        const FVector Desired = BallLocation + Aim.RotateVector(bShortGame ? ShortGameCameraOffset : TeeCameraOffset);
+        // Along the putt, at the cup's height, so the ball sits low in the frame with the cup ahead.
+        const FVector LookAt = bShortGame ? BallLocation + Aim.Vector() * FMath::Max(Mode->GetDistanceToCupM() * 100.0f, ShortGameMinLookCm) +
+                                                FVector(0, 0, Mode->GetCupLocation().Z - BallLocation.Z)
+                                          : BallLocation + Aim.RotateVector(TeeCameraTarget);
         // Aim from the final camera spot, never from the camera's path, so the view cannot flip
         // while the camera passes over the aim point on its way back.
-        const FQuat TeeRotation = (BallLocation + Aim.RotateVector(TeeCameraTarget) - Desired).Rotation().Quaternion();
+        const FQuat TeeRotation = (LookAt - Desired).Rotation().Quaternion();
         if (bSnap)
         {
             bReturningToTee = false;
@@ -160,6 +255,8 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
             ReturnStartRotation = ShotCamera->GetActorQuat();
         }
         bCameraAtTee = true;
+        // The glide starts from wherever the cup zoom left the camera.
+        CupZoom = 0.0f;
 
         if (!bReturningToTee)
         {
@@ -185,13 +282,31 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
         FollowDelayElapsed += DeltaTime;
         return;
     }
-    const FVector Desired = BallLocation + Aim.RotateVector(FollowOffset);
-    const FVector Location = bSnap ? Desired : FMath::VInterpTo(ShotCamera->GetActorLocation(), Desired, DeltaTime, FollowSpeed);
+    UpdateCupZoom(*Ball, DeltaTime, bSnap);
+    const FVector Desired = BallLocation + Aim.RotateVector(FMath::Lerp(FollowOffset, CupZoomOffset, CupZoom));
+    const float CameraSpeed = FMath::Lerp(FollowSpeed, CupCameraFollowSpeed, CupZoom);
+    const FVector Location = bSnap ? Desired : FMath::VInterpTo(ShotCamera->GetActorLocation(), Desired, DeltaTime, CameraSpeed);
     // Aim at the ball so it stays in frame while the camera catches up, then tilt up to frame it low.
     FRotator DesiredRotation = (BallLocation - Location).Rotation();
     DesiredRotation.Pitch += FollowFramingPitch;
-    const FRotator Rotation = bSnap ? DesiredRotation : FMath::RInterpTo(ShotCamera->GetActorRotation(), DesiredRotation, DeltaTime, FollowSpeed * 2.0f);
+    const FRotator Rotation = bSnap ? DesiredRotation : FMath::RInterpTo(ShotCamera->GetActorRotation(), DesiredRotation, DeltaTime, CameraSpeed * 2.0f);
     ShotCamera->SetActorLocationAndRotation(Location, Rotation);
+}
+
+void AUOpenGolfPlayerController::UpdateCupZoom(const AOpenFairwayBall& Ball, float DeltaTime, bool bSnap)
+{
+    // Close on a holed ball until it is teed up again. A moving ball only within CupZoomStartM of a cup, so the view
+    // backs out as it rolls away, to the normal distance by 8 ft past, and once a miss stops.
+    float Target = Ball.IsHoled() ? 1.0f : 0.0f;
+    if (!Ball.IsHoled() && Ball.IsMoving())
+    {
+        // In 3D, so a shot flying over the flag does not close in.
+        double NearestCm = TNumericLimits<double>::Max();
+        for (const FVector& Cup : Ball.GetCupLocations())
+            NearestCm = FMath::Min(NearestCm, FVector::Dist(Ball.GetActorLocation(), Cup));
+        Target = OpenGolfPlay::CupZoomAmount(static_cast<float>(NearestCm / 100.0));
+    }
+    CupZoom = bSnap ? Target : FMath::FInterpTo(CupZoom, Target, DeltaTime, Target > CupZoom ? CupZoomInSpeed : CupZoomOutSpeed);
 }
 
 void AUOpenGolfPlayerController::ConnectLaunchMonitor()
@@ -259,7 +374,7 @@ void AUOpenGolfPlayerController::ResetBallToTee()
         // Only the player's tee-up clears the history tracers; the automatic re-tee keeps them.
         if (auto* PresentedBall = Cast<AUOpenGolfBall>(Mode->GetBall()))
             PresentedBall->ClearShotTrailHistory();
-        Mode->ResetBallToTee();
+        Mode->ResetBall();
     }
 }
 
@@ -272,10 +387,28 @@ bool AUOpenGolfPlayerController::SetAimYaw(float Degrees)
     {
         return false;
     }
-    Ball->AimYawDeg = FMath::Clamp(Degrees, -MaxAimYawDeg, MaxAimYawDeg);
+    const float Center = AimCenterDeg(*Mode, *Ball);
+    Ball->AimYawDeg = Center + FMath::Clamp(FRotator::NormalizeAxis(Degrees - Center), -MaxAimYawDeg, MaxAimYawDeg);
     // Face the teed ball along the new line, as a re-tee does.
     Ball->SetActorRotation(FRotator(0.0f, Ball->AimYawDeg, 0.0f));
     return true;
+}
+
+bool AUOpenGolfPlayerController::NudgeAim(int32 Direction)
+{
+    return SetAimYaw(GetAimYaw() + FMath::Sign(Direction) * (IsFineAim() ? OpenGolfPlay::FineAimTapStepDeg : OpenGolfPlay::AimTapStepDeg));
+}
+
+bool AUOpenGolfPlayerController::IsFineAim() const
+{
+    return IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
+}
+
+float AUOpenGolfPlayerController::GetAimOffsetDeg() const
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    return Ball ? FRotator::NormalizeAxis(Ball->AimYawDeg - AimCenterDeg(*Mode, *Ball)) : 0.0f;
 }
 
 float AUOpenGolfPlayerController::GetAimYaw() const
@@ -283,6 +416,51 @@ float AUOpenGolfPlayerController::GetAimYaw() const
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
     const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     return Ball ? Ball->AimYawDeg : 0.0f;
+}
+
+void AUOpenGolfPlayerController::SetWindOn(bool bOn)
+{
+    AdoptRangeWind();
+    Wind.bOn = bOn;
+    ApplyWind();
+}
+
+void AUOpenGolfPlayerController::SetWindSpeedMph(float Mph)
+{
+    AdoptRangeWind();
+    Wind.SetSpeedMph(Mph);
+    ApplyWind();
+}
+
+void AUOpenGolfPlayerController::SetWindFromDeg(float FromDeg)
+{
+    AdoptRangeWind();
+    Wind.SetFromDeg(FromDeg);
+    ApplyWind();
+}
+
+void AUOpenGolfPlayerController::ApplyWind()
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    AUOpenGolfRange* Range = Mode ? Mode->GetRange() : nullptr;
+    if (!Range)
+        return;
+    // The same controls as Details: the range passes them to the ball, flag and vegetation on its next tick.
+    Range->WindSpeedMph = Wind.AppliedMph();
+    Range->WindFromDeg = Wind.FromDeg;
+    AppliedWindMph = Range->WindSpeedMph;
+    AppliedWindFromDeg = Range->WindFromDeg;
+}
+
+void AUOpenGolfPlayerController::AdoptRangeWind()
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    const AUOpenGolfRange* Range = Mode ? Mode->GetRange() : nullptr;
+    if (!Range || (Range->WindSpeedMph == AppliedWindMph && Range->WindFromDeg == AppliedWindFromDeg))
+        return;
+    Wind.Adopt(Range->WindSpeedMph, Range->WindFromDeg);
+    AppliedWindMph = Range->WindSpeedMph;
+    AppliedWindFromDeg = Range->WindFromDeg;
 }
 
 void AUOpenGolfPlayerController::ToggleRecordShots()

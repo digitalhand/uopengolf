@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Reference harness: mirrors ogolf-physics PhysicsAdapter.SimulateShotInternal (flat ground)
+// Reference harness: mirrors ogolf-physics PhysicsAdapter.SimulateShotInternal (planar ground)
 // on top of the real Godot-free core sources, to produce golden values for the C++ port.
-// Usage: dotnet run --project <this folder> [-- <ogolf-physics dir> [shot.json[@Surface] ...]]
+// Usage: dotnet run --project <this folder> [-- <ogolf-physics dir> [greens | shot[@Surface[:option...]] ...]]
+// A shot is a JSON file from assets/data or data/, or putt=<mph>[,<vla>] for a no-spin putt.
+// Options: stimp=<ft> (profile GreenStimpFeet), slope=<deg> (ground tilted downhill along
+// the target line; negative is uphill), neutral (no landing-bucket bite, as the reference's
+// LandingBucketRegressionTests use). "greens" runs the GreenReferenceTest.cpp cases.
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -43,25 +47,62 @@ static class Program
         "wood_low_test_shot.json@FairwaySoft", "bump_and_run.json@Fringe", "putt_test_shot.json@Green", "checked_test_shot.json@Green",
     };
 
+    // The cases in Private/Tests/GreenReferenceTest.cpp.
+    static readonly string[] GreenShots =
+    {
+        "putt=4.1@Green", "putt=5.5@Green", "putt=7.8@Green", "putt=11@Green", "putt=5.5,3@Green",
+        "putt=3.9@Green:stimp=11", "putt=6@Green:stimp=11", "putt=9.5@Green:stimp=11", "putt=12.5@Green:stimp=11",
+        "putt=6@Green:stimp=8", "putt=6@Green:stimp=13",
+        "flop_test_shot.json@Green", "wedge_test_shot.json@Green:neutral", "approach_mid_iron_test_shot.json@Green",
+        "approach_mid_iron_test_shot.json@Green:neutral", "wedge_test_shot.json@Green:slope=2", "wedge_test_shot.json@Green:slope=-3",
+        "putt=6@Green:slope=2", "putt=6@Green:slope=-2", "wood_low_test_shot.json@Fairway:slope=2", "wood_low_test_shot.json@Rough:slope=-2",
+    };
+
     static void Main(string[] args)
     {
         string harnessDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../"));
         string ogolfDir = args.Length > 0 ? args[0] : Path.Combine(harnessDir, "../../../../../ogolf-physics");
         string[] dataDirs = { Path.Combine(ogolfDir, "assets/data"), Path.Combine(harnessDir, "data") };
         var results = new List<string>();
-        foreach (string file in args.Length > 1 ? args[1..] : DefaultShots)
+        string[] shots = args.Length > 1 ? (args[1] == "greens" ? GreenShots : args[1..]) : DefaultShots;
+        foreach (string file in shots)
         {
             string surfaceName = "Fairway";
             string name = file;
             int at = file.IndexOf('@');
             if (at >= 0) { surfaceName = file[(at + 1)..]; name = file[..at]; }
-            var surface = Enum.Parse<PhysicsEnums.SurfaceType>(surfaceName);
-            string path = Array.Find(dataDirs, dir => File.Exists(Path.Combine(dir, name))) is { } found
-                ? Path.Combine(found, name)
-                : throw new FileNotFoundException($"{name} not found in {string.Join(", ", dataDirs)}");
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            string[] options = surfaceName.Split(':');
+            var surface = Enum.Parse<PhysicsEnums.SurfaceType>(options[0]);
+            var profile = new BallPhysicsProfile();
+            float slopeDeg = 0f;
+            foreach (string option in options[1..])
+            {
+                string[] kv = option.Split('=');
+                if (kv[0] == "stimp") profile.GreenStimpFeet = float.Parse(kv[1], CultureInfo.InvariantCulture);
+                else if (kv[0] == "slope") slopeDeg = float.Parse(kv[1], CultureInfo.InvariantCulture);
+                else if (kv[0] == "neutral")
+                    foreach (var key in new List<LandingBucketKind>(profile.LandingResponses.Keys))
+                        profile.LandingResponses[key] = profile.LandingResponses[key] with { SpinBiteScale = 0f };
+                else throw new ArgumentException($"Unknown option {option}");
+            }
+
+            string json;
+            if (name.StartsWith("putt="))
+            {
+                string[] p = name[5..].Split(',');
+                json = "{\"Speed\": " + p[0] + ", \"VLA\": " + (p.Length > 1 ? p[1] : "0") + ", \"HLA\": 0, \"TotalSpin\": 0, \"SpinAxis\": 0}";
+            }
+            else
+            {
+                string path = Array.Find(dataDirs, dir => File.Exists(Path.Combine(dir, name))) is { } found
+                    ? Path.Combine(found, name)
+                    : throw new FileNotFoundException($"{name} not found in {string.Join(", ", dataDirs)}");
+                json = File.ReadAllText(path);
+            }
+            using var doc = JsonDocument.Parse(json);
             JsonElement ball = doc.RootElement.TryGetProperty("BallData", out var b) ? b : doc.RootElement;
-            results.Add(Simulate(name, ball, surface));
+            float slope = slopeDeg * DegToRadF;
+            results.Add(Simulate(ball, surface, profile, new Vector3(MathF.Sin(slope), MathF.Cos(slope), 0f), at >= 0 ? file : $"{file}@{surface}"));
         }
         Console.WriteLine(string.Join("\n", results));
     }
@@ -69,7 +110,7 @@ static class Program
     static bool Has(JsonElement e, string k) => e.TryGetProperty(k, out _);
     static float Get(JsonElement e, string k) => e.TryGetProperty(k, out var v) ? (float)v.GetDouble() : 0f;
 
-    static string Simulate(string name, JsonElement ball, PhysicsEnums.SurfaceType surfaceType)
+    static string Simulate(JsonElement ball, PhysicsEnums.SurfaceType surfaceType, BallPhysicsProfile profile, Vector3 groundNormal, string label)
     {
         float speedMph = Get(ball, "Speed"), vla = Get(ball, "VLA"), hla = Get(ball, "HLA");
         // ShotSetup.ParseSpin
@@ -88,7 +129,6 @@ static class Program
             if (MathF.Abs(computed - total) > 1f) { total = computed; axis = MathF.Atan2(sidespin, backspin) * (180f / MathF.PI); }
         }
 
-        var profile = new BallPhysicsProfile();
         // ShotSetup.BuildLaunchVectorsFromComponents
         float speedMps = speedMph * MpsPerMph;
         Vector3 up = Vector3.UnitY, forward = new(0, 0, -1);
@@ -123,10 +163,12 @@ static class Program
         RolloutProfile rp = profile.ResolvedRollout;
         float rolloutImpactSpin = 0f;
 
-        Vector3 n = up;
+        // PhysicsAdapter: contactNormal = floorNormal.Normalized(), else up.
+        Vector3 n = groundNormal.LengthSquared() > 0.000001f ? Vector3.Normalize(groundNormal) : up;
         Vector3 pos = n * Core.GolfPhysics.Radius;
         bool flight = true, onGround = false, carryRecorded = false, rest = false;
-        float carry = 0, hang = 0, apex = pos.Y, landingSpeed = 0, landingAngle = 0;
+        float carry = 0, hang = 0, apex = pos.Y, landingSpeed = 0, landingAngle = 0, tangentIn = 0, tangentOut = 0;
+        bool spinback = false;
         int steps = (int)(MaxTime / Dt);
         for (int i = 0; i < steps; i++)
         {
@@ -157,6 +199,14 @@ static class Program
                     if (onGround) velocity -= n * Vector3.Dot(velocity, n);
                     if (!carryRecorded)
                     {
+                        Vector3 postTan = velocity - n * Vector3.Dot(velocity, n);
+                        tangentIn = preTan.Length();
+                        tangentOut = postTan.Length();
+                        if (tangentIn > 0.01f && tangentOut > 0.01f)
+                        {
+                            spinback = Vector3.Dot(Vector3.Normalize(preTan), Vector3.Normalize(postTan)) < -0.001f;
+                            if (spinback) tangentOut = -tangentOut;
+                        }
                         landingSpeed = preSpeed;
                         landingAngle = MathF.Atan2(preNormal, MathF.Max(preTan.Length(), 0.0001f)) * (180f / MathF.PI);
                         carry = MathF.Max(Vector3.Dot(pos, shotDir), 0);
@@ -185,8 +235,8 @@ static class Program
         if (!carryRecorded) carry = totalM;
         var ci = CultureInfo.InvariantCulture;
         return string.Format(ci,
-            "{0}@{1}: carry_yd={2:F4} total_yd={3:F4} apex_ft={4:F4} hang_s={5:F4} landing_angle_deg={6:F3} landing_speed_mps={7:F3} lateral_yd={8:F4} rest={9} bucket={10} regime={11} matched={12}",
-            name, surfaceType, carry * YardsPerMeter, totalM * YardsPerMeter, apex * FeetPerMeter, hang, landingAngle, landingSpeed,
-            pos.Z * YardsPerMeter, rest, bucket, regimeKey, matched);
+            "{0}: carry_yd={1:F4} total_yd={2:F4} apex_ft={3:F4} hang_s={4:F4} landing_angle_deg={5:F3} landing_speed_mps={6:F3} lateral_yd={7:F4} rest={8} bucket={9} regime={10} matched={11} tangent_out_mps={12:F4} spinback={13}",
+            label, carry * YardsPerMeter, totalM * YardsPerMeter, apex * FeetPerMeter, hang, landingAngle, landingSpeed,
+            pos.Z * YardsPerMeter, rest, bucket, regimeKey, matched, tangentOut, spinback);
     }
 }

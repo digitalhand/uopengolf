@@ -4,6 +4,25 @@
 #include "CoreMinimal.h"
 #include "OpenFairwayTypes.generated.h"
 
+/** A circular hole's surface frame, shared by course presentation and ball physics. World centimetres. */
+USTRUCT(BlueprintType)
+struct OPENFAIRWAYPHYSICS_API FOpenFairwayCup
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cup")
+    FVector Position = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cup")
+    FVector Normal = FVector::UpVector;
+
+    FVector GetNormal() const
+    {
+        FVector Unit = Normal;
+        return Unit.ContainsNaN() || !Unit.Normalize() ? FVector::UpVector : Unit;
+    }
+};
+
 /**
  * Ground surfaces with their own contact tuning. Assign one with an UOpenFairwayPhysicalMaterial on the ground's
  * material, or tag a component or actor "OpenFairway.Surface.<Name>" (see AOpenFairwayBall::ResolveSurface).
@@ -144,6 +163,36 @@ struct OPENFAIRWAYPHYSICS_API FOpenFairwayShotResult
     /** Seconds since launch. */
     UPROPERTY(BlueprintReadOnly, Category = "OpenFairway")
     float ElapsedS = 0.0f;
+
+    /** The ball dropped into a cup. */
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway")
+    bool bHoled = false;
+
+    /** The ball rolled over a cup too fast to drop (it lipped out or ran over it). */
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway")
+    bool bOverCup = false;
+
+    /** Horizontal speed over the cup, and the fastest that would have dropped on that line (m/s); set with bOverCup. */
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway")
+    float OverCupSpeedMps = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway")
+    float OverCupMaxSpeedMps = 0.0f;
+
+    /** Diagnostics for the latest cup crossing, independent of the shot's launch-relative apex. */
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway|Cup")
+    float CupEntrySpinRpm = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway|Cup")
+    float CupEntryOffsetM = 0.0f;
+
+    /** World velocity in m/s on leaving the cup. */
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway|Cup")
+    FVector CupExitVelocityMps = FVector::ZeroVector;
+
+    /** Maximum ball-bottom height above the cup's tangent plane after entering the cup. */
+    UPROPERTY(BlueprintReadOnly, Category = "OpenFairway|Cup")
+    float CupMaxHeightM = 0.0f;
 
     /** "Run", "Release", "Check" or "Spinback": the landing response chosen at launch. */
     UPROPERTY(BlueprintReadOnly, Category = "OpenFairway")

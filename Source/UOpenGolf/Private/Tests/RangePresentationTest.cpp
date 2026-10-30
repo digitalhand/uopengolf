@@ -143,12 +143,12 @@ class FCheckRangePresentation : public IAutomationLatentCommand
         if (Stage == 4)
         {
             const FVector Locations[] = {FVector(-600, 0, 220), FVector(-600, 0, 220),
-                                         FVector(-18, -18, 10), FVector(AUOpenGolfRange::GreenDistanceM * 100 - 400, -200, 180),
+                                         FVector(-18, -18, 10), FVector(AUOpenGolfRange::HoleDistanceM * 100 - 400, -200, 180),
                                          FVector(-330, -400, 15), FVector(1600, -200, 100),
-                                         FVector(AUOpenGolfRange::GreenDistanceM * 100 - 400, -200, 180)};
+                                         FVector(AUOpenGolfRange::HoleDistanceM * 100 - 400, -200, 180)};
             const FVector Targets[] = {FVector(6000, 0, 0), FVector(6000, 0, 0),
-                                       Mode->GetBall()->GetActorLocation(), FVector(AUOpenGolfRange::GreenDistanceM * 100, 0, 140),
-                                       FVector(-200, -380, 0), FVector(2300, 0, 0), FVector(AUOpenGolfRange::GreenDistanceM * 100, 0, 140)};
+                                       Mode->GetBall()->GetActorLocation(), FVector(AUOpenGolfRange::HoleDistanceM * 100, 0, 140),
+                                       FVector(-200, -380, 0), FVector(2300, 0, 0), FVector(AUOpenGolfRange::HoleDistanceM * 100, 0, 140)};
             Camera->SetActorLocation(Locations[View]);
             Camera->SetActorRotation((Targets[View] - Locations[View]).Rotation());
             GrassVar->Set(View == 1 ? 0 : 1, ECVF_SetByConsole);

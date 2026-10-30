@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfHUD.h"
+#include "OpenFairwayBall.h"
 
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -7,7 +8,10 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
-#include "RangeHud.h"
+#include "UI/HudLayers.h"
+#include "UI/PlayModeBar.h"
+#include "UI/RangeHud.h"
+#include "UI/WindControl.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfRange.h"
@@ -16,7 +20,7 @@
 #include "OpenGolfFlagstickComponent.h"
 #include "OpenGolfWindIndicator.h"
 #include "OpenGolfWindSubsystem.h"
-#include "WindDebug.h"
+#include "UI/WindDebug.h"
 
 namespace
 {
@@ -44,8 +48,13 @@ void AUOpenGolfHUD::BeginPlay()
         }
         ensureMsgf(Indicator, TEXT("The range wind Widget Blueprint must contain WindIndicator."));
         Widget = SNew(SRangeHud).Controller(Controller).WindIndicator(Indicator).WindContent(WindContent);
-        // Below the test-shot panel (Z-order 10), which hides this HUD while it is open.
-        Viewport->AddViewportWidgetContent(Widget.ToSharedRef(), 5);
+        // Below the test-shot panel, which hides this HUD while it is open.
+        Viewport->AddViewportWidgetContent(Widget.ToSharedRef(), HudLayers::ShotHud);
+        // Their controls take clicks, so they sit over the shot HUD but under the test-shot panel.
+        PlayBar = SNew(SPlayModeBar).Controller(Controller);
+        Viewport->AddViewportWidgetContent(PlayBar.ToSharedRef(), HudLayers::Controls);
+        WindControl = SNew(SWindControl).Controller(Controller).WindIndicator(Indicator);
+        Viewport->AddViewportWidgetContent(WindControl.ToSharedRef(), HudLayers::Controls);
     }
 }
 
@@ -59,6 +68,14 @@ void AUOpenGolfHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
         }
         Widget.Reset();
     }
+    for (TSharedPtr<SWidget>* Control : {&PlayBar, &WindControl})
+    {
+        if (!Control->IsValid())
+            continue;
+        if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+            Viewport->RemoveViewportWidgetContent(Control->ToSharedRef());
+        Control->Reset();
+    }
     WindWidget = nullptr;
     Super::EndPlay(EndPlayReason);
 }
@@ -66,6 +83,28 @@ void AUOpenGolfHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void AUOpenGolfHUD::DrawHUD()
 {
     Super::DrawHUD();
+    const auto* PlayMode = GetWorld()->GetAuthGameMode<AUOpenGolfGameMode>();
+    const auto* Player = Cast<AUOpenGolfPlayerController>(GetOwningPlayerController());
+    if (Canvas && GEngine && bShowHUD && Player && !Player->IsReplayPanelOpen() &&
+        PlayMode && PlayMode->GetPlayMode() == EOpenGolfPlayMode::Hole &&
+        PlayMode->GetBall() && PlayMode->GetRange() && PlayMode->GetRange()->GetFlagstick())
+    {
+        const auto* Flag = PlayMode->GetRange()->GetFlagstick();
+        FVector2D Screen;
+        const FVector Anchor = Flag->GetComponentTransform().TransformPosition(FVector(0, 0, UOpenGolfFlagstickComponent::PoleHeightCm + 30));
+        if (Player->ProjectWorldLocationToScreen(Anchor, Screen) && Screen.X >= 0 && Screen.X < Canvas->ClipX && Screen.Y >= 0 && Screen.Y < Canvas->ClipY)
+        {
+            FOpenFairwayShotResult Result;
+            PlayMode->GetBall()->GetShotResult(Result);
+            const FString Label = PlayMode->GetBall()->IsHoled() ? TEXT("In") :
+                OpenGolfPlay::DistanceToPinLabel(PlayMode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green);
+            float Width, Height;
+            const float Scale = FMath::Max(1.0f, Canvas->ClipY / 1080.0f);
+            GetTextSize(Label, Width, Height, GEngine->GetMediumFont(), Scale);
+            DrawRect(FLinearColor(0, 0, 0, 0.75f), Screen.X - Width / 2 - 6, Screen.Y - Height - 4, Width + 12, Height + 8);
+            DrawText(Label, FLinearColor::White, Screen.X - Width / 2, Screen.Y - Height, GEngine->GetMediumFont(), Scale);
+        }
+    }
     if (CVarWindDebug.GetValueOnGameThread() == 0 || !Canvas || !GEngine)
         return;
     const UWorld* World = GetWorld();

@@ -145,7 +145,12 @@ public:
             FOpenFairwayShotResult Result;
             Ball->GetShotResult(Result);
             Test->TestTrue(TEXT("Shot lands and rests naturally"), Result.bLanded && Result.bAtRest && Result.TerminationReason == EOpenFairwayShotTermination::Rest);
-            Test->TestEqual(TEXT("Surrounding ground plays as rough"), Result.Surface, EOpenFairwaySurface::Rough);
+            // Wide shots finish in the rough; the long straight drive runs past the fairway's end onto the par-4 green
+            // complex or the rough beyond it.
+            if (Aim != 0)
+                Test->TestEqual(TEXT("Surrounding ground plays as rough"), Result.Surface, EOpenFairwaySurface::Rough);
+            else
+                Test->TestTrue(TEXT("The long drive ends past the fairway"), Result.Surface != EOpenFairwaySurface::Fairway);
             const FVector FromTee = Ball->GetActorLocation() - Mode->GetRange()->GetTeeLocation();
             Test->TestTrue(TEXT("Shot finishes beyond the former range boundary"), Aim == 0 ? FromTee.X > 32000 : FMath::Abs(FromTee.Y) > 7000);
         }

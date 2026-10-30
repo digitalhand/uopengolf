@@ -10,7 +10,8 @@ ImportNatureEssentials.py). The script:
 
 1. backs up the map and its terrain definition;
 2. copies the map's definition to <course>/DA_SavannaRange the first time and switches the map to it;
-3. moves the bunker onto the approach, sets the Grass008/Ground093C surfaces, the savanna ground
+3. lays out the par-4 hole (savanna_hole.py: the green 400 yards out with its contour and flag, the fairway bunker on
+   the left of the landing area, a greenside bunker), sets the Grass008/Ground093C surfaces, the savanna ground
    (course mask, rough and outer-ground instances) and 36 seeded jacaranda patches, and drops
    scattered grass presets;
 4. rebuilds the terrain, then the trees, wood collision and understory, saves the map and deletes the
@@ -33,14 +34,17 @@ PROJECT = Path(ue.Paths.project_dir()).resolve()
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(PROJECT / "Scripts"))
+sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
 import BuildSavannaGround as ground
+import course_hole
 import RebuildRangeVegetation as vegetation
 import savanna_assets as s
+import savanna_hole as hole_spec
 import savanna_layout as layout
 import savanna_trees as trees
 import understory
 
-ground, vegetation, s, layout, trees, understory = [importlib.reload(m) for m in (ground, vegetation, s, layout, trees, understory)]
+ground, course_hole, vegetation, s, hole_spec, layout, trees, understory = [importlib.reload(m) for m in (ground, course_hole, vegetation, s, hole_spec, layout, trees, understory)]
 LIB = ue.EditorAssetLibrary
 OWNER = "OpenGolfSavanna.Course.v1"
 SURFACES = {
@@ -85,24 +89,6 @@ def preset_copy(source, path):
     if not copy:
         raise RuntimeError(f"Could not copy {source} to {path}")
     return copy
-
-
-def move_bunker(definition):
-    regions = list(definition.get_editor_property("regions"))
-    bunkers = [i for i, region in enumerate(regions) if str(region.name) == "Bunker"]
-    if len(bunkers) != 1:
-        raise RuntimeError("Expected one region named Bunker")
-    outline = [(p.x, p.y) for p in regions[bunkers[0]].outline_m]
-    mounds = list(definition.get_editor_property("mounds"))
-    moved, centers = layout.relocate_bunker(outline, [(m.center_m.x, m.center_m.y) for m in mounds])
-    green = next(r for r in regions if str(r.name) == "Green")
-    if max(x for x, _ in moved) >= min(p.x for p in green.outline_m):
-        raise RuntimeError("The bunker must sit fully before the green")
-    regions[bunkers[0]].set_editor_property("outline_m", [ue.Vector2D(x, y) for x, y in moved])
-    for mound, (x, y) in zip(mounds, centers):
-        mound.set_editor_property("center_m", ue.Vector2D(x, y))
-    definition.set_editor_property("mounds", mounds)
-    definition.set_editor_property("regions", regions)
 
 
 def set_surfaces(definition):
@@ -168,6 +154,17 @@ def apply_ground(area, rough, native):
     return changed
 
 
+def finish_trees(terrain, backup, extra=None):
+    """After a vegetation rebuild: wood collision and understory under the baked trees. Returns the counts."""
+    report = trees.apply(terrain, PROJECT / "Saved/Automation/SavannaRange/collision.json")
+    understory.apply(terrain)
+    result = counts(terrain)
+    if not result["trees"] or result["trees"] != result["colliders"]:
+        raise RuntimeError(f"Tree/collider mismatch: {result}")
+    (backup / "counts.json").write_text(json.dumps({"counts": result, **(extra or {}), "collision": str(report)[:200]}, indent=2))
+    return result
+
+
 def counts(area):
     result = {"trees": 0, "colliders": 0, "ground_cover": 0}
     for actor in area.generated_actors:
@@ -219,7 +216,7 @@ def main(argv):
     with s.course_helpers(mount, content, OWNER):
         definition = definition_copy(current, definition_path)
         definition.modify()
-        move_bunker(definition)
+        course_hole.lay_out(definition, hole_spec.apply_layout, hole_spec.REGION_TEMPLATES)
         set_surfaces(definition)
         rough, native = set_ground(definition, args.course, mount)
         set_trees(definition, args.course, mount)
@@ -232,20 +229,14 @@ def main(argv):
     if ue.OpenGolfTerrainBuilder.build_terrain(area, args.generated, True) is None:
         raise RuntimeError(f"Terrain rebuild failed; map not saved. Backup: {backup}")
     applied = apply_ground(area, rough, native)
-    range_actor.align_layout_to_terrain()
+    course_hole.place_flag(range_actor, area, hole_spec.PIN)
     range_actor.refresh_presentation()
     tee_after = range_actor.get_tee_location()
     if abs(tee_after.x - tee_before.x) > 0.01 or abs(tee_after.y - tee_before.y) > 0.01:
         raise RuntimeError(f"The tee moved horizontally; map not saved. Backup: {backup}")
 
     def finished(_range, terrain):
-        report = trees.apply(terrain, PROJECT / "Saved/Automation/SavannaRange/collision.json")
-        understory.apply(terrain)
-        result = counts(terrain)
-        if not result["trees"] or result["trees"] != result["colliders"]:
-            raise RuntimeError(f"Tree/collider mismatch: {result}")
-        (backup / "counts.json").write_text(json.dumps({"counts": result, "ground_targets": applied,
-                                                       "collision": str(report)[:200]}, indent=2))
+        result = finish_trees(terrain, backup, {"ground_targets": applied})
         grass = " ".join(f"--grass-preset {p}" for p in COURSE_GRASS)
         ue.log(f"OPEN_GOLF_SAVANNA_RANGE_COMPLETE {result}; backup={backup}. Next: ApplyCourseGrass.py --map {args.map} "
                f"--generated {args.generated} {grass} --boundary-preset {BOUNDARY_GRASS}")

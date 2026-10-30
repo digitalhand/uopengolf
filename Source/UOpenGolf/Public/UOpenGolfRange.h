@@ -5,6 +5,7 @@
 #include "UOpenGolfRange.generated.h"
 
 class UPostProcessComponent;
+class UOpenGolfCupComponent;
 class UOpenGolfFlagstickComponent;
 class AOpenFairwayBall;
 class AOpenGolfTerrainArea;
@@ -65,11 +66,21 @@ public:
     UFUNCTION(CallInEditor, BlueprintCallable, Category = "UOpenGolf|Terrain")
     void AlignLayoutToTerrain();
 
-    /** Distance from the tee to the green's center (150 yards), where a new layout places the flag. */
-    static constexpr float GreenDistanceM = 137.16f;
+    /** Distance from the tee to the pin (400 yards), where a new layout places the flag. */
+    static constexpr float HoleDistanceM = 365.76f;
+
+    /** The hole is a par 4. */
+    static constexpr int32 Par = 4;
 
     /** The flag at the green; its cloth flies in the ball's wind. */
     UOpenGolfFlagstickComponent* GetFlagstick() const { return Flagstick; }
+
+    /** The cup at the flag's foot, placed there when Play starts; it lifts the flag for a nearby ball. */
+    UOpenGolfCupComponent* GetCup() const { return Cup; }
+
+    /** The cup on the green's surface; the flag's foot before Play, the tee when there is no flag. */
+    UFUNCTION(BlueprintPure, Category = "UOpenGolf|Range")
+    FVector GetCupLocation() const;
 
     /** Saved wind at 10 m for the ball, flag and vegetation. Zero is calm. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UOpenGolf|Wind", meta = (DisplayName = "Wind Speed (mph)", ClampMin = "0", UIMax = "40"))
@@ -123,6 +134,9 @@ private:
 
     UPROPERTY()
     TObjectPtr<UOpenGolfFlagstickComponent> Flagstick;
+
+    UPROPERTY(VisibleAnywhere, Category = "UOpenGolf|Range")
+    TObjectPtr<UOpenGolfCupComponent> Cup;
 
     bool bFlagWindApplied = false;
     float AppliedWindVarMph = 0.0f;

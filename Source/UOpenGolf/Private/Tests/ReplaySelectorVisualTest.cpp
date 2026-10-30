@@ -9,30 +9,11 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "Tests/AutomationEditorCommon.h"
+#include "Tests/RenderedPlay.h"
 #include "UOpenGolfPlayerController.h"
 #include "UnrealClient.h"
 #include "Widgets/Input/SComboBox.h"
 #include "Widgets/SWindow.h"
-
-namespace
-{
-    TSharedPtr<SWidget> FindWidget(const TSharedRef<SWidget>& Root, const FString& Type)
-    {
-        if (Root->GetTypeAsString().Contains(Type))
-        {
-            return Root;
-        }
-        FChildren* Children = Root->GetChildren();
-        for (int32 Index = 0; Index < Children->Num(); ++Index)
-        {
-            if (TSharedPtr<SWidget> Found = FindWidget(Children->GetChildAt(Index), Type))
-            {
-                return Found;
-            }
-        }
-        return nullptr;
-    }
-} // namespace
 
 class FCaptureReplaySelector : public IAutomationLatentCommand
 {
@@ -83,9 +64,9 @@ public:
         {
             for (const TSharedRef<SWindow>& Window : FSlateApplication::Get().GetTopLevelWindows())
             {
-                if (TSharedPtr<SWidget> Panel = FindWidget(Window, TEXT("SReplayShotPanel")))
+                if (TSharedPtr<SWidget> Panel = RenderedPlay::FindWidget(Window, TEXT("SReplayShotPanel")))
                 {
-                    if (TSharedPtr<SWidget> Combo = FindWidget(Panel.ToSharedRef(), TEXT("SComboBox")))
+                    if (TSharedPtr<SWidget> Combo = RenderedPlay::FindWidget(Panel.ToSharedRef(), TEXT("SComboBox")))
                     {
                         ShotList = StaticCastSharedPtr<SComboBox<TSharedPtr<FString>>>(Combo);
                         ShotList->SetIsOpen(true);

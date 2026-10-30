@@ -116,8 +116,17 @@ and pressure are now inputs. The game still defaults to calm, dry air at 75 °F.
 against FlightScope is tracked in the [FlightScope analysis](FlightScopeAnalysis.md).
 The current profile carries long for woods and irons and rolls short.
 
-**Remaining:** JSON ball profiles, slope and terrain contact coverage (the range is flat),
-a full ball and camera visual review, and independent physical calibration.
+Windows (2026-10-29): the editor build and 56 of 57 `UOpenGolf` tests pass
+(`Saved/Automation/20261029-163843-6af38390`). The failure, `.Sand`'s roll-into-sand check
+(2.48 m against a 2 m limit), fails the same way on unchanged `main`. A port audit against
+ogolf-physics `e6d793a` added headless sloped ground, first-impact spin-back diagnostics,
+below-ground recovery for the ball actor, and the reference's putt, landing-bucket,
+green spin-back and slope tests (`.GreenReference`, `.SlopeRollout`); see the plugin
+README's [Port status](../Plugins/OpenFairwayPhysics/README.md#port-status).
+
+**Remaining:** JSON ball profiles, ball-actor contact on contoured terrain (the range is
+flat; slopes are covered headless only), a full ball and camera visual review, and
+independent physical calibration.
 
 ## Phase 4 — Greens and surfaces
 
@@ -138,7 +147,9 @@ stripes. Contours, sand and more varied lies are not started.
   `uopengolf.GreenStimp` console variable. Greens now roll a full-shot run-out farther than
   fairway: the user's replay across the putting green went 161.5 yd, against 159.2 yd on
   fairway. Six physics tests pass; the range rollout tests have not run on this change.
-- Windows: not built.
+- Windows (2026-10-29): built; the surface, course-asset and range rollout tests pass with
+  the rest of the suite (see Phase 3). Green physics is documented in the plugin README's
+  [Greens](../Plugins/OpenFairwayPhysics/README.md#greens) section.
 
 The map saves separate actors for editing and reuses its range controller in Play.
 The old mesh flag is removed; one cloth flag responds to the ball's wind and gravity,
@@ -154,7 +165,7 @@ cloth accuracy or a contoured course.
 range, which has:
 - ball presentation, a white tracer and orange history tracers (the last two shots,
   cleared with **R**);
-- a follow camera, the Slate shot HUD and the version label;
+- a follow camera (it closes in within 8 ft of the cup), the Slate shot HUD and the version label;
 - automatic tee reset after 3 s;
 - A/D aim (±45°, the camera turns with it) for hitting into the rough;
 - nine replay presets (**P**, repeat with **H**).

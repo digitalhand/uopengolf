@@ -1,8 +1,8 @@
 # Open Golf Course
 
 Reusable course kit for uopengolf maps: surface materials that declare OpenFairway physics
-surfaces, terrain generation with vegetation scatter, a flagstick whose cloth flag flies in the wind
-and a marked golf ball. The range uses it, and new
+surfaces, terrain generation with vegetation scatter, a flagstick whose cloth flag flies in the wind,
+a regulation cup, hole scoring and play rules, and a marked golf ball. The range uses it, and new
 course designs can use the same pieces without range code.
 
 The plugin depends on [OpenFairway Physics](../OpenFairwayPhysics/README.md) for the surface
@@ -12,6 +12,10 @@ type. Its content mounts at `/OpenGolfCourse/`.
 
 - [Contents](#contents)
 - [Using the kit](#using-the-kit)
+- [Holes and play](#holes-and-play)
+  - [Cup](#cup)
+  - [Scoring and play rules](#scoring-and-play-rules)
+  - [Laying out a hole](#laying-out-a-hole)
 - [Performance](#performance)
 - [Editing and regenerating assets](#editing-and-regenerating-assets)
 - [Sources and licenses](#sources-and-licenses)
@@ -33,6 +37,9 @@ type. Its content mounts at `/OpenGolfCourse/`.
 | `Flagstick/M_FlagCloth`, `MI_Flag_Red` | Two-sided flag cloth material (`FlagColor`, `FlagRoughness`) and its red instance |
 | `Ball/SM_GolfBall`, `M_GolfBall`, `MF_BallMarking` | Dimpled ball (three LODs) with an alignment line and a logo dot |
 | `UOpenGolfFlagstickComponent` (C++) | The pole plus a simulated 20 x 14 inch cloth flag (`FOpenGolfFlagCloth`); no collision; `SetWind` flies it |
+| `Hole/UOpenGolfCupComponent` (C++) | A regulation 4.25 in cup drawn at the flag's foot; lifts the flagstick for a nearby ball. See [Cup](#cup) |
+| `Play/FOpenGolfHoleRound`, `Play/OpenGolfPlayRules.h`, `Play/OpenGolfWindSetting.h` (C++) | Strokes, putts and score names; play mode, aim bearing, aim steps and readout, short-game and placement rules; the wind the player sets on the HUD. See [Scoring and play rules](#scoring-and-play-rules) |
+| `Scripts/hole_layout.py`, `course_hole.py` | Hole layout geometry (pure Python) and the editor helpers that apply it to a terrain definition. See [Laying out a hole](#laying-out-a-hole) |
 | `UOpenGolfWindSubsystem` (C++) | A world's wind (10 m vector, air density, height profile); writes `Wind/MPC_Wind` |
 | `OpenGolfBeaufort.h` (C++) | The Beaufort land scale, with the flag bands the cloth is held to |
 | `Wind/MPC_Wind`, `MF_VegetationWind` | Vegetation World Position Offset in the world's wind; see [Vegetation wind](#vegetation-wind) |
@@ -146,6 +153,89 @@ mesh's local XZ great circle, with the dot on it at local -X. `AOpenFairwayBall`
 mesh as it rolls and faces it down the aim line on each re-tee, so the line points at the
 target and the dot tumbles as the ball rolls.
 
+## Holes and play
+
+The pieces a course needs to be played as a hole rather than a range. They hold no course data: a course supplies its
+pin, par and layout, and its game mode combines them (the game's `AUOpenGolfGameMode` and `AUOpenGolfRange` are one
+example).
+
+### Cup
+
+The ball drops into a cup by rule, not geometry: a real 108 mm hole in a 0.5 m ground mesh would meet the ball as a
+wall. `OpenFairway::CupCapture` in the physics plugin decides the capture (see
+[Cup and hole-out](../OpenFairwayPhysics/README.md#cup-and-hole-out)); give the ball the cup's position with
+`AOpenFairwayBall::SetCupLocations`.
+
+`UOpenGolfCupComponent` draws a regulation dark opening, with grass meeting the hole directly. It does not draw
+an above-ground white liner: real liners are recessed below the putting surface. This remains a visual opening over
+solid terrain, not an excavated mesh or a collision obstacle.
+
+For any course, sample its terrain once and pass the same surface descriptor to the cup and the ball:
+
+```cpp
+FOpenFairwayCup Surface{GroundPositionCm, GroundNormal};
+Cup->PlaceOnSurface(Surface, OptionalFlagstick);
+Ball->SetCups({Cup->GetCupDescriptor()});
+```
+
+- `PlaceOnSurface` needs no range actor, terrain class, map asset or flag. The supplied normal is normalized; an invalid
+  normal defaults to world up. Invalid positions are ignored. Component world scale stays unit-sized under scaled parents.
+- `PlaceAtFlagstick(Flagstick, SurfaceNormal)` remains a convenience wrapper. `GetCupLocation()` stays at the ground
+  surface; `GetCupDescriptor()` shares that location and normal with physics. Register after placement completes.
+- The collision-free dark engine cylinder is 0.1 mm thick, with its top face 0.2 mm above the sampled plane to avoid
+  depth flicker. This rendering offset never changes the physics position. `GetLiner()` is deprecated and returns null.
+- `UpdatePinLift(BallLocation, DeltaSeconds)` lifts an attached flag vertically by 2 ft while a nearby ball is at green
+  height, and lowers it beyond 6 ft. It is a no-op without a flag. Replacing placement restores the old flag first.
+- When a course changes hole positions, call placement and `SetCups` again. Register all active cups in one array;
+  registration replaces the previous list. The range is only one consumer of these reusable plugin interfaces.
+
+### Scoring and play rules
+
+`FOpenGolfHoleRound` (after ogolf `HoleRound`) counts one hole: `Start(Par)`, then `RecordStroke(bFromGreen,
+bInCup)` for every shot that stops. Shots from the green are putts; the hole ends when the ball drops, after which
+strokes stop counting. `ResultName()` is the score name (Hole in one, Albatross, Eagle, Birdie, Par, Bogey, Double
+bogey, Triple bogey, then +N), or "Holed in N" when `bPractice` is set because the ball was placed by hand.
+
+`Play/OpenGolfPlayRules.h` holds the rules every course shares:
+
+| Rule | Value |
+| --- | --- |
+| `EOpenGolfPlayMode` | `Range` (every shot from the tee) or `Hole` (played as it lies) |
+| `BearingDeg(From, To)` | Aim toward the cup, degrees clockwise from world +X |
+| `IsShortGame(DistanceM, bOnGreen)` | On the green or within 30 yd: the lower, closer address camera (ogolf `CameraProfiles.ForLie`) |
+| `CupZoomStartM`, `CupZoomAmount(DistanceM)` | How far the follow camera closes in near the cup: 0 from 8 ft out, easing to 1 at the cup |
+| `CanPlaceBallAt(Location, Cup)` | A placed ball keeps 0.15 m from the cup's centre |
+| `DistanceToPinLabel(DistanceM, bOnGreen)` | "18 ft" on the green, "152 yd" elsewhere |
+| `AimTapStepDeg`, `FineAimTapStepDeg` | One tap of the aim keys turns 0.25°, or 0.1° fine |
+| `AimTurnDegPerSecond(HeldSeconds, bFine)` | A held aim key: nothing for the first 0.3 s, then a smooth ramp from 2 to 20°/s over 1 s; fine stays at 2°/s |
+| `AimOffsetLabel(OffsetDeg, TargetDistanceM, bShortGame)` | "Straight", "1.5° R" (tenths under 10°), with how far wide of the target the line passes: " · 4 yd", or feet in the short game |
+
+`Play/OpenGolfWindSetting.h` holds the wind the player sets on the HUD. `FOpenGolfWindSetting` is on or off, with a
+speed kept while it is off (`AppliedMph()` is calm then) and the direction the wind comes from (0 headwind, 90 from the
+right, 180 tailwind, 270 from the left). `SetSpeedMph` takes whole mph from calm to `MaxWindSettingMph` (30),
+`SetFromDeg` wraps and snaps to `WindDirectionStepDeg` (5°), and `Adopt(Mph, FromDeg)` takes wind set elsewhere, such
+as the map or the console: on when it blows (a console speed above 30 is kept), off and keeping the last speed when it
+is calm. `WindDirectionLabel(FromDeg)` names it against the target line in 45° sectors: Headwind, Into · right to left,
+Right to left, Helping · right to left, Tailwind and their mirror images.
+
+### Laying out a hole
+
+A course writes its hole as data plus a pure `apply_layout(regions, mounds) -> (regions, mounds)` over
+`{name: [(x, y)]}` outlines and `(cx, cy, rx, ry, height)` mounds in terrain metres, and tests it under plain
+Python. `Scripts/hole_layout.py` has the geometry for that:
+
+- moving and scaling outlines, pulling a fairway's end back (`trim_end`);
+- moving or copying a feature with the mounds at its centre (a bunker's lip and hollow);
+- `height_at` and `slope_at`, the same Gaussian sum as `UOpenGolfTerrainDefinition::HeightAt`, and
+  `max_slope_inside` / `max_slope_near` to hold a green's grades and keep the pin flat;
+- `outline_distance` for clearances.
+
+Terrain regions must nest or stay apart: the builder refuses crossing edges (check with
+`outline_smoothing.crossing_outlines`). `Scripts/course_hole.py` then applies the layout in the editor:
+`lay_out(definition, apply_layout, templates)` writes outlines and mounds back (a new region copies a template
+region's surface), and `place_flag(range, area, pin)` stands the flagstick at the pin on the ground. The savanna
+course's par 4 (`Plugins/OpenGolfSavanna/Scripts/savanna_hole.py`) is the worked example.
+
 ## Performance
 
 - The flag is 153 particles and 256 triangles. Each frame runs about eight 1/480 s substeps
@@ -240,6 +330,10 @@ original MIT contributions.
 - Nothing stretches more than a few percent.
 - 30 and 144 fps agree.
 
+`UOpenGolf.Course.Play.HoleRound` checks the stroke, putt and score-name rules, including practice holes, and
+`UOpenGolf.Course.Play.Rules` the shared play rules. `Scripts/test_hole_layout.py` checks the layout geometry against
+the terrain's height sum. The game's `UOpenGolf.Range.HolePlay` plays the cup and the pin lift in the saved map.
+
 `UOpenGolf.Course.FlagBeaufort` holds the cloth to the Beaufort flag bands from 0 to 40 mph and in a 60 mph gale (see
 [Flagstick](#flagstick)). `UOpenGolf.Course.WindSubsystem` checks a world's wind: calm by default,
 the log height profile, gusts that stay in place when the speed changes, and `MPC_Wind` once built.
@@ -263,13 +357,19 @@ Scripts/
   course_props.py         Flagstick and ball
   vegetation_wind.py      Vegetation wind profiles, HLSL and its Python mirror (pure)
   vegetation_wind_assets.py  MPC_Wind, MF_VegetationWind, add_vegetation_wind, apply_profile
+  hole_layout.py          Hole layout geometry: outlines, feature mounds, green grades (pure)
+  course_hole.py          Applies a hole layout to a terrain definition; stands the flag at the pin
 Source/OpenGolfCourse/
   Public/OpenGolfCourse.h               Asset paths
   Public/OpenGolfFlagstickComponent.h   Flagstick component (pole + cloth flag)
   Public/OpenGolfFlagCloth.h            Flag cloth solver and its droop/flap readings
   Public/OpenGolfWindSubsystem.h        A world's wind and MPC_Wind
   Public/OpenGolfBeaufort.h             Beaufort land scale and flag bands
-  Private/Tests/                        Asset tests
+  Public/Hole/OpenGolfCupComponent.h    Regulation cup at the flag; pin lift
+  Public/Play/OpenGolfHoleRound.h       One hole's strokes, putts and score name
+  Public/Play/OpenGolfPlayRules.h       Play mode and the rules every course shares
+  Public/Play/OpenGolfWindSetting.h     The HUD's wind setting and direction names
+  Private/Tests/                        Asset, cloth, wind and play tests
 ```
 
 ## Course grass

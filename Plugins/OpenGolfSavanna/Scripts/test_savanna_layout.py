@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from savanna_layout import CANOPY_RATIO, TREE_SETTINGS, ground_mask, relocate_bunker, tree_patches
+from savanna_layout import CANOPY_RATIO, TREE_SETTINGS, ground_mask, tree_patches
 
 
 class LayoutTests(unittest.TestCase):
@@ -35,17 +35,6 @@ class LayoutTests(unittest.TestCase):
 
     def test_empty_mask_is_native_ground(self):
         self.assertEqual(ground_mask([], (-10, -10), (10, 10), 8, 8), bytes(64))
-
-    def test_bunker_moves_before_green_with_its_contours(self):
-        outline = [(138, 23), (154, 23), (154, 33), (138, 33)]
-        moved, centers = relocate_bunker(outline, [(146, 28), (146, 28), (126, 5)])
-        self.assertEqual(moved, [(100, -5), (116, -5), (116, 5), (100, 5)])
-        self.assertTrue(all(x < 122.9 for x, y in moved))
-        self.assertEqual(centers, [(108, 0), (108, 0), (126, 5)])
-
-    def test_bunker_relocation_is_repeatable(self):
-        outline = [(100, -5), (116, -5), (116, 5), (100, 5)]
-        self.assertEqual(relocate_bunker(outline, [(108, 0), (126, 5)]), (outline, [(108, 0), (126, 5)]))
 
 
 if __name__ == "__main__":

@@ -71,6 +71,11 @@ def configure(instance, profiles, settings):
         for name in field.VECTORS:
             _set_vector(instance, family + name, values[name])
         a.MAT.set_material_instance_texture_parameter_value(instance, family + 'TurfTexture', values['TurfTexture'])
+    return configure_field(instance, settings)
+
+
+def configure_field(instance, settings):
+    """The course field and its placement, the only settings that follow the play outlines."""
     a.MAT.set_material_instance_texture_parameter_value(instance, 'CourseField', field.field_texture())
     for name, value in settings.items():
         if isinstance(value, (tuple, list)):
@@ -84,15 +89,30 @@ def configure(instance, profiles, settings):
     return a.save(instance)
 
 
-def configure_all(area, source, width):
-    """Give every cut-turf ground, rough and blade instance the same field and family profiles."""
-    info = json.loads((Path(source) / 'T_CourseSurfaceField.json').read_text())
-    profiles, settings = field.profiles(source), field_settings(area, info, width)
+def _instances():
     names = [f'MI_Turf{f}' for f in GROUND_FAMILIES] + [f'MI_Turf{f}Blades' for f in BLADE_FAMILIES] + ['MI_TurfRough']
     for name in names:
         instance = ue.load_asset(MATERIALS + name)
         if not instance:
             raise RuntimeError(f'Missing {MATERIALS}{name}; run BuildCutTurf.py and ApplyCutTurf.py first')
+        yield name, instance
+
+
+def configure_field_all(area, source, width):
+    """After the play outlines change: every cut-turf instance reads the newly baked field. The family profiles,
+    which come from BakeCutTurf.py, are kept."""
+    info = json.loads((Path(source) / 'T_CourseSurfaceField.json').read_text())
+    settings = field_settings(area, info, width)
+    return [name for name, instance in _instances() if configure_field(instance, settings)]
+
+
+def configure_all(area, source, width):
+    """Give every cut-turf ground, rough and blade instance the same field and family profiles."""
+    info = json.loads((Path(source) / 'T_CourseSurfaceField.json').read_text())
+    profiles, settings = field.profiles(source), field_settings(area, info, width)
+    names = []
+    for name, instance in _instances():
+        names.append(name)
         configure(instance, profiles, settings)
         if name.endswith('Blades'):
             for key, value in BLADE_FADE.items():

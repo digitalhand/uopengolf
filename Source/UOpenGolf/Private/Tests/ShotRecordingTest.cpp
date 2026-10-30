@@ -9,7 +9,7 @@
 #include "Misc/Guid.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "ShotDisplay.h"
+#include "UI/ShotDisplay.h"
 #include "ShotRecording.h"
 
 #include <cerrno>

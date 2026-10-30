@@ -51,7 +51,7 @@ notes: [launch-monitor integration](../../Docs/LaunchMonitorIntegration.md).
 - Club data (path, face to target, attack angle, dynamic loft, impact location) matched to its
   shot, with per-field flags.
 - Club and handedness selection sent to the device.
-- Nine built-in replay shots (both FlightScope comparisons, varied synthetic shots and hardware captures) and
+- Ten built-in replay shots (both FlightScope comparisons, varied synthetic shots and hardware captures) and
   arbitrary replay frames in hex,
   through the same events as the device.
 - Automatic reconnect with backoff after a dropped link.
@@ -161,6 +161,7 @@ during Play. See [Recording shots](../../README.md#recording-shots) and
 | 6 | Wedge, 66.4 mph / 23.2° / 6449 rpm | Synthetic |
 | 7 | Chip, 24.7 mph / 17.94° / 3204 rpm | Synthetic |
 | 8 | High flop, 68.1 mph / 45° / 12000 rpm | Synthetic |
+| 9 | Straight putt, 5 mph / 0° launch angles / 0 rpm | Synthetic |
 
 Speeds are rounded for display; Square packets store 0.01 m/s increments. Captures
 come from open-lm-connector's pinned test fixtures. New synthetic frames leave

@@ -9,13 +9,12 @@
 #include "HAL/FileManager.h"
 #include "ImageUtils.h"
 #include "Misc/AutomationTest.h"
-#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
-#include "Misc/Parse.h"
 #include "Misc/Paths.h"
-#include "RangeHud.h"
+#include "UI/RangeHud.h"
 #include "OpenGolfWindIndicator.h"
-#include "WindIndicator.h"
+#include "Tests/RenderedPlay.h"
+#include "UI/WindIndicator.h"
 #include "Slate/WidgetRenderer.h"
 #include "Slate/SceneViewport.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -26,36 +25,10 @@
 #include "UnrealClient.h"
 #include "UObject/UObjectIterator.h"
 #include "Types/SlateAttributeMetaData.h"
-#include "Widgets/SWindow.h"
 #include "Widgets/SViewport.h"
-#include "Framework/Application/SlateApplication.h"
-#include "PlayInEditorDataTypes.h"
 
 namespace
 {
-    class FStartWindPreview : public IAutomationLatentCommand
-    {
-    public:
-        bool Update() override
-        {
-            int32 Width = 1280, Height = 720;
-            FParse::Value(FCommandLine::Get(), TEXT("ResX="), Width);
-            FParse::Value(FCommandLine::Get(), TEXT("ResY="), Height);
-            const TSharedRef<SWindow> Window = SNew(SWindow)
-                                                   .ClientSize(FVector2D(Width, Height))
-                                                   .CreateTitleBar(false)
-                                                   .UseOSWindowBorder(false)
-                                                   .AdjustInitialSizeAndPositionForDPIScale(false)
-                                                   .SaneWindowPlacement(false)
-                                                   .SizingRule(ESizingRule::FixedSize);
-            FSlateApplication::Get().AddWindow(Window);
-            FRequestPlaySessionParams Params;
-            Params.CustomPIEWindow = Window;
-            GEditor->RequestPlaySession(Params);
-            return true;
-        }
-    };
-
     class FCaptureWindIndicator : public IAutomationLatentCommand
     {
     public:
@@ -78,10 +51,8 @@ namespace
                 return false;
             if (Stage == 0)
             {
-                int32 Width = 1280, Height = 720;
-                FParse::Value(FCommandLine::Get(), TEXT("ResX="), Width);
-                FParse::Value(FCommandLine::Get(), TEXT("ResY="), Height);
-                World->GetGameViewport()->GetGameViewport()->SetFixedViewportSize(Width, Height);
+                const FIntPoint Size = RenderedPlay::CaptureSize();
+                World->GetGameViewport()->GetGameViewport()->SetFixedViewportSize(Size.X, Size.Y);
                 const TSharedRef<SRangeHud> Hud = SNew(SRangeHud).Controller(Controller);
                 FSlateAttributeMetaData::UpdateAllAttributes(*Hud, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidation);
                 Test->TestEqual(TEXT("HUD allows clicks through"), Hud->GetVisibility(), EVisibility::HitTestInvisible);
@@ -161,9 +132,7 @@ bool FWindIndicatorVisualTest::RunTest(const FString& Parameters)
     UUserWidget* Preview = NewObject<UUserWidget>(GetTransientPackage(), WidgetClass);
     Preview->SetDesignerFlags(EWidgetDesignFlags::Designing);
     Preview->Initialize();
-    int32 Width = 1280, Height = 720;
-    FParse::Value(FCommandLine::Get(), TEXT("ResX="), Width);
-    FParse::Value(FCommandLine::Get(), TEXT("ResY="), Height);
+    const int32 Width = RenderedPlay::CaptureSize().X, Height = RenderedPlay::CaptureSize().Y;
     FWidgetRenderer* Renderer = new FWidgetRenderer(true);
     UTextureRenderTarget2D* Target = Renderer->DrawWidget(Preview->TakeWidget(), FVector2D(Width, Height));
     TArray<FColor> Pixels;
@@ -183,7 +152,7 @@ bool FWindIndicatorVisualTest::RunTest(const FString& Parameters)
         AddError(TEXT("Could not load the range map."));
         return false;
     }
-    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FStartWindPreview>());
+    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<RenderedPlay::FStartInWindow>());
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCaptureWindIndicator>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
     return true;

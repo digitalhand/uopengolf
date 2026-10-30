@@ -19,6 +19,16 @@ maintainer's own MIT project, so the port is covered by this repository's licens
   - [C++ headless simulation](#c-headless-simulation)
 - [How it uses Unreal physics](#how-it-uses-unreal-physics)
 - [Surfaces](#surfaces)
+- [Greens](#greens)
+  - [Green surface preset](#green-surface-preset)
+  - [Green speed (stimp)](#green-speed-stimp)
+  - [Grass drag and the ported value](#grass-drag-and-the-ported-value)
+  - [Landing on a green (spin-back and check)](#landing-on-a-green-spin-back-and-check)
+  - [Slopes and break](#slopes-and-break)
+  - [Building greens in a course](#building-greens-in-a-course)
+  - [Cup and hole-out](#cup-and-hole-out)
+  - [Green tests](#green-tests)
+  - [Green port status and gaps](#green-port-status-and-gaps)
 - [Ball profile and launch regimes](#ball-profile-and-launch-regimes)
   - [Decoding a regime key](#decoding-a-regime-key)
   - [Lookup and continuous calibration](#lookup-and-continuous-calibration)
@@ -34,6 +44,7 @@ maintainer's own MIT project, so the port is covered by this repository's licens
   - [Regenerating fixtures](#regenerating-fixtures)
   - [FlightScope shot library](#flightscope-shot-library)
 - [Differences from ogolf-physics](#differences-from-ogolf-physics)
+  - [Port status](#port-status)
 - [Known gaps](#known-gaps)
 - [Plugin structure](#plugin-structure)
 - [References](#references)
@@ -45,11 +56,12 @@ maintainer's own MIT project, so the port is covered by this repository's licens
 | --- | --- |
 | Core equations (flight, impact, ground, rest) | Ported, then corrected for spin decay, calibration continuity, excess low-launch lift, the high-Re drag step and the low-Re lift dead band; historical profile matches 21 C# fixtures |
 | Air | Temperature, altitude, humidity, station pressure, and wind that grows with height; headwinds cost too little carry until recalibration (see [Headwinds](#headwinds)) |
-| Headless simulator (`ShotSimulator`) | Ported from `PhysicsAdapter`; flat ground, one surface |
+| Headless simulator (`ShotSimulator`) | Ported from `PhysicsAdapter`; one surface on level or planar sloped ground |
 | Ball actor (`AOpenFairwayBall`) | Working on Windows and Linux; automated range shot within tolerance of the headless result |
-| Surfaces | All seven presets; assigned by physical materials or tags; green speed set by stimp (`GreenStimpFeet`) |
-| JSON ball profiles, surface zones, terrain probes | Not ported yet (see [Known gaps](#known-gaps)) |
+| Surfaces | All seven presets; assigned by physical materials or tags; green speed set by stimp (`GreenStimpFeet`); see [Greens](#greens) |
+| JSON ball profiles, surface zones, Terrain3D height queries | Not ported yet (see [Known gaps](#known-gaps)) |
 | Linux | Editor/game build, the 33 headless `UOpenGolf` tests and a packaged game start pass (Unreal 5.8.3, 2026-10-18). After the later green-drag change, six physics tests pass; the range rollout tests have not rerun |
+| Windows | Editor build and 56 of 57 `UOpenGolf` tests pass (2026-10-29); `UOpenGolf.Physics.Sand`'s roll-into-sand check (2.48 m, limit 2 m) also fails on unchanged `main` |
 
 Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
 
@@ -68,7 +80,7 @@ Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
   response and a first-impact "bite" chosen per landing bucket (run, release, check, spin-back).
 - Ground roll with sliding friction until rolling, spin-scaled rolling resistance, grass drag,
   slope drive and slope resistance, and rest detection.
-- Seven surface presets: fairway, soft fairway, rough, firm, green (set by stimp), sand, fringe.
+- Seven surface presets: fairway, soft fairway, rough, firm, green (set by stimp; see [Greens](#greens)), sand, fringe.
 - Calibrated launch-regime overrides from the ogolf-physics FS reference data.
 - Launch-monitor spin parsing (back/side spin or total spin/axis); a putt with no measured
   spin leaves the face rolling.
@@ -156,7 +168,7 @@ Launch.SideSpinRpm = -47.8f;
 const OpenFairway::FShotSimulationResult Result =
     OpenFairway::ShotSimulator::Simulate(Launch, OpenFairway::ESurface::Fairway);
 // Result.CarryM, Result.TotalM, Result.LateralM, Result.ApexM, Result.HangTimeS,
-// Result.LandingSpinRpm, Result.bAtRest
+// Result.LandingSpinRpm, Result.bFirstImpactSpinback, Result.bAtRest
 
 OpenFairway::FAirConditions Air;  // 75 F, sea level, dry and calm by default
 Air.RelativeHumidity = 0.5f;
@@ -234,22 +246,14 @@ not affect the ball; OpenFairway's surface preset does.
 | Soft fairway | `OpenFairway.Surface.FairwaySoft` | 0.56 | 0.070 | Wet or soft turf |
 | Rough | `OpenFairway.Surface.Rough` | 0.62 | 0.095 | Grabs the ball |
 | Firm | `OpenFairway.Surface.Firm` | 0.30 | 0.030 | Hard ground, long roll |
-| Green | `OpenFairway.Surface.Green` | 0.58 | From stimp (ball's Green Stimp Feet, 10 ft) | Spin-back enabled; rolls at its stimp speed |
+| Green | `OpenFairway.Surface.Green` | 0.58 | From stimp (ball's Green Stimp Feet, 10 ft) | Spin-back enabled; rolls at its stimp speed; see [Greens](#greens) |
 | Sand | `OpenFairway.Surface.Sand` | 0.65 | 0.30 | Soft: lower restitution and retention; landings plow (see below) |
 | Fringe | `OpenFairway.Surface.Fringe` | 0.56 | 0.0725 | Close-cut collar |
 
 `AOpenFairwayBall::GetSurfaceTag(Surface)` returns the tag. Values come from
 `SurfaceCatalog` in `Private/OpenFairway/Surfaces.cpp`.
 
-**Green speed.** The ball's **Green Stimp Feet** (8–15, default 10) sets every green's
-rolling friction from the next launch; on the range, the `uopengolf.GreenStimp` console
-variable writes it. That friction is solved together with the green's speed-dependent
-grass drag, `FBallPhysicsProfile::GreenGrassViscosity`, so a stimpmeter ball still stops at
-the stimp distance. The drag is **0.0009**: the original OpenFairway green value, below the
-fairway's 0.0017. After a full-shot landing (about 2,000 rpm or more), a ball rolling from
-fairway onto a green therefore goes farther than it would on fairway. `HistoricalReference()`
-keeps the ported 0.011. See
-[green and fairway by rolling speed](../../Docs/FlightScopeAnalysis.md#green-and-fairway-by-rolling-speed).
+Green speed, grass drag, spin-back and slopes are covered in [Greens](#greens).
 
 **Sand.** A landing in sand digs a crater. Each sand impact removes forward speed equal to
 `FBallPhysicsProfile::SandPlowRatio` (default **2.5**) times the speed at which the ball drives
@@ -258,6 +262,197 @@ keeps some pace, and steep landings stop as before. The ported contact scaled it
 square of the landing's sine, so a 15° landing kept about 95% of its pace and skipped out.
 `HistoricalReference()` keeps that ported contact (ratio 0) for the golden fixtures.
 `UOpenGolf.Physics.Sand` covers these cases.
+
+## Greens
+
+Everything that makes a green play like a green: the surface preset, its speed, how
+shots land and roll on it, slopes, how a course declares one, and how it is tested.
+The equations are the ported ogolf-physics ones; the only deliberate change is the
+green's grass drag (see [Grass drag and the ported value](#grass-drag-and-the-ported-value)).
+
+### Green surface preset
+
+`SurfaceCatalog` (`Private/OpenFairway/Surfaces.cpp`) defines the green with the same
+values as ogolf-physics `SurfacePhysicsCatalog.Green`:
+
+| Setting | Value | Effect |
+| --- | --- | --- |
+| Kinetic friction | 0.58 | Sliding grip at impact and until the ball rolls |
+| Rolling friction | From the stimp (0.0761 at 10 ft) | Constant roll resistance; see [Green speed](#green-speed-stimp) |
+| Grass viscosity | 0.0009 (ported 0.011) | Speed-dependent drag and spin damping |
+| Critical angle θc | 0.36 rad | Penner contact angle; steeper landings grip |
+| Spin-back response scale | 1.12 | Reverse-spin impulse at impact (fairway 0.78) |
+| Spin-back theta boost | up to 0.12 rad | Extra critical angle for high-spin landings |
+| Spin-back spin window | 3,500–5,500 rpm | Spin over which the boost ramps in |
+| Spin-back speed window | 8–20 m/s | Impact speed over which the boost ramps in |
+| Rolling spin scale | 0 | Impact spin does not scale roll resistance: every ball rolls at the stimp speed |
+| Restitution, retention, bounce | Neutral (1, 1, default) | Same rebound rules as fairway |
+
+### Green speed (stimp)
+
+The ball's **Green Stimp Feet** (8–15, default 10) sets every green's rolling friction
+from the next launch; out-of-range values clamp and a non-finite value plays as 10. On
+the range, the `uopengolf.GreenStimp` console variable writes it; headless callers set
+`FBallPhysicsProfile::GreenStimpFeet`. Stimp never changes another surface.
+
+`GreenSpeed::RollingFriction` solves for the constant deceleration that, together with
+the green's speed-dependent grass drag (`FBallPhysicsProfile::GreenGrassViscosity`),
+stops a ball leaving a stimpmeter at **1.83 m/s** at the stimp distance. The roll
+distance has no closed-form inverse, so it bisects (32 iterations, double precision);
+rolling friction is `7·a0 / (5·g)`.
+
+| Stimp, ft | Rolling friction (drag 0.0009) | Hold angle | Rolling friction (ported drag 0.011) | Hold angle |
+| ---: | ---: | ---: | ---: | ---: |
+| 8 | 0.0957 | 8.7° | 0.0711 | 6.5° |
+| 10 | 0.0761 | 6.9° | 0.0518 | 4.7° |
+| 11 | 0.0690 | 6.3° | 0.0448 | 4.1° |
+| 12 | 0.0631 | 5.8° | 0.0390 | 3.6° |
+| 15 | 0.0500 | 4.6° | 0.0264 | 2.4° |
+
+The hold angle is the steepest slope a resting ball stays on (see
+[Slopes and break](#slopes-and-break)).
+
+### Grass drag and the ported value
+
+The green's grass drag is **0.0009**, the original OpenFairway green value, below the
+fairway's 0.0017. ogolf-physics uses **0.011**, which it fitted to measured putt speeds
+from 10 to 60 ft. Both stop a stimpmeter ball at the stimp distance, because the
+rolling friction is solved with the drag, but they differ at other speeds:
+
+- With 0.0009, a ball rolling from fairway onto a green after a full-shot landing
+  (about 2,000 rpm or more) goes farther than it would on fairway.
+- With 0.011, a fast roll stops shorter on the green than on fairway, and putts match
+  the reference's putt bands (a 6 mph putt rolls 20.2 ft at stimp 11; 21.1 ft at
+  stimp 10 with 0.0009 on the current profile).
+
+`FBallPhysicsProfile::HistoricalReference()` keeps the ported 0.011, and every green
+golden value uses it. See
+[green and fairway by rolling speed](../../Docs/FlightScopeAnalysis.md#green-and-fairway-by-rolling-speed).
+
+### Landing on a green (spin-back and check)
+
+A green's first impact uses the launch's [landing bucket](#landing-buckets): Run keeps
+the neutral bounce, Release and Check add spin "bite" that shortens the release, and
+Spinback (`P4` spin with `V2`–`V4` launch) may also reverse the ball by up to 1.2 m/s.
+The green's stronger spin-back response (scale 1.12 with its theta boost, against
+fairway's 0.78 and none) is what reverses the ball: the same flop on fairway stops dead. `FShotSimulationResult` reports
+`FirstImpactTangentInMps`, `FirstImpactTangentOutMps` (negative after spin-back) and
+`bFirstImpactSpinback`, as ogolf-physics' `first_impact_*` diagnostics.
+
+On the historical profile, the reference's own bands hold: a wedge (Check) rolls out
+1.1 yd versus 5.8 yd with no bite, a mid-iron (Release) 7.0 yd versus 9.4 yd, and the
+checked and flop wedges draw back 1.6 yd on green and not at all on fairway.
+
+### Slopes and break
+
+`GolfPhysics::StepGround` drives the ball down the slope with gravity and resists it
+with rolling friction and grass drag. A ball slower than 0.05 m/s and 8 rad/s stays put
+while the slope is within its hold angle, `atan(rolling friction × 1.6)`
+(`FRolloutProfile::SlopeResistanceRatio`); beyond that it rolls. A stimp-10 green holds
+a ball on up to 6.9°, fairway 4.6° and rough 8.6°, so a slope rough holds can still roll
+a ball on a green.
+
+The ball actor uses each contact's normal (`FloorNormal`), so a curved green breaks
+putts. `ShotSimulator::Simulate` takes a `GroundNormal` for a planar slope through the
+launch point:
+
+```cpp
+const float Slope = FMath::DegreesToRadians(2.0f);  // downhill along the target line
+const auto Downhill = OpenFairway::ShotSimulator::Simulate(Launch, OpenFairway::ESurface::Green,
+    OpenFairway::FBallPhysicsProfile(), OpenFairway::FAirConditions(),
+    OpenFairway::ShotSimulator::DefaultMaxTimeSeconds, FVector3f(FMath::Sin(Slope), FMath::Cos(Slope), 0.0f));
+```
+
+Neither this port nor ogolf-physics models grain (nap) or green firmness separately
+from the surface preset.
+
+### Building greens in a course
+
+A green is any ground whose material carries `PM_Green` (an
+`UOpenFairwayPhysicalMaterial` with **Surface** Green), or a component tagged
+`OpenFairway.Surface.Green`; see [Surfaces](#surfaces) for the resolution order.
+In `OpenGolfCourse`:
+
+- `MI_Green` and `MI_CoastalGreen` reference `PM_Green`, so a mesh drawn with either
+  plays as green.
+- `DA_CoastalGreen` is the green surface preset for the terrain builder, which sets
+  `PM_<Surface>` on each region mesh (`OpenGolfTerrainBuilder.cpp`).
+- The builder's Landscape gets only the area's default physical material. A green
+  painted as a Landscape layer needs that layer's physical material set to `PM_Green`.
+- `MI_Tee` and `MI_CoastalTee` carry no physical material, so ground drawn with them
+  plays as the ball's **Default Surface** (Fairway). No shipped map uses them.
+
+### Cup and hole-out
+
+The green is a solid surface, so the cup is a capture rule, as in ogolf `game/hole/CupCapture.cs`; a 108 mm hole in a
+0.5 m ground mesh would meet the ball as a wall. `OpenFairway/CupCapture.h` (Core module only) holds it:
+
+| Rule | Value |
+| --- | --- |
+| Cup | Regulation: 4.25 in (108 mm) across, 4 in (101.6 mm) deep |
+| Rolling capture | Lip-entry model (Holmes 1991): a ball crossing the cup along a chord drops if it falls one ball radius before reaching the far rim, `MaxCaptureSpeed(offset) = 2 sqrt(r_cup^2 - offset^2) sqrt(g / 2 r_ball)`: about 1.64 m/s through the centre, 0 at the rim. A ball that stops over the cup is holed; a faster one crosses the open cup (Lip reaction), and a wider one rolls past |
+| Lip reaction | `AdvanceCrossing` integrates ballistic motion in a local cup frame, resolves sphere contact with the rim/outer green at impact time, and returns consumed time. The actor rotates gravity, velocity and spin into that frame. Restitution 0.1 and friction 0.3 are inherited, uncalibrated defaults; hops are physical model outputs, not height-capped animations. No unconditional upward snap is applied at the far edge. |
+| Dunk | A descending contact inside the cup at green level, from flight or a bounce |
+| Height gate | The centre within two ball radii (a contact within one) of the cup, so a ball on the flagstick never counts |
+| Drop | The ball settles on its entry side, as close to the centre as the pole allows, fully below the surface |
+
+On the ball actor, `SetCups(TArray<FOpenFairwayCup>)` registers surface positions (world cm) and normals. The
+physics plugin does not depend on course actors or terrain implementations. Invalid positions are ignored and invalid
+normals default to world up. `SetCupLocations` remains a position-only wrapper using world-up normals, and
+`GetCupLocations` remains available for existing consumers.
+
+A grounded ball's motion segment is intersected with all apertures before the solid-green sweep; the earliest entry
+wins, independent of registration order. Entry retains its height, velocity and spin rather than snapping onto a
+horizontal cup plane. Capture limits and landing tests use the same local frame. A fast crossing bypasses terrain
+collision until it exits or is holed. Ordinary physics integrates the unconsumed part of the exit timestep.
+
+A captured ball stops and sinks over `HoleDropSeconds` (0.35 s); `OnBallHoled` fires at capture and `OnBallAtRest`
+after the drop. `bHoled` is set and `bOverCup` is cleared. Below-ground recovery skips holed balls.
+`PlaceAt` and `Launch` reset crossing state; registering new cups cancels an active crossing.
+
+Diagnostics for the latest crossing include entry speed, capture limit, chord offset, spin, world exit velocity (m/s),
+and `CupMaxHeightM` (ball-bottom height above the cup's tangent plane, not the launch-relative shot apex). The entry
+log also records the surface normal. No height cap is applied. The plane-based height is a local diagnostic; terrain
+far beyond the cup can depart from that tangent plane.
+
+`UOpenGolf.Physics.CupContact` checks energy and convergence with smaller substeps on flat and sloped frames.
+`UOpenGolf.Range.CupThirtyFoot` launches the actual ball actor from exactly 30 horizontal feet at 8.6 mph on a flat
+stimp-10 fixture and the saved green, with straight and recorded replay angles. It reports both an unadjusted replay
+(which misses the hole) and aimed crossings. These are reproducible model measurements, not real-world calibration.
+
+The course kit draws the cup and lifts the flag (`UOpenGolfCupComponent`, see
+[Open Golf Course](../OpenGolfCourse/README.md#cup)).
+
+### Green tests
+
+| Test | What it checks |
+| --- | --- |
+| `UOpenGolf.Physics.GreenReference` | 21 historical-profile golden values from the harness (putts at stimp 8/10/11/13, a lofted putt, flop, bucketed wedges with and without bite, 2–3° green slopes, sloped fairway and rough), then the reference test bands: `PuttRollRegressionTests`, `LandingBucketRegressionTests`, `GreenSpinBackRegressionTests` (flat and 10° slopes) and green-versus-fairway reverse tangent speed; the current profile keeps slope direction |
+| `UOpenGolf.Physics.SlopeRollout` | Level ground and slopes below the hold angle keep a resting ball still; steeper slopes roll it with resistance; rough holds a slope that rolls a ball on green (current and historical profiles) |
+| `UOpenGolf.Physics.GreenRollout` | After 2,000–6,000 rpm landings, a level stimp-10 green rolls a ball at 2–12 m/s at least as far as fairway; faster greens roll farther; the stimpmeter distance holds; the historical reference keeps the ported green |
+| `UOpenGolf.Physics.GreenStimp` | Green Stimp Feet reaches predictions: the default matches the headless putt, a faster green rolls it farther, out-of-range stimps clamp, fairway unchanged |
+| `UOpenGolf.Physics.Fixtures` | Includes `wedge`, `putt` and `checked` on Green |
+| `UOpenGolf.Physics.CupCapture` | Port of ogolf `CupCaptureTests`: regulation size, the 1.64 m/s centre and zero rim limits, slow drops and fast lip-overs, near-rim lines, stopped and leaning balls, dunks, the pin height gate and the drop point |
+| `UOpenGolf.Range.HolePlay`, `UOpenGolf.Range.GreenContour` (game module) | The ball actor on the saved hole: a firm putt rolls over the cup, an off-line putt misses, a dying putt drops; the contoured green's contact normals, a resting ball on its steepest part, and a putt breaking downhill |
+| `UOpenGolf.Range.RolloutSurfaces` (game module) | The same path rolls farther tagged green than tagged fairway |
+
+Regenerate the green golden values with
+`dotnet run --project Plugins/OpenFairwayPhysics/Tools/ReferenceHarness -c Release -- <path-to-ogolf-physics> greens`
+and copy them into `Private/Tests/GreenReferenceTest.cpp`.
+
+### Green port status and gaps
+
+Ported in full from ogolf-physics `e6d793a`: the green preset and spin-back window,
+`GreenSpeed` (stimp range, stimpmeter speed and solve), the profile stimp and its
+per-surface application, landing buckets, slope hold and drive in `StepGround`, and
+the green, putt, spin-back and slope regression tests. Remaining:
+
+- The grass drag deliberately differs (above); no measured green-rollout reference
+  exists for either value. `GreenRollout` checks only that a green out-rolls fairway
+  after full-shot landings.
+- JSON profiles (`"GreenStimpFeet"` in a profile file) are not ported; set
+  `GreenStimpFeet` on the ball or profile.
+- `SurfaceZone` area overrides are not ported; declare greens by material or tag.
 
 ## Ball profile and launch regimes
 
@@ -418,7 +613,7 @@ calibration still affects landing speed, angle and spin indirectly.
 The original range had a 30 m green centered at 150 yd, with a 2 m fringe. This wood
 landed on fairway but crossed into that green during rollout. Surface settings change
 as the ball travels. In particular, the modeled green's grass viscosity was then
-**0.011** (0.0009 since 2026-10-18; see [Surfaces](#surfaces)), versus **0.0017** on
+**0.011** (0.0009 since 2026-10-18; see [Grass drag and the ported value](#grass-drag-and-the-ported-value)), versus **0.0017** on
 fairway and **0.00245** on fringe. This coefficient
 enters speed-dependent translational drag and spin damping. The green also uses
 stimp-derived rolling resistance and excludes the fairway's spin multiplier from
@@ -621,8 +816,7 @@ bash Scripts/ue.sh test --filter UOpenGolf.Physics   # add --engine-root PATH if
 | `UOpenGolf.Physics.ObstacleResponse` | Face-on, glancing, edge and flat-top obstacle contacts; tagging by component or actor |
 | `UOpenGolf.Physics.CanopyResponse` | Canopy speed loss by path length (step-size independent), bounded seeded deflection, tagging; canopy is not an obstacle |
 | `UOpenGolf.Physics.SurfaceResolution` | Resolution order: component tag, hit or component physical material, actor tag, default; plain physical materials are ignored |
-| `UOpenGolf.Physics.GreenRollout` | After 2,000–6,000 rpm landings, a level stimp-10 green rolls a ball at 2–12 m/s at least as far as fairway; faster greens roll farther; the stimpmeter distance holds; the historical reference keeps the ported green |
-| `UOpenGolf.Physics.GreenStimp` | Green Stimp Feet reaches predictions: the default matches the headless putt, a faster green rolls it farther, out-of-range stimps clamp, fairway unchanged |
+| `UOpenGolf.Physics.GreenReference`, `SlopeRollout`, `GreenRollout`, `GreenStimp` | Greens, putting and slopes; see [Green tests](#green-tests) |
 | `UOpenGolf.Physics.VisualRoll` | Roll angle is distance over radius, the top moves with the motion, the per-frame cap, no motion and slopes |
 | `UOpenGolf.Physics.FlightScopeAnalysis` | Both screenshots; historical, decay, interpolation, lift/drag and timestep diagnostics; not an assertion of FlightScope accuracy |
 | `UOpenGolf.Physics.ShotLibrary` | Replays all shots in `Data/ShotLibrary/` with every profile in `MakeShotLibraryProfiles()` and writes `Saved/ShotLibrary/results.csv`, including landing angle and spin; checks that every shot parses, completes and stays finite, not FlightScope accuracy |
@@ -646,7 +840,10 @@ dotnet run --project Plugins/OpenFairwayPhysics/Tools/ReferenceHarness -c Releas
 ```
 
 Copy the printed values into `Private/Tests/PhysicsFixtureTest.cpp` and update the pinned
-revision in the source headers when you port newer ogolf-physics changes.
+revision in the source headers when you port newer ogolf-physics changes. Pass `greens` instead
+of shot names for the [green cases](#green-tests). A shot can also be `putt=<mph>[,<vla>]`, and
+`@Surface` can take `:stimp=<ft>`, `:slope=<deg>` (downhill along the target line; negative is
+uphill) and `:neutral` (no landing-bucket bite), e.g. `putt=6@Green:stimp=11:slope=-2`.
 
 ### FlightScope shot library
 
@@ -677,8 +874,11 @@ in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
   (`FLaunchData::IsValid`) before simulating.
 - Single-precision math, as in C#. The port uses `MathF.PI`'s value, not the engine's
   double-precision pi, to stay bit-close.
-- Out of bounds is 1000 m from the launch point (ogolf-physics uses the world origin), and
-  a ball 100 m below its launch point stops instead of using Godot's terrain recovery.
+- Out of bounds is 1000 m from the launch point (ogolf-physics uses the world origin).
+  A ball whose centre ends up 0.5 m or more below the ground under it is lifted back onto
+  that ground, as ogolf-physics' `TryRecoverToGround` does; the port measures from the
+  ground found by a trace from 2 m above the ball, not from world height 0. A ball still
+  100 m below its launch point stops.
 - The ball actor spends the remainder of a landing step moving after impact, with
   another sweep to detect intervening geometry. This now matches the headless loop's
   contact timing closely enough to avoid selecting a different subsequent bounce.
@@ -686,9 +886,30 @@ in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
   high-Re drag blend and the low-Re lift bridge intentionally differ from the pinned C#
   model; use `HistoricalReference()` when comparing golden fixtures.
 - Wind, humidity and station pressure are additions; ogolf-physics has calm, dry air.
-- The green's grass drag is 0.0009, the original OpenFairway green value, instead of the
-  ported 0.011, so a ball crossing a green from fairway rolls farther. The green's stimp
-  friction is solved with it. `HistoricalReference()` keeps 0.011.
+- The green's grass drag is 0.0009 instead of the ported 0.011; see
+  [Grass drag and the ported value](#grass-drag-and-the-ported-value).
+
+### Port status
+
+Checked against ogolf-physics `e6d793a` (2026-10-29):
+
+- **Identical:** every constant and formula in `StepFlight`, `ResolveImpact`,
+  `ApplyLandingBite`, `StepGround`, `SpinFrictionMultiplier`, `CanRest`, `LaunchSpin` and the
+  aerodynamic model; the seven surface presets and their bounce settings; `GreenSpeed`; the
+  regime and landing-response tables and bin edges; spin parsing and launch vectors; the
+  headless shot loop (`PhysicsAdapter.SimulateShotInternal`), including sloped ground and the
+  first-impact spin-back diagnostics; the ball's contact, landing, wall and ground-probe rules
+  and below-ground recovery.
+- **Deliberately different** (`HistoricalReference()` restores the reference): flight spin
+  decay, low-launch lift recovery, continuous calibration, the high-Re drag blend, the low-Re
+  lift bridge, the sand plow and the green grass drag. Wind, humidity and station pressure are
+  additions.
+- **Replaced:** Godot's `LieSurfaceResolver`, `SurfaceZone` and `GridMapSurfaceCache` by
+  physical materials and tags; `PhysicsCoreBridge` and `PhysicsLogger` by native types and
+  `UE_LOG`.
+- **Not ported:** JSON ball profiles, `SimulateCarryOnly`, the initial and peak aerodynamic
+  diagnostics, `CdMin` and `PennerLowEnergyThreshold` (unused by the reference's physics), and
+  the reference's argument-validation exceptions (the port clamps or falls back instead).
 
 ## Known gaps
 
@@ -699,15 +920,11 @@ in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
 - Headwinds cost too little carry. A driver loses about 20–40% less than published aerodynamics
   into 30 mph, and low-launch shots gain 5–14 yd. See [Headwinds](#headwinds).
 - No shot camera, tracer styling or HUD here (the game module supplies those).
-- Physical-material surfaces are a possible later addition to tags.
 - Packaged builds are only start-checked headless; ball flight in a rendered packaged game
   has not been reviewed on either platform.
 - Against the FlightScope shot library the current profile carries long (bias +2.4 yd) and
   rolls short (bias -2.9 yd); see the [baseline](../../Docs/FlightScopeAnalysis.md#shot-library-baseline-2026-10-16-linux).
-- No measured green-rollout reference exists. `UOpenGolf.Physics.GreenRollout` checks only
-  that a green out-rolls fairway after full-shot landings. With the 0.0009 green drag, a putt
-  at a given speed rolls farther than under the ported model; see
-  [green and fairway by rolling speed](../../Docs/FlightScopeAnalysis.md#green-and-fairway-by-rolling-speed).
+- Green gaps: see [Green port status and gaps](#green-port-status-and-gaps).
 
 ## Plugin structure
 
@@ -715,12 +932,12 @@ in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
 OpenFairwayPhysics.uplugin
 Source/OpenFairwayPhysics/
   Public/OpenFairway/       Core (Core module only): profiles, GolfPhysics, surfaces,
-                            ball profile and regimes, ShotSimulator
+                            ball profile and regimes, ShotSimulator, CupCapture
   Public/OpenFairwayTypes.h Blueprint types: surfaces, ball state, launch, shot result
   Public/OpenFairwayBall.h  Ball actor (Chaos sweeps and traces)
   Public/OpenFairwayPhysicalMaterial.h  Physical material that declares a surface
   Private/OpenFairway/      Core implementation
-  Private/Tests/            Core and golden-fixture automation tests
+  Private/Tests/            Core, golden-fixture, green, slope and cup automation tests
 Tools/ReferenceHarness/     Optional .NET harness that regenerates golden values
 ```
 

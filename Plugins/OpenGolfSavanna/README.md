@@ -126,7 +126,7 @@ The script:
 
 1. backs up the map and its terrain definition under `Saved/TerrainBackups/*-savanna-range`;
 2. copies the definition to `<course>/DA_SavannaRange` the first time and switches the map to it;
-3. moves the bunker onto the approach, sets the Grass008 and Ground093C surfaces, builds the
+3. lays out the [par-4 hole](#par-4-hole), sets the Grass008 and Ground093C surfaces, builds the
    course mask and ground instances (`MI_SavannaRough`, `MI_SavannaNative`, `DA_SavannaRough`),
    and places 36 seeded jacaranda patches (`savanna_layout.py`). Scattered grass presets are dropped;
 4. rebuilds the terrain, trees, wood collision (`savanna_trees.py`) and understory
@@ -146,7 +146,36 @@ sweeps and saves. `Scripts/PlayTreeShots.py` plays trunk and canopy shots at one
 Then place the course grass with the course kit's `ApplyCourseGrass.py`; the completion line
 `OPEN_GOLF_SAVANNA_RANGE_COMPLETE` prints the command. The understory alone can be reapplied
 with `Scripts/understory.py` on the open map. Layout rules are pure Python with tests
-(`python3 -m unittest test_savanna_layout test_understory_layout`).
+(`python -m unittest test_savanna_layout test_savanna_hole test_understory_layout`).
+
+### Par-4 hole
+
+The range plays as a 400-yard par 4 (`Scripts/savanna_hole.py`, built on the course kit's
+[hole layout](../OpenGolfCourse/README.md#laying-out-a-hole) helpers):
+
+| Feature | Where | Notes |
+| --- | --- | --- |
+| Pin | 365.76 m (400 yd) on the target line | `AUOpenGolfRange::HoleDistanceM`; back left of the green's centre, under 1% grade within 1.5 m |
+| Green and fringe | Centred at (363, 1.5) m | The former 150-yard green's outlines, moved; the old spot is fairway |
+| Green contour | Three Gaussian mounds | A broad rise behind the green tilts it toward the fairway, with a swell back right and a softer one front left; under 2.5% grade anywhere on the green |
+| Fairway | Ends 1 m short of the fringe | Its end is pulled back from 300 m on, keeping its shape |
+| Fairway bunker | (240, -8) m | Left side of the drive landing area, a metre inside the fairway's edge, with its lip and hollow |
+| Greenside bunker | (360, 19) m | Right of the green, 1.5 m off the fringe: the fairway bunker's shape and contours at three quarters size |
+| Backdrop hill | Moved from 385 to 440 m, narrower | So it no longer tilts the green and still fades out before the Landscape at 504 m |
+
+Terrain regions must nest or stay apart, so the bunkers and the fairway's end are placed to never cross another
+outline. `savanna_hole.py` is applied by `BuildSavannaRange.py`; to turn an already built range into the hole
+without rebuilding everything else, open the map with Play stopped and run
+
+```text
+py "<project>/Plugins/OpenGolfSavanna/Scripts/BuildParFourHole.py"
+```
+
+It backs up the map and definition, lays out the hole, rebuilds the ground meshes (the Landscape is kept),
+stands the flag at the pin, re-bakes the course field for the cut turf (`turf_mask.py` needs NumPy: set
+`OPEN_GOLF_NUMPY_PYTHON` to a Python that has it), places the course grass along the new outlines and rebuilds the
+trees and understory away from them. It logs `OPEN_GOLF_PAR_FOUR_HOLE_COMPLETE`, then
+`OPEN_GOLF_RANGE_VEGETATION_COMPLETE` once the map is saved. Running it again rebuilds the same hole.
 
 ## Wind
 

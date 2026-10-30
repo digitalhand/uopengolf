@@ -61,7 +61,7 @@ namespace OpenFairway
         OPENFAIRWAYPHYSICS_API FVector3f Rotate(const FVector3f& Vector, const FVector3f& Axis, float AngleRadians);
     } // namespace ShotSetup
 
-    /** Outcome of a headless shot on a flat surface. Distances are meters along the shot direction. */
+    /** Outcome of a headless shot on one planar surface. Distances are meters along the shot direction. */
     struct FShotSimulationResult
     {
         bool bValid = false;
@@ -75,6 +75,12 @@ namespace OpenFairway
         float LandingAngleDeg = 0.0f;
         /** Spin at the first impact; 0 when the ball never lands. */
         float LandingSpinRpm = 0.0f;
+        /** Speed along the ground just before the first impact; 0 when the ball never lands. */
+        float FirstImpactTangentInMps = 0.0f;
+        /** Speed along the ground just after the first impact, negative when the ball spins back. */
+        float FirstImpactTangentOutMps = 0.0f;
+        /** True when the first impact reversed the ball's direction along the ground. */
+        bool bFirstImpactSpinback = false;
         /** False when the time limit ran out before the ball stopped. */
         bool bAtRest = false;
         ELandingBucket LandingBucket = ELandingBucket::Run;
@@ -84,8 +90,10 @@ namespace OpenFairway
     };
 
     /**
-     * Headless shot simulation on one flat surface, stepping at 120 Hz like the ogolf-physics
+     * Headless shot simulation on one planar surface, stepping at 120 Hz like the ogolf-physics
      * PhysicsAdapter. Used for regression fixtures and to predict a shot without a world.
+     * GroundNormal tilts the plane through the launch point (OpenFairway frame, +Y up); a zero
+     * normal plays as level ground.
      */
     namespace ShotSimulator
     {
@@ -93,6 +101,6 @@ namespace OpenFairway
 
         OPENFAIRWAYPHYSICS_API FShotSimulationResult Simulate(const FLaunchData& Launch, ESurface Surface = ESurface::Fairway,
             const FBallPhysicsProfile& Profile = FBallPhysicsProfile(), const FAirConditions& Air = FAirConditions(),
-            float MaxTimeSeconds = DefaultMaxTimeSeconds);
+            float MaxTimeSeconds = DefaultMaxTimeSeconds, const FVector3f& GroundNormal = FVector3f(0.0f, 1.0f, 0.0f));
     } // namespace ShotSimulator
 } // namespace OpenFairway
