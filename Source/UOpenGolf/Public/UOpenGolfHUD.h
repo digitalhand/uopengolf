@@ -7,7 +7,7 @@
 class SWidget;
 class UUserWidget;
 
-/** Range HUD: shot tiles, wind, launch-monitor status and the optional wind debug overlay. */
+/** Range HUD: shot tiles, wind and its controls, launch-monitor status, play buttons and the optional wind debug overlay. */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfHUD : public AHUD
 {
@@ -29,4 +29,8 @@ private:
     TSoftClassPtr<UUserWidget> WindWidgetClass = TSoftClassPtr<UUserWidget>(FSoftObjectPath(TEXT("/Game/UOpenGolf/UI/WBP_WindIndicator.WBP_WindIndicator_C")));
 
     TSharedPtr<SWidget> Widget;
+    /** Play mode, ball placement and hole score; see SPlayModeBar. */
+    TSharedPtr<SWidget> PlayBar;
+    /** The wind slide-out on the wind indicator; see SWindControl. */
+    TSharedPtr<SWidget> WindControl;
 };

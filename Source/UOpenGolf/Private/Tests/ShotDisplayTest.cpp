@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
-#include "ShotDisplay.h"
+#include "UI/ShotDisplay.h"
 
 namespace
 {
@@ -135,11 +135,6 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Recording error outranks launch-monitor error"),
         ShotDisplay::StatusTip(EState::Disconnected, TEXT("Link lost"), 2, TEXT("Disk full")), FString(TEXT("Disk full - retrying")));
 
-    TestEqual(TEXT("Aim straight"), ShotDisplay::AimLabel(0.0f), FString(TEXT("Straight")));
-    TestEqual(TEXT("Aim under half a degree is straight"), ShotDisplay::AimLabel(0.4f), FString(TEXT("Straight")));
-    TestEqual(TEXT("Aim left"), ShotDisplay::AimLabel(-12.3f), FString(TEXT("12° L")));
-    TestEqual(TEXT("Aim right rounds"), ShotDisplay::AimLabel(12.6f), FString(TEXT("13° R")));
-    TestEqual(TEXT("Aim at the limit"), ShotDisplay::AimLabel(45.0f), FString(TEXT("45° R")));
     return true;
 }
 #endif

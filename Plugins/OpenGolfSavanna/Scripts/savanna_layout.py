@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Savanna range layout: seeded tree patches, the approach bunker and the rough-to-desert ground mask.
+"""Savanna range layout: seeded tree patches and the rough-to-desert ground mask. The hole itself is savanna_hole.py.
 
 Terrain-local metres; no unreal import, so the rules run under plain Python tests.
 """
@@ -10,15 +10,6 @@ import random
 # then fades to desert over ROUGH_FADE_M, so no wide strip of bare rough shows past the tiles.
 ROUGH_SOLID_M = 12.0
 ROUGH_FADE_M = 4.0
-
-
-def relocate_bunker(outline, mound_centers, target=(108.0, 0.0)):
-    center = tuple(sum(p[axis] for p in outline) / len(outline) for axis in (0, 1))
-    delta = target[0] - center[0], target[1] - center[1]
-    moved = [(x + delta[0], y + delta[1]) for x, y in outline]
-    centers = [(x + delta[0], y + delta[1]) if math.hypot(x - center[0], y - center[1]) < 0.1 else (x, y)
-               for x, y in mound_centers]
-    return moved, centers
 
 
 # Jacaranda canopy scale: each patch kind's scale range times the canopy ratio measured on

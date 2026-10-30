@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Misc/AutomationTest.h"
+#include "Play/OpenGolfPlayRules.h"
 #include "OpenFairwayBall.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UOpenGolfGameMode.h"
@@ -61,6 +62,12 @@ public:
                 Test->TestEqual(TEXT("Tee camera sits on the aim line"), FMath::RadiansToDegrees(FMath::Atan2(CameraToBall.Y, CameraToBall.X)), 30.0, 0.5);
                 Test->TestEqual(TEXT("Tee camera keeps its distance"), CameraToBall.Size2D(), 600.0, 1.0);
             }
+            // A tap turns exactly one step, whatever the frame rate.
+            Test->TestTrue(TEXT("A tap of D turns"), Controller->NudgeAim(1));
+            Test->TestEqual(TEXT("A tap turns one step"), Controller->GetAimYaw(), 30.0f + OpenGolfPlay::AimTapStepDeg, 1e-4f);
+            Controller->NudgeAim(-1);
+            Test->TestEqual(TEXT("A tap of A turns back"), Controller->GetAimYaw(), 30.0f, 1e-4f);
+            Test->TestEqual(TEXT("The range reads the aim off its target line"), Controller->GetAimOffsetDeg(), 30.0f, 1e-4f);
             Controller->SetAimYaw(90.0f);
             Test->TestEqual(TEXT("Aim is limited"), Controller->GetAimYaw(), AUOpenGolfPlayerController::MaxAimYawDeg);
             Controller->SetAimYaw(0.0f);

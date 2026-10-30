@@ -105,7 +105,7 @@ namespace OpenFairway
     }
 
     FShotSimulationResult ShotSimulator::Simulate(const FLaunchData& Launch, ESurface SurfaceType, const FBallPhysicsProfile& Profile,
-        const FAirConditions& Air, float MaxTimeSeconds)
+        const FAirConditions& Air, float MaxTimeSeconds, const FVector3f& GroundNormal)
     {
         FShotSimulationResult Result;
         if (!Launch.IsValid())
@@ -126,7 +126,7 @@ namespace OpenFairway
 
         constexpr float Dt = GolfPhysics::SimulationDt;
         constexpr float Radius = GolfPhysics::Radius;
-        const FVector3f Normal = UpAxis;
+        const FVector3f Normal = GroundNormal.SizeSquared() > 0.000001f ? GroundNormal.GetSafeNormal() : UpAxis;
         FVector3f Velocity = Vectors.Velocity;
         FVector3f Omega = Vectors.Omega;
         FVector3f Position = Normal * Radius;
@@ -141,8 +141,8 @@ namespace OpenFairway
         {
             if (!bOnGround)
             {
-                // Position.Y is the ball centre's height above the flat ground.
-                const FVector3f Wind = WindProfile::At(Params.Environment, Position.Y);
+                // The ball centre's height above the ground plane.
+                const FVector3f Wind = WindProfile::At(Params.Environment, FVector3f::DotProduct(Position, Normal));
                 const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(Velocity - Wind, Omega, Params.Environment.AirDensity,
                     Params.Environment.AirViscosity, Params.Environment.DragScale, Params.Environment.LiftScale, Params.Environment.InitialLaunchAngleDeg,
                     Params.Flight);
@@ -186,9 +186,23 @@ namespace OpenFairway
 
                     if (!bCarryRecorded)
                     {
+                        const FVector3f PostImpactTangent = Velocity - Normal * FVector3f::DotProduct(Velocity, Normal);
+                        const float PreTangentSpeed = PreImpactTangent.Size();
+                        const float PostTangentSpeed = PostImpactTangent.Size();
+                        Result.FirstImpactTangentInMps = PreTangentSpeed;
+                        Result.FirstImpactTangentOutMps = PostTangentSpeed;
+                        if (PreTangentSpeed > 0.01f && PostTangentSpeed > 0.01f)
+                        {
+                            Result.bFirstImpactSpinback =
+                                FVector3f::DotProduct(PreImpactTangent / PreTangentSpeed, PostImpactTangent / PostTangentSpeed) < -0.001f;
+                            if (Result.bFirstImpactSpinback)
+                            {
+                                Result.FirstImpactTangentOutMps = -PostTangentSpeed;
+                            }
+                        }
                         Result.LandingSpeedMps = PreImpactSpeed;
                         Result.LandingSpinRpm = RolloutImpactSpinRpm;
-                        Result.LandingAngleDeg = FMath::Atan2(PreImpactNormalSpeed, FMath::Max(PreImpactTangent.Size(), 0.0001f)) * RadToDeg;
+                        Result.LandingAngleDeg = FMath::Atan2(PreImpactNormalSpeed, FMath::Max(PreTangentSpeed, 0.0001f)) * RadToDeg;
                         Result.CarryM = FMath::Max(FVector3f::DotProduct(Position, Vectors.ShotDirection), 0.0f);
                         Result.HangTimeS = (static_cast<float>(Step) + ImpactFraction) * Dt;
                         bCarryRecorded = true;

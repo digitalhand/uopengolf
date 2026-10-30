@@ -25,7 +25,7 @@ bool FCoastalTerrainContactTest::RunTest(const FString& Parameters)
         Area = *It;
     if (!TestNotNull(TEXT("Saved range has a terrain area"), Area))
         return false;
-    FVector2D BunkerCenter;
+    FVector2D BunkerCenter = FVector2D::ZeroVector;
     if (!TestTrue(TEXT("Saved range has a bunker probe inside its sand outline"), Area->Definition && FindRangeBunkerCenter(*Area->Definition, BunkerCenter)))
         return false;
     struct FProbe
@@ -35,8 +35,11 @@ bool FCoastalTerrainContactTest::RunTest(const FString& Parameters)
     };
     const FProbe Probes[] = {
         {{0, 0}, EOpenFairwaySurface::Fairway},
-        {{137.16, 0}, EOpenFairwaySurface::Green},
-        {{137.16, 11}, EOpenFairwaySurface::Fringe},
+        // The par-4 green at the pin, its fringe beside it, and the old 150-yard green, now fairway.
+        {{AUOpenGolfRange::HoleDistanceM, 0}, EOpenFairwaySurface::Green},
+        {{363.0, 12.5}, EOpenFairwaySurface::Fringe},
+        {{137.16, 0}, EOpenFairwaySurface::Fairway},
+        {{360.0, 19.0}, EOpenFairwaySurface::Sand},
         {BunkerCenter, EOpenFairwaySurface::Sand},
         {{60, -42}, EOpenFairwaySurface::Rough},
         {{-252.01, 0}, EOpenFairwaySurface::Rough},

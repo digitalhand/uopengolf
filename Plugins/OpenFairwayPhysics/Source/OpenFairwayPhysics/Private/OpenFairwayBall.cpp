@@ -2,6 +2,7 @@
 // Collision handling follows ogolf-physics game/GolfBall.cs at e6d793ae9477efaf55dc9078d7260f76bb532a7d,
 // with Godot/Jolt MoveAndCollide and ray casts replaced by Chaos sphere sweeps and line traces.
 #include "OpenFairwayBall.h"
+#include "OpenFairway/CupCapture.h"
 #include "OpenFairway/WindProfile.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
@@ -27,6 +28,11 @@ namespace
     constexpr float SnapProbeM = 50.0f;
     constexpr float OutOfBoundsM = 1000.0f;
     constexpr float FallThroughM = 100.0f;
+    /** A ball centre this far below the ground under it has tunnelled through and is lifted back (ogolf-physics BELOW_GROUND_RECOVERY_Y). */
+    constexpr float BelowGroundRecoveryM = 0.5f;
+    constexpr float RecoveryProbeUpM = 2.0f;
+    constexpr float RecoveryProbeDownM = 8.0f;
+    constexpr float GroundSnapOffsetM = 0.001f;
     constexpr float TracerSpacingCm = 25.0f;
     /** Visual roll per frame stays under half a turn: without motion blur, faster spin reads as turning backwards. */
     constexpr float MaxVisualRollRadPerFrame = 1.0f;
@@ -41,6 +47,11 @@ namespace
     FVector ToUnreal(const FVector3f& V)
     {
         return FVector(V.X, V.Z, V.Y);
+    }
+
+    FQuat4f CupRotation(const FOpenFairwayCup& Cup)
+    {
+        return FQuat4f::FindBetweenNormals(CoreUp, ToCore(Cup.GetNormal()));
     }
 
     ESurface ToCoreSurface(EOpenFairwaySurface Surface)
@@ -83,6 +94,29 @@ AOpenFairwayBall::AOpenFairwayBall()
     {
         BallMesh->SetStaticMesh(Sphere.Object);
     }
+}
+
+void AOpenFairwayBall::SetCupLocations(const TArray<FVector>& Locations)
+{
+    TArray<FOpenFairwayCup> Descriptors;
+    for (const FVector& Location : Locations)
+        Descriptors.Add({Location, FVector::UpVector});
+    SetCups(Descriptors);
+}
+
+void AOpenFairwayBall::SetCups(const TArray<FOpenFairwayCup>& InCups)
+{
+    Cups.Reset();
+    CupLocations.Reset();
+    for (const FOpenFairwayCup& Cup : InCups)
+    {
+        if (Cup.Position.ContainsNaN())
+            continue;
+        Cups.Add({Cup.Position, Cup.GetNormal()});
+        CupLocations.Add(Cup.Position);
+    }
+    CrossingCup.Reset();
+    MeasuredCup.Reset();
 }
 
 void AOpenFairwayBall::BeginPlay()
@@ -345,6 +379,10 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     SubstepAccumulator = 0.0f;
     ShotStep = 0;
     RolloutImpactSpinRpm = 0.0f;
+    bHoled = false;
+    CrossingCup.Reset();
+    MeasuredCup.Reset();
+    HoleDropElapsed = -1.0f;
     ShotStart = GetActorLocation();
 
     const int32 ShotNumber = Result.ShotNumber + 1;
@@ -376,6 +414,12 @@ void AOpenFairwayBall::PlaceAt(const FVector& Location)
     }
     SetActorLocation(Location, false, nullptr, ETeleportType::ResetPhysics);
     BallState = EOpenFairwayBallState::Rest;
+    bHoled = false;
+    CrossingCup.Reset();
+    MeasuredCup.Reset();
+    MeasuredCup.Reset();
+    Result.bOverCup = false;
+    HoleDropElapsed = -1.0f;
     Velocity = FVector3f::ZeroVector;
     Omega = FVector3f::ZeroVector;
     bOnGround = false;
@@ -399,6 +443,12 @@ void AOpenFairwayBall::Tick(float DeltaSeconds)
     if (BallState == EOpenFairwayBallState::Rest)
     {
         SubstepAccumulator = 0.0f;
+        return;
+    }
+
+    if (HoleDropElapsed >= 0.0f)
+    {
+        StepHoleDrop(DeltaSeconds);
         return;
     }
 
@@ -429,8 +479,13 @@ void AOpenFairwayBall::Tick(float DeltaSeconds)
 
 bool AOpenFairwayBall::StepPhysics(float Dt)
 {
+    if (CrossingCup)
+    {
+        return StepCupCrossing(Dt);
+    }
     const bool bWasOnGround = bOnGround;
     const FVector3f PreviousVelocity = Velocity;
+    const FVector3f PreviousSpin = Omega;
     // Flight reads the height above the launch ground: ShotStart is the ball centre, one radius up.
     const FVector3f Position = ToCore(GetActorLocation() - ShotStart) / CmPerM + FVector3f(0.0f, GolfPhysics::Radius, 0.0f);
     const FBallState State{Position, Velocity, Omega};
@@ -455,6 +510,14 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         Result.TerminationReason = EOpenFairwayShotTermination::SafetyStop;
         EnterRest();
         return false;
+    }
+
+    // Intersect the actual predicted segment before sweeping against the uncut green. This also catches
+    // a complete crossing between two samples and keeps entry height/normal velocity on sloped greens.
+    if (bWasOnGround && TryEnterCup(Start, Start + ToUnreal(Velocity * Dt) * CmPerM, PreviousVelocity, PreviousSpin, Dt))
+    {
+        UpdateCupHeight();
+        return !bHoled;
     }
 
     auto MoveWithSweep = [this](const FVector& Delta, FHitResult& Hit)
@@ -482,6 +545,10 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
     FHitResult Hit;
     const bool bHit = MoveWithSweep(ToUnreal(Velocity * Dt) * CmPerM, Hit);
     HandleCollision(bHit ? &Hit : nullptr, bWasOnGround, PreviousVelocity);
+    if (bHoled)
+    {
+        return false;
+    }
 
     // Match the headless contact step: move with the rebound for the unspent portion
     // of this timestep. Dropping it changes the next bounce speed enough to cross
@@ -493,7 +560,12 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         FHitResult RemainderHit;
         const bool bRemainderHit = MoveWithSweep(ToUnreal(Velocity * Dt * (1.0f - Hit.Time)) * CmPerM, RemainderHit);
         HandleCollision(bRemainderHit ? &RemainderHit : nullptr, bSupportedAfterImpact, ReboundVelocity);
+        if (bHoled)
+        {
+            return false;
+        }
     }
+    TryRecoverToGround();
 
     ++ShotStep;
     if (!bOnGround)
@@ -501,7 +573,13 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         ApplyCanopy(Dt);
     }
 
+    UpdateCupHeight();
     Result.ApexM = FMath::Max(Result.ApexM, static_cast<float>(GetActorLocation().Z - ShotStart.Z) / CmPerM);
+    // Before the rest check: a ball that stops over the cup drops, it never rests there.
+    if (BallState == EOpenFairwayBallState::Rollout && bOnGround && TryCaptureInCup(GetActorLocation(), false))
+    {
+        return false;
+    }
     if (BallState != EOpenFairwayBallState::Rest && GolfPhysics::CanRest(FBallState{FVector3f::ZeroVector, Velocity, Omega}, bOnGround, FloorNormal, SurfaceSettings, ShotParams.Rollout))
     {
         EnterRest();
@@ -558,14 +636,16 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
             {
                 if (bLandedFromFlight)
                 {
-                    // The impact spin keeps its "bite" on roll-out friction as the spin decays.
-                    RolloutImpactSpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
-                    Result.bLanded = true;
-                    Result.LandingSpeedMps = Velocity.Size();
-                    Result.LandingAngleDeg = AngleDegrees(Velocity, Normal);
-                    Result.HangTimeS = Result.ElapsedS;
-                    Result.LandingSurface = CurrentSurface;
-                    Result.CarryM = FMath::Max(FVector3f::DotProduct(ToCore(GetActorLocation() - ShotStart) / CmPerM, ShotDirection), 0.0f);
+                    RecordLanding(Normal);
+                }
+                // Descending into the cup, from flight or a bounce: a dunk instead of a bounce.
+                if (FVector3f::DotProduct(Velocity, Normal) < 0.0f && TryCaptureInCup(Hit->ImpactPoint, true))
+                {
+                    if (bLandedFromFlight)
+                    {
+                        OnBallLanded.Broadcast(Result);
+                    }
+                    return;
                 }
 
                 const FBallState Resolved = GolfPhysics::ResolveImpact(
@@ -625,6 +705,225 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
         bOnGround = false;
         FloorNormal = CoreUp;
     }
+}
+
+void AOpenFairwayBall::RecordLanding(const FVector3f& Normal)
+{
+    // The impact spin keeps its "bite" on roll-out friction as the spin decays.
+    RolloutImpactSpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
+    Result.bLanded = true;
+    Result.LandingSpeedMps = Velocity.Size();
+    Result.LandingAngleDeg = AngleDegrees(Velocity, Normal);
+    Result.HangTimeS = Result.ElapsedS;
+    Result.LandingSurface = CurrentSurface;
+    Result.CarryM = FMath::Max(FVector3f::DotProduct(ToCore(GetActorLocation() - ShotStart) / CmPerM, ShotDirection), 0.0f);
+}
+
+bool AOpenFairwayBall::TryCaptureInCup(const FVector& Location, bool bLanding)
+{
+    for (const FOpenFairwayCup& Cup : Cups)
+    {
+        const FQuat4f Rotation = CupRotation(Cup);
+        const FVector3f Probe = Rotation.UnrotateVector(ToCore(Location - Cup.Position) / CmPerM);
+        const FVector3f LocalVelocity = Rotation.UnrotateVector(Velocity);
+        if (bLanding ? CupCapture::CapturesLanding(Probe, FVector3f::ZeroVector)
+                     : CupCapture::CapturesRolling(Probe, LocalVelocity, FVector3f::ZeroVector))
+        {
+            StartHoleDrop(Cup, bLanding ? TEXT(" on the fly") : TEXT(""));
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AOpenFairwayBall::TryEnterCup(const FVector& Start, const FVector& End, const FVector3f& PreviousVelocity,
+    const FVector3f& PreviousSpin, float Dt)
+{
+    // Choose the first crossed aperture, independent of the order courses register their cups.
+    const FOpenFairwayCup* First = nullptr;
+    float EntryFraction = 2;
+    for (const FOpenFairwayCup& Cup : Cups)
+    {
+        const FQuat4f Rotation = CupRotation(Cup);
+        const FVector3f A = Rotation.UnrotateVector(ToCore(Start - Cup.Position) / CmPerM);
+        const FVector3f D = Rotation.UnrotateVector(ToCore(End - Start) / CmPerM);
+        const float LengthSquared = D.X * D.X + D.Z * D.Z;
+        if (LengthSquared < 1e-12f)
+            continue;
+        const float Along = A.X * D.X + A.Z * D.Z;
+        const float Outside = A.X * A.X + A.Z * A.Z - FMath::Square(CupCapture::CupRadiusM);
+        const float Discriminant = Along * Along - LengthSquared * Outside;
+        if (Discriminant < 0)
+            continue;
+        const float Fraction = Outside < 0 ? 0 : (-Along - FMath::Sqrt(Discriminant)) / LengthSquared;
+        if (Fraction < 0 || Fraction > 1 || Fraction >= EntryFraction)
+            continue;
+        const FVector3f Entry = A + D * Fraction;
+        if (FMath::Abs(Entry.Y) > 2 * GolfPhysics::Radius)
+            continue;
+        First = &Cup;
+        EntryFraction = Fraction;
+    }
+    if (!First)
+        return false;
+    const FOpenFairwayCup Cup = *First;
+    const FQuat4f Rotation = CupRotation(Cup);
+    SetActorLocation(FMath::Lerp(Start, End, EntryFraction), false, nullptr, ETeleportType::TeleportPhysics);
+    Velocity = FMath::Lerp(PreviousVelocity, Velocity, EntryFraction);
+    Omega = FMath::Lerp(PreviousSpin, Omega, EntryFraction);
+    const FVector3f Local = Rotation.UnrotateVector(ToCore(GetActorLocation() - Cup.Position) / CmPerM);
+    const FVector3f LocalVelocity = Rotation.UnrotateVector(Velocity);
+    const float Speed = FVector2f(LocalVelocity.X, LocalVelocity.Z).Size();
+    const float Offset = Speed > 1e-4f ? FMath::Abs(Local.X * LocalVelocity.Z - Local.Z * LocalVelocity.X) / Speed : 0;
+    const float MaxSpeed = CupCapture::MaxCaptureSpeed(Offset);
+    if (Speed <= MaxSpeed)
+    {
+        StartHoleDrop(Cup, TEXT(""));
+        return true;
+    }
+    Result.bOverCup = true;
+    Result.OverCupSpeedMps = Speed;
+    Result.OverCupMaxSpeedMps = MaxSpeed;
+    Result.CupEntrySpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
+    Result.CupEntryOffsetM = Offset;
+    Result.CupExitVelocityMps = FVector::ZeroVector;
+    Result.CupMaxHeightM = 0;
+    MeasuredCup = Cup;
+    CrossingCup = Cup;
+    CrossingEntrySpeed = Speed;
+    bOnGround = false;
+    UE_LOG(LogOpenFairway, Log, TEXT("Shot %d crossed the cup at %.3f m/s, offset %.4f m, spin %.1f rpm, normal %s (capture limit %.3f m/s)."),
+        Result.ShotNumber, Speed, Offset, Result.CupEntrySpinRpm, *Cup.Normal.ToString(), MaxSpeed);
+    AdvanceCupCrossing(Dt * (1 - EntryFraction));
+    return true;
+}
+
+void AOpenFairwayBall::StartHoleDrop(const FOpenFairwayCup& Cup, const TCHAR* How)
+{
+    bHoled = true;
+    Result.bHoled = true;
+    // Even one that crossed too fast first: it dropped.
+    Result.bOverCup = false;
+    HoleDropFrom = GetActorLocation();
+    const FQuat4f Rotation = CupRotation(Cup);
+    const FVector3f LocalFrom = Rotation.UnrotateVector(ToCore(HoleDropFrom - Cup.Position) / CmPerM);
+    HoleDropTo = Cup.Position + ToUnreal(Rotation.RotateVector(CupCapture::DropPoint(LocalFrom, FVector3f::ZeroVector, PoleRadiusCm / CmPerM))) * CmPerM;
+    HoleDropElapsed = 0.0f;
+    // Still moving until the drop finishes; off the ground so nothing rolls it on.
+    BallState = EOpenFairwayBallState::Rollout;
+    bOnGround = false;
+    Velocity = FVector3f::ZeroVector;
+    Omega = FVector3f::ZeroVector;
+    UpdateResult();
+    UE_LOG(LogOpenFairway, Log, TEXT("Shot %d holed%s after %.1f s."), Result.ShotNumber, How, Result.ElapsedS);
+    OnBallHoled.Broadcast(Result);
+}
+
+bool AOpenFairwayBall::StepCupCrossing(float Dt)
+{
+    Result.ElapsedS += Dt;
+    if (Result.ElapsedS > MaxShotSeconds)
+    {
+        UE_LOG(LogOpenFairway, Warning, TEXT("Shot %d still moving after %.1f s; stopping it."), Result.ShotNumber, MaxShotSeconds);
+        Result.TerminationReason = EOpenFairwayShotTermination::SafetyStop;
+        CrossingCup.Reset();
+        EnterRest();
+        return false;
+    }
+    ++ShotStep;
+    AdvanceCupCrossing(Dt);
+    return !bHoled;
+}
+
+bool AOpenFairwayBall::AdvanceCupCrossing(float Dt)
+{
+    const FOpenFairwayCup Cup = *CrossingCup;
+    const FQuat4f Rotation = CupRotation(Cup);
+    FBallState State{Rotation.UnrotateVector(ToCore(GetActorLocation() - Cup.Position) / CmPerM),
+        Rotation.UnrotateVector(Velocity), Rotation.UnrotateVector(Omega)};
+    const auto Crossing = CupCapture::AdvanceCrossing(State, FVector3f::ZeroVector,
+        Rotation.UnrotateVector(FVector3f(0, -GolfPhysics::Gravity, 0)), Dt);
+    SetActorLocation(Cup.Position + ToUnreal(Rotation.RotateVector(State.Position)) * CmPerM, false, nullptr, ETeleportType::TeleportPhysics);
+    Velocity = Rotation.RotateVector(State.Velocity);
+    Omega = Rotation.RotateVector(State.Spin);
+    UpdateCupHeight();
+    if (Crossing.Outcome == CupCapture::ECupCrossing::OverCup)
+        return true;
+
+    CrossingCup.Reset();
+    if (Crossing.Outcome == CupCapture::ECupCrossing::Holed)
+    {
+        StartHoleDrop(Cup, TEXT(" off the back of the cup"));
+        return false;
+    }
+    // Above the surface is flight even for a small positive departure velocity. Do not erase a genuine hop.
+    bOnGround = State.Position.Y <= GolfPhysics::Radius + 1e-6f && State.Velocity.Y <= 0;
+    FloorNormal = ToCore(Cup.Normal);
+    if (bOnGround)
+        Velocity = RemoveVelocityAlongNormal(Velocity, FloorNormal, false);
+    Result.CupExitVelocityMps = ToUnreal(Velocity);
+    UE_LOG(LogOpenFairway, Log, TEXT("Shot %d left the cup: local velocity %s m/s (entered %.3f m/s)%s."),
+        Result.ShotNumber, *State.Velocity.ToString(), CrossingEntrySpeed, bOnGround ? TEXT("") : TEXT(", airborne"));
+    const float Remaining = Dt - Crossing.ConsumedSeconds;
+    if (Remaining > 1e-7f)
+    {
+        // The caller already counted Dt; ordinary physics accounts for the remainder itself.
+        Result.ElapsedS -= Remaining;
+        StepPhysics(Remaining);
+    }
+    return false;
+}
+
+void AOpenFairwayBall::UpdateCupHeight()
+{
+    if (MeasuredCup)
+    {
+        const float Height = FVector::DotProduct(GetActorLocation() - MeasuredCup->Position, MeasuredCup->Normal) / CmPerM - GolfPhysics::Radius;
+        Result.CupMaxHeightM = FMath::Max(Result.CupMaxHeightM, Height);
+    }
+}
+
+void AOpenFairwayBall::StepHoleDrop(float DeltaSeconds)
+{
+    // Slides over the cup in the first half while falling with an eased (t squared) drop.
+    HoleDropElapsed += DeltaSeconds;
+    const float T = FMath::Min(HoleDropElapsed / HoleDropSeconds, 1.0f);
+    FVector Location = FMath::Lerp(HoleDropFrom, HoleDropTo, FMath::Min(T * 2.0f, 1.0f));
+    Location.Z = FMath::Lerp(HoleDropFrom.Z, HoleDropTo.Z, T * T);
+    SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
+    if (T >= 1.0f)
+    {
+        HoleDropElapsed = -1.0f;
+        EnterRest();
+    }
+}
+
+bool AOpenFairwayBall::TryRecoverToGround()
+{
+    // Probe from above: a ball inside or under the terrain still finds the ground's top face.
+    FGroundHit Ground;
+    const FVector Location = GetActorLocation();
+    if (BallState == EOpenFairwayBallState::Rest || bHoled || !ProbeGround(Ground, RecoveryProbeUpM, RecoveryProbeDownM) || Ground.Normal.Y <= 0.7f ||
+        Ground.Location.Z - Location.Z < BelowGroundRecoveryM * CmPerM)
+    {
+        return false;
+    }
+
+    SetActorLocation(Ground.Location + ToUnreal(Ground.Normal) * (GolfPhysics::Radius + GroundSnapOffsetM) * CmPerM, false, nullptr, ETeleportType::TeleportPhysics);
+    FloorNormal = Ground.Normal;
+    SetSurface(ResolveSurface(Ground.Component.Get(), Ground.PhysMaterial.Get()));
+    Velocity = RemoveVelocityAlongNormal(Velocity, Ground.Normal, false);
+    bOnGround = true;
+    UE_LOG(LogOpenFairway, Warning, TEXT("Shot %d fell through the ground at %s; recovered onto %s."), Result.ShotNumber, *Location.ToString(),
+        SurfaceCatalog::GetName(ToCoreSurface(CurrentSurface)));
+    if (BallState == EOpenFairwayBallState::Flight)
+    {
+        RecordLanding(Ground.Normal);
+        BallState = EOpenFairwayBallState::Rollout;
+        UpdateResult();
+        OnBallLanded.Broadcast(Result);
+    }
+    return true;
 }
 
 bool AOpenFairwayBall::ProbeGround(FGroundHit& OutHit, float UpMeters, float DownMeters) const

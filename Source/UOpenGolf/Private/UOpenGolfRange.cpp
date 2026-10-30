@@ -7,6 +7,7 @@
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/World.h"
+#include "Hole/OpenGolfCupComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "OpenFairwayBall.h"
 #include "OpenGolfFlagstickComponent.h"
@@ -33,6 +34,8 @@ AUOpenGolfRange::AUOpenGolfRange()
     PrimaryActorTick.TickInterval = 0.25f;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Tee"));
     RootComponent->SetMobility(EComponentMobility::Static);
+    Cup = CreateDefaultSubobject<UOpenGolfCupComponent>(TEXT("Cup"));
+    Cup->SetupAttachment(RootComponent);
 }
 
 template <typename T>
@@ -68,7 +71,7 @@ void AUOpenGolfRange::BuildDefaultLayout()
 
     // The terrain area supplies the ground; AlignLayoutToTerrain puts the flag on it.
     Flagstick = AddLayoutComponent<UOpenGolfFlagstickComponent>(TEXT("Flagstick"), TEXT("Range/Targets"));
-    Flagstick->SetRelativeLocation(FVector(GreenDistanceM * CmPerM, 0, 0));
+    Flagstick->SetRelativeLocation(FVector(HoleDistanceM * CmPerM, 0, 0));
     // Like the rest of the range, it is movable; its cloth child moves every frame.
     Flagstick->SetMobility(EComponentMobility::Movable);
 
@@ -95,6 +98,20 @@ void AUOpenGolfRange::BeginPlay()
     ApplyWindSettings();
     BuildDefaultLayout();
     RefreshPresentation();
+    if (IsValid(Flagstick))
+    {
+        FVector Ground, Normal = FVector::UpVector;
+        if (IsValid(Terrain) && Terrain->GroundAt(Flagstick->GetComponentLocation(), Ground, Normal))
+            Flagstick->SetWorldLocation(Ground);
+        Cup->PlaceAtFlagstick(Flagstick, Normal);
+    }
+}
+
+FVector AUOpenGolfRange::GetCupLocation() const
+{
+    if (Cup && Cup->GetFlagstick())
+        return Cup->GetCupLocation();
+    return IsValid(Flagstick) ? Flagstick->GetComponentLocation() : GetTeeLocation();
 }
 
 FVector AUOpenGolfRange::GetTeeLocation() const

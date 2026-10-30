@@ -13,6 +13,7 @@ struct FHitResult;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOpenFairwayBallLanded, const FOpenFairwayShotResult&, Result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOpenFairwayBallAtRest, const FOpenFairwayShotResult&, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOpenFairwayBallHoled, const FOpenFairwayShotResult&, Result);
 
 /**
  * A golf ball driven by the OpenFairway core. Unreal (Chaos) is used the way ogolf-physics
@@ -45,6 +46,32 @@ public:
     /** The current or last shot; false before the first launch. */
     UFUNCTION(BlueprintPure, Category = "OpenFairway")
     bool GetShotResult(FOpenFairwayShotResult& OutResult) const;
+
+    /**
+     * Cups the ball can drop into: world positions of each cup's centre at the surface. A ball rolling over a cup
+     * slowly enough, or landing inside it, is holed (OpenFairway::CupCapture); it sinks into the cup, comes to rest
+     * there and reports bHoled. A rolling ball too fast for its line crosses the open cup instead: it dips, strikes the
+     * lip and hops over it, or hits the back of the cup and drops.
+     */
+    UFUNCTION(BlueprintCallable, Category = "OpenFairway|Cup")
+    void SetCupLocations(const TArray<FVector>& Locations);
+
+    /** Registers cups on arbitrary surfaces. Invalid positions are ignored; invalid normals use world up. */
+    UFUNCTION(BlueprintCallable, Category = "OpenFairway|Cup")
+    void SetCups(const TArray<FOpenFairwayCup>& InCups);
+
+    UFUNCTION(BlueprintPure, Category = "OpenFairway|Cup")
+    const TArray<FOpenFairwayCup>& GetCups() const { return Cups; }
+
+    UFUNCTION(BlueprintPure, Category = "OpenFairway|Cup")
+    const TArray<FVector>& GetCupLocations() const { return CupLocations; }
+
+    /** True from a cup capture until the ball is placed or launched again. */
+    UFUNCTION(BlueprintPure, Category = "OpenFairway|Cup")
+    bool IsHoled() const { return bHoled; }
+
+    /** Seconds a holed ball takes to sink into the cup. */
+    static constexpr float HoleDropSeconds = 0.35f;
 
     /** Ball speed in m/s. */
     UFUNCTION(BlueprintPure, Category = "OpenFairway")
@@ -142,6 +169,14 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "OpenFairway")
     FOnOpenFairwayBallAtRest OnBallAtRest;
 
+    /** The moment a cup captures the ball; OnBallAtRest follows once it has sunk in. */
+    UPROPERTY(BlueprintAssignable, Category = "OpenFairway|Cup")
+    FOnOpenFairwayBallHoled OnBallHoled;
+
+    /** Flagstick radius; a holed ball settles beside the pole. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Cup", meta = (ClampMin = "0"))
+    float PoleRadiusCm = 1.25f;
+
     /** Surface used where no surface tag is found. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway")
     EOpenFairwaySurface DefaultSurface = EOpenFairwaySurface::Fairway;
@@ -227,6 +262,23 @@ private:
     void HandleCollision(const FHitResult* Hit, bool bWasOnGround, const FVector3f& PreviousVelocity);
     bool ProbeGround(FGroundHit& OutHit, float UpMeters, float DownMeters) const;
     void SnapToGround();
+    /** Lifts a ball that slipped through the ground back onto it; false when the ball is not below ground. */
+    bool TryRecoverToGround();
+    void RecordLanding(const FVector3f& Normal);
+    /**
+     * Starts the drop when Location (a ball centre, or a landing contact) is captured by a cup, or a crossing when a
+     * rolling ball is over a cup too fast to drop. True when the ball was holed.
+     */
+    bool TryCaptureInCup(const FVector& Location, bool bLanding);
+    bool TryEnterCup(const FVector& Start, const FVector& End, const FVector3f& PreviousVelocity, const FVector3f& PreviousSpin, float Dt);
+    /** Captures the ball into the cup at Cup (world): it stops and sinks in over HoleDropSeconds. */
+    void StartHoleDrop(const FOpenFairwayCup& Cup, const TCHAR* How);
+    /** One step of a crossing over the open cup (CupCapture::StepOverCup) in place of the ground step and sweep. */
+    bool StepCupCrossing(float Dt);
+    /** Advances the crossing by Dt from the ball's state; false once it ends, holed or back on the green. */
+    bool AdvanceCupCrossing(float Dt);
+    void UpdateCupHeight();
+    void StepHoleDrop(float DeltaSeconds);
     void ApplyVisualRoll(const FVector& FrameDelta);
     void SetSurface(EOpenFairwaySurface Surface);
     void EnterRest();
@@ -254,6 +306,19 @@ private:
     FVector3f ShotDirection = FVector3f(1.0f, 0.0f, 0.0f);
     FOpenFairwayShotResult Result;
     bool bHasShot = false;
+
+    TArray<FVector> CupLocations;
+    TArray<FOpenFairwayCup> Cups;
+    /** The cup (world) a ball too fast to drop is crossing, off the green's collision until it is out or holed. */
+    TOptional<FOpenFairwayCup> CrossingCup;
+    TOptional<FOpenFairwayCup> MeasuredCup;
+    /** Horizontal speed the current crossing started at, for its log. */
+    float CrossingEntrySpeed = 0.0f;
+    bool bHoled = false;
+    /** The sink animation runs while this is non-negative. */
+    float HoleDropElapsed = -1.0f;
+    FVector HoleDropFrom = FVector::ZeroVector;
+    FVector HoleDropTo = FVector::ZeroVector;
 
     FVector LastTracerPoint = FVector::ZeroVector;
     uint32 TracerBatchId = 0;

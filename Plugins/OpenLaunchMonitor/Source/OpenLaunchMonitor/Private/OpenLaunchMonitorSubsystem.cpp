@@ -35,6 +35,7 @@ namespace
         {TEXT("Wedge - 66.4 mph"), TEXT("110237980B100974FF31193AFD00800080"), TEXT(""), TEXT("Synthetic wedge; no FlightScope reference.")},
         {TEXT("Chip - 24.7 mph"), TEXT("1102374F0402070000840C000000800080"), TEXT(""), TEXT("Synthetic straight chip; no FlightScope reference.")},
         {TEXT("High flop - 68.1 mph"), TEXT("110237E20B94112D00E02EACFF00800080"), TEXT(""), TEXT("Synthetic 45-degree, 12000 rpm flop; no FlightScope reference.")},
+        {TEXT("Straight putt - 5 mph"), TEXT("110213E000000000000000000000800080"), TEXT("110700FFFFFFFFFFFFFFFF"), TEXT("Synthetic straight putt: zero launch angles and spin; 2.24 m/s (5 mph rounded) at Square packet precision.")},
     };
 
     const TCHAR* ClubCode(ELaunchMonitorClub Club)

@@ -64,7 +64,7 @@ bool FLaunchMonitorReplayTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Error recorded"), Subsystem->GetLastError().Contains(TEXT("not a plausible")));
 
     const TArray<FString> Names = Subsystem->GetReplayShotNames();
-    TestEqual(TEXT("Replay catalog includes both screenshots and varied shots"), Names.Num(), 9);
+    TestEqual(TEXT("Replay catalog includes both screenshots and varied shots"), Names.Num(), 10);
     TestFalse(TEXT("Negative preset rejected"), Subsystem->InjectReplayShotAt(-1));
     TestFalse(TEXT("Past-end preset rejected"), Subsystem->InjectReplayShotAt(Names.Num()));
     TestEqual(TEXT("Browsing and invalid selection do not fire shots"), Shots.Num(), 3);
@@ -74,6 +74,11 @@ bool FLaunchMonitorReplayTest::RunTest(const FString& Parameters)
         TestFalse(TEXT("Preset decodes for description"), Subsystem->GetReplayShotDescription(Index).IsEmpty());
         TestTrue(TEXT("Each preset delivers"), Subsystem->InjectReplayShotAt(Index));
     }
+    TestTrue(TEXT("Straight putt type"), Shots.Last().ShotType == ELaunchMonitorShotType::Putt);
+    TestEqual(TEXT("Straight putt speed at packet precision"), Shots.Last().GetBallSpeedMph(), 5.0f, 0.02f);
+    TestEqual(TEXT("Straight putt horizontal launch"), Shots.Last().HorizontalLaunchDeg, 0.0f);
+    TestEqual(TEXT("Straight putt vertical launch"), Shots.Last().VerticalLaunchDeg, 0.0f);
+    TestEqual(TEXT("Straight putt spin"), Shots.Last().TotalSpinRpm, 0);
     TestTrue(TEXT("Earlier screenshot selected"), Subsystem->InjectReplayShotAt(3));
     const FLaunchMonitorShot Previous = Shots.Last();
     TestEqual(TEXT("Earlier speed"), Previous.GetBallSpeedMph(), 75.7f, 0.02f);

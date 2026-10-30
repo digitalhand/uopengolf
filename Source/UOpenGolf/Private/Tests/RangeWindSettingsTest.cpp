@@ -14,7 +14,7 @@
 #include "Tests/AutomationEditorCommon.h"
 #include "UOpenGolfGameMode.h"
 #include "UObject/UnrealType.h"
-#include "WindDisplay.h"
+#include "UI/WindDisplay.h"
 
 namespace
 {

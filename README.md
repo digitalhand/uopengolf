@@ -13,6 +13,7 @@ the [MIT license](LICENSE). Unreal Engine and third-party content retain their o
 - [Game](#game)
   - [Controls](#controls)
   - [HUD](#hud)
+  - [Playing the hole](#playing-the-hole)
   - [Changing clubs](#changing-clubs)
   - [Recording shots](#recording-shots)
   - [Recording errors and retries](#recording-errors-and-retries)
@@ -49,8 +50,10 @@ the [MIT license](LICENSE). Unreal Engine and third-party content retain their o
 
 Play opens a driving range: shots from a Square Home or a replay are hit
 from the tee and flown, bounced and rolled by native C++ golf physics, and the HUD
-shows carry, roll, total, offline, apex, hang time and landing data. There is no
-course, scoring or player character yet. Currently focused on foundation, eye candy came come later. 
+shows carry, roll, total, offline, apex, hang time and landing data. Press **G** to play
+the range as a 400-yard par 4 instead: the ball is played as it lies onto a contoured green
+with a regulation cup, strokes and putts are counted, and the ball can be placed anywhere to
+practise. There is no player character yet. Currently focused on foundation, eye candy came come later. 
 
 ### Current Features
 
@@ -58,6 +61,7 @@ course, scoring or player character yet. Currently focused on foundation, eye ca
 - Fully implemented physics carry, roll, surface, and wind. 
 - Fully playable Square Home launch monitor, collects ball and club available data.
   - Also plays measured versus calculated ball data. Tested in measured only.
+- Hole play (G): a par 4 with a regulation cup, strokes, putts, score names and ball placement for practice.
 - Shot recording data (F9) saved to Documents folder. This allows to collect shot data, analyze, and adjust physics when needed. 
 
 
@@ -196,7 +200,7 @@ to hit a replay shot. Stop Play using the editor toolbar or Escape. See
 ## Game
 
 Play opens the driving range. Every shot, from a Square Home or a test shot, is hit
-from the tee. Click in the viewport once so it has keyboard focus; the keys below do
+from the tee until you switch to [playing the hole](#playing-the-hole). Click in the viewport once so it has keyboard focus; the keys below do
 nothing until it does.
 
 ### Controls
@@ -209,13 +213,17 @@ nothing until it does.
 | **F9** | Record shots on/off (only while a launch monitor is connected) |
 | **H** | Hit the selected test shot again |
 | **P** | Open or close the test-shot list |
-| **R** | Tee the ball up again straight away |
-| **A** / **D** (hold) | Turn the aim line left / right, 20°/s up to 45° either way, while the ball is on the tee. The camera turns with it, the aim stays set across shots, and Offline is measured from it. Use it to hit into the rough (beyond 17 m either side of the centre line) |
+| **R** | Tee the ball up again straight away (on the hole, a new hole) |
+| **G** | Play the hole / back to the range; the ball goes back to the tee either way |
+| **B** | On the hole: place the ball, then click the ground where it should go (right-click or Escape cancels) |
+| **W** | Open or close the wind controls under the wind indicator (the same as clicking the indicator) |
+| **A** / **D** | Turn the aim line left / right: a tap turns exactly 0.25° (0.1° with **Shift**), a hold starts slowly and speeds up to 20°/s (with **Shift**, stays at 2°/s), up to 45° either way (from the target line on the range, from the line to the cup on the hole), while the ball waits for the shot. The camera turns with it, the aim stays set across shots, and Offline is measured from it. Use it to hit into the rough (beyond 17 m either side of the centre line) |
 | **~** | Unreal console, for the [settings](#settings) below |
-| **Escape** | Quit the game (standalone or packaged); stop Play in the editor |
+| **Escape** | Cancel placing the ball, or close the wind controls; otherwise quit the game (standalone or packaged) or stop Play in the editor |
 
-The mouse is only used for the test-shot panel at the bottom left. The HUD itself
-does not take clicks: clicking the club name or a tile does nothing.
+The mouse is used for the test-shot panel at the bottom left, the play buttons at the top
+left, the wind indicator and its controls at the top centre, and placing the ball. The shot
+tiles and the status box do not take clicks.
 
 ### HUD
 
@@ -225,13 +233,33 @@ does not take clicks: clicking the club name or a tile does nothing.
   launch-monitor values. `…` means the value is still coming, `—` that it is missing,
   `*` that it is derived from other measurements, and `L`/`R` the direction.
 - **Status box** (bottom right): the launch-monitor state (Disconnected, Scanning,
-  Connecting, Connected, Ready), battery and **Aim [A/D]** (Straight, or degrees
-  left/right of the target line). While connected it also shows
+  Connecting, Connected, Ready), battery and **Aim** (Straight, or degrees
+  left/right of the target line, in tenths under 10°; on the hole also how far wide of the
+  cup the line passes, in yards, or feet in the short game). While connected it also shows
   **Record Shots** (Off, or On with the number of shots saved). Failed saves keep
   the status visible after disconnect and show the unsaved count and error while
   retrying; see [Recording errors and retries](#recording-errors-and-retries).
   The usual key tips are
   **Connect [C]**, or **Disconnect [T] · Record [F9]**.
+- **Play buttons** (top left): round icon buttons in the tile style. The flag button
+  (**Play hole [G]**) switches to the hole; while playing it is ringed and reads **Range [G]**,
+  and a ball button (**Place ball [B]**) appears beside it. Under them the hole tiles show
+  **Hole 1 · Par 4 · 400 yd** (and **Practice** once the ball was placed), the stroke being
+  played, the distance **To Pin** (feet on the green, yards elsewhere) and **Putts**. A banner
+  names the score when the ball drops.
+- **Wind** (top centre): the wind speed and an arrow for the way it blows, turned with the
+  camera. Click it (or press **W**) to slide out the wind controls under it:
+  - an **On/Off** switch; off is calm, and the speed is kept for when it is switched back on;
+  - **Speed**, slid from calm to 30 mph in 1 mph steps;
+  - **Direction**, slid in 5° steps through where the wind comes from against the target
+    line (0° headwind, 90° from the right, 180° tailwind, 270° from the left), named in golf
+    terms under the slider (Headwind, Into · left to right, Left to right, Helping · right to
+    left and so on).
+
+  The arrow and the flag follow as you slide, and the next shot flies in the new wind; a shot
+  already in the air keeps the wind it was hit in. Click the indicator again, or press **W**
+  or **Escape**, to close the controls. Wind set from the console shows in them too, and
+  nothing set during Play is saved to the map.
 - **Test shots [P] | Hit [H]** (bottom left): only shown while no launch monitor is
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
@@ -239,8 +267,36 @@ does not take clicks: clicking the club name or a tile does nothing.
   currently **v0.0.3**. Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](#versioning)).
 
-A stopped ball stays put for 3 seconds with its result shown, then goes back to the
-tee. The tiles keep the last shot until the next one. See
+On the range, a stopped ball stays put for 3 seconds with its result shown, then goes back to
+the tee. The tiles keep the last shot until the next one.
+
+### Playing the hole
+
+Press **G** (or click the flag button) to play the range as a par 4: the pin is 400 yards
+out on a gently contoured green, with a fairway bunker on the left of the landing area and a
+bunker right of the green.
+
+- The ball is played as it lies. Each shot that stops is a stroke; a shot hit from the green
+  is also a putt. Two seconds after it stops, the ball turns to the cup and the camera moves
+  behind it; on the green or within 30 yards the view is lower and closer, looking along the
+  putt.
+- The cup is regulation size (4.25 in). A putt drops if it is slow enough for its line (about
+  1.6 m/s, or 3.7 mph, through the centre, less toward the edge of the cup). A firmer one
+  dips into the cup, strikes the far lip and hops over it, losing speed, and off centre the
+  rim turns it; one only a little too firm through the centre can hit the back of the cup and
+  drop. The hole tiles say how fast it crossed and how slow it had to be. On a stimp-10 green
+  a putt drops if it would finish no more than about 8 feet past (a little more through the
+  dead centre). A shot landing in the cup drops too. The flag lifts out while the ball is
+  within 5 feet.
+- From 8 feet out the camera slowly closes in behind the ball. It backs out as the ball rolls
+  away, to the normal distance by 8 feet past or once a miss stops; a holed ball keeps the
+  close view until the ball is reset (automatically, or with **R**).
+- When the ball drops, a banner names the score (Birdie, Par, Bogey and so on) with the
+  strokes and putts, and after 5 seconds the ball goes back to the tee for a new hole.
+- **B** (or the ball button), then a click on the ground, places the ball there to practise,
+  for example a chip from beside the green. Placing adds no stroke, but the hole then counts
+  as practice and the banner reads "Holed in N".
+- **G** again goes back to the range. See
 [Hitting shots on the range](#hitting-shots-on-the-range) for details.
 
 ### Changing clubs
@@ -337,16 +393,16 @@ remain between Play sessions in the same editor process.
 | Recording folder | `Documents/UOpenGolf/Saved/ShotRecordings` | Fixed |
 | Selected test shot | First preset (low wood) | **P**, then pick one |
 | 3D grass near the tee | On | Console: `uopengolf.Grass3D 0` (off) or `1` (on); see [Grass and golf assets](#grass-and-golf-assets) |
-| Wind speed | 0 mph (calm) | Select **Range settings → Details → UOpenGolf → Wind → Wind Speed (mph)** |
-| Wind direction | 0° (headwind) | **Wind From (degrees)**: `90` from the right, `180` tailwind, `270` from the left |
+| Wind speed | 0 mph (calm) | In Play: click the wind indicator (up to 30 mph). Saved with the map: select **Range settings → Details → UOpenGolf → Wind → Wind Speed (mph)** |
+| Wind direction | 0° (headwind) | In Play: the wind controls' **Direction**. Saved with the map: **Wind From (degrees)**: `90` from the right, `180` tailwind, `270` from the left |
 | Editor flag preview | On | **Preview Wind in Editor**; viewport Realtime must be enabled |
 | Green speed | Stimp 10 ft | Console: `uopengolf.GreenStimp 8` to `15`; applies from the next shot |
 | Auto-reconnect after a dropped link | On, five attempts | Blueprint/C++ only: `UOpenLaunchMonitorSubsystem::bAutoReconnect` |
 | Left-handed | Off | Blueprint/C++ only: `UOpenLaunchMonitorSubsystem::SetLeftHanded` |
 
-Shots are played on flat ground at 75 °F and sea level. Wind is editable before Play;
-wind and green speed also have console controls during Play. There is no in-game weather
-or altitude menu yet. The flag previews wind in the editor and uses the ball's wind at flag height
+Shots are played on flat ground at 75 °F and sea level. Wind is editable before Play, and
+during Play from the wind controls or the console; green speed has a console control. There
+is no in-game weather or altitude menu yet. The flag previews wind in the editor and uses the ball's wind at flag height
 during Play, about 72% of the authored speed, which is the 10 m reading. In calm air it hangs beside the pole. For editor controls, expected movement and
 optional console commands, see
 [Validate wind and flag movement](Docs/RangeAssets.md#validate-wind-and-flag-movement).
@@ -417,9 +473,11 @@ test ran and every test passed. None of the tests need hardware:
 | `UOpenGolf.Range.ShotRecordingRecovery` | Delayed/missing club data, simulation identity, queued retries, recording-session changes and shutdown failures |
 | `UOpenGolf.Range.ShotRecordingStorage` | Real directory/write/rename failures, retry and preserving existing final files |
 | `UOpenGolf.Range.FrameRates` | Matching carry, total and simulation duration at 30/60/144/5 FPS and with 250 ms hitches |
+| `UOpenGolf.Range.WindControls`, `.HudControls`, `UOpenGolf.Course.Play.Wind` | The wind controls' setting reaching the range and ball, console wind reaching the controls, Escape closing them, which widgets in each HUD layer take clicks (the test-shot layer passes them to the play buttons), slider and switch clicks, and the wind setting's steps, limits and direction names |
 | `UOpenGolf.Range.Presentation`, `.ShotTrail` | Ball dimensions, decorative grass toggling, wind and green-stimp console variables reaching the ball, tracer path, monotonic fade, rest and reset, two history tracers (oldest replaced, kept on re-tee, cleared on request) |
 | `UOpenGolf.Visual.LaunchDirections` | Rendered HUD captures; requires rendering and is excluded from headless runs |
 | `UOpenGolf.Visual.ShotTrail`, `.RangeAssets`, `.ReplaySelector` | Rendered tracer, range assets and replay-panel checks; excluded from headless runs |
+| `UOpenGolf.Visual.WindControls` | Real clicks through Slate's hit test on the flag button, the wind indicator, its switch and a drag on its speed slider, with a capture under `Saved/Screenshots/WindControls/`; excluded from headless runs |
 
 Each smoke or test run writes logs and an `index.json` report to a fresh directory under
 `Saved/Automation/`. The runner fails on a nonzero process exit, timeout, missing or
@@ -772,7 +830,7 @@ download those artifacts too.
 ```text
 Config/                    Startup map, game mode, and project settings
 Content/UOpenGolf/Maps/     Original UOpenGolf map (the range is built at runtime)
-Source/UOpenGolf/           Game module: range mode, whitebox range, camera, HUD, tests
+Source/UOpenGolf/           Game module: range and hole play, camera, HUD (Private/UI), tests
 Plugins/OpenLaunchMonitor/  Launch-monitor plugin: Square protocol, Bluetooth, replay, events
 Plugins/OpenFairwayPhysics/ Golf physics plugin: OpenFairway core, ball actor, fixtures
 Plugins/OpenGolfCourse/     Course kit: surface materials, flagstick, ball, turf, Blender sources
@@ -800,7 +858,8 @@ Each plugin has its own detailed README:
   ported from ogolf-physics, the Chaos-backed ball actor, surfaces, and golden fixtures.
 - [Open Golf Course](Plugins/OpenGolfCourse/README.md): reusable course kit. Surface
   materials declare OpenFairway surfaces through physical materials; it also has a waving
-  flagstick, a marked golf ball, turf grass and editable Blender sources.
+  flagstick, a regulation cup, hole scoring and play rules, hole layout scripts, a marked
+  golf ball, turf grass and editable Blender sources.
 
 The launch-monitor and physics plugins do not depend on each other; the game module
 connects shots to the ball. The course kit depends on the physics plugin for the surface
@@ -965,8 +1024,8 @@ promise the same total on the current public map.
 See [regimes and rollout](Plugins/OpenFairwayPhysics/README.md#does-the-regime-limit-rollout)
 before comparing the mixed range's total with FlightScope's Medium setting.
 
-Details are logged under `LogOpenFairway`. Wind is adjustable through the console and
-**A/D** changes aim. Known limitations: no club-based tee placement, course, scoring or
+Details are logged under `LogOpenFairway`. Wind is adjustable from the wind indicator's
+controls or the console, and **A/D** changes aim. Known limitations: no club-based tee placement, course, scoring or
 contoured terrain; the range has not been
 fully reviewed for ball/camera presentation. The launch-direction HUD has been
 checked in rendered captures.
