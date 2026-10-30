@@ -10,7 +10,7 @@
 
 namespace
 {
-    constexpr float CmPerM = 100.0f;
+    constexpr float CupCmPerM = 100.0f;
     /** Engine cylinder: 100 cm across and tall, centred on its origin. */
     constexpr float CylinderSizeCm = 100.0f;
     /** Thin discs with top faces just above the surface, measured along its normal. */
@@ -54,7 +54,7 @@ void UOpenGolfCupComponent::OnRegister()
         Disc->SetVisibility(bPlaced);
         Disc->RegisterComponent();
     };
-    const float Diameter = OpenFairway::CupCapture::CupDiameterM * CmPerM;
+    const float Diameter = OpenFairway::CupCapture::CupDiameterM * CupCmPerM;
     UStaticMeshComponent* HolePart = Hole;
     MakeDisc(HolePart, TEXT("CupHole"), Diameter, HoleLiftCm);
     Hole = HolePart;
@@ -118,7 +118,7 @@ void UOpenGolfCupComponent::UpdatePinLift(const FVector& BallLocation, float Del
     if (!Flag)
         return;
     const FVector Cup = GetCupLocation();
-    const double DistanceM = FVector::Dist2D(BallLocation, Cup) / CmPerM;
+    const double DistanceM = FVector::Dist2D(BallLocation, Cup) / CupCmPerM;
     const bool bNearGreen = FMath::Abs(BallLocation.Z - Cup.Z) < NearGreenCm;
     if (!bPinRaised && bNearGreen && DistanceM < PinLiftNearM)
         bPinRaised = true;
