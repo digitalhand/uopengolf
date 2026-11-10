@@ -390,10 +390,10 @@ void SMainMenu::BuildSimulator(TSharedRef<SVerticalBox> Rows)
     auto ProviderName=[](int32 Provider){return StaticEnum<ELaunchMonitorProvider>()->GetDisplayNameTextByValue(Provider).ToString();};
 
     // Connection choices act at once, like Connect and Disconnect: no Apply. The block below always shows the live connection.
-    AddChoice(Rows,TEXT("Launch monitor"),TEXT("Switches immediately. Square Home connects over Bluetooth; GSPro Open Connect accepts shots from a third-party connector app over TCP."),
+    AddChoice(Rows,TEXT("Launch monitor"),TEXT("Switches immediately. Square Home connects over Bluetooth; Open Connect accepts shots from a connector app over TCP."),
         {TEXT("Square Home"),TEXT("Open Connect")},{0,1},[this]{return Draft.Provider;},[this](int32 V){CommitConnection([V](P& Prefs){Prefs.Provider=V;});});
 
-    if(Matches(TEXT("Launch monitor connection status connect disconnect listening connector GSPro"),FString()))
+    if(Matches(TEXT("Launch monitor connection status connect disconnect listening connector"),FString()))
     {
         const UOpenLaunchMonitorSubsystem* Live=Monitor();
         const bool bLiveOpenConnect=Live && Live->GetProvider()==ELaunchMonitorProvider::OpenConnect;
@@ -409,7 +409,7 @@ void SMainMenu::BuildSimulator(TSharedRef<SVerticalBox> Rows)
 
     if(bOpenConnect)
     {
-        const FString PortHelp=TEXT("TCP port the connector sends to; changes restart the listener. GSPro uses 921; close GSPro first if it runs on this PC.");
+        const FString PortHelp=TEXT("TCP port the connector sends to (default 4921); changes restart the listener. Set the same port in the connector.");
         if(Matches(TEXT("Connector port"),PortHelp))
             AddRow(Rows,TEXT("Connector port"),PortHelp,SNew(SEditableTextBox).Font(HudStyle::Font("Regular",16))
                 .Text_Lambda([this]{return FText::AsNumber(Draft.OpenConnectPort,&FNumberFormattingOptions::DefaultNoGrouping());})
@@ -424,7 +424,7 @@ void SMainMenu::BuildSimulator(TSharedRef<SVerticalBox> Rows)
                 }));
         AddChoice(Rows,TEXT("Allow connectors on other PCs"),TEXT("On listens on every network interface for a connector on another computer on your local network; Windows may ask to allow it through the firewall. Connectors are not authenticated, so use this only on a trusted home network. Connections from outside private network ranges are refused."),
             {TEXT("Off (this PC only)"),TEXT("On (local network)")},{0,1},[this]{return Draft.OpenConnectLan;},[this](int32 V){CommitConnection([V](P& Prefs){Prefs.OpenConnectLan=V;});});
-        const FString ConnectorHelp=FString::Printf(TEXT("Any connector that sends GSPro Open Connect v1 shots works, for example: Rapsodo MLM2PRO and FlightScope Mevo+ (MLM2PRO-GSPro-Connector), SkyTrak (OpenSkyPlus2), Garmin R10 (gspro-garmin-connect) and PiTrac.\nPoint the connector at %s:%d instead of GSPro. UOpenGolf is GSPro Open Connect compatible and not affiliated with GSPro."),
+        const FString ConnectorHelp=FString::Printf(TEXT("Any connector that sends Open Connect v1 shots works, for example the Rapsodo MLM2PRO and FlightScope Mevo+ connector, SkyTrak (OpenSkyPlus2), the Garmin R10 connector and PiTrac.\nPoint the connector at %s:%d."),
             Draft.OpenConnectLan?TEXT("this PC's network address"):TEXT("127.0.0.1"),Draft.OpenConnectPort);
         if(Matches(TEXT("Compatible connectors"),ConnectorHelp))
             Rows->AddSlot().AutoHeight().Padding(0,0,0,8)[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(FLinearColor(1,1,1,.025f)).Padding(12)

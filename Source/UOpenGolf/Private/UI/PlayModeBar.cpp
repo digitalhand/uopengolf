@@ -23,8 +23,6 @@ namespace
     constexpr float TileWidth = 84.0f;
     constexpr float TileHeight = 48.0f;
     constexpr float TileGap = 2.0f;
-    constexpr float YardsPerMeter = 1.0936133f;
-    constexpr float MphPerMps = 2.2369363f;
     /** The hole-out banner fades over this last part of the wait before the new hole. */
     constexpr float BannerFadeSeconds = 1.0f;
 } // namespace

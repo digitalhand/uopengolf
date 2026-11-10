@@ -58,7 +58,7 @@ public:
         TUniquePtr<FOpenConnectSocket> Listener = FOpenConnectSocket::Listen(Port, bAllowLan, Error);
         if (!Listener)
         {
-            Push(EEvent::ListenFailed, FString::Printf(TEXT("Could not listen on %s:%d: %s. Another program, such as GSPro, may be using port %d%s."),
+            Push(EEvent::ListenFailed, FString::Printf(TEXT("Could not listen on %s:%d: %s. Another program may be using port %d%s."),
                 bAllowLan ? TEXT("0.0.0.0") : TEXT("127.0.0.1"), Port, *Error, Port,
                 PLATFORM_LINUX && Port < 1024 ? TEXT("; on Linux, ports below 1024 need root") : TEXT("")));
             return 0;

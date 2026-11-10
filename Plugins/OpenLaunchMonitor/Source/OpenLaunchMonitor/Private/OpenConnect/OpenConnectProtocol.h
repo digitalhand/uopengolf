@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-// GSPro Open Connect v1 compatible messages (https://gsprogolf.com/GSProConnectV1.html):
-// a connector sends JSON shots and status over TCP; the simulator answers with JSON codes.
+// Open Connect v1 messages: a connector sends JSON shots and status over TCP; the simulator answers with JSON codes.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -59,12 +58,12 @@ namespace OpenConnectProtocol
      */
     bool Decode(const FString& Json, FOpenConnectMessage& OutMessage, FString& OutError);
 
-    /** {"Code":200,"Message":"Shot received successfully"} and the like; no delimiter, as GSPro sends. */
+    /** {"Code":200,"Message":"Shot received successfully"} and the like; no delimiter. */
     FString Response(int32 Code, const FString& Message);
 
-    /** The 201 player-information message: handedness and the selected club as a GSPro club code. */
+    /** The 201 player-information message: handedness and the selected club as an Open Connect club code. */
     FString PlayerInformation(bool bLeftHanded, ELaunchMonitorClub Club);
 
-    /** GSPro club code: DR, W3, I7, PW, PT and so on. */
+    /** Open Connect club code: DR, W3, I7, PW, PT and so on. */
     const TCHAR* ClubCode(ELaunchMonitorClub Club);
 } // namespace OpenConnectProtocol

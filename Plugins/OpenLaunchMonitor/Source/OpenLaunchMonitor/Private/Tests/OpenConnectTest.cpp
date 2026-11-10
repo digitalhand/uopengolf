@@ -21,8 +21,8 @@
 
 namespace
 {
-    // The example shot from the GSPro Open Connect v1 page, without its // comments.
-    const TCHAR* SpecShot = TEXT(R"({"DeviceID":"GSPro LM 1.1","Units":"Yards","ShotNumber":13,"APIversion":"1",
+    // An example Open Connect v1 shot.
+    const TCHAR* SpecShot = TEXT(R"({"DeviceID":"Open Connect LM 1.1","Units":"Yards","ShotNumber":13,"APIversion":"1",
         "BallData":{"Speed":147.5,"SpinAxis":-13.2,"TotalSpin":3250.0,"BackSpin":2500.0,"SideSpin":-800.0,"HLA":2.3,"VLA":14.3,"CarryDistance":256.5},
         "ClubData":{"Speed":0.0,"AngleOfAttack":0.0,"FaceToTarget":0.0,"Lie":0.0,"Loft":0.0,"Path":0.0,"SpeedAtImpact":0.0,"VerticalFaceImpact":0.0,"HorizontalFaceImpact":0.0,"ClosureRate":0.0},
         "ShotDataOptions":{"ContainsBallData":true,"ContainsClubData":false,"LaunchMonitorIsReady":true,"LaunchMonitorBallDetected":true,"IsHeartBeat":false}})");
@@ -149,7 +149,7 @@ bool FOpenConnectProtocolTest::RunTest(const FString& Parameters)
         FOpenConnectMessage Message;
         FString Error;
         TestTrue(TEXT("Spec example decodes"), OpenConnectProtocol::Decode(SpecShot, Message, Error));
-        TestEqual(TEXT("DeviceID"), Message.DeviceId, FString(TEXT("GSPro LM 1.1")));
+        TestEqual(TEXT("DeviceID"), Message.DeviceId, FString(TEXT("Open Connect LM 1.1")));
         TestEqual(TEXT("Device shot number"), Message.DeviceShotNumber, 13);
         TestTrue(TEXT("Ready flag"), Message.bReady.Get(false));
         if (TestTrue(TEXT("Shot present"), Message.Shot.IsSet()))

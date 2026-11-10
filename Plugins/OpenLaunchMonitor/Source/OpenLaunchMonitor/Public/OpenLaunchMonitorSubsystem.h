@@ -69,7 +69,7 @@ public:
     UFUNCTION(BlueprintPure, Category = "Launch Monitor|Open Connect")
     bool IsOpenConnectLanAllowed() const { return bOpenConnectAllowLan; }
 
-    /** Where a connector should send shots: "127.0.0.1:921", or this computer's network address when LAN is allowed. */
+    /** Where a connector should send shots: "127.0.0.1:4921", or this computer's network address when LAN is allowed. */
     UFUNCTION(BlueprintPure, Category = "Launch Monitor|Open Connect")
     FString GetOpenConnectAddress() const;
 

@@ -119,10 +119,8 @@ operation wakes the worker as it completes instead of being polled. Duplicate no
 
 ## Open Connect provider (third-party connectors)
 
-uopengolf can stand in for GSPro as the target of a connector app. Many launch monitors
-reach GSPro through such a connector, which speaks the
-[GSPro Open Connect v1](https://gsprogolf.com/GSProConnectV1.html) protocol. uopengolf
-is "GSPro Open Connect compatible"; it is not affiliated with GSPro. Choose it in
+uopengolf accepts shots from connector apps that speak the Open Connect v1 protocol. Many
+launch monitors have such a connector. Choose it in
 **Settings → Simulator → Launch monitor**.
 - **No Apply needed:** the provider, port and "Allow connectors on other PCs" are saved and take
   effect as soon as they change, like Connect and Disconnect. They are left out of Apply,
@@ -144,9 +142,9 @@ is "GSPro Open Connect compatible"; it is not affiliated with GSPro. Choose it i
   link-local peers are accepted; others are refused and logged once.
 - On Windows the port is bound with `SO_EXCLUSIVEADDRUSE`, so no other process can share or
   take it over while the game listens.
-- The port defaults to **921 on Windows**, which connectors expect, and **49152 on
-  Linux**, because ports below 1024 need root there. It is configurable.
-- The listener fails with a message if the port is taken, for example by a running GSPro.
+- The port defaults to **4921** on every platform. Set the connector to send to it. It is
+  configurable.
+- The listener fails with a message if the port is taken, for example by another simulator.
 - One worker thread owns the sockets. One connector is served at a time. A new connection
   from the same address replaces the old one, as a restarted connector would; one from
   another address is refused until the current connector has sent no complete message for
@@ -184,12 +182,12 @@ message (oversized objects or junk outside any object) is disconnected. The read
 - **Heartbeats and status:** `IsHeartBeat`, and status messages without ball data, never fly.
   `LaunchMonitorIsReady` drives the ball-ready flag.
 
-**Replies:** every message gets one JSON reply, with no delimiter, as GSPro sends.
+**Replies:** every message gets one JSON reply, with no delimiter.
 - **200** for a shot the game accepted, and for heartbeats and status messages.
 - **501 with a reason** for a malformed message, or for a shot the game refused
   (menu open, missing speed or VLA, launch failed). A shot handler reports a refusal
   with `RejectShot` while the shot is being broadcast.
-- **201 player information** (`Handed` RH/LH and a GSPro club code such as `DR`, `I7`
+- **201 player information** (`Handed` RH/LH and an Open Connect club code such as `DR`, `I7`
   or `PT`) when a connector attaches, and whenever the club or handedness changes.
 
 **State mapping:**
@@ -212,9 +210,9 @@ Square spin mode applies only to Square Home.
 | Connector | Launch monitor | Result |
 | --- | --- | --- |
 | Automated loopback client (`UOpenGolf.LaunchMonitor.OpenConnect.Loopback`) | none | Passes |
-| springbok/MLM2PRO-GSPro-Connector | Rapsodo MLM2PRO, FlightScope Mevo+ | Not yet tested |
+| MLM2PRO connector (springbok) | Rapsodo MLM2PRO, FlightScope Mevo+ | Not yet tested |
 | OpenSkyPlus2 | SkyTrak / ST+ | Not yet tested |
-| gspro-garmin-connect-v2 | Garmin R10 | Not yet tested |
+| Garmin R10 connector | Garmin R10 | Not yet tested |
 | PiTrac | PiTrac | Not yet tested |
 
 ## Remaining work

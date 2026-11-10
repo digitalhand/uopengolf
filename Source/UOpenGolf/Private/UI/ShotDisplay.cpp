@@ -53,9 +53,9 @@ namespace
 
 TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult* Result, const FLaunchMonitorShot* Shot, const FLaunchMonitorClubData* Club)
 {
-    const float FeetPerMeter = GolfSettings::DistanceFactor(true);
+    const float ShortFactor = GolfSettings::DistanceFactor(true);
     const float MpsPerMph = 1.f / GolfSettings::SpeedFactor();
-    const float YardsPerMeter = GolfSettings::DistanceFactor();
+    const float LongFactor = GolfSettings::DistanceFactor();
 
     TArray<FTile> Tiles;
     const auto Add = [&Tiles](const TCHAR* Label, const FString& Value, ETileGroup Group)
@@ -76,11 +76,11 @@ TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult*
         return bKnown ? Value : FString(TilePending);
     };
     const bool bInterrupted = R.TerminationReason == EOpenFairwayShotTermination::SafetyStop;
-    Add(TEXT("Total (yd)"), bInterrupted ? FString(TileDash) : Live(TileFixed1(R.TotalM * YardsPerMeter)), ETileGroup::Result);
-    Add(TEXT("Carry (yd)"), AfterLanding(R.bLanded || (R.bAtRest && !bInterrupted), TileFixed1(R.CarryM * YardsPerMeter)), ETileGroup::Result);
-    Add(TEXT("Roll (yd)"), bInterrupted ? FString(TileDash) : AfterLanding(R.bLanded, TileFixed1(R.RollM * YardsPerMeter)), ETileGroup::Result);
-    Add(TEXT("Apex (ft)"), Live(TileFixed1(R.ApexM * FeetPerMeter)), ETileGroup::Result);
-    Add(TEXT("Offline (yd)"), Live(TileLeftRight(R.LateralM * YardsPerMeter, TEXT(""))), ETileGroup::Result);
+    Add(TEXT("Total (yd)"), bInterrupted ? FString(TileDash) : Live(TileFixed1(R.TotalM * LongFactor)), ETileGroup::Result);
+    Add(TEXT("Carry (yd)"), AfterLanding(R.bLanded || (R.bAtRest && !bInterrupted), TileFixed1(R.CarryM * LongFactor)), ETileGroup::Result);
+    Add(TEXT("Roll (yd)"), bInterrupted ? FString(TileDash) : AfterLanding(R.bLanded, TileFixed1(R.RollM * LongFactor)), ETileGroup::Result);
+    Add(TEXT("Apex (ft)"), Live(TileFixed1(R.ApexM * ShortFactor)), ETileGroup::Result);
+    Add(TEXT("Offline (yd)"), Live(TileLeftRight(R.LateralM * LongFactor, TEXT(""))), ETileGroup::Result);
     Add(TEXT("Hang Time (s)"), AfterLanding(R.bLanded, TileFixed1(R.HangTimeS)), ETileGroup::Result);
     Add(TEXT("Land Angle"), AfterLanding(R.bLanded, TileFixed1(R.LandingAngleDeg) + TEXT("°")), ETileGroup::Result);
     Add(TEXT("Land Speed (mph)"), AfterLanding(R.bLanded, TileFixed1(R.LandingSpeedMps / MpsPerMph)), ETileGroup::Result);

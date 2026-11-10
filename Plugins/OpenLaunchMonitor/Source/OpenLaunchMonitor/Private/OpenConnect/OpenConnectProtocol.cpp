@@ -314,7 +314,7 @@ namespace OpenConnectProtocol
         Player->SetStringField(TEXT("Club"), ClubCode(Club));
         const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
         Object->SetNumberField(TEXT("Code"), 201);
-        Object->SetStringField(TEXT("Message"), TEXT("GSPro Player Information"));
+        Object->SetStringField(TEXT("Message"), TEXT("Player Information"));
         Object->SetObjectField(TEXT("Player"), Player);
         return Write(Object);
     }

@@ -207,11 +207,11 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 
 Newest first. Evidence paths are relative to the repository root.
 
-- **2026-11-09, Windows 11, Unreal 5.8.4 Development editor: GSPro Open Connect compatible listener.**
+- **2026-11-09, Windows 11, Unreal 5.8.4 Development editor: Open Connect listener.**
   - **Added:** a second launch-monitor provider that accepts shots from third-party connector
     apps over TCP ([details](LaunchMonitorIntegration.md#open-connect-provider-third-party-connectors)).
     It is chosen in Settings → Simulator, which has the live status, Start/Stop listening, the port
-    (921 on Windows, 49152 on Linux), LAN access and a list of compatible connectors.
+    (default 4921), LAN access and a list of compatible connectors.
   - **Behaviour:**
     - Shots refused by the game (menu open, unusable data) are answered with 501, and accepted shots with 200.
     - Club and handedness are sent to the connector as 201 player information.
