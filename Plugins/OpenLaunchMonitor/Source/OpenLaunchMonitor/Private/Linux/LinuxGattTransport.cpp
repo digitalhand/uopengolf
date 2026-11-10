@@ -8,6 +8,7 @@
 #include "Async/Async.h"
 #include "Bluetooth/BlueZModel.h"
 #include "Containers/Queue.h"
+#include "HAL/Event.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
 #include "HAL/Runnable.h"
@@ -26,8 +27,9 @@ namespace
     constexpr int32 ConnectAttempts = 12;
     constexpr int32 ServiceResolveAttempts = 12;
     constexpr double RetryDelaySeconds = 1.0;
-    constexpr double ConnectSeconds = 30.0;
     constexpr double CleanupSeconds = 2.0;
+    /** The final write at app exit, as on Windows: short, and not cancelled by the release that follows. */
+    constexpr double ExitWriteSeconds = 1.0;
     /** Longer than BlueZ's 2 s disconnect timer, after which a released link is really down. */
     constexpr double DisconnectSettleSeconds = 3.0;
     constexpr double PollSeconds = 0.025;
@@ -107,13 +109,13 @@ public:
     }
 
     virtual void Connect(const FString& DeviceId, const TArray<FString>& RequiredUuids, const TArray<FString>& OptionalUuids,
-        FCompletion OnComplete) override
+        float TimeoutSeconds, FCompletion OnComplete) override
     {
         ++ConnectionSerial;
-        Enqueue([this, DeviceId, RequiredUuids, OptionalUuids, OnComplete = MoveTemp(OnComplete)]() mutable
+        Enqueue([this, DeviceId, RequiredUuids, OptionalUuids, TimeoutSeconds, OnComplete = MoveTemp(OnComplete)]() mutable
             {
-            // Deviation from upstream: one 30 s deadline bounds the whole connection, as on Windows.
-            JobDeadline = FPlatformTime::Seconds() + ConnectSeconds;
+            // Deviation from upstream: one deadline bounds the whole connection, as on Windows.
+            JobDeadline = FPlatformTime::Seconds() + TimeoutSeconds;
             const FString Error = ConnectOnWorker(DeviceId, RequiredUuids, OptionalUuids);
             JobDeadline = TNumericLimits<double>::Max();
             if (!Error.IsEmpty())
@@ -145,10 +147,30 @@ public:
             { Complete(MoveTemp(OnComplete), SubscribeOnWorker(Uuid)); });
     }
 
+    virtual void WriteThenRelease(const FString& Uuid, const TArray<uint8>& FinalWrite, double MaxWaitSeconds) override
+    {
+        if (!Thread)
+        {
+            return;
+        }
+        // Shared: after a timeout the job may still run and signal an event the caller no longer waits on.
+        const TSharedRef<FEventRef, ESPMode::ThreadSafe> Done = MakeShared<FEventRef, ESPMode::ThreadSafe>(EEventMode::ManualReset);
+        Enqueue([this, Uuid, FinalWrite, Done]()
+            {
+            if (!FinalWrite.IsEmpty())
+            {
+                WriteOnWorker(Uuid, FinalWrite, CleanupWait(FPlatformTime::Seconds() + ExitWriteSeconds));
+            }
+            StopScanOnWorker();
+            DisconnectOnWorker();
+            (*Done)->Trigger(); });
+        (*Done)->Wait(static_cast<uint32>(MaxWaitSeconds * 1000.0));
+    }
+
     virtual void Write(const FString& Uuid, const TArray<uint8>& Value, FCompletion OnComplete) override
     {
         Enqueue([this, Uuid, Value, OnComplete = MoveTemp(OnComplete)]() mutable
-            { Complete(MoveTemp(OnComplete), WriteOnWorker(Uuid, Value)); });
+            { Complete(MoveTemp(OnComplete), WriteOnWorker(Uuid, Value, ShortWait())); });
     }
 
 private:
@@ -213,6 +235,12 @@ private:
     FBlueZWait OperationWait() const
     {
         return {[this] { return Cancelled(); }, JobDeadline};
+    }
+
+    /** Reads, writes and notification setup fail fast, so a dead or half-connected link is noticed quickly. */
+    FBlueZWait ShortWait() const
+    {
+        return {[this] { return Cancelled(); }, FMath::Min(JobDeadline, FPlatformTime::Seconds() + ShortOperationTimeoutSeconds)};
     }
 
     /** Cleanup is not cancellable, so a superseded connection still releases the device, but it is short. */
@@ -510,14 +538,14 @@ private:
         {
             FBlueZArgs Args;
             Args.Options = FProperties();
-            const FBlueZReply Reply = Bus->Call(*Path, CharacteristicInterface, TEXT("ReadValue"), Args, OperationWait());
+            const FBlueZReply Reply = Bus->Call(*Path, CharacteristicInterface, TEXT("ReadValue"), Args, ShortWait());
             const TArray<uint8>* Bytes = Reply.Ok() ? Reply.Value.TryGet<TArray<uint8>>() : nullptr;
             if (!Reply.Ok()) Describe(Reply);
             return Bytes ? *Bytes : TArray<uint8>();
         }
         if (!BatteryFallbackUuid.IsEmpty() && Uuid.Equals(BatteryFallbackUuid, ESearchCase::IgnoreCase))
         {
-            const FBlueZReply Reply = Bus->GetProperty(DevicePath, BatteryInterface, TEXT("Percentage"), OperationWait());
+            const FBlueZReply Reply = Bus->GetProperty(DevicePath, BatteryInterface, TEXT("Percentage"), ShortWait());
             const int32* Percent = Reply.Ok() ? Reply.Value.TryGet<int32>() : nullptr;
             return Percent ? TArray<uint8>({static_cast<uint8>(FMath::Clamp(*Percent, 0, 100))}) : TArray<uint8>();
         }
@@ -556,7 +584,7 @@ private:
         {
             return TEXT("Bluetooth notification setup failed.");
         }
-        const FBlueZReply Reply = Bus->Call(*Path, CharacteristicInterface, TEXT("StartNotify"), {}, OperationWait());
+        const FBlueZReply Reply = Bus->Call(*Path, CharacteristicInterface, TEXT("StartNotify"), {}, ShortWait());
         if (!Reply.Ok())
         {
             Bus->Unmatch(Match);
@@ -567,7 +595,7 @@ private:
         return FString();
     }
 
-    FString WriteOnWorker(const FString& Uuid, const TArray<uint8>& Value)
+    FString WriteOnWorker(const FString& Uuid, const TArray<uint8>& Value, const FBlueZWait& Wait)
     {
         const FString* Path = Characteristics.Find(Uuid);
         if (!Path)
@@ -577,7 +605,7 @@ private:
         FBlueZArgs Args;
         Args.Bytes = Value;
         Args.Options = CreateWriteOptions();
-        const FBlueZReply Reply = Bus->Call(*Path, CharacteristicInterface, TEXT("WriteValue"), Args, OperationWait());
+        const FBlueZReply Reply = Bus->Call(*Path, CharacteristicInterface, TEXT("WriteValue"), Args, Wait);
         return Reply.Ok() ? FString() : Describe(Reply);
     }
 

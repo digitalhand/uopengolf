@@ -76,9 +76,21 @@ struct FSquareConnectionOptions
     FString EventCharacteristicUuid = TEXT("86602102-6b7e-439a-bdd1-489a3213e9bb");
     FString BatteryCharacteristicUuid = TEXT("00002a19-0000-1000-8000-00805f9b34fb");
     FString FirmwareCharacteristicUuid = TEXT("86602003-6b7e-439a-bdd1-489a3213e9bb");
-    float ConnectionClubDelaySeconds = 2.0f;
-    float ConnectionReadyDelaySeconds = 3.0f;
-    float HeartbeatIntervalSeconds = 5.0f;
+    /** Handshake: after the first heartbeat, before the club command. Upstream waits 2 s. */
+    float ConnectionClubDelaySeconds = 0.0f;
+    /** Handshake: after the club command, before the first arm. Upstream waits 3 s. */
+    float ConnectionArmDelaySeconds = 0.5f;
+    /** Before re-arming after a shot or a rejected frame, and between failed arm attempts. */
+    float RearmDelaySeconds = 3.0f;
+    /** Deadline for a reconnect straight to the last device; a scan follows if it fails. */
+    float DirectReconnectTimeoutSeconds = 8.0f;
+    /**
+     * The device acknowledges each heartbeat within about 0.2 s (frame 11 03), and also sends sensor
+     * frames every 1.3-2.2 s and clock ticks every 3-6 s (measured 2026-11-10). Upstream sends one every 5 s.
+     */
+    float HeartbeatIntervalSeconds = 1.0f;
+    /** Heartbeat intervals in a row without any notification before the link is treated as gone. */
+    int32 MissedHeartbeatsBeforeLinkLoss = 2;
     float ScanTimeoutSeconds = 30.0f;
 };
 

@@ -3,6 +3,7 @@
 
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "UI/WindDisplay.h"
+#include "UI/HudStyle.h"
 #include "Widgets/SLeafWidget.h"
 
 class SWindIndicator : public SLeafWidget
@@ -26,6 +27,6 @@ public:
 
 private:
     WindDisplay::FState State;
-    FSlateRoundedBoxBrush PanelBrush{FLinearColor::FromSRGBColor(FColor(38, 44, 48, 210)), 8.0f};
-    FSlateRoundedBoxBrush CircleBrush{FLinearColor::White, CircleSize * 0.5f};
+    FSlateRoundedBoxBrush PanelBrush{HudStyle::TileColor(), HudStyle::TileRadius};
+    FSlateRoundedBoxBrush CircleBrush{HudStyle::AccentColor(), CircleSize * 0.5f};
 };

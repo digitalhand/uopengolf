@@ -40,7 +40,8 @@ namespace ShotDisplay
 
     /**
      * The status box's bottom line: an unsaved-recording error first, then a launch-monitor
-     * error (with the connect key while disconnected), otherwise the key tips.
+     * error (with the connect key while disconnected), otherwise the key tips; while disconnected
+     * they also point to the menu (Escape), where the launch monitor is set up.
      */
     FString StatusTip(ELaunchMonitorConnectionState State, const FString& LaunchMonitorError, int32 FailedRecordings,
         const FString& RecordingError);

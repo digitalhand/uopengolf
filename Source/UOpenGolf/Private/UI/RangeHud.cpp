@@ -47,18 +47,6 @@ namespace
         return HudStyle::LabelColor();
     }
 
-    FLinearColor HudStateColor(ELaunchMonitorConnectionState State)
-    {
-        switch (State)
-        {
-        case ELaunchMonitorConnectionState::Ready:
-            return FLinearColor(0.3f, 1.0f, 0.4f);
-        case ELaunchMonitorConnectionState::Disconnected:
-            return FLinearColor(0.65f, 0.65f, 0.65f);
-        default:
-            return FLinearColor(1.0f, 0.85f, 0.3f);
-        }
-    }
 } // namespace
 
 void SRangeHud::Construct(const FArguments& Args)
@@ -78,13 +66,13 @@ void SRangeHud::Construct(const FArguments& Args)
                 SNew(SHorizontalBox)
                 + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
                 [
-                    SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10)).ColorAndOpacity(FLinearColor::White)
+                    SNew(STextBlock).Font(HudStyle::Font("Bold", 10)).ColorAndOpacity(HudStyle::TextColor())
                     .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
                     .Text_Lambda([this] { return FText::FromString(Heading); })
                 ]
                 + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8, 0, 0, 0)
                 [
-                    SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 10)).ColorAndOpacity(HudLabelColor())
+                    SNew(STextBlock).Font(HudStyle::Font("Regular", 10)).ColorAndOpacity(HudLabelColor())
                     .Text_Lambda([this] { return FText::FromString(ClubName); })
                 ]
             ]
@@ -151,7 +139,7 @@ void SRangeHud::Construct(const FArguments& Args)
                     ]
                     + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16, 0, 0, 0)
                     [
-                        SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).ColorAndOpacity(HudLabelColor())
+                        SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudLabelColor())
                         .Text_Lambda([this] { return FText::FromString(KeyTip); })
                     ]
                 ]
@@ -159,7 +147,7 @@ void SRangeHud::Construct(const FArguments& Args)
             // Game version in the bottom-left corner, under the Test shots button.
             + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, 0, 0, HudVersionBottom)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(HudLabelColor())
+                SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
                 .Text(FText::FromString(ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion())))
             ]
@@ -213,12 +201,14 @@ void SRangeHud::Refresh(bool bText)
     const int32 Battery = LaunchMonitor ? LaunchMonitor->GetBatteryPercent() : -1;
     ClubName = LaunchMonitor ? UOpenLaunchMonitorSubsystem::GetClubDisplayName(LaunchMonitor->GetClub()).ToString() : FString();
     ConnectionText = StaticEnum<ELaunchMonitorConnectionState>()->GetDisplayNameTextByValue(static_cast<int64>(State));
-    ConnectionColor = HudStateColor(State);
+    ConnectionColor = HudStyle::StateColor(State);
     BatteryText = Battery < 0 ? FString(TEXT("—")) : FString::Printf(TEXT("%d%%"), Battery);
     // Off the target line; on the hole, also how far wide of the cup the line passes.
     const bool bHole = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
-    AimText = OpenGolfPlay::AimOffsetLabel(PlayerController ? PlayerController->GetAimOffsetDeg() : 0.0f, bHole ? Mode->GetDistanceToCupM() : 0.0f,
+    AimText = OpenGolfPlay::AimOffsetLabel(PlayerController ? PlayerController->GetAimOffsetDeg() : 0.0f, 0.0f,
         bHole && PlayerController->IsShortGameView());
+    if (bHole && PlayerController && FMath::Abs(PlayerController->GetAimOffsetDeg()) >= .05f)
+        AimText += TEXT(" / ") + GolfSettings::Distance(Mode->GetDistanceToCupM() * FMath::Tan(FMath::DegreesToRadians(FMath::Abs(PlayerController->GetAimOffsetDeg()))), PlayerController->IsShortGameView());
     const bool bRecording = Mode && Mode->IsRecordingShots();
     const int32 Failed = Mode ? Mode->GetFailedRecordingCount() : 0;
     bShowRecord = State != ELaunchMonitorConnectionState::Disconnected || Failed > 0;
@@ -244,6 +234,7 @@ TSharedRef<SWidget> SRangeHud::MakeTile(int32 Index)
     const bool bLaunch = Tiles[Index].Group == ShotDisplay::ETileGroup::Launch;
     // clang-format off
     return SNew(SBox).WidthOverride(HudTileWidth).HeightOverride(HudTileHeight)
+    .Visibility_Lambda([Index]{ const int32 Detail = GolfSettings::Get().ShotData; return Detail == 2 || Index < 3 || (Detail == 1 && (Index < 5 || Index == 12)) ? EVisibility::Visible : EVisibility::Collapsed; })
     [
         SNew(SBorder).BorderImage(bLaunch ? &LaunchBrush : &TileBrush).Padding(FMargin(6, 2)).VAlign(VAlign_Center)
         [
@@ -253,15 +244,15 @@ TSharedRef<SWidget> SRangeHud::MakeTile(int32 Index)
                 // Long text such as "Soft Fairway" shrinks to fit the tile.
                 SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
                 [
-                    SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 18)).ColorAndOpacity(FLinearColor::White)
+                    SNew(STextBlock).Font(HudStyle::Font("Bold", 18)).ColorAndOpacity(HudStyle::TextColor())
                     .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
                     .Text_Lambda([this, Index] { return FText::FromString(Tiles.IsValidIndex(Index) ? Tiles[Index].Value : FString()); })
                 ]
             ]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(HudLabelColor())
-                .Text(FText::FromString(Tiles[Index].Label))
+                SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
+                .Text_Lambda([this,Index]{return FText::FromString(Tiles.IsValidIndex(Index)?Tiles[Index].Label:FString());})
             ]
         ]
     ];
@@ -274,12 +265,12 @@ TSharedRef<SWidget> SRangeHud::MakeStatusCell(TAttribute<FText> Value, TAttribut
     return SNew(SVerticalBox)
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
         [
-            SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)).ColorAndOpacity(Color)
+            SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(Color)
             .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor).Text(Value)
         ]
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
         [
-            SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(HudLabelColor())
+            SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
             .Text(FText::FromString(Label))
         ];
     // clang-format on

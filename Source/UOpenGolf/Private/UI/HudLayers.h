@@ -22,6 +22,6 @@ namespace HudLayers
     inline bool IsShown(const AUOpenGolfPlayerController* Controller)
     {
         const AHUD* Hud = Controller ? Controller->GetHUD() : nullptr;
-        return Controller && !Controller->IsReplayPanelOpen() && (!Hud || Hud->bShowHUD);
+        return Controller && !Controller->IsMainMenuOpen() && !Controller->IsReplayPanelOpen() && (!Hud || Hud->bShowHUD);
     }
 } // namespace HudLayers

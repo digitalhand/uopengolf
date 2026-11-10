@@ -11,13 +11,16 @@
 #include "Async/Async.h"
 #include "Containers/Queue.h"
 #include "HAL/Event.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/Runnable.h"
 #include "HAL/RunnableThread.h"
 #include "OpenLaunchMonitorLog.h"
 
 #include <atomic>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "Windows/AllowWindowsPlatformTypes.h"
 THIRD_PARTY_INCLUDES_START
@@ -40,6 +43,12 @@ namespace
     constexpr int32 OpenAttempts = 12;
     constexpr int32 ServiceDiscoveryAttempts = 12;
     constexpr float RetryDelaySeconds = 1.0f;
+    /** A requested disconnect tells the device to stop notifying, but never waits long for it. */
+    constexpr double GracefulDisconnectWriteSeconds = 1.0;
+
+    TAutoConsoleVariable<int32> CVarGracefulRelease(TEXT("olm.Bluetooth.GracefulRelease"), 1,
+        TEXT("Windows: on a requested disconnect, clear MaintainConnection, turn notifications off and close the GATT services before ")
+        TEXT("releasing the device, so Windows can drop the link sooner. 0 releases the objects only (the earlier behavior)."));
 
     winrt::guid ToGuid(const FString& Uuid)
     {
@@ -51,6 +60,16 @@ namespace
         const FString Trimmed = FString(Name.c_str()).TrimStartAndEnd();
         return !Trimmed.IsEmpty() && Trimmed.StartsWith(Prefix, ESearchCase::IgnoreCase);
     }
+
+    /**
+     * The worker's wake event. Operation completion handlers hold a reference, so one that fires
+     * after a timeout or after the transport is gone still triggers a live event.
+     */
+    struct FWakeEvent
+    {
+        FEvent* Event = FPlatformProcess::GetSynchEventFromPool(false);
+        ~FWakeEvent() { FPlatformProcess::ReturnSynchEventToPool(Event); }
+    };
 
     TArray<uint8> ReadBuffer(const WinStreams::IBuffer& Buffer)
     {
@@ -98,7 +117,8 @@ public:
 
     FWindowsGattTransport()
     {
-        WakeEvent = FPlatformProcess::GetSynchEventFromPool(false);
+        Wake = std::make_shared<FWakeEvent>();
+        WakeEvent = Wake->Event;
         Thread = FRunnableThread::Create(this, TEXT("OpenLaunchMonitorBluetooth"));
     }
 
@@ -110,7 +130,7 @@ public:
             Thread->WaitForCompletion();
             delete Thread;
         }
-        FPlatformProcess::ReturnSynchEventToPool(WakeEvent);
+        // Wake returns the event to the pool once no pending completion handler holds it.
     }
 
     virtual void StartScan(const FString& NamePrefix) override
@@ -128,12 +148,12 @@ public:
     }
 
     virtual void Connect(const FString& DeviceId, const TArray<FString>& RequiredUuids, const TArray<FString>& OptionalUuids,
-        FCompletion OnComplete) override
+        float TimeoutSeconds, FCompletion OnComplete) override
     {
         ++ConnectionSerial;
-        Enqueue([this, DeviceId, RequiredUuids, OptionalUuids, OnComplete = MoveTemp(OnComplete)]() mutable
+        Enqueue([this, DeviceId, RequiredUuids, OptionalUuids, TimeoutSeconds, OnComplete = MoveTemp(OnComplete)]() mutable
             {
-            JobDeadline = FPlatformTime::Seconds() + 30.0;
+            JobDeadline = FPlatformTime::Seconds() + TimeoutSeconds;
             const FString Error = RunGuarded([&]() { return ConnectOnWorker(DeviceId, RequiredUuids, OptionalUuids); });
             JobDeadline = TNumericLimits<double>::Max();
             if (!Error.IsEmpty())
@@ -149,9 +169,40 @@ public:
         ++ConnectionSerial;
         ++ScanSerial;
         WakeEvent->Trigger();
-        Enqueue([this]()
-            { RunGuarded([this]()
-                  { StopScanOnWorker(); DisconnectOnWorker(); return FString(); }); }, true);
+        const bool bGraceful = CVarGracefulRelease.GetValueOnGameThread() != 0;
+        Enqueue([this, bGraceful]()
+            { RunGuarded([this, bGraceful]()
+                  { StopScanOnWorker(); DisconnectOnWorker(bGraceful); return FString(); }); }, true);
+    }
+
+    virtual void WriteThenRelease(const FString& Uuid, const TArray<uint8>& FinalWrite, double MaxWaitSeconds) override
+    {
+        if (!Thread)
+        {
+            return;
+        }
+        // Shared: after a timeout the job may still run and signal an event the caller no longer waits on.
+        const TSharedRef<FEventRef, ESPMode::ThreadSafe> Done = MakeShared<FEventRef, ESPMode::ThreadSafe>(EEventMode::ManualReset);
+        const bool bGraceful = CVarGracefulRelease.GetValueOnGameThread() != 0;
+        Enqueue([this, Uuid, FinalWrite, bGraceful, Done]()
+            {
+            if (!FinalWrite.IsEmpty())
+            {
+                RunGuarded([&]
+                    {
+                    if (const WinGatt::GattCharacteristic* Characteristic = Characteristics.Find(Uuid))
+                    {
+                        const WinStreams::DataWriter Writer;
+                        Writer.WriteBytes(winrt::array_view<const uint8_t>(FinalWrite.GetData(), FinalWrite.GetData() + FinalWrite.Num()));
+                        Await(Characteristic->WriteValueWithResultAsync(Writer.DetachBuffer(), WinGatt::GattWriteOption::WriteWithResponse),
+                            GracefulDisconnectWriteSeconds);
+                    }
+                    return FString(); });
+            }
+            // At exit only the disarm matters: skip turning notifications off, which costs a round trip each.
+            RunGuarded([&] { StopScanOnWorker(); DisconnectOnWorker(bGraceful, false); return FString(); });
+            (*Done)->Trigger(); });
+        (*Done)->Wait(static_cast<uint32>(MaxWaitSeconds * 1000.0));
     }
 
     virtual void Read(const FString& Uuid, TFunction<void(const TArray<uint8>&)> OnComplete) override
@@ -163,7 +214,7 @@ public:
             {
                 if (const WinGatt::GattCharacteristic* Characteristic = Characteristics.Find(Uuid))
                 {
-                    const WinGatt::GattReadResult Result = Await(Characteristic->ReadValueAsync(WinBluetooth::BluetoothCacheMode::Uncached));
+                    const WinGatt::GattReadResult Result = Await(Characteristic->ReadValueAsync(WinBluetooth::BluetoothCacheMode::Uncached), ShortOperationTimeoutSeconds);
                     if (Result.Status() == WinGatt::GattCommunicationStatus::Success)
                     {
                         Value = ReadBuffer(Result.Value());
@@ -199,7 +250,8 @@ public:
                 const WinStreams::DataWriter Writer;
                 Writer.WriteBytes(winrt::array_view<const uint8_t>(Value.GetData(), Value.GetData() + Value.Num()));
                 const WinGatt::GattWriteResult Result =
-                    Await(Characteristic->WriteValueWithResultAsync(Writer.DetachBuffer(), WinGatt::GattWriteOption::WriteWithResponse));
+                    Await(Characteristic->WriteValueWithResultAsync(Writer.DetachBuffer(), WinGatt::GattWriteOption::WriteWithResponse),
+                        ShortOperationTimeoutSeconds);
                 return Result.Status() == WinGatt::GattCommunicationStatus::Success
                            ? FString()
                            : FString::Printf(TEXT("Bluetooth write returned status %d."), static_cast<int32>(Result.Status())); })); });
@@ -246,9 +298,14 @@ private:
     bool Cancelled() const { return bStopping || ConnectionSerial != JobGeneration; }
 
     template <typename OperationType>
-    auto Await(const OperationType& Operation)
+    auto Await(const OperationType& Operation, double MaxSeconds = OperationTimeoutSeconds)
     {
-        const double Deadline = FMath::Min(JobDeadline, FPlatformTime::Seconds() + 10.0);
+        // Wake the worker the moment the operation finishes instead of at the next poll.
+        RunGuarded([&]
+            {
+            Operation.Completed([WakeRef = Wake](const auto&, winrt::Windows::Foundation::AsyncStatus) { WakeRef->Event->Trigger(); });
+            return FString(); });
+        const double Deadline = FMath::Min(JobDeadline, FPlatformTime::Seconds() + MaxSeconds);
         const auto Result = GattOperationWait::Wait(
             [&] { return Operation.Status() != winrt::Windows::Foundation::AsyncStatus::Started; },
             [this] { return Cancelled(); }, [] { return FPlatformTime::Seconds(); },
@@ -413,35 +470,61 @@ private:
                 RetryDelay();
             }
         }
+        if (Services && Services.Status() == WinGatt::GattCommunicationStatus::Success)
+        {
+            // Kept so a disconnect can close them: an open service object keeps Windows holding the link.
+            for (const WinGatt::GattDeviceService& Service : Services.Services())
+            {
+                OpenServices.push_back(Service);
+            }
+        }
         if (!Services || Services.Status() != WinGatt::GattCommunicationStatus::Success)
         {
             return FString::Printf(TEXT("Bluetooth service discovery returned status %d."), Services ? static_cast<int32>(Services.Status()) : -1);
         }
 
-        auto Resolve = [&](const FString& Uuid) -> bool
+        // One characteristics query per service, matched by UUID: the system cache first, and the
+        // device itself only when a required characteristic is not in the cache.
+        TArray<FString> Wanted = RequiredUuids;
+        Wanted.Append(OptionalUuids);
+        TArray<winrt::guid> WantedGuids;
+        for (const FString& Uuid : Wanted)
         {
+            WantedGuids.Add(ToGuid(Uuid));
+        }
+        auto ResolveAll = [&](WinBluetooth::BluetoothCacheMode CacheMode)
+        {
+            Characteristics.Empty();
             for (const WinGatt::GattDeviceService& Service : Services.Services())
             {
-                const WinGatt::GattCharacteristicsResult Result =
-                    Await(Service.GetCharacteristicsForUuidAsync(ToGuid(Uuid), WinBluetooth::BluetoothCacheMode::Uncached));
-                if (Result.Status() == WinGatt::GattCommunicationStatus::Success && Result.Characteristics().Size() > 0)
+                const WinGatt::GattCharacteristicsResult Result = Await(Service.GetCharacteristicsAsync(CacheMode));
+                if (Result.Status() != WinGatt::GattCommunicationStatus::Success)
                 {
-                    Characteristics.Add(Uuid, Result.Characteristics().GetAt(0));
-                    return true;
+                    continue;
+                }
+                for (const WinGatt::GattCharacteristic& Characteristic : Result.Characteristics())
+                {
+                    const winrt::guid Uuid = Characteristic.Uuid();
+                    for (int32 Index = 0; Index < Wanted.Num(); ++Index)
+                    {
+                        if (Uuid == WantedGuids[Index] && !Characteristics.Contains(Wanted[Index]))
+                        {
+                            Characteristics.Add(Wanted[Index], Characteristic);
+                        }
+                    }
                 }
             }
-            return false;
+            return Algo::AllOf(RequiredUuids, [this](const FString& Uuid) { return Characteristics.Contains(Uuid); });
         };
-        for (const FString& Uuid : RequiredUuids)
+        if (!ResolveAll(WinBluetooth::BluetoothCacheMode::Cached) && !ResolveAll(WinBluetooth::BluetoothCacheMode::Uncached))
         {
-            if (!Resolve(Uuid))
+            for (const FString& Uuid : RequiredUuids)
             {
-                return FString::Printf(TEXT("Missing Bluetooth characteristic %s."), *Uuid);
+                if (!Characteristics.Contains(Uuid))
+                {
+                    return FString::Printf(TEXT("Missing Bluetooth characteristic %s."), *Uuid);
+                }
             }
-        }
-        for (const FString& Uuid : OptionalUuids)
-        {
-            Resolve(Uuid);
         }
 
         const uint32 ThisConnection = JobGeneration;
@@ -449,6 +532,21 @@ private:
         ConnectionStatusToken = Device.ConnectionStatusChanged([WeakSelf, ThisConnection](const WinBluetooth::BluetoothLEDevice& Sender, const auto&)
             {
             if (Sender.ConnectionStatus() != WinBluetooth::BluetoothConnectionStatus::Disconnected)
+            {
+                return;
+            }
+            AsyncTask(ENamedThreads::GameThread, [WeakSelf, ThisConnection]()
+            {
+                const TSharedPtr<FWindowsGattTransport> Self = WeakSelf.Pin();
+                if (Self && Self->ConnectionSerial == ThisConnection && Self->OnDisconnected)
+                {
+                    Self->OnDisconnected();
+                }
+            }); });
+        // The GATT session can close before the device reports a status change; either one means the link is gone.
+        SessionStatusToken = Session.SessionStatusChanged([WeakSelf, ThisConnection](const WinGatt::GattSession&, const WinGatt::GattSessionStatusChangedEventArgs& Args)
+            {
+            if (Args.Status() != WinGatt::GattSessionStatus::Closed)
             {
                 return;
             }
@@ -496,7 +594,8 @@ private:
         const WinGatt::GattCommunicationStatus Status =
             Await(Characteristic->WriteClientCharacteristicConfigurationDescriptorAsync(
                 bNotify ? WinGatt::GattClientCharacteristicConfigurationDescriptorValue::Notify
-                        : WinGatt::GattClientCharacteristicConfigurationDescriptorValue::Indicate));
+                        : WinGatt::GattClientCharacteristicConfigurationDescriptorValue::Indicate),
+                ShortOperationTimeoutSeconds);
         if (Status != WinGatt::GattCommunicationStatus::Success)
         {
             Characteristic->ValueChanged(Token);
@@ -506,17 +605,49 @@ private:
         return FString();
     }
 
-    void DisconnectOnWorker()
+    /**
+     * Releases the device. WinRT has no disconnect call: Windows drops the link only once nothing holds
+     * it, so everything is let go explicitly, starting with MaintainConnection. bGraceful (a requested
+     * disconnect, link still up) also turns notifications off on the device first, as WinRT recommends;
+     * after a link loss that write is skipped so cleanup never waits on a dead link. bTurnOffNotifications
+     * false skips it too (app exit, where the process lets go of everything anyway).
+     */
+    void DisconnectOnWorker(bool bGraceful = false, bool bTurnOffNotifications = true)
     {
+        const double Start = FPlatformTime::Seconds();
+        const bool bHadDevice = static_cast<bool>(Device);
+        if (bGraceful && Session)
+        {
+            RunGuarded([&] { Session.MaintainConnection(false); return FString(); });
+        }
+        bool bLinkUp = false;
+        if (bGraceful && bTurnOffNotifications && Device)
+        {
+            RunGuarded([&] { bLinkUp = Device.ConnectionStatus() == WinBluetooth::BluetoothConnectionStatus::Connected; return FString(); });
+        }
         for (const TPair<FString, winrt::event_token>& Subscription : Subscriptions)
         {
             if (const WinGatt::GattCharacteristic* Characteristic = Characteristics.Find(Subscription.Key))
             {
                 RunGuarded([&] { Characteristic->ValueChanged(Subscription.Value); return FString(); });
+                if (bLinkUp)
+                {
+                    RunGuarded([&]
+                        {
+                        Await(Characteristic->WriteClientCharacteristicConfigurationDescriptorAsync(
+                                  WinGatt::GattClientCharacteristicConfigurationDescriptorValue::None),
+                            GracefulDisconnectWriteSeconds);
+                        return FString(); });
+                }
             }
         }
         Subscriptions.Empty();
         Characteristics.Empty();
+        for (const WinGatt::GattDeviceService& Service : OpenServices)
+        {
+            RunGuarded([&] { Service.Close(); return FString(); });
+        }
+        OpenServices.clear();
         if (Device && ConnectionStatusToken.value != 0)
         {
             RunGuarded([&] { Device.ConnectionStatusChanged(ConnectionStatusToken); return FString(); });
@@ -524,6 +655,11 @@ private:
         }
         if (Session)
         {
+            if (SessionStatusToken.value != 0)
+            {
+                RunGuarded([&] { Session.SessionStatusChanged(SessionStatusToken); return FString(); });
+                SessionStatusToken = {};
+            }
             RunGuarded([&] { Session.Close(); return FString(); });
             Session = nullptr;
         }
@@ -531,6 +667,11 @@ private:
         {
             RunGuarded([&] { Device.Close(); return FString(); });
             Device = nullptr;
+        }
+        if (bGraceful && bHadDevice)
+        {
+            UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Bluetooth device released in %.2f s%s."), FPlatformTime::Seconds() - Start,
+                bLinkUp ? TEXT(" (notifications turned off first)") : TEXT(""));
         }
     }
 
@@ -540,6 +681,8 @@ private:
      */
     TWeakPtr<FWindowsGattTransport> WeakThis;
     FRunnableThread* Thread = nullptr;
+    /** Owns WakeEvent; shared with completion handlers that may outlive a wait. */
+    std::shared_ptr<FWakeEvent> Wake;
     FEvent* WakeEvent = nullptr;
     std::atomic<bool> bStopping = false;
     TQueue<TUniqueFunction<void()>, EQueueMode::Mpsc> Jobs;
@@ -555,8 +698,11 @@ private:
     winrt::event_token AdvertisementToken;
     WinBluetooth::BluetoothLEDevice Device = nullptr;
     winrt::event_token ConnectionStatusToken{};
+    winrt::event_token SessionStatusToken{};
     WinGatt::GattSession Session = nullptr;
     TMap<FString, WinGatt::GattCharacteristic> Characteristics;
+    /** std::vector: WinRT types forbid the placement new TArray uses. */
+    std::vector<WinGatt::GattDeviceService> OpenServices;
     TMap<FString, winrt::event_token> Subscriptions;
 };
 

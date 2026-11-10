@@ -79,10 +79,12 @@ namespace RenderedPlay
         return FPointerEvent(0, At, From, bDown ? TSet<FKey>{EKeys::LeftMouseButton} : TSet<FKey>(), Button, 0.0f, FModifierKeysState());
     }
 
-    /** Presses the left button at From, moves to To and releases there, through Slate's routing as a real mouse would. */
+    /** Hovers From, presses the left button there, moves to To and releases there, through Slate's routing as a real mouse would. */
     inline void Drag(const TSharedRef<SWindow>& Window, const FVector2D& From, const FVector2D& To)
     {
         FSlateApplication& Slate = FSlateApplication::Get();
+        // SButton only clicks when hovered, and hover comes from a move.
+        Slate.RoutePointerMoveEvent(PathAt(Window, From), MouseAt(From, From, false, EKeys::Invalid), false);
         Slate.RoutePointerDownEvent(PathAt(Window, From), MouseAt(From, From, true, EKeys::LeftMouseButton));
         if (!To.Equals(From))
             Slate.RoutePointerMoveEvent(PathAt(Window, To), MouseAt(To, From, true, EKeys::Invalid), false);

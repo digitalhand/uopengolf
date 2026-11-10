@@ -2,15 +2,38 @@
 #include "OpenLaunchMonitorSubsystem.h"
 
 #include "Bluetooth/GattTransport.h"
+#include "HAL/IConsoleManager.h"
+#include "IPAddress.h"
+#include "OpenConnect/OpenConnectProtocol.h"
+#include "OpenConnect/OpenConnectServer.h"
 #include "OpenLaunchMonitorLog.h"
 #include "Square/SquareProtocol.h"
 #include "Square/SquareScheduler.h"
 #include "Square/SquareSession.h"
+#include "SocketSubsystem.h"
 
 namespace
 {
-    constexpr int32 MaxReconnectAttempts = 5;
-    constexpr float MaxReconnectDelaySeconds = 30.0f;
+    /** About three minutes of retries: long enough for a battery swap or a slow power cycle. */
+    constexpr int32 MaxReconnectAttempts = 12;
+    /** Every this many attempts scans instead of connecting to the known device. */
+    constexpr int32 ScanEveryAttempts = 4;
+    /** Backoff 0.5, 1, 2, 4, then 8 s: a dropped link usually comes back at once. */
+    constexpr float FirstReconnectDelaySeconds = 0.5f;
+    constexpr float MaxReconnectDelaySeconds = 8.0f;
+
+    TAutoConsoleVariable<float> CVarSquareClubDelay(TEXT("olm.Square.ClubDelay"), FSquareConnectionOptions().ConnectionClubDelaySeconds,
+        TEXT("Seconds between the first heartbeat and the club command while connecting to a Square Home. Read at each connect."));
+    TAutoConsoleVariable<float> CVarSquareArmDelay(TEXT("olm.Square.ArmDelay"), FSquareConnectionOptions().ConnectionArmDelaySeconds,
+        TEXT("Seconds between the club command and the first arm while connecting to a Square Home. Read at each connect."));
+    TAutoConsoleVariable<float> CVarSquareHeartbeatInterval(TEXT("olm.Square.HeartbeatInterval"), FSquareConnectionOptions().HeartbeatIntervalSeconds,
+        TEXT("Seconds between Square Home heartbeats (minimum 0.5). Read at each connect."));
+    TAutoConsoleVariable<int32> CVarSquareMissedHeartbeats(TEXT("olm.Square.MissedHeartbeats"), FSquareConnectionOptions().MissedHeartbeatsBeforeLinkLoss,
+        TEXT("Heartbeat intervals in a row without any notification before a Square Home link is treated as lost. Read at each connect."));
+    /** Rejected Open Connect messages logged at Warning per connection; later ones log at Verbose. */
+    constexpr int32 MaxWarnedRejections = 5;
+    /** Characters of a rejected message kept in the log. */
+    constexpr int32 RejectionExcerptChars = 160;
     const TCHAR* SquareHomeSource = TEXT("Square Home");
     const TCHAR* ReplaySource = TEXT("Replay");
 
@@ -118,9 +141,15 @@ namespace
 void UOpenLaunchMonitorSubsystem::Deinitialize()
 {
     CancelReconnect();
+    if (OpenConnect)
+    {
+        OpenConnect->Stop();
+        OpenConnect.Reset();
+    }
     if (Session)
     {
-        Session->Disconnect();
+        // Disarm and release before the transport is destroyed, so the Square's lights go off on exit too.
+        Session->Shutdown();
         Session.Reset();
     }
     Super::Deinitialize();
@@ -131,15 +160,31 @@ void UOpenLaunchMonitorSubsystem::Connect()
     CancelReconnect();
     ReconnectAttempts = 0;
     LastError.Reset();
+    if (Provider == ELaunchMonitorProvider::OpenConnect)
+    {
+        StartOpenConnect();
+        return;
+    }
     if (EnsureSession())
     {
+        ApplyTiming();
         Session->Connect();
+    }
+}
+
+void UOpenLaunchMonitorSubsystem::ApplyTiming()
+{
+    if (Session)
+    {
+        Session->SetTiming(CVarSquareClubDelay.GetValueOnGameThread(), CVarSquareArmDelay.GetValueOnGameThread(),
+            CVarSquareHeartbeatInterval.GetValueOnGameThread(), CVarSquareMissedHeartbeats.GetValueOnGameThread());
     }
 }
 
 void UOpenLaunchMonitorSubsystem::Disconnect()
 {
     CancelReconnect();
+    StopOpenConnect();
     if (Session)
     {
         Session->Disconnect();
@@ -153,6 +198,13 @@ void UOpenLaunchMonitorSubsystem::SetClub(ELaunchMonitorClub NewClub)
     {
         Session->SetClub(ClubCode(Club));
     }
+    SendOpenConnectPlayer();
+}
+
+void UOpenLaunchMonitorSubsystem::SetSpinMode(ESquareSpinMode Mode)
+{
+    SpinMode = Mode == ESquareSpinMode::Calculated ? Mode : ESquareSpinMode::Measured;
+    if (Session) Session->SetSpinMode(SpinMode == ESquareSpinMode::Calculated ? 0 : 1);
 }
 
 void UOpenLaunchMonitorSubsystem::SetLeftHanded(bool bNewLeftHanded)
@@ -163,6 +215,7 @@ void UOpenLaunchMonitorSubsystem::SetLeftHanded(bool bNewLeftHanded)
         Session->SetHandedness(bLeftHanded ? 1 : 0);
         Session->SetClub(ClubCode(Club));
     }
+    SendOpenConnectPlayer();
 }
 
 bool UOpenLaunchMonitorSubsystem::InjectReplayShot()
@@ -273,34 +326,36 @@ bool UOpenLaunchMonitorSubsystem::EnsureSession()
 
     Session = MakeShared<FSquareSession>(Transport.ToSharedRef(), MakeShared<FTickerSquareScheduler>());
     Session->Initialize();
+    Session->SetSpinMode(SpinMode == ESquareSpinMode::Calculated ? 0 : 1);
     Session->SetHandedness(bLeftHanded ? 1 : 0);
     Session->SetClub(ClubCode(Club));
 
+    // After a switch to another provider, late events from the Square session are ignored.
     TWeakObjectPtr<UOpenLaunchMonitorSubsystem> WeakThis(this);
     Session->OnStatusChanged = [WeakThis](ESquareSessionStatus Status)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->SetConnectionState(ToConnectionState(Status));
         }
     };
     Session->OnError = [WeakThis](const FString& Message)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->ReportError(Message);
         }
     };
     Session->OnDeviceSelected = [WeakThis](const FGattDeviceInfo& Device)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->DeviceName = Device.Name;
         }
     };
     Session->OnBatteryChanged = [WeakThis](int32 Percent)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->BatteryPercent = Percent;
             WeakThis->OnBatteryChanged.Broadcast(Percent);
@@ -308,28 +363,28 @@ bool UOpenLaunchMonitorSubsystem::EnsureSession()
     };
     Session->OnFirmwareChanged = [WeakThis](const FString& InFirmware)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->Firmware = InFirmware;
         }
     };
     Session->OnReadyChanged = [WeakThis](bool bReady)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->SetBallReady(bReady);
         }
     };
     Session->OnShot = [WeakThis](const FSquareShotMetrics& Metrics, int32 SessionShotId)
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->DeliverShot(Metrics, SquareHomeSource, SessionShotId);
         }
     };
     Session->OnClub = [WeakThis](const FSquareClubMetrics& Metrics, int32 SessionShotId)
     {
-        if (!WeakThis.IsValid())
+        if (!WeakThis.IsValid() || !WeakThis->IsSquareActive())
         {
             return;
         }
@@ -341,7 +396,7 @@ bool UOpenLaunchMonitorSubsystem::EnsureSession()
     };
     Session->OnConnectionLost = [WeakThis]()
     {
-        if (WeakThis.IsValid())
+        if (WeakThis.IsValid() && WeakThis->IsSquareActive())
         {
             WeakThis->ScheduleReconnect();
         }
@@ -352,8 +407,6 @@ bool UOpenLaunchMonitorSubsystem::EnsureSession()
 void UOpenLaunchMonitorSubsystem::DeliverShot(const FSquareShotMetrics& Metrics, const FString& Source, int32 SessionShotId)
 {
     FLaunchMonitorShot Shot;
-    Shot.ShotNumber = ++ShotCounter;
-    Shot.ReceivedUtc = FDateTime::UtcNow();
     Shot.Source = Source;
     Shot.ShotType = Metrics.ShotType == ESquareShotType::Full   ? ELaunchMonitorShotType::Full
                     : Metrics.ShotType == ESquareShotType::Putt ? ELaunchMonitorShotType::Putt
@@ -373,6 +426,18 @@ void UOpenLaunchMonitorSubsystem::DeliverShot(const FSquareShotMetrics& Metrics,
     Shot.BackSpinSource = ToValueSource(Metrics.BackSpinSource);
     Shot.SideSpinSource = ToValueSource(Metrics.SideSpinSource);
 
+    if (Source == SquareHomeSource && SpinMode == ESquareSpinMode::Calculated)
+    {
+        for (ELaunchMonitorValueSource* Value : {&Shot.TotalSpinSource, &Shot.SpinAxisSource, &Shot.BackSpinSource, &Shot.SideSpinSource})
+            if (*Value != ELaunchMonitorValueSource::Missing) *Value = ELaunchMonitorValueSource::Derived;
+    }
+    DeliverShot(MoveTemp(Shot), SessionShotId);
+}
+
+void UOpenLaunchMonitorSubsystem::DeliverShot(FLaunchMonitorShot Shot, int32 SessionShotId)
+{
+    Shot.ShotNumber = ++ShotCounter;
+    Shot.ReceivedUtc = FDateTime::UtcNow();
     if (SessionShotId > 0)
     {
         // Club data only ever follows the newest shot, so older entries could never be claimed.
@@ -385,8 +450,12 @@ void UOpenLaunchMonitorSubsystem::DeliverShot(const FSquareShotMetrics& Metrics,
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Shot %d (%s): %.2f mph (%.2f m/s), VLA %.2f, HLA %.2f, spin %d rpm, axis %.2f, back %d, side %d."),
         Shot.ShotNumber, *Shot.Source, Shot.GetBallSpeedMph(), Shot.BallSpeedMps, Shot.VerticalLaunchDeg, Shot.HorizontalLaunchDeg,
         Shot.TotalSpinRpm, Shot.SpinAxisDeg, Shot.BackSpinRpm, Shot.SideSpinRpm);
+    // Handlers run synchronously; one that refuses the shot calls RejectShot during the broadcast.
+    BroadcastingShotNumber = Shot.ShotNumber;
+    BroadcastRejection.Reset();
     OnShotReceivedNative.Broadcast(Shot);
     OnShotReceived.Broadcast(Shot);
+    BroadcastingShotNumber = 0;
 }
 
 void UOpenLaunchMonitorSubsystem::DeliverClubData(const FSquareClubMetrics& Metrics, int32 ShotNumber)
@@ -399,8 +468,12 @@ void UOpenLaunchMonitorSubsystem::DeliverClubData(const FSquareClubMetrics& Metr
     CopyOptional(Metrics.DynamicLoftDeg, ClubData.bHasDynamicLoft, ClubData.DynamicLoftDeg);
     CopyOptional(Metrics.ImpactHorizontalMm, ClubData.bHasImpactHorizontal, ClubData.ImpactHorizontalMm);
     CopyOptional(Metrics.ImpactVerticalMm, ClubData.bHasImpactVertical, ClubData.ImpactVerticalMm);
+    DeliverClubData(ClubData);
+}
 
-    if (LastShot.IsSet() && LastShot->ShotNumber == ShotNumber)
+void UOpenLaunchMonitorSubsystem::DeliverClubData(const FLaunchMonitorClubData& ClubData)
+{
+    if (LastShot.IsSet() && LastShot->ShotNumber == ClubData.ShotNumber)
     {
         LastClubData = ClubData;
     }
@@ -443,26 +516,42 @@ void UOpenLaunchMonitorSubsystem::ReportError(const FString& Message)
     OnError.Broadcast(Message);
 }
 
+void UOpenLaunchMonitorSubsystem::SetAutoReconnect(bool bEnabled)
+{
+    bAutoReconnect = bEnabled;
+    if (!bEnabled) CancelReconnect();
+}
+
 void UOpenLaunchMonitorSubsystem::ScheduleReconnect()
 {
     // A link lost during a reconnect's handshake reports both a state change and a lost
     // connection. One pending attempt is enough, and CancelReconnect can only remove one.
-    if (!bAutoReconnect || !Session || ReconnectAttempts >= MaxReconnectAttempts || ReconnectHandle.IsValid())
+    if (!bAutoReconnect || !Session || !IsSquareActive() || ReconnectAttempts >= MaxReconnectAttempts || ReconnectHandle.IsValid())
     {
         return;
     }
-    const float Delay = FMath::Min(2.0f * FMath::Pow(2.0f, static_cast<float>(ReconnectAttempts)), MaxReconnectDelaySeconds);
+    const float Delay = FMath::Min(FirstReconnectDelaySeconds * FMath::Pow(2.0f, static_cast<float>(ReconnectAttempts)), MaxReconnectDelaySeconds);
     ++ReconnectAttempts;
-    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Reconnecting in %.0f s (attempt %d of %d)."), Delay, ReconnectAttempts, MaxReconnectAttempts);
+    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Reconnecting in %.1f s (attempt %d of %d)."), Delay, ReconnectAttempts, MaxReconnectAttempts);
     TWeakObjectPtr<UOpenLaunchMonitorSubsystem> WeakThis(this);
     ReconnectHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([WeakThis](float)
                                                                {
         if (WeakThis.IsValid())
         {
             WeakThis->ReconnectHandle.Reset();
-            if (WeakThis->Session && WeakThis->ConnectionState == ELaunchMonitorConnectionState::Disconnected)
+            if (WeakThis->bAutoReconnect && WeakThis->IsSquareActive() && WeakThis->Session && WeakThis->ConnectionState == ELaunchMonitorConnectionState::Disconnected)
             {
-                WeakThis->Session->Connect();
+                WeakThis->ApplyTiming();
+                // Connect straight to the known device: after a power cycle it may not advertise, so a scan
+                // finds nothing (measured on a Square Home). Every fourth attempt scans, in case it changed.
+                if (WeakThis->ReconnectAttempts % ScanEveryAttempts != 0 && WeakThis->Session->HasLastDevice())
+                {
+                    WeakThis->Session->Reconnect();
+                }
+                else
+                {
+                    WeakThis->Session->Connect();
+                }
             }
         }
         return false; }),
@@ -477,4 +566,232 @@ void UOpenLaunchMonitorSubsystem::CancelReconnect()
         ReconnectHandle.Reset();
     }
     ReconnectAttempts = 0;
+}
+
+void UOpenLaunchMonitorSubsystem::SetProvider(ELaunchMonitorProvider NewProvider)
+{
+    if (Provider == NewProvider)
+    {
+        return;
+    }
+    Disconnect();
+    Provider = NewProvider;
+    bOpenConnectClient = false;
+    DeviceName.Reset();
+    Firmware.Reset();
+    BatteryPercent = -1;
+    LastError.Reset();
+    SetBallReady(false);
+    SetConnectionState(ELaunchMonitorConnectionState::Disconnected);
+    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Launch-monitor provider: %s."),
+        *StaticEnum<ELaunchMonitorProvider>()->GetDisplayNameTextByValue(static_cast<int64>(Provider)).ToString());
+}
+
+void UOpenLaunchMonitorSubsystem::SetOpenConnectEndpoint(int32 Port, bool bAllowLan)
+{
+    Port = FMath::Clamp(Port, 1, 65535);
+    if (Port == OpenConnectPort && bAllowLan == bOpenConnectAllowLan)
+    {
+        return;
+    }
+    OpenConnectPort = Port;
+    bOpenConnectAllowLan = bAllowLan;
+    if (OpenConnect)
+    {
+        StartOpenConnect();
+    }
+}
+
+FString UOpenLaunchMonitorSubsystem::GetOpenConnectAddress() const
+{
+    const FString Host = bOpenConnectAllowLan && !OpenConnectLanHost.IsEmpty() ? OpenConnectLanHost : FString(TEXT("127.0.0.1"));
+    return FString::Printf(TEXT("%s:%d"), *Host, OpenConnectPort);
+}
+
+bool UOpenLaunchMonitorSubsystem::IsOpenConnectListening() const
+{
+    return OpenConnect.IsValid() && OpenConnect->IsRunning();
+}
+
+bool UOpenLaunchMonitorSubsystem::GetOpenConnectLastMessageUtc(FDateTime& OutUtc) const
+{
+    if (OpenConnectLastMessageUtc.IsSet())
+    {
+        OutUtc = OpenConnectLastMessageUtc.GetValue();
+        return true;
+    }
+    return false;
+}
+
+void UOpenLaunchMonitorSubsystem::RejectShot(int32 ShotNumber, const FString& Reason)
+{
+    if (ShotNumber != 0 && ShotNumber == BroadcastingShotNumber && !BroadcastRejection.IsSet())
+    {
+        BroadcastRejection = Reason;
+    }
+}
+
+void UOpenLaunchMonitorSubsystem::StartOpenConnect()
+{
+    StopOpenConnect();
+    LastError.Reset();
+    if (bOpenConnectAllowLan)
+    {
+        bool bCanBindAll = false;
+        OpenConnectLanHost = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, bCanBindAll)->ToString(false);
+    }
+    OpenConnect = MakeShared<FOpenConnectServer>();
+    TWeakObjectPtr<UOpenLaunchMonitorSubsystem> WeakThis(this);
+    OpenConnect->OnListening = [WeakThis]()
+    {
+        if (WeakThis.IsValid())
+        {
+            UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Open Connect listening on %s%s."), *WeakThis->GetOpenConnectAddress(),
+                WeakThis->bOpenConnectAllowLan ? TEXT(" (all network interfaces)") : TEXT(""));
+            WeakThis->SetConnectionState(ELaunchMonitorConnectionState::Connecting);
+        }
+    };
+    OpenConnect->OnListenFailed = [WeakThis](const FString& Error)
+    {
+        if (WeakThis.IsValid())
+        {
+            UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("%s"), *Error);
+            WeakThis->StopOpenConnect();
+            WeakThis->ReportError(Error);
+        }
+    };
+    OpenConnect->OnClientConnected = [WeakThis](const FString& Peer)
+    {
+        if (WeakThis.IsValid())
+        {
+            UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Open Connect connector attached from %s."), *Peer);
+            WeakThis->bOpenConnectClient = true;
+            WeakThis->OpenConnectRejections = 0;
+            WeakThis->DeviceName = Peer;
+            WeakThis->LastError.Reset();
+            WeakThis->SetConnectionState(ELaunchMonitorConnectionState::Connected);
+            WeakThis->SendOpenConnectPlayer();
+        }
+    };
+    OpenConnect->OnClientDisconnected = [WeakThis]()
+    {
+        if (WeakThis.IsValid())
+        {
+            UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Open Connect connector detached; still listening."));
+            WeakThis->bOpenConnectClient = false;
+            WeakThis->DeviceName.Reset();
+            WeakThis->SetBallReady(false);
+            WeakThis->SetConnectionState(ELaunchMonitorConnectionState::Connecting);
+        }
+    };
+    OpenConnect->OnMessage = [WeakThis](const FString& Json)
+    {
+        if (WeakThis.IsValid())
+        {
+            WeakThis->HandleOpenConnectMessage(Json);
+        }
+    };
+    OpenConnect->OnOverflow = [WeakThis]()
+    {
+        if (WeakThis.IsValid() && WeakThis->OpenConnect)
+        {
+            WeakThis->OpenConnect->Send(OpenConnectProtocol::Response(413, TEXT("Payload too large")));
+        }
+    };
+    if (!OpenConnect->Start(OpenConnectPort, bOpenConnectAllowLan))
+    {
+        OpenConnect.Reset();
+        ReportError(TEXT("Could not start the Open Connect listener thread."));
+    }
+}
+
+void UOpenLaunchMonitorSubsystem::StopOpenConnect()
+{
+    if (!OpenConnect)
+    {
+        return;
+    }
+    // Stop joins the worker, which closes the connector and listening sockets before it returns,
+    // so the port is free as soon as this call (and any provider switch) completes.
+    OpenConnect->Stop();
+    OpenConnect.Reset();
+    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Open Connect stopped; port %d closed."), OpenConnectPort);
+    bOpenConnectClient = false;
+    if (Provider == ELaunchMonitorProvider::OpenConnect)
+    {
+        DeviceName.Reset();
+        SetBallReady(false);
+        SetConnectionState(ELaunchMonitorConnectionState::Disconnected);
+    }
+}
+
+void UOpenLaunchMonitorSubsystem::HandleOpenConnectMessage(const FString& Json)
+{
+    OpenConnectLastMessageUtc = FDateTime::UtcNow();
+    FOpenConnectMessage Message;
+    FString Error;
+    if (!OpenConnectProtocol::Decode(Json, Message, Error))
+    {
+        // The message is untrusted: log a short excerpt without control characters, and only the first few loudly.
+        const FString Excerpt = OpenConnectProtocol::SanitizeText(Json, RejectionExcerptChars);
+        if (++OpenConnectRejections <= MaxWarnedRejections)
+        {
+            UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Open Connect message rejected (%s): %s%s"), *Error, *Excerpt,
+                OpenConnectRejections == MaxWarnedRejections ? TEXT(" (further rejections log at Verbose)") : TEXT(""));
+        }
+        else
+        {
+            UE_LOG(LogOpenLaunchMonitor, Verbose, TEXT("Open Connect message rejected (%s): %s"), *Error, *Excerpt);
+        }
+        if (OpenConnect)
+        {
+            OpenConnect->Send(OpenConnectProtocol::Response(501, Error));
+        }
+        return;
+    }
+    if (!Message.DeviceId.IsEmpty())
+    {
+        DeviceName = Message.DeviceId;
+    }
+    if (Message.bReady.IsSet())
+    {
+        SetBallReady(Message.bReady.GetValue());
+        SetConnectionState(Message.bReady.GetValue() ? ELaunchMonitorConnectionState::Ready : ELaunchMonitorConnectionState::Connected);
+    }
+    if (!Message.Shot.IsSet())
+    {
+        // The readiness broadcasts above may have stopped the listener.
+        if (OpenConnect)
+            OpenConnect->Send(OpenConnectProtocol::Response(200, Message.bHeartbeat ? TEXT("Heartbeat received") : TEXT("Status received")));
+        return;
+    }
+
+    // A connector that sends shots without readiness flags is treated as ready once it shoots.
+    SetConnectionState(ELaunchMonitorConnectionState::Ready);
+    FLaunchMonitorShot Shot = Message.Shot.GetValue();
+    Shot.Source = Message.DeviceId.IsEmpty() ? FString(LaunchMonitorOpenConnectSource)
+                                             : FString::Printf(TEXT("%s: %s"), LaunchMonitorOpenConnectSource, *Message.DeviceId);
+    DeliverShot(MoveTemp(Shot), 0);
+    const TOptional<FString> Rejection = BroadcastRejection;
+    BroadcastRejection.Reset();
+    if (Message.Club.IsSet())
+    {
+        FLaunchMonitorClubData ClubData = Message.Club.GetValue();
+        ClubData.ShotNumber = ShotCounter;
+        DeliverClubData(ClubData);
+    }
+    // A handler may have stopped the listener while the shot was broadcast.
+    if (OpenConnect)
+    {
+        OpenConnect->Send(Rejection.IsSet() ? OpenConnectProtocol::Response(501, Rejection.GetValue())
+                                            : OpenConnectProtocol::Response(200, TEXT("Shot received successfully")));
+    }
+}
+
+void UOpenLaunchMonitorSubsystem::SendOpenConnectPlayer()
+{
+    if (OpenConnect && bOpenConnectClient)
+    {
+        OpenConnect->Send(OpenConnectProtocol::PlayerInformation(bLeftHanded, Club));
+    }
 }

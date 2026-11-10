@@ -15,9 +15,13 @@ struct OPENGOLFCOURSE_API FOpenGolfHoleRound
     int32 Putts = 0;
     bool bHoled = false;
     bool bPractice = false;
+    bool bConceded = false;
 
     void Start(int32 InPar);
     void RecordStroke(bool bFromGreen, bool bInCup);
+    /** Called after counting the stopped shot; adds one conceded putt at most once. */
+    bool TryConcede(float DistanceM, float RadiusFeet, bool bOnGreen);
+
 
     /** "Par", "Birdie", "+3" and so on for a finished hole; empty before the hole ends and always for practice. */
     FString ResultName() const;

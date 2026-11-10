@@ -14,8 +14,12 @@ namespace
     constexpr float ClubRequestRetryDelaySeconds = 0.15f;
     /** Arm commands tried, a ready delay apart, before the link is dropped and reconnected. */
     constexpr int32 ArmAttempts = 3;
+    /** Longest a Disconnect waits for the device to confirm it stopped detecting before releasing the link. */
+    constexpr float DisarmBeforeDisconnectSeconds = 0.5f;
+    /** Longest app exit waits for the device to be disarmed and released. */
+    constexpr double ShutdownWaitSeconds = 1.5;
     /** Heartbeats that may fail in a row before the device is treated as gone. */
-    constexpr int32 HeartbeatFailuresBeforeLinkLoss = 3;
+    constexpr int32 HeartbeatFailuresBeforeLinkLoss = 2;
 } // namespace
 
 FSquareSession::FSquareSession(
@@ -83,13 +87,35 @@ void FSquareSession::Connect()
         } }));
 }
 
-void FSquareSession::ConnectToDevice(const FGattDeviceInfo& Device)
+void FSquareSession::Reconnect()
+{
+    if (LastDevice.Id.IsEmpty())
+    {
+        Connect();
+        return;
+    }
+    // The device is known: skip the scan, with a short deadline so an absent one fails fast.
+    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Reconnecting to %s without a scan."), *LastDevice.Name);
+    ConnectToDevice(LastDevice, Options.DirectReconnectTimeoutSeconds);
+}
+
+void FSquareSession::SetTiming(float ClubSeconds, float ArmSeconds, float HeartbeatSeconds, int32 MissedBeforeLoss)
+{
+    Options.ConnectionClubDelaySeconds = FMath::Max(ClubSeconds, 0.0f);
+    Options.ConnectionArmDelaySeconds = FMath::Max(ArmSeconds, 0.0f);
+    // A heartbeat faster than the device's ~0.2 s acknowledgement would count every one as missed.
+    Options.HeartbeatIntervalSeconds = FMath::Max(HeartbeatSeconds, 0.5f);
+    Options.MissedHeartbeatsBeforeLinkLoss = FMath::Max(MissedBeforeLoss, 1);
+}
+
+void FSquareSession::ConnectToDevice(const FGattDeviceInfo& Device, float TimeoutSeconds)
 {
     if (Device.Id.IsEmpty())
     {
         EmitError(TEXT("No Square device was selected."));
         return;
     }
+    LastDevice = Device;
 
     ResetConnection();
     SetStatus(ESquareSessionStatus::Connecting);
@@ -99,7 +125,7 @@ void FSquareSession::ConnectToDevice(const FGattDeviceInfo& Device)
         OnDeviceSelected(Device);
     }
     Transport->Connect(Device.Id, {Options.CommandCharacteristicUuid, Options.EventCharacteristicUuid},
-        {Options.BatteryCharacteristicUuid, Options.FirmwareCharacteristicUuid}, Guard([this](bool bSuccess, const FString& Error)
+        {Options.BatteryCharacteristicUuid, Options.FirmwareCharacteristicUuid}, TimeoutSeconds, Guard([this](bool bSuccess, const FString& Error)
                                                                                      {
         if (!bSuccess)
         {
@@ -112,7 +138,7 @@ void FSquareSession::ConnectToDevice(const FGattDeviceInfo& Device)
 
 void FSquareSession::ContinueHandshake()
 {
-    // Device info, notifications, heartbeat, club after 2 s, arm after 3 s, then the heartbeat timer.
+    // Device info, notifications, heartbeat, club, arm (each after its configured delay), then the heartbeat timer.
     Transport->Read(Options.BatteryCharacteristicUuid, Guard([this](const TArray<uint8>& Battery)
                                                            {
         if (Battery.Num() > 0)
@@ -157,7 +183,7 @@ void FSquareSession::ContinueHandshake()
                                     FailConnect(Error);
                                     return;
                                 }
-                                Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]()
+                                Scheduler->Schedule(Options.ConnectionArmDelaySeconds, Guard([this]()
                                 {
                                     Arm();
                                     ScheduleHeartbeat();
@@ -174,9 +200,60 @@ void FSquareSession::ContinueHandshake()
 void FSquareSession::Disconnect()
 {
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Disconnect requested."));
+    if (!bConnected)
+    {
+        ResetConnection();
+        SetStatus(ESquareSessionStatus::Disconnected);
+        EmitReady(false);
+        return;
+    }
+    // Tell the device to stop detecting first. Windows only drops a released link when it chooses,
+    // which can take many seconds; until then an armed Square keeps its red lights on. The write goes
+    // straight to the transport, ahead of anything queued, and the link is released once it completes
+    // or after DisarmBeforeDisconnectSeconds, whichever is first. The game sees Disconnected at once.
+    const TArray<uint8> Command = SquareProtocol::DetectBall(NextSequence(), 0, SpinMode);
+    ResetSessionState();
+    bDisconnecting = true;
+    SetStatus(ESquareSessionStatus::Disconnected);
+    EmitReady(false);
+    Transport->Write(Options.CommandCharacteristicUuid, Command, Guard([this](bool bSuccess, const FString& Error)
+        {
+        if (!bSuccess)
+        {
+            UE_LOG(LogOpenLaunchMonitor, Verbose, TEXT("Disarm before disconnect failed: %s"), *Error);
+        }
+        FinishDisconnect(); }));
+    Scheduler->Schedule(DisarmBeforeDisconnectSeconds, Guard([this]()
+        { FinishDisconnect(); }));
+}
+
+void FSquareSession::Shutdown()
+{
+    // At exit no game-thread callback runs again, so the transport sends the disarm and releases the
+    // device itself while this call waits, instead of the asynchronous Disconnect sequence.
+    if (bConnected || bDisconnecting)
+    {
+        UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Shutting down: stopping ball detection and releasing the Square."));
+        TArray<uint8> Disarm;
+        if (bConnected)
+        {
+            Disarm = SquareProtocol::DetectBall(NextSequence(), 0, SpinMode);
+        }
+        Transport->WriteThenRelease(Options.CommandCharacteristicUuid, Disarm, ShutdownWaitSeconds);
+    }
     ResetConnection();
     SetStatus(ESquareSessionStatus::Disconnected);
     EmitReady(false);
+}
+
+void FSquareSession::FinishDisconnect()
+{
+    if (!bDisconnecting)
+    {
+        return;
+    }
+    ResetConnection();
+    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Ball detection stopped; Bluetooth link released."));
 }
 
 void FSquareSession::SetClub(const FString& InClubCode)
@@ -228,9 +305,14 @@ void FSquareSession::SetSpinMode(int32 InSpinMode)
 
 void FSquareSession::ResetConnection()
 {
-    ++Generation;
+    ResetSessionState();
     Transport->StopScan();
     Transport->Disconnect();
+}
+
+void FSquareSession::ResetSessionState()
+{
+    ++Generation;
     WriteQueue.Reset();
     bWriteInFlight = false;
     LastPayload.Reset();
@@ -240,6 +322,10 @@ void FSquareSession::ResetConnection()
     bShotPendingRearm = false;
     ArmFailures = 0;
     HeartbeatFailures = 0;
+    MissedHeartbeats = 0;
+    bNotifiedSinceHeartbeat = false;
+    bHeartbeatInFlight = false;
+    bDisconnecting = false;
     bLastFrameRejected = false;
     LastLoggedBattery = -1;
 }
@@ -295,6 +381,23 @@ void FSquareSession::PumpWrites()
         PumpWrites(); }));
 }
 
+void FSquareSession::Disarm()
+{
+    if (!bConnected)
+    {
+        return;
+    }
+    UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Disarming ball detection."));
+    bArmed = false;
+    EmitReady(false);
+    QueueCommand(SquareProtocol::DetectBall(NextSequence(), 0, SpinMode), Guard([](bool bSuccess, const FString& Error)
+        {
+        if (!bSuccess)
+        {
+            UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Disarm failed: %s"), *Error);
+        } }));
+}
+
 void FSquareSession::Arm()
 {
     UE_LOG(LogOpenLaunchMonitor, Log, TEXT("Arming ball detection (spin mode %s)."), SpinMode == 0 ? TEXT("calculated") : TEXT("measured"));
@@ -329,7 +432,7 @@ void FSquareSession::HandleArmFailed(const FString& Error)
         return;
     }
     EmitError(Message);
-    Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]()
+    Scheduler->Schedule(Options.RearmDelaySeconds, Guard([this]()
                                                                  { Arm(); }));
 }
 
@@ -343,8 +446,27 @@ void FSquareSession::ScheduleHeartbeat()
                                                               {
         // Schedule the next one first: a failure that drops the link must also cancel it.
         ScheduleHeartbeat();
+        // Silence is the fastest sign of a lost link: Windows may not report it for many seconds,
+        // and a failed write only shows after its timeout. A live device answers every heartbeat.
+        if (bNotifiedSinceHeartbeat)
+        {
+            MissedHeartbeats = 0;
+        }
+        else if (++MissedHeartbeats >= Options.MissedHeartbeatsBeforeLinkLoss)
+        {
+            LoseConnection(TEXT("No notifications for several heartbeats; dropping the link to reconnect."), TEXT("The Square device stopped answering."));
+            return;
+        }
+        bNotifiedSinceHeartbeat = false;
+        // On a slow link, don't pile heartbeats up behind one that is still waiting for its answer.
+        if (bHeartbeatInFlight)
+        {
+            return;
+        }
+        bHeartbeatInFlight = true;
         QueueCommand(SquareProtocol::Heartbeat(NextSequence()), Guard([this](bool bSuccess, const FString& Error)
         {
+            bHeartbeatInFlight = false;
             if (bSuccess)
             {
                 HeartbeatFailures = 0;
@@ -372,6 +494,13 @@ void FSquareSession::HandleNotification(const FString& CharacteristicUuid, const
     {
         return;
     }
+    // Any notification with data, an acknowledgement, a sensor frame or a battery level, proves the link
+    // is alive. A Square Home switched off sends a burst of empty notifications (measured 2026-11-10);
+    // those must not keep a dying link counted as alive.
+    if (Data.Num() > 0)
+    {
+        bNotifiedSinceHeartbeat = true;
+    }
     if (CharacteristicUuid.Equals(Options.EventCharacteristicUuid, ESearchCase::IgnoreCase))
     {
         HandleEventFrame(Data);
@@ -397,6 +526,8 @@ void FSquareSession::ReportBattery(int32 Percent)
 
 void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
 {
+    // Every frame, including heartbeat acks and clock ticks, so the device's rhythm can be measured.
+    UE_LOG(LogOpenLaunchMonitor, Verbose, TEXT("Event frame %s."), *SquareProtocol::ToHex(Data));
     FSquareSensorData Sensor;
     if (SquareProtocol::TryParseSensor(Data, Sensor))
     {
@@ -432,7 +563,7 @@ void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
         UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("Ball frame rejected as implausible: %s"), *Payload);
         bLastFrameRejected = true;
         EmitReady(false);
-        Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this]()
+        Scheduler->Schedule(Options.RearmDelaySeconds, Guard([this]()
                                                                      { Arm(); }));
         return;
     }
@@ -457,7 +588,7 @@ void FSquareSession::HandleEventFrame(const TArray<uint8>& Data)
     // The next club frame belongs to this shot until the session re-arms.
     AwaitingClubForShot = ShotId;
     RequestClubMetrics(ShotId, 1);
-    Scheduler->Schedule(Options.ConnectionReadyDelaySeconds, Guard([this, ShotId]()
+    Scheduler->Schedule(Options.RearmDelaySeconds, Guard([this, ShotId]()
                                                                  {
         if (AwaitingClubForShot == ShotId)
         {

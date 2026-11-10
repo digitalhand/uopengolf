@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/ReplayShotPanel.h"
+#include "UI/HudStyle.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -20,12 +21,12 @@ void SReplayShotPanel::Construct(const FArguments& Args)
 {
     Controller = Args._Controller;
     // The panel spans the viewport over the play controls: only its button and open panel take clicks.
-    SetVisibility(EVisibility::SelfHitTestInvisible);
+    SetVisibility(TAttribute<EVisibility>::CreateLambda([this]{return Controller.IsValid() && Controller->IsMainMenuOpen() ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible;}));
     for (const FString& Name : UOpenLaunchMonitorSubsystem::GetReplayShotNames())
     {
         Options.Add(MakeShared<FString>(Name));
     }
-    const FSlateFontInfo BodyFont = FCoreStyle::GetDefaultFontStyle("Regular", 11);
+    const FSlateFontInfo BodyFont = HudStyle::Font("Regular", 11);
     // Preserve Slate's layout syntax, which clang-format otherwise collapses.
     // clang-format off
     ChildSlot
@@ -48,14 +49,14 @@ void SReplayShotPanel::Construct(const FArguments& Args)
                 [
                     SNew(SBorder).Padding(16)
                     .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
-                    .BorderBackgroundColor(FLinearColor(0.025f, 0.035f, 0.05f, 1.0f))
+                    .BorderBackgroundColor(HudStyle::LaunchTileColor())
                     [
                         SNew(SVerticalBox)
                         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 10)
                         [
                             SNew(SHorizontalBox)
                             + SHorizontalBox::Slot().FillWidth(1)
-                            [ SNew(STextBlock).Text(FText::FromString(TEXT("Test shots"))).Font(FCoreStyle::GetDefaultFontStyle("Bold", 16)) ]
+                            [ SNew(STextBlock).Text(FText::FromString(TEXT("Test shots"))).Font(HudStyle::Font("Bold", 16)) ]
                             + SHorizontalBox::Slot().AutoWidth()
                             [
                                 SNew(SButton).IsFocusable(false).Text(FText::FromString(TEXT("Close [P]")))
@@ -78,7 +79,10 @@ void SReplayShotPanel::Construct(const FArguments& Args)
                         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 12)
                         [
                             SNew(STextBlock).Font(BodyFont).WrapTextAt(488)
-                            .Text_Lambda([this] { return FText::FromString(Controller.IsValid() ? UOpenLaunchMonitorSubsystem::GetReplayShotDescription(Controller->GetSelectedReplayShot()) : FString()); })
+                            .Text_Lambda([this] { FString Description = Controller.IsValid() ? UOpenLaunchMonitorSubsystem::GetReplayShotDescription(Controller->GetSelectedReplayShot()) : FString();
+                                int32 SpeedEnd; if (Description.FindChar(TCHAR('|'), SpeedEnd))
+                                    Description = GolfSettings::Speed(FCString::Atof(*Description) * .44704f) + TEXT("   ") + Description.Mid(SpeedEnd);
+                                return FText::FromString(Description); })
                         ]
                         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
                         [ SNew(SButton).IsFocusable(false).Text(FText::FromString(TEXT("Hit selected shot [H]"))).OnClicked(this, &SReplayShotPanel::HitShot) ]

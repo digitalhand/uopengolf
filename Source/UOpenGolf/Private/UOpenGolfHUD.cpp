@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfHUD.h"
+#include "OpenGolfSettings.h"
+#include "UI/HudStyle.h"
 #include "OpenFairwayBall.h"
 
 #include "Engine/Canvas.h"
@@ -32,6 +34,18 @@ namespace
 void AUOpenGolfHUD::BeginPlay()
 {
     Super::BeginPlay();
+    RefreshTheme();
+}
+
+void AUOpenGolfHUD::RefreshTheme()
+{
+    if (auto* Viewport = GetWorld()->GetGameViewport())
+        for (TSharedPtr<SWidget>* Control : {&Widget, &PlayBar, &WindControl})
+        {
+            if (Control->IsValid()) Viewport->RemoveViewportWidgetContent(Control->ToSharedRef());
+            Control->Reset();
+        }
+    WindWidget = nullptr;
     if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
     {
         AUOpenGolfPlayerController* Controller = Cast<AUOpenGolfPlayerController>(GetOwningPlayerController());
@@ -85,7 +99,7 @@ void AUOpenGolfHUD::DrawHUD()
     Super::DrawHUD();
     const auto* PlayMode = GetWorld()->GetAuthGameMode<AUOpenGolfGameMode>();
     const auto* Player = Cast<AUOpenGolfPlayerController>(GetOwningPlayerController());
-    if (Canvas && GEngine && bShowHUD && Player && !Player->IsReplayPanelOpen() &&
+    if (Canvas && GEngine && bShowHUD && Player && !Player->IsReplayPanelOpen() && !Player->IsMainMenuOpen() &&
         PlayMode && PlayMode->GetPlayMode() == EOpenGolfPlayMode::Hole &&
         PlayMode->GetBall() && PlayMode->GetRange() && PlayMode->GetRange()->GetFlagstick())
     {
@@ -95,12 +109,12 @@ void AUOpenGolfHUD::DrawHUD()
         if (Player->ProjectWorldLocationToScreen(Anchor, Screen) && Screen.X >= 0 && Screen.X < Canvas->ClipX && Screen.Y >= 0 && Screen.Y < Canvas->ClipY)
         {
             const FString Label = PlayMode->GetBall()->IsHoled() ? TEXT("In") :
-                OpenGolfPlay::DistanceToPinLabel(PlayMode->GetDistanceToCupM(), PlayMode->GetBall()->GetResult().Surface == EOpenFairwaySurface::Green);
+                GolfSettings::RoundDistance(PlayMode->GetDistanceToCupM(), PlayMode->GetBall()->GetResult().Surface == EOpenFairwaySurface::Green);
             float Width, Height;
             const float Scale = FMath::Max(1.0f, Canvas->ClipY / 1080.0f);
             GetTextSize(Label, Width, Height, GEngine->GetMediumFont(), Scale);
-            DrawRect(FLinearColor(0, 0, 0, 0.75f), Screen.X - Width / 2 - 6, Screen.Y - Height - 4, Width + 12, Height + 8);
-            DrawText(Label, FLinearColor::White, Screen.X - Width / 2, Screen.Y - Height, GEngine->GetMediumFont(), Scale);
+            DrawRect(HudStyle::TileColor(), Screen.X - Width / 2 - 6, Screen.Y - Height - 4, Width + 12, Height + 8);
+            DrawText(Label, HudStyle::TextColor(), Screen.X - Width / 2, Screen.Y - Height, GEngine->GetMediumFont(), Scale);
         }
     }
     if (CVarWindDebug.GetValueOnGameThread() == 0 || !Canvas || !GEngine)

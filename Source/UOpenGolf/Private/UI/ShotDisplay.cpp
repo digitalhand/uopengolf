@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/ShotDisplay.h"
+#include "OpenGolfSettings.h"
 
 #include "Misc/ConfigCacheIni.h"
 #include "OpenFairway/ShotSimulator.h"
@@ -52,9 +53,9 @@ namespace
 
 TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult* Result, const FLaunchMonitorShot* Shot, const FLaunchMonitorClubData* Club)
 {
-    using OpenFairway::FeetPerMeter;
-    using OpenFairway::MpsPerMph;
-    using OpenFairway::YardsPerMeter;
+    const float ShortFactor = GolfSettings::DistanceFactor(true);
+    const float MpsPerMph = 1.f / GolfSettings::SpeedFactor();
+    const float LongFactor = GolfSettings::DistanceFactor();
 
     TArray<FTile> Tiles;
     const auto Add = [&Tiles](const TCHAR* Label, const FString& Value, ETileGroup Group)
@@ -75,11 +76,11 @@ TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult*
         return bKnown ? Value : FString(TilePending);
     };
     const bool bInterrupted = R.TerminationReason == EOpenFairwayShotTermination::SafetyStop;
-    Add(TEXT("Total (yd)"), bInterrupted ? FString(TileDash) : Live(TileFixed1(R.TotalM * YardsPerMeter)), ETileGroup::Result);
-    Add(TEXT("Carry (yd)"), AfterLanding(R.bLanded || (R.bAtRest && !bInterrupted), TileFixed1(R.CarryM * YardsPerMeter)), ETileGroup::Result);
-    Add(TEXT("Roll (yd)"), bInterrupted ? FString(TileDash) : AfterLanding(R.bLanded, TileFixed1(R.RollM * YardsPerMeter)), ETileGroup::Result);
-    Add(TEXT("Apex (ft)"), Live(TileFixed1(R.ApexM * FeetPerMeter)), ETileGroup::Result);
-    Add(TEXT("Offline (yd)"), Live(TileLeftRight(R.LateralM * YardsPerMeter, TEXT(""))), ETileGroup::Result);
+    Add(TEXT("Total (yd)"), bInterrupted ? FString(TileDash) : Live(TileFixed1(R.TotalM * LongFactor)), ETileGroup::Result);
+    Add(TEXT("Carry (yd)"), AfterLanding(R.bLanded || (R.bAtRest && !bInterrupted), TileFixed1(R.CarryM * LongFactor)), ETileGroup::Result);
+    Add(TEXT("Roll (yd)"), bInterrupted ? FString(TileDash) : AfterLanding(R.bLanded, TileFixed1(R.RollM * LongFactor)), ETileGroup::Result);
+    Add(TEXT("Apex (ft)"), Live(TileFixed1(R.ApexM * ShortFactor)), ETileGroup::Result);
+    Add(TEXT("Offline (yd)"), Live(TileLeftRight(R.LateralM * LongFactor, TEXT(""))), ETileGroup::Result);
     Add(TEXT("Hang Time (s)"), AfterLanding(R.bLanded, TileFixed1(R.HangTimeS)), ETileGroup::Result);
     Add(TEXT("Land Angle"), AfterLanding(R.bLanded, TileFixed1(R.LandingAngleDeg) + TEXT("°")), ETileGroup::Result);
     Add(TEXT("Land Speed (mph)"), AfterLanding(R.bLanded, TileFixed1(R.LandingSpeedMps / MpsPerMph)), ETileGroup::Result);
@@ -94,13 +95,19 @@ TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult*
     // Every source of a default shot is Missing, so no shot shows dashes.
     const FLaunchMonitorShot NoShot;
     const FLaunchMonitorShot& S = Shot ? *Shot : NoShot;
-    Add(TEXT("Ball Speed (mph)"), TileMeasured(S.BallSpeedSource, TileFixed1(S.GetBallSpeedMph())), ETileGroup::Launch);
+    Add(TEXT("Ball Speed (mph)"), TileMeasured(S.BallSpeedSource, TileFixed1(S.BallSpeedMps * GolfSettings::SpeedFactor())), ETileGroup::Launch);
     Add(TEXT("VLA"), TileMeasured(S.VerticalLaunchSource, TileFixed1(S.VerticalLaunchDeg) + TEXT("°")), ETileGroup::Launch);
     Add(TEXT("Total Spin (rpm)"), TileMeasured(S.TotalSpinSource, FString::FromInt(S.TotalSpinRpm)), ETileGroup::Launch);
     Add(TEXT("HLA"), TileMeasured(S.HorizontalLaunchSource, TileLeftRight(S.HorizontalLaunchDeg, TEXT("°"))), ETileGroup::Launch);
     Add(TEXT("Back Spin (rpm)"), TileMeasured(S.BackSpinSource, FString::FromInt(S.BackSpinRpm)), ETileGroup::Launch);
     Add(TEXT("Side Spin (rpm)"), TileMeasured(S.SideSpinSource, TileLeftRightRpm(S.SideSpinRpm)), ETileGroup::Launch);
     Add(TEXT("Spin Axis"), TileMeasured(S.SpinAxisSource, TileLeftRight(S.SpinAxisDeg, TEXT("°"))), ETileGroup::Launch);
+    for (FTile& Tile : Tiles)
+    {
+        Tile.Label.ReplaceInline(TEXT("(yd)"), *(TEXT("(") + GolfSettings::DistanceUnit() + TEXT(")")));
+        Tile.Label.ReplaceInline(TEXT("(ft)"), *(TEXT("(") + GolfSettings::DistanceUnit(true) + TEXT(")")));
+        Tile.Label.ReplaceInline(TEXT("(mph)"), *(TEXT("(") + GolfSettings::SpeedUnit() + TEXT(")")));
+    }
     return Tiles;
 }
 
@@ -133,7 +140,8 @@ FString ShotDisplay::StatusTip(ELaunchMonitorConnectionState State, const FStrin
     {
         return bDisconnected ? LaunchMonitorError + TEXT("  ·  Connect [C]") : LaunchMonitorError;
     }
-    return bDisconnected ? TEXT("Connect [C]") : TEXT("Disconnect [T]  ·  Record [F9]");
+    // Escape opens the menu, whose Settings → Simulator chooses Square Home or an Open Connect connector.
+    return bDisconnected ? TEXT("Connect [C]  ·  Set up: Esc") : TEXT("Disconnect [T]  ·  Record [F9]");
 }
 
 FString ShotDisplay::VersionLabel(const FString& ProjectVersion)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/WindDisplay.h"
+#include "OpenGolfSettings.h"
 
 #include "OpenFairwayBall.h"
 #include "UOpenGolfRange.h"
@@ -8,7 +9,7 @@ namespace WindDisplay
 {
     FString FState::SpeedLabel() const
     {
-        return FString::Printf(TEXT("%.0f MPH"), FMath::RoundToDouble(SpeedMph));
+        return FString::Printf(TEXT("%.0f %s"), FMath::RoundToDouble(SpeedMph * .44704f * GolfSettings::SpeedFactor()), *GolfSettings::SpeedUnit().ToUpper());
     }
 
     FState FromVelocity(const FVector& WindMps, float ViewYawDeg)

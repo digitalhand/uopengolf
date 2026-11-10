@@ -125,7 +125,7 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("No landing, no roll"), ShotTileValue(ShotDisplay::BuildTiles(&Rest, &Shot, &Club), TEXT("Roll (yd)")), Dash);
 
     using EState = ELaunchMonitorConnectionState;
-    TestEqual(TEXT("Disconnected tip"), ShotDisplay::StatusTip(EState::Disconnected, TEXT(""), 0, TEXT("")), FString(TEXT("Connect [C]")));
+    TestEqual(TEXT("Disconnected tip"), ShotDisplay::StatusTip(EState::Disconnected, TEXT(""), 0, TEXT("")), FString(TEXT("Connect [C]  ·  Set up: Esc")));
     TestEqual(TEXT("Connected tip"), ShotDisplay::StatusTip(EState::Ready, TEXT(""), 0, TEXT("")),
         FString(TEXT("Disconnect [T]  ·  Record [F9]")));
     TestEqual(TEXT("Launch-monitor error persists while disconnected"),

@@ -7,6 +7,22 @@
 /** Miles per hour in one metre per second. */
 inline constexpr float LaunchMonitorMphPerMps = 2.2369363f;
 
+/** Default Open Connect listening port, the same on every platform (above 1024, so Linux needs no root). */
+inline constexpr int32 LaunchMonitorDefaultOpenConnectPort = 4921;
+
+/** FLaunchMonitorShot::Source of an Open Connect shot starts with this, followed by the connector's DeviceID. */
+inline const TCHAR* const LaunchMonitorOpenConnectSource = TEXT("Open Connect");
+
+/** Where launch-monitor shots come from. One provider is active at a time. */
+UENUM(BlueprintType)
+enum class ELaunchMonitorProvider : uint8
+{
+    /** Square Home over Bluetooth LE. */
+    SquareHome UMETA(DisplayName = "Square Home (Bluetooth)"),
+    /** A connector sending Open Connect v1 JSON over TCP. */
+    OpenConnect UMETA(DisplayName = "Open Connect")
+};
+
 UENUM(BlueprintType)
 enum class ELaunchMonitorConnectionState : uint8
 {
@@ -74,7 +90,7 @@ struct OPENLAUNCHMONITOR_API FLaunchMonitorShot
     UPROPERTY(BlueprintReadOnly, Category = "Launch Monitor")
     FDateTime ReceivedUtc;
 
-    /** "Square Home" or "Replay". */
+    /** "Square Home", "Replay", or "Open Connect" / "Open Connect: <DeviceID>" for a connector shot. */
     UPROPERTY(BlueprintReadOnly, Category = "Launch Monitor")
     FString Source;
 

@@ -2,6 +2,8 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "OpenLaunchMonitorSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Square/SquareProtocol.h"
 #include "Square/SquareScheduler.h"
 #include "Square/SquareSession.h"
@@ -18,13 +20,19 @@ namespace
             bScanning = true;
         }
         virtual void StopScan() override { bScanning = false; }
-        virtual void Connect(const FString& DeviceId, const TArray<FString>&, const TArray<FString>&, FCompletion OnComplete) override
+        virtual void Connect(const FString& DeviceId, const TArray<FString>&, const TArray<FString>&, float, FCompletion OnComplete) override
         {
             ConnectedId = DeviceId;
             if (bDeferConnect) { PendingConnects.Add(MoveTemp(OnComplete)); return; }
             OnComplete(true, FString());
         }
         virtual void Disconnect() override { ++DisconnectCalls; }
+        virtual void WriteThenRelease(const FString&, const TArray<uint8>& FinalWrite, double) override
+        {
+            if (!FinalWrite.IsEmpty())
+                Writes.Add(SquareProtocol::ToHex(FinalWrite));
+            ++ExitReleases;
+        }
         virtual void Read(const FString& Uuid, TFunction<void(const TArray<uint8>&)> OnComplete) override
         {
             const FSquareConnectionOptions Options;
@@ -43,6 +51,11 @@ namespace
         {
             const FString Hex = SquareProtocol::ToHex(Value);
             Writes.Add(Hex);
+            if (bHoldWrites)
+            {
+                HeldWrites.Add(MoveTemp(OnComplete));
+                return;
+            }
             for (TPair<FString, int32>& Failure : FailWrites)
             {
                 if (Failure.Value > 0 && Hex.StartsWith(Failure.Key))
@@ -51,6 +64,11 @@ namespace
                     OnComplete(false, TEXT("Write failed"));
                     return;
                 }
+            }
+            // The device answers every heartbeat with an 11 03 notification.
+            if (bAckHeartbeats && Hex.StartsWith(TEXT("1183")))
+            {
+                Notify(TEXT("11034C000004020000"));
             }
             OnComplete(true, FString());
         }
@@ -70,11 +88,16 @@ namespace
         }
 
         bool bDeferConnect = false;
+        bool bAckHeartbeats = true;
+        /** Writes wait in HeldWrites instead of completing. */
+        bool bHoldWrites = false;
+        TArray<FCompletion> HeldWrites;
         TArray<FCompletion> PendingConnects;
         FString ScanPrefix;
         bool bScanning = false;
         FString ConnectedId;
         int32 DisconnectCalls = 0;
+        int32 ExitReleases = 0;
         TArray<FString> Writes;
         /** Command hex prefix -> how many of the next matching writes fail. */
         TMap<FString, int32> FailWrites;
@@ -173,21 +196,21 @@ bool FLaunchMonitorSessionTest::RunTest(const FString& Parameters)
     Transport->OnNotification(BatteryUuid, {80});
     TestEqual(TEXT("Battery notification"), Battery, 80);
 
-    // Handshake: heartbeat now, club after 2 s, arm after 3 more seconds.
+    // Handshake: heartbeat now, club on the next tick, arm 0.5 s later.
     TestTrue(TEXT("Connected before arming"), Session->GetStatus() == ESquareSessionStatus::Connected);
     TestEqual(TEXT("First write is heartbeat"), Transport->Writes, TArray<FString>{TEXT("1183000000000000")});
-    Scheduler->Advance(2.0f);
-    TestEqual(TEXT("Club after 2 s"), Transport->Writes.Last(), FString(TEXT("118201020400000000")));
-    Scheduler->Advance(2.9f);
-    TestTrue(TEXT("Not armed before 3 s"), Session->GetStatus() == ESquareSessionStatus::Connected);
+    Scheduler->Advance(0.0f);
+    TestEqual(TEXT("Club without a wait"), Transport->Writes.Last(), FString(TEXT("118201020400000000")));
+    Scheduler->Advance(0.4f);
+    TestTrue(TEXT("Not armed before 0.5 s"), Session->GetStatus() == ESquareSessionStatus::Connected);
     Scheduler->Advance(0.1f);
-    TestEqual(TEXT("Arm after 3 s"), Transport->Writes.Last(), FString(TEXT("118102011100000000")));
+    TestEqual(TEXT("Arm after 0.5 s"), Transport->Writes.Last(), FString(TEXT("118102011100000000")));
     TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
     TestTrue(TEXT("Status sequence"), Statuses == TArray<ESquareSessionStatus>{ESquareSessionStatus::Scanning, ESquareSessionStatus::Connecting,
                                                       ESquareSessionStatus::Connected, ESquareSessionStatus::Ready});
 
-    // Heartbeat every 5 s.
-    Scheduler->Advance(5.0f);
+    // Heartbeat every second.
+    Scheduler->Advance(1.0f);
     TestEqual(TEXT("Periodic heartbeat"), Transport->CountWrites(TEXT("1183")), 2);
 
     // A shot is reported once even though the device repeats it, and requests club data.
@@ -316,10 +339,10 @@ bool FLaunchMonitorArmRecoveryTest::RunTest(const FString&)
     Session->OnConnectionLost = [&ConnectionLost]()
     { ++ConnectionLost; };
 
-    // A failed arm is retried after the ready delay instead of leaving the device unarmed.
+    // A failed arm is retried after the re-arm delay instead of leaving the device unarmed.
     Transport->FailWrites.Add(TEXT("1181"), 1);
     Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
-    Scheduler->Advance(5.0f);
+    Scheduler->Advance(1.0f);
     TestTrue(TEXT("Not ready after a failed arm"), Session->GetStatus() == ESquareSessionStatus::Connected);
     Scheduler->Advance(3.0f);
     TestTrue(TEXT("Ready once the arm is retried"), Session->GetStatus() == ESquareSessionStatus::Ready);
@@ -366,22 +389,219 @@ bool FLaunchMonitorHeartbeatLossTest::RunTest(const FString&)
     Scheduler->Advance(5.0f);
     TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
 
-    // Two failed heartbeats are tolerated, and a success clears the count.
-    Transport->FailWrites.Add(TEXT("1183"), 2);
+    // One failed heartbeat is tolerated, and a success clears the count.
+    Transport->FailWrites.Add(TEXT("1183"), 1);
     Scheduler->Advance(15.0f);
-    TestTrue(TEXT("Still ready after failures and a success"), Session->GetStatus() == ESquareSessionStatus::Ready);
-    Transport->FailWrites.Add(TEXT("1183"), 2);
+    TestTrue(TEXT("Still ready after a failure and a success"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    Transport->FailWrites.Add(TEXT("1183"), 1);
     Scheduler->Advance(15.0f);
     TestEqual(TEXT("Count restarted after a success"), ConnectionLost, 0);
 
-    // Three in a row mean the device stopped answering: drop the link so the owner reconnects.
-    Transport->FailWrites.Add(TEXT("1183"), 3);
+    // Two in a row mean the device stopped answering: drop the link so the owner reconnects.
+    Transport->FailWrites.Add(TEXT("1183"), 2);
     Scheduler->Advance(15.0f);
-    TestEqual(TEXT("Link dropped after three failed heartbeats"), ConnectionLost, 1);
+    TestEqual(TEXT("Link dropped after two failed heartbeats"), ConnectionLost, 1);
     TestTrue(TEXT("Disconnected"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
     const int32 Writes = Transport->Writes.Num();
     Scheduler->Advance(30.0f);
     TestEqual(TEXT("No heartbeats after the link is dropped"), Transport->Writes.Num(), Writes);
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorHeartbeatWatchdogTest, "UOpenGolf.LaunchMonitor.HeartbeatWatchdog",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorHeartbeatWatchdogTest::RunTest(const FString&)
+{
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    const auto Scheduler = MakeShared<FManualScheduler>();
+    const auto Session = MakeShared<FSquareSession>(Transport, Scheduler);
+    Session->Initialize();
+    int32 ConnectionLost = 0;
+    Session->OnConnectionLost = [&ConnectionLost]()
+    { ++ConnectionLost; };
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(1.0f);
+    TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
+
+    // A device that answers every heartbeat stays connected.
+    Scheduler->Advance(30.0f);
+    TestTrue(TEXT("Answered heartbeats keep the link"), Session->GetStatus() == ESquareSessionStatus::Ready && ConnectionLost == 0);
+
+    // One unanswered heartbeat is tolerated.
+    Transport->bAckHeartbeats = false;
+    Scheduler->Advance(1.0f);
+    Transport->bAckHeartbeats = true;
+    Scheduler->Advance(5.0f);
+    TestTrue(TEXT("One silent interval tolerated"), Session->GetStatus() == ESquareSessionStatus::Ready && ConnectionLost == 0);
+
+    // Two silent intervals in a row drop the link, without waiting for a write to time out. The empty
+    // notifications a switched-off device sends do not count as signs of life.
+    Transport->bAckHeartbeats = false;
+    Scheduler->Advance(1.0f);
+    Transport->OnNotification(FSquareConnectionOptions().EventCharacteristicUuid, TArray<uint8>());
+    Scheduler->Advance(1.0f);
+    TestEqual(TEXT("Still connected after one silent interval"), ConnectionLost, 0);
+    Scheduler->Advance(1.0f);
+    TestEqual(TEXT("Link dropped after two silent intervals"), ConnectionLost, 1);
+    TestTrue(TEXT("Disconnected"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
+    const int32 Writes = Transport->Writes.Num();
+    Scheduler->Advance(10.0f);
+    TestEqual(TEXT("No heartbeats after the link is dropped"), Transport->Writes.Num(), Writes);
+
+    // After a requested disconnect the watchdog never fires.
+    Transport->bAckHeartbeats = true;
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(3.0f);
+    Session->Disconnect();
+    Transport->bAckHeartbeats = false;
+    Scheduler->Advance(10.0f);
+    TestEqual(TEXT("No link loss after Disconnect"), ConnectionLost, 1);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorDisconnectDisarmTest, "UOpenGolf.LaunchMonitor.DisconnectDisarm",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorDisconnectDisarmTest::RunTest(const FString&)
+{
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    const auto Scheduler = MakeShared<FManualScheduler>();
+    const auto Session = MakeShared<FSquareSession>(Transport, Scheduler);
+    Session->Initialize();
+    TArray<int32> ShotIds;
+    int32 ConnectionLost = 0;
+    Session->OnShot = [&ShotIds](const FSquareShotMetrics&, int32 ShotId)
+    { ShotIds.Add(ShotId); };
+    Session->OnConnectionLost = [&ConnectionLost]()
+    { ++ConnectionLost; };
+    auto IsDisarm = [](const FString& Write) { return Write.StartsWith(TEXT("1181")) && Write.Mid(6, 2) == TEXT("00"); };
+
+    // Not connected: nothing to tell the device.
+    Session->Disconnect();
+    TestEqual(TEXT("No writes without a connection"), Transport->Writes.Num(), 0);
+
+    // Connected: the device is told to stop detecting, then the link is released.
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(1.0f);
+    TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    int32 Releases = Transport->DisconnectCalls;
+    Session->Disconnect();
+    TestTrue(TEXT("Disarm sent on disconnect"), IsDisarm(Transport->Writes.Last()));
+    TestTrue(TEXT("Disconnected at once"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
+    TestEqual(TEXT("Link released once the disarm completed"), Transport->DisconnectCalls, Releases + 1);
+    const int32 WritesAfter = Transport->Writes.Num();
+    Scheduler->Advance(10.0f);
+    TestEqual(TEXT("Nothing more is sent after disconnect"), Transport->Writes.Num(), WritesAfter);
+    TestEqual(TEXT("Disconnect is not a link loss"), ConnectionLost, 0);
+
+    // A disarm that never completes still releases the link after 0.5 s; frames meanwhile are ignored.
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(1.0f);
+    Releases = Transport->DisconnectCalls;
+    Transport->bHoldWrites = true;
+    Session->Disconnect();
+    TestTrue(TEXT("Disarm sent"), IsDisarm(Transport->Writes.Last()));
+    TestEqual(TEXT("Link kept while the disarm is pending"), Transport->DisconnectCalls, Releases);
+    Transport->Notify(ShotHex);
+    TestEqual(TEXT("Shot frames ignored while disconnecting"), ShotIds.Num(), 0);
+    Scheduler->Advance(0.5f);
+    TestEqual(TEXT("Link released after the timeout"), Transport->DisconnectCalls, Releases + 1);
+    Transport->bHoldWrites = false;
+    Releases = Transport->DisconnectCalls;
+    Transport->HeldWrites.Pop()(true, FString());
+    TestEqual(TEXT("A late disarm completion releases nothing twice"), Transport->DisconnectCalls, Releases);
+
+    // A connect while the disarm is pending is not disturbed by its completion.
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Scheduler->Advance(1.0f);
+    Transport->bHoldWrites = true;
+    Session->Disconnect();
+    Transport->bHoldWrites = false;
+    Session->ConnectToDevice({TEXT("123456"), TEXT("SquareGolf-Home"), 0});
+    Transport->HeldWrites.Pop()(true, FString());
+    Scheduler->Advance(1.0f);
+    TestTrue(TEXT("New connection reaches Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
+
+    // App exit disarms and releases synchronously, then nothing more is sent.
+    Session->Shutdown();
+    TestTrue(TEXT("Disarm sent on exit"), IsDisarm(Transport->Writes.Last()));
+    TestEqual(TEXT("Released on exit"), Transport->ExitReleases, 1);
+    TestTrue(TEXT("Disconnected after exit"), Session->GetStatus() == ESquareSessionStatus::Disconnected);
+    const int32 WritesAfterExit = Transport->Writes.Num();
+    Scheduler->Advance(10.0f);
+    TestEqual(TEXT("Nothing sent after exit"), Transport->Writes.Num(), WritesAfterExit);
+    Session->Shutdown();
+    TestEqual(TEXT("Exit while disconnected releases nothing"), Transport->ExitReleases, 1);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorDirectReconnectTest, "UOpenGolf.LaunchMonitor.DirectReconnect",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorDirectReconnectTest::RunTest(const FString&)
+{
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    const auto Scheduler = MakeShared<FManualScheduler>();
+    const auto Session = MakeShared<FSquareSession>(Transport, Scheduler);
+    Session->Initialize();
+
+    // With no device yet, a reconnect is a scan.
+    TestFalse(TEXT("No device before the first connection"), Session->HasLastDevice());
+    Session->Reconnect();
+    TestTrue(TEXT("Scans without a known device"), Transport->bScanning && Session->GetStatus() == ESquareSessionStatus::Scanning);
+    Transport->OnDeviceDiscovered({TEXT("777"), TEXT("SquareGolf-Home"), -50});
+    Scheduler->Advance(1.0f);
+    TestTrue(TEXT("Ready"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    TestTrue(TEXT("Device remembered"), Session->HasLastDevice());
+
+    // After link loss it goes straight to the remembered device.
+    Transport->OnDisconnected();
+    Transport->ConnectedId.Reset();
+    Session->Reconnect();
+    TestFalse(TEXT("No scan for a known device"), Transport->bScanning);
+    TestEqual(TEXT("Connects to the remembered device"), Transport->ConnectedId, FString(TEXT("777")));
+    Scheduler->Advance(1.0f);
+    TestTrue(TEXT("Ready after a direct reconnect"), Session->GetStatus() == ESquareSessionStatus::Ready);
+
+    // Handshake delays can be tuned for the next connection.
+    Session->SetTiming(1.0f, 2.0f, 1.0f, 2);
+    Session->Reconnect();
+    Scheduler->Advance(2.9f);
+    TestTrue(TEXT("Tuned delays not yet elapsed"), Session->GetStatus() == ESquareSessionStatus::Connected);
+    Scheduler->Advance(0.1f);
+    TestTrue(TEXT("Ready after the tuned delays"), Session->GetStatus() == ESquareSessionStatus::Ready);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorReconnectSettingTest, "UOpenGolf.LaunchMonitor.ReconnectSetting",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorReconnectSettingTest::RunTest(const FString&)
+{
+    auto* Instance = NewObject<UGameInstance>();
+    auto* Monitor = NewObject<UOpenLaunchMonitorSubsystem>(Instance);
+    const auto Transport = MakeShared<FFakeGattTransport>();
+    Monitor->Session = MakeShared<FSquareSession>(Transport, MakeShared<FManualScheduler>());
+    Monitor->Session->Initialize();
+    Monitor->ScheduleReconnect();
+    TestTrue(TEXT("Retry scheduled"), Monitor->ReconnectHandle.IsValid());
+    Monitor->SetAutoReconnect(false);
+    TestFalse(TEXT("Disabling cancels pending retry"), Monitor->ReconnectHandle.IsValid());
+    TestEqual(TEXT("Retry budget reset"), Monitor->ReconnectAttempts, 0);
+    FTSTicker::GetCoreTicker().Tick(1.0f);
+    TestFalse(TEXT("No scan after disabling"), Transport->bScanning);
+    Monitor->Connect();
+    TestTrue(TEXT("Manual connect still scans"), Transport->bScanning);
+    Monitor->Disconnect();
+    Monitor->SetAutoReconnect(true);
+    TestFalse(TEXT("Enabling does not connect immediately"), Transport->bScanning);
+    Monitor->ScheduleReconnect();
+    TestTrue(TEXT("Enabling permits later recovery"), Monitor->ReconnectHandle.IsValid());
+    Monitor->SetProvider(ELaunchMonitorProvider::OpenConnect);
+    TestFalse(TEXT("Provider switch cancels retry"), Monitor->ReconnectHandle.IsValid());
+    Monitor->Deinitialize();
+    return true;
+}
+
 #endif

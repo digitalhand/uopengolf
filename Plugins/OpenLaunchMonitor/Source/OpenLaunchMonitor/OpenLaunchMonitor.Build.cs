@@ -11,7 +11,8 @@ public class OpenLaunchMonitor : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine" });
-        PrivateDependencyModuleNames.AddRange(new[] { "Json" });
+        // Sockets and Networking: the Open Connect TCP listener.
+        PrivateDependencyModuleNames.AddRange(new[] { "Json", "Sockets", "Networking" });
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
@@ -19,6 +20,8 @@ public class OpenLaunchMonitor : ModuleRules
             // It is added to this module only, so the shared build environment is unchanged.
             PublicSystemIncludePaths.Add(FindCppWinRTIncludeDir(Target));
             PublicSystemLibraries.Add("WindowsApp.lib");
+            // Winsock: the Open Connect listener binds with SO_EXCLUSIVEADDRUSE, which FSocket cannot set.
+            PublicSystemLibraries.Add("ws2_32.lib");
             bEnableExceptions = true;
         }
         // Linux loads sd-bus from the host's libsystemd.so.0 at runtime, so nothing is linked here.
