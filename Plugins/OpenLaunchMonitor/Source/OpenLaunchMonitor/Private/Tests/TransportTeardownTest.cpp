@@ -37,7 +37,7 @@ bool FTransportTeardownTest::RunTest(const FString&)
         Transport->OnDisconnected = [Callbacks]() { ++*Callbacks; };
         // An address BlueZ does not know: the connection job fails without touching a device.
         Transport->Connect(TEXT("00:00:00:00:00:00"), {TEXT("00000000-0000-0000-0000-000000000000")}, {},
-            [Callbacks](bool, const FString&) { ++*Callbacks; });
+            IGattTransport::DefaultConnectTimeoutSeconds, [Callbacks](bool, const FString&) { ++*Callbacks; });
         Transport->Read(TEXT("00000000-0000-0000-0000-000000000001"), [Callbacks](const TArray<uint8>&) { ++*Callbacks; });
         FPlatformProcess::Sleep(0.0005f * static_cast<float>(Round % 10));
         Transport.Reset();
