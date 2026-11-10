@@ -42,6 +42,11 @@ public:
     void StartShotTrail();
     /** Removes the finished-shot tracers; the auto re-tee keeps them. */
     void ClearShotTrailHistory();
+    /**
+     * The ball's contact channel, "GolfBall" in Config/DefaultEngine.ini. Ground and obstacles block it and canopy
+     * overlaps it, as they do Visibility, but camera and UI traces no longer decide what the ball hits.
+     */
+    static constexpr ECollisionChannel ContactChannel = ECC_GameTraceChannel1;
     static constexpr FColor HistoryTracerOrange{255, 165, 0};
     static constexpr int32 MaxHistoryTrails = 2;
 

@@ -124,6 +124,10 @@ below-ground recovery for the ball actor, and the reference's putt, landing-buck
 green spin-back and slope tests (`.GreenReference`, `.SlopeRollout`); see the plugin
 README's [Port status](../Plugins/OpenFairwayPhysics/README.md#port-status).
 
+Windows (2026-11-09): all 78 `UOpenGolf` tests pass (`Saved/Automation/20261109-180842-0eb74dc7`),
+with `.Sand` fixed by a profile-level sand rolling friction and the saved hole rebuilt; see
+the [history](#history).
+
 **Remaining:** JSON ball profiles, ball-actor contact on contoured terrain (the range is
 flat; slopes are covered headless only), a full ball and camera visual review, and
 independent physical calibration.
@@ -181,12 +185,12 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
   (2026-10-18). The latest editable-range package builds, cooks and passes its 60-second
   headless startup check (`Saved/Automation/20261018-203950-package-ihhCZ2`;
   `Saved/Logs/Package.log`).
-- **Windows:** a manual `RunUAT` package started without crashing (2026-10-15);
-  `ue.ps1 Package` itself has not been run.
+- **Windows:** `ue.ps1 Package` builds, cooks (SM6 only) and passes its 60-second headless start
+  check (2026-11-09, `Saved/Automation/20261109-193349-package-219d66da`).
 - The editor `-game` mode also passes the same start check on Linux.
 
 **Remaining:**
-- Run `ue.ps1 Package` on Windows.
+- A rendered start of the Windows package on an SM6 GPU (the start check uses `-nullrhi`).
 - A Square Home shot from a packaged game on each platform.
 - Shipping builds, and a real course.
 - Visual review of the follow camera, the latest palette and the tee reset in a rendered
@@ -202,6 +206,58 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 ## History
 
 Newest first. Evidence paths are relative to the repository root.
+
+- **2026-11-09, Windows 11, Unreal 5.8.4 Development editor: audit fixes and the seven failing tests.**
+  - **Baseline:** unchanged `main` failed 7 of 68 tests (`Saved/Automation/20261109-170347-02ef9b82`).
+    After the changes below all 78 pass (`Saved/Automation/20261109-180842-0eb74dc7`); the golden
+    fixtures are unchanged.
+  - **Ball presentation:** `AOpenFairwayBall` keeps the 120 Hz simulated position apart from the actor
+    and draws the ball between the last two steps, so it moves every frame at any frame rate. Rest,
+    landing, holing and placement show the exact simulated position; distances are bit-identical. A
+    `SetActorLocation` from outside (Blueprint, editor, tests) is adopted. `.FrameRates` checks it.
+  - **Smaller fixes:** the shot camera ticks after the ball; per-frame shot-result copies removed;
+    a HUD wind change reaches the ball at once instead of on the range's quarter-second tick (a shot
+    hit straight after a change used the old wind); the cup zoom backs out at 3/s instead of 2/s
+    (zoom 0.036 at 4 m past the cup, against 0.104); `FOpenGolfHoleRound::ResultName` lost its dead
+    practice branch (practice records no strokes).
+  - **Sand:** `FBallPhysicsProfile::SandRollingFriction = 0.45` replaces the ported 0.30 for the
+    default profile; `HistoricalReference()` keeps 0.30. A ball rolling into sand at 4 m/s now stops
+    after 1.72 m (2.48 m before, 2 m target).
+  - **Saved hole was stale against `savanna_hole.py`:** `DA_SavannaRange` held the two small green
+    mounds twice (steepest green grade 3.29 %, design limit 2.5 %) and the fairway bunker, with its
+    lip and hollow, at y = -8 m instead of -22 m, where the `.Shot` drive rolled into it.
+    `BuildParFourHole.py` was rerun through unreal-mcp with `OPEN_GOLF_NUMPY_PYTHON` set (the default
+    `python` had no NumPy, so the first attempt stopped at the turf field): 18 mounds, green 1.74 %,
+    297 trees and colliders, 163,330 ground-cover instances. `.Shot` now totals 262.53 yd, equal to
+    the headless prediction. Backup: `Saved/TerrainBackups/20261110-020425-579278-course-grass`.
+  - **Test updates:** `.ReplaySelection` compares the wood's carry with the ball's own flat-ground
+    prediction within 1 yd (the landing sits about 12 cm up the fairway contour: 120.88 against
+    121.55 yd); `.Course.Play.HoleRound` checks that practice counts nothing.
+  - **Pruned:** `Content/UOpenGolf/Terrain/Generated/Build_1156A707472046F5C35840B28B51EE09` (2026-10-30),
+    which no package or source referenced; backed up to `Saved/AssetBackups/20261110-032408/`. It was
+    checked and removed by hand because the `pythonscript` commandlet does not print `unreal.log` output
+    to stdout, so `Scripts/prune_unreferenced_assets.py`'s dry-run report could not be read there; run it
+    from the editor's `py` command, or have a commandlet script write its findings to a file.
+  - **Tree canopy restored:** the 36 jacaranda presets had the wood collider but no `TreeCanopyMesh`, so every
+    vegetation rebuild since the 2026-10-21 canopy pass (the 10-30 hole build included) dropped the canopy
+    volumes; balls flew through crowns untouched. `ApplyTreeCollision.py --canopy` now also sets the canopy
+    mesh on the presets. Run through unreal-mcp: 36 presets updated, 297 canopy volumes, 297/297 wood hits,
+    891/891 clear leaf sweeps (backup `Saved/TerrainBackups/20261110-041122-tree-collision`).
+    `.Range.CoastalTerrain` now requires one canopy volume per tree. `BuildParFourHole.py` checks for NumPy
+    before changing anything. All 79 tests pass with the canopy in place
+    (`Saved/Automation/20261109-201335-5e9c0d41`).
+  - **Windows renders SM6 only:** D3D11 and D3D12 SM5 shader formats are dropped and DX12 is the default
+    RHI, matching Linux's Vulkan SM6; the root README lists the GPU threshold. `ue.ps1 Package` ran on
+    Windows for the first time: the cook targeted only `PCD3D_SM6`, the packaged content is 411 MB, and the
+    60-second start check passed (`Saved/Automation/20261109-193349-package-219d66da`; `-nullrhi`, so it does
+    not show rendering on a GPU). All 79 tests pass (`Saved/Automation/20261109-192804-efafbe20`); the suite
+    now takes about 200 s, so the test timeout default is 600 s in `ue.ps1` and `ue.sh`.
+  - **Later the same day:** the game ball and the range's ground queries use their own `GolfBall` trace
+    channel, which every profile answers as it answers Visibility (3D UI excepted); the play keys are Enhanced
+    Input actions built in code, and the test-shot panel hands focused keys to them instead of keeping its own
+    partial key table (C, T, Tab, R, F9 and Escape were dead while it had focus); the AndroidFileServer
+    plugin is disabled, so the editor stops writing its settings into `DefaultEngine.ini`. All 79 tests pass,
+    including the new `.Range.InputBindings` (`Saved/Automation/20261109-182524-948fd4fd`).
 
 - **2026-10-29, Linux, Unreal 5.8.4 DebugGame: drag-loaded vegetation wind applied, then review fixes.**
   This supersedes the oscillator profiles in the three 2026-10-29 vegetation entries below.

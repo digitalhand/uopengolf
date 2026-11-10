@@ -189,8 +189,7 @@ void SPlayModeBar::Refresh()
         return;
 
     const FOpenGolfHoleRound& Round = Mode->GetHoleRound();
-    FOpenFairwayShotResult Result;
-    Ball->GetShotResult(Result);
+    const FOpenFairwayShotResult& Result = Ball->GetResult();
     HoleText = FText::FromString(FString::Printf(TEXT("Hole 1  ·  Par %d  ·  %d yd%s"), Round.Par,
         FMath::RoundToInt(AUOpenGolfRange::HoleDistanceM * YardsPerMeter), Round.bPractice ? TEXT("  ·  Practice") : TEXT("")));
     // The stroke about to be played, or the final count once holed.

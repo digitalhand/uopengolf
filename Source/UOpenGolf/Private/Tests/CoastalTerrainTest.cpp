@@ -7,9 +7,11 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "OpenGolfTerrain.h"
 #include "OpenFairwayBall.h"
 #include "OpenFairwayPhysicalMaterial.h"
+#include "UOpenGolfBall.h"
 #include "UOpenGolfRange.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCoastalTerrainContactTest, "UOpenGolf.Range.CoastalTerrain",
@@ -59,7 +61,7 @@ bool FCoastalTerrainContactTest::RunTest(const FString& Parameters)
         const FString Label = Probe.Position.ToString();
         if (!TestTrue(Label + TEXT(" ball sphere hits ground"), World->SweepSingleByChannel(Hit,
                                                                     Position + FVector(0, 0, 1000), Position - FVector(0, 0, 1000), FQuat::Identity,
-                                                                    ECC_Visibility, FCollisionShape::MakeSphere(2.135f), Query)))
+                                                                    AUOpenGolfBall::ContactChannel, FCollisionShape::MakeSphere(2.135f), Query)))
             continue;
         const auto* Physical = Cast<UOpenFairwayPhysicalMaterial>(Hit.PhysMaterial.Get());
         if (TestNotNull(Label + TEXT(" physical material"), Physical))
@@ -70,7 +72,7 @@ bool FCoastalTerrainContactTest::RunTest(const FString& Parameters)
         AddInfo(FString::Printf(TEXT("%s: height difference %.3f cm (limit %.0f cm)"), *Label, Hit.ImpactPoint.Z - Expected, ToleranceCm));
         TestTrue(Label + TEXT(" upward contact normal"), Hit.ImpactNormal.Z > 0.95);
     }
-    int32 Instances = 0, Trees = 0, Colliders = 0;
+    int32 Instances = 0, Trees = 0, Colliders = 0, Canopies = 0;
     for (AActor* Actor : Area->GeneratedActors)
     {
         if (!IsValid(Actor))
@@ -91,14 +93,35 @@ bool FCoastalTerrainContactTest::RunTest(const FString& Parameters)
             {
                 Colliders += Component->GetInstanceCount();
                 TestTrue(TEXT("Trunk colliders are ball obstacles"), AOpenFairwayBall::IsObstacle(Component));
-                TestTrue(TEXT("Trunk colliders block the ball's channel"), Component->GetCollisionResponseToChannel(ECC_Visibility) == ECR_Block);
+                TestTrue(TEXT("Trunk colliders block the ball's channel"), Component->GetCollisionResponseToChannel(AUOpenGolfBall::ContactChannel) == ECR_Block);
                 TestFalse(TEXT("Trunk colliders are hidden"), Component->IsVisible());
+            }
+            else if (Actor->ActorHasTag(AOpenGolfTerrainArea::TreeCanopyTag))
+            {
+                Canopies += Component->GetInstanceCount();
+                TestTrue(TEXT("Canopy volumes are ball canopy"), AOpenFairwayBall::IsCanopy(Component));
+                TestEqual(TEXT("Canopy volumes overlap the ball's channel, never block it"),
+                    Component->GetCollisionResponseToChannel(AUOpenGolfBall::ContactChannel), ECR_Overlap);
+                TestFalse(TEXT("Canopy volumes are hidden"), Component->IsVisible());
             }
         }
     }
     TestTrue(TEXT("Saved range contains baked vegetation"), Instances > 100);
     TestEqual(TEXT("Every tree has one trunk collider"), Colliders, Trees);
-    AddInfo(FString::Printf(TEXT("Baked vegetation instances: %d; trees: %d; trunk colliders: %d"), Instances, Trees, Colliders));
+    // A vegetation rebuild from presets without a canopy mesh once dropped these silently.
+    TestEqual(TEXT("Every tree has one canopy volume"), Canopies, Trees);
+    AddInfo(FString::Printf(TEXT("Baked vegetation instances: %d; trees: %d; trunk colliders: %d; canopy volumes: %d"), Instances, Trees, Colliders, Canopies));
+
+    // The ball's channel (Config/DefaultEngine.ini) answers like Visibility: ground and trunks block it, canopy
+    // volumes overlap it, so the ball's sweeps and probes pass through them; 3D UI never stops the ball.
+    const TPair<FName, ECollisionResponse> Profiles[] = {{UCollisionProfile::BlockAll_ProfileName, ECR_Block},
+        {TEXT("OverlapAll"), ECR_Overlap}, {UCollisionProfile::NoCollision_ProfileName, ECR_Ignore}, {TEXT("UI"), ECR_Ignore}};
+    for (const auto& [Name, Expected] : Profiles)
+    {
+        FCollisionResponseTemplate Template;
+        if (TestTrue(Name.ToString() + TEXT(" profile exists"), UCollisionProfile::Get()->GetProfileTemplate(Name, Template)))
+            TestEqual(Name.ToString() + TEXT(" answers the ball's channel"), Template.ResponseToChannels.GetResponse(AUOpenGolfBall::ContactChannel), Expected);
+    }
     return true;
 }
 #endif

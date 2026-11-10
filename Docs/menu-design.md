@@ -1,0 +1,39 @@
+# UOpenGolf — Fairway interface
+
+Open `menu-prototype.html` in a browser for the interactive design. It uses an existing project screenshot, works offline, and saves demonstration preferences locally. It is a design artifact, not a connected Unreal settings implementation.
+
+## Art direction and navigation
+
+Quiet, premium sports presentation: charcoal #121917, ivory #F0F2E9, muted sage #ACC89A. Let the course occupy the screen. Use a subtle dark gradient for readability, thin rules, generous whitespace, restrained 4px corners, and a single accent. Avoid card grids, glossy buttons, heavy borders and ornamental icons. Use a licensed sans-serif with regular text and medium headings; minimum 18px at 1080p, scalable to 150%. Focus uses a visible sage outline and must never rely on color alone. Transitions are 160ms fades, disabled with reduced motion.
+
+Home: Training, Settings, Exit UOpenGolf. Show the project version in the lower-right corner on home and settings screens (currently v0.0.4, sourced from ProjectVersion in Config/DefaultGame.ini). Future course selection, competitions and multiplayer appear only when implemented. Home shows active local player and actual monitor connection state. Training leads to the current training range, with existing hole practice available within training. Pause uses the same shell with Resume, Settings, Return to home, Exit UOpenGolf; confirm any action that loses a round. Escape closes the topmost dialog, then settings, then opens pause; never immediately exits the application.
+
+Settings: category rail, scrollable grouped rows, contextual help, persistent Apply / Discard footer. Show changed count and restore-category action. Search labels and descriptions across categories. Controller bumpers switch category; D-pad navigates rows; left/right adjusts discrete values; A confirms; B backs out. Preserve focus and scroll when returning. Touch targets are at least 48px. Keep settings usable at 1280×720, 1080p, 4K, ultrawide and simulator projector aspect ratios with a bounded content width and safe margins.
+
+## Settings inventory
+
+All entries below are proposed product scope; existing engine/game capabilities still need UI integration. Hide unavailable capabilities or disable them with a concrete reason. Never present a setting that silently does nothing.
+
+| Category | Controls |
+| --- | --- |
+| Video | Display and monitor; fullscreen/borderless/windowed; supported resolution and refresh rate; VSync; foreground/background FPS limits; render scale; supported upscaler and quality; dynamic resolution target; HDR when supported and calibration; SDR brightness; safe area; overall Low/Medium/High/Epic/Custom preset; view distance, shadows, textures, effects, foliage, shading, reflections, global illumination, anti-aliasing, post-processing; supported ray tracing; motion blur, depth of field, film grain, chromatic aberration; FPS overlay. Show restart requirements and estimated performance impact without invented benchmarks. |
+| Audio | Master, ambience, impacts, UI, music, and available commentary/voice volumes; output device; stereo/surround where supported; dynamic range; mute in background; subtitles for spoken content. |
+| Player | Player handedness, preferred club, club bag and carry references; automatic club suggestion; distance/short-distance, speed, wind and temperature units; aim sensitivity and fine aim; preferred assistance preset; preferred putting mode; auto tee delay; shot confirmation/retry behavior. Handedness must not mirror measured launch data. |
+| Camera & HUD | Address height and distance, follow mode and delay, landing camera, cup zoom, replay duration and speed; reduced camera motion; tracer visibility/color, landing marker, aim line, green contours, slope animation, wind widget, pin distance, minimap when available; configurable shot metrics, data hold time, HUD scale and safe area. |
+| Simulator | Supported device selection, connect/disconnect, actual status/battery when reported, reconnect preference, connection diagnostics; Square spin mode (Measured or Calculated, default Measured), mapped to the device ball-detection spin mode with calculated values explicitly labeled; shot readiness sound; handedness/placement guidance; projector alignment and physical screen calibration. Calibration is a guided flow with documented units and validation, not an arbitrary physics multiplier. |
+| Accessibility | Text and HUD scaling, high contrast, color-vision palettes, reduced motion, camera shake, subtitles, audio/visual readiness cues, hold duration; screen-reader support only if implemented and tested. |
+| Data & system | Language when translations exist, local profile, shot recording and export, storage location/status, retention, diagnostic logging, credits/licenses; explicit confirmation for deleting recordings or resetting preferences. Any future telemetry is disclosed and configurable. |
+| Game Defaults | Tee selection, holes, format, scoring/handicap, mulligans, Gimmie radius (Off, 3 ft, 5 ft, 8 ft or 10 ft maximum; default Off), auto-putt, maximum strokes, penalties, lie effects, green speed/firmness, fairway firmness, rough difficulty, wind, weather, time of day, elevation and temperature. These seed a new session; session rules belong in round setup, with explicit overrides and future competition locks. |
+
+Default presentation: current engine video values until hardware detection; motion blur off; restrained tracer; readable HUD; existing physics and shot rules preserved. Simulator measurements remain authoritative. Assistance presets summarize their effects. Do not silently alter carry, spin or ball physics through difficulty settings.
+
+## Unreal integration contract
+
+- Retain the project's Slate UI approach. Add shared theme tokens and reusable setting rows alongside existing HUD widgets. Mount the menu through AUOpenGolfHUD above existing controls. The player controller owns modal focus/input routing and suppresses shot, aim and placement commands while a modal menu has focus. Decide explicitly how incoming launch-monitor shots are rejected while menus are open; show a readiness state and never replay queued shots unexpectedly.
+- Use UGameUserSettings for supported display/scalability settings. Keep device-specific graphics and simulator calibration local to the machine; persist player preferences separately with a versioned schema. Game Defaults create a session snapshot and never rewrite a running round.
+- Maintain saved, draft and preview state. Apply validates and saves atomically per settings domain; report individual failures and preserve drafts. Discard reverses previews. Restore defaults modifies the current category draft. Display changes require Keep/Revert with a 15-second countdown and automatic rollback; recover a known-good mode after failed startup. Tag restart-required settings.
+- Bind supported settings to existing wind, camera, HUD, recording and launch-monitor services. Add missing runtime capabilities incrementally rather than exposing inert controls. Capability checks govern HDR, upscalers, ray tracing, refresh rates and device fields.
+
+## Acceptance
+
+Verify keyboard and controller navigation, focus restoration, screen-reader labels where supported, readable contrast, scaling and safe-area layouts. Verify draft/apply/discard/defaults and persistence, corrupt preference recovery, display timeout rollback, device disconnect/reconnect, unsupported graphics hardware, incoming shots while menus are open. Verify changes to Game Defaults do not affect an active ball flight or round. Compare home, video, simulator and pause screenshots at 720p, 1080p, 4K and ultrawide. The browser prototype demonstrates navigation and preferences only; it does not validate engine behavior or GPU capabilities.

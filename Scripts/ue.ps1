@@ -8,7 +8,7 @@ param(
     [ValidateSet('Editor', 'Game')]
     [string]$Target = 'Editor',
     [ValidateRange(1, 3600)]
-    [int]$TimeoutSeconds = 180,
+    [int]$TimeoutSeconds = 600,
     # Test only: automation test name prefix to run, such as UOpenGolf.LaunchMonitor.
     [ValidatePattern('^[A-Za-z0-9_.]+$')]
     [string]$Filter = 'UOpenGolf'

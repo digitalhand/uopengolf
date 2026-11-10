@@ -165,6 +165,25 @@ without installing extra system packages. The project now targets 5.8.4.
 Bluetooth and BlueZ are **not needed to build**. Connecting a Square Home on Linux needs a
 running BlueZ (`bluetoothd`) and a user allowed to use it; `libsystemd.so.0` is loaded at runtime.
 
+### Graphics hardware
+
+The game and editor render with **Shader Model 6 only**: DirectX 12 on Windows and Vulkan on
+Linux. There is no DirectX 11 or SM5 fallback, because the range's Nanite foliage and virtual
+shadow maps need SM6 (`Config/DefaultEngine.ini`). The GPU and driver must expose DirectX 12
+feature level 12_1 with Shader Model 6.6 and its 64-bit atomics (on Linux, Vulkan with
+`VK_KHR_shader_atomic_int64`). Windows 10 needs version 1909 or later for the DirectX 12 Agility SDK.
+
+- **Supported, as a guide:** NVIDIA GeForce GTX 900 series (Maxwell) or newer, AMD Radeon GCN or
+  newer, and Intel Arc, all with current drivers.
+- **Newest unsupported cards:** NVIDIA's Kepler generation, the last of which were the
+  GeForce GTX 780 Ti and GTX TITAN Black (2014); they stop at feature level 11_0. Older Intel
+  integrated graphics such as HD 620 are also limited to SM5.
+- On an unsupported GPU the game reports that DirectX 12 with SM6 is not supported and does
+  not start. These thresholds follow Epic's
+  [hardware requirements for UE5 rendering features](https://dev.epicgames.com/documentation/en-us/unreal-engine/hardware-and-software-specifications-for-unreal-engine)
+  and have not been tested on each card here. To check a specific machine, use the DirectX
+  Caps Viewer (Windows) or `vulkaninfo` (Linux).
+
 ## Getting started
 
 Obtain Unreal Engine separately, clone this repository, and set `UE_ROOT` to the
@@ -264,7 +283,7 @@ tiles and the status box do not take clicks.
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
   from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
-  currently **v0.0.4**. Change the version there; packaged builds use the same value.
+  currently **v0.0.5**. Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](#versioning)).
 
 On the range, a stopped ball stays put for 3 seconds with its result shown, then goes back to
@@ -484,7 +503,8 @@ Each smoke or test run writes logs and an `index.json` report to a fresh directo
 invalid report, zero tests, a missing UOpenGolf test, or failed/incomplete tests.
 Smoke runs select a project-local filesystem cache in `DerivedDataCache/`, without
 requiring a Zen cache service; normal interactive editor sessions use engine defaults.
-Default timeout is 180 seconds; use `-TimeoutSeconds 300` or `--timeout 300` on slower machines.
+Default timeout is 600 seconds (the full `UOpenGolf` suite takes about 3.5 minutes on the Windows test
+machine, longer after a shader change); use `-TimeoutSeconds` or `--timeout` (up to 3600) to change it.
 Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
 
 The report validator and the FlightScope comparison script also have engine-free checks:
@@ -534,7 +554,7 @@ choose the `Packaged` folder.
 | --- | --- | --- |
 | Map to cook | `Config/DefaultGame.ini`, `[/Script/UnrealEd.ProjectPackagingSettings]` `+MapsToCook` | Cooks `/Game/UOpenGolf/Maps/UOpenGolf` |
 | Startup map and game mode | `Config/DefaultEngine.ini`, `[/Script/EngineSettings.GameMapsSettings]` | `GameDefaultMap` and `GlobalDefaultGameMode` used by the packaged game |
-| Project name and version | `Config/DefaultGame.ini`, `[/Script/EngineSettings.GeneralProjectSettings]` | Package metadata and the HUD version label (`ProjectVersion=0.0.4`, shown as **v0.0.4**); CI release builds stamp it from the tag ([Versioning](#versioning)) |
+| Project name and version | `Config/DefaultGame.ini`, `[/Script/EngineSettings.GeneralProjectSettings]` | Package metadata and the HUD version label (`ProjectVersion=0.0.5`, shown as **v0.0.5**); CI release builds stamp it from the tag ([Versioning](#versioning)) |
 | Game target | `Source/UOpenGolf.Target.cs` | The `UOpenGolf` game target that `-build` compiles |
 | Build configuration | `-clientconfig=` | `Development` is verified; `Shipping` has not been tried |
 | Cook order logs | `Build/<platform>/FileOpenOrder/` | Written by packaging; ignored by Git |

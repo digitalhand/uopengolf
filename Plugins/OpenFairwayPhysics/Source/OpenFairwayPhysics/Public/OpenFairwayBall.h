@@ -47,6 +47,18 @@ public:
     UFUNCTION(BlueprintPure, Category = "OpenFairway")
     bool GetShotResult(FOpenFairwayShotResult& OutResult) const;
 
+    /** The current or last shot without a copy, for per-frame readers; defaults before the first launch. */
+    const FOpenFairwayShotResult& GetResult() const { return Result; }
+
+    /** Number of the current or last shot; 0 before the first launch. */
+    int32 GetShotNumber() const { return Result.ShotNumber; }
+
+    /**
+     * Where the 120 Hz simulation has the ball. The actor is shown between the last two steps while it moves, so
+     * every frame advances it; at rest the two agree.
+     */
+    FVector GetSimulatedLocation() const { return SimLocation; }
+
     /**
      * Cups the ball can drop into: world positions of each cup's centre at the surface. A ball rolling over a cup
      * slowly enough, or landing inside it, is holed (OpenFairway::CupCapture); it sinks into the cup, comes to rest
@@ -281,6 +293,12 @@ private:
     void StepHoleDrop(float DeltaSeconds);
     void ApplyVisualRoll(const FVector& FrameDelta);
     void SetSurface(EOpenFairwaySurface Surface);
+    /** Moves the actor, the ball as shown, without touching the simulated position. */
+    void PresentAt(const FVector& Location);
+    /** Takes a move made from outside (SetActorLocation from a Blueprint, the editor or a test) into the simulation. */
+    void AdoptExternalMove();
+    /** Shows the ball where it landed before listeners read its location. */
+    void BroadcastLanded();
     void EnterRest();
     void UpdateResult();
     void AddTracerPoint(bool bForce);
@@ -288,6 +306,12 @@ private:
     OpenFairway::FAirConditions GetAirConditions() const;
 
     EOpenFairwayBallState BallState = EOpenFairwayBallState::Rest;
+    /** World position (cm) the physics steps from; the actor only follows it. Taken from the actor at launch from rest. */
+    FVector SimLocation = FVector::ZeroVector;
+    /** SimLocation before the latest step, for showing the ball between steps. */
+    FVector PreviousSimLocation = FVector::ZeroVector;
+    /** Where this ball last put its actor; an actor found elsewhere was moved from outside. */
+    FVector PresentedLocation = FVector::ZeroVector;
     /** OpenFairway frame (+X downrange, +Y up, +Z right), m/s and rad/s. */
     FVector3f Velocity = FVector3f::ZeroVector;
     FVector3f Omega = FVector3f::ZeroVector;

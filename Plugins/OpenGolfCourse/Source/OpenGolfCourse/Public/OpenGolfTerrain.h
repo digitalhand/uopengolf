@@ -316,7 +316,10 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Terrain")
     FGuid GenerationId;
 
-    /** Line trace for the ground beneath WorldPosition. Ball obstacles such as trunk colliders are ignored. */
+    /**
+     * Line trace on Channel for the ground beneath WorldPosition. Ball obstacles such as trunk colliders are ignored.
+     * A game whose ball has its own contact channel passes it, so this finds the ground the ball lands on.
+     */
     UFUNCTION(BlueprintCallable, Category = "Terrain")
-    bool GroundAt(FVector WorldPosition, FVector& GroundPosition, FVector& GroundNormal) const;
+    bool GroundAt(FVector WorldPosition, FVector& GroundPosition, FVector& GroundNormal, TEnumAsByte<ECollisionChannel> Channel = ECC_Visibility) const;
 };

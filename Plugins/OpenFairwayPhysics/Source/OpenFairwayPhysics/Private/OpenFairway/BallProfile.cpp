@@ -235,6 +235,7 @@ namespace OpenFairway
         Profile.Flight.bBridgeLowReLift = false;
         Profile.GreenGrassViscosity = GreenSpeed::ReferenceGrassViscosity;
         Profile.SandPlowRatio = 0.0f;
+        Profile.SandRollingFriction = SurfaceCatalog::Get(ESurface::Sand).RollingFriction;
         return Profile;
     }
 
@@ -334,9 +335,11 @@ namespace OpenFairway
     FSurfaceSettings FResolvedShotParams::ResolveSurface(ESurface Surface, const FBallPhysicsProfile& Profile) const
     {
         const FSurfacePhysicsSettings& Base = SurfaceCatalog::Get(Surface);
-        // A green's rolling friction is its stimp speed, solved with its grass drag; both are set on the profile.
+        // A green's rolling friction is its stimp speed, solved with its grass drag; both are set on the profile, as is sand's.
         const bool bGreen = Surface == ESurface::Green;
-        const float BaseRolling = bGreen ? GreenSpeed::RollingFriction(Profile.GreenStimpFeet, Profile.GreenGrassViscosity) : Base.RollingFriction;
+        const float BaseRolling = bGreen                       ? GreenSpeed::RollingFriction(Profile.GreenStimpFeet, Profile.GreenGrassViscosity)
+                                  : Surface == ESurface::Sand ? FMath::Max(0.0f, Profile.SandRollingFriction)
+                                                              : Base.RollingFriction;
         const float BaseViscosity = bGreen ? Profile.GreenGrassViscosity : Base.GrassViscosity;
 
         FSurfaceSettings Settings;

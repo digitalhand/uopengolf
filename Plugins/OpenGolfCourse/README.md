@@ -194,7 +194,8 @@ Ball->SetCups({Cup->GetCupDescriptor()});
 `FOpenGolfHoleRound` (after ogolf `HoleRound`) counts one hole: `Start(Par)`, then `RecordStroke(bFromGreen,
 bInCup)` for every shot that stops. Shots from the green are putts; the hole ends when the ball drops, after which
 strokes stop counting. `ResultName()` is the score name (Hole in one, Albatross, Eagle, Birdie, Par, Bogey, Double
-bogey, Triple bogey, then +N), or "Holed in N" when `bPractice` is set because the ball was placed by hand.
+bogey, Triple bogey, then +N). A hole is practice (`bPractice`) once the ball is placed by hand: it records no
+strokes or putts, never finishes, and `ResultName()` stays empty.
 
 `Play/OpenGolfPlayRules.h` holds the rules every course shares:
 

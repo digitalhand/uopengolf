@@ -177,6 +177,12 @@ stands the flag at the pin, re-bakes the course field for the cut turf (`turf_ma
 trees and understory away from them. It logs `OPEN_GOLF_PAR_FOUR_HOLE_COMPLETE`, then
 `OPEN_GOLF_RANGE_VEGETATION_COMPLETE` once the map is saved. Running it again rebuilds the same hole.
 
+NumPy is checked before anything changes. In an editor that is already open, set the variable from the
+console first, for example `py import os; os.environ['OPEN_GOLF_NUMPY_PYTHON'] = r'C:\Python311\python.exe'`.
+The rebuilt trees keep their wood colliders and canopy volumes because every jacaranda preset carries
+`SM_JacarandaCollision` and `SM_JacarandaCanopy`; `ApplyTreeCollision.py --canopy` restores both on a course
+whose presets predate the canopy.
+
 ## Wind
 
 The jacarandas, the Grass Medium rough and the Nature Essentials grasses move in the range's wind

@@ -102,6 +102,9 @@ bool FOpenFairwaySandImpactTest::RunTest(const FString& Parameters)
         }
     }
     TestEqual(TEXT("Sand plows at the profile ratio"), SandSurface.ImpactPlowRatio, Profile.SandPlowRatio);
+    TestEqual(TEXT("Sand rolls at the profile's friction"), SandSurface.RollingFriction, Profile.SandRollingFriction);
+    TestEqual(TEXT("The reference keeps the ported sand friction"), Shot.ResolveSurface(ESurface::Sand, Reference).RollingFriction,
+        SurfaceCatalog::Get(ESurface::Sand).RollingFriction);
     return true;
 }
 

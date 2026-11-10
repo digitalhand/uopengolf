@@ -26,10 +26,14 @@ bool FOpenGolfHoleRoundTest::RunTest(const FString& Parameters)
     Round.RecordStroke(true, false);
     TestEqual(TEXT("No strokes after holing out"), Round.Strokes, 4);
 
+    // Placing the ball by hand makes the hole practice: nothing counts, as the play bar's "?" shows.
     Round.Start(4);
     Round.bPractice = true;
-    Round.RecordStroke(false, true);
-    TestEqual(TEXT("Practice reports the strokes, not a score"), Round.ResultName(), FString(TEXT("Holed in 1")));
+    Round.RecordStroke(true, true);
+    TestEqual(TEXT("Practice counts no strokes"), Round.Strokes, 0);
+    TestEqual(TEXT("Practice counts no putts"), Round.Putts, 0);
+    TestFalse(TEXT("A practice ball in the cup does not finish the hole"), Round.bHoled);
+    TestTrue(TEXT("Practice has no score name"), Round.ResultName().IsEmpty());
 
     const TPair<int32, const TCHAR*> Names[] = {{1, TEXT("Hole in one")}, {2, TEXT("Eagle")}, {3, TEXT("Birdie")}, {4, TEXT("Par")}, {5, TEXT("Bogey")},
         {6, TEXT("Double bogey")}, {7, TEXT("Triple bogey")}, {9, TEXT("+5")}};

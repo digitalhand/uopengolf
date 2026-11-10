@@ -347,7 +347,7 @@ AOpenGolfTerrainArea::AOpenGolfTerrainArea()
     RootComponent->SetMobility(EComponentMobility::Static);
 }
 
-bool AOpenGolfTerrainArea::GroundAt(FVector WorldPosition, FVector& GroundPosition, FVector& GroundNormal) const
+bool AOpenGolfTerrainArea::GroundAt(FVector WorldPosition, FVector& GroundPosition, FVector& GroundNormal, TEnumAsByte<ECollisionChannel> Channel) const
 {
     if (!GetWorld())
         return false;
@@ -360,7 +360,7 @@ bool AOpenGolfTerrainArea::GroundAt(FVector WorldPosition, FVector& GroundPositi
     constexpr int32 MaxObstacles = 8;
     for (int32 Attempt = 0;; ++Attempt)
     {
-        if (!GetWorld()->LineTraceSingleByChannel(Hit, WorldPosition + FVector(0, 0, 50000), WorldPosition - FVector(0, 0, 50000), ECC_Visibility, Params))
+        if (!GetWorld()->LineTraceSingleByChannel(Hit, WorldPosition + FVector(0, 0, 50000), WorldPosition - FVector(0, 0, 50000), Channel, Params))
             return false;
         if (!AOpenFairwayBall::IsObstacle(Hit.GetComponent()))
             break;

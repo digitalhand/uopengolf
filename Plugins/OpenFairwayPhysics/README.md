@@ -61,7 +61,7 @@ maintainer's own MIT project, so the port is covered by this repository's licens
 | Surfaces | All seven presets; assigned by physical materials or tags; green speed set by stimp (`GreenStimpFeet`); see [Greens](#greens) |
 | JSON ball profiles, surface zones, Terrain3D height queries | Not ported yet (see [Known gaps](#known-gaps)) |
 | Linux | Editor/game build, the 33 headless `UOpenGolf` tests and a packaged game start pass (Unreal 5.8.3, 2026-10-18). After the later green-drag change, six physics tests pass; the range rollout tests have not rerun |
-| Windows | Editor build and 56 of 57 `UOpenGolf` tests pass (2026-10-29); `UOpenGolf.Physics.Sand`'s roll-into-sand check (2.48 m, limit 2 m) also fails on unchanged `main` |
+| Windows | Editor build and all 78 `UOpenGolf` tests pass (2026-11-09), including `UOpenGolf.Physics.Sand` after the sand rolling-friction change |
 
 Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
 
@@ -247,7 +247,7 @@ not affect the ball; OpenFairway's surface preset does.
 | Rough | `OpenFairway.Surface.Rough` | 0.62 | 0.095 | Grabs the ball |
 | Firm | `OpenFairway.Surface.Firm` | 0.30 | 0.030 | Hard ground, long roll |
 | Green | `OpenFairway.Surface.Green` | 0.58 | From stimp (ball's Green Stimp Feet, 10 ft) | Spin-back enabled; rolls at its stimp speed; see [Greens](#greens) |
-| Sand | `OpenFairway.Surface.Sand` | 0.65 | 0.30 | Soft: lower restitution and retention; landings plow (see below) |
+| Sand | `OpenFairway.Surface.Sand` | 0.65 | 0.45 (profile; ported 0.30) | Soft: lower restitution and retention; landings plow (see below) |
 | Fringe | `OpenFairway.Surface.Fringe` | 0.56 | 0.0725 | Close-cut collar |
 
 `AOpenFairwayBall::GetSurfaceTag(Surface)` returns the tag. Values come from
@@ -261,7 +261,9 @@ into the sand, so a shallow full-shot landing stays near its pitch mark. A grazi
 keeps some pace, and steep landings stop as before. The ported contact scaled its loss by the
 square of the landing's sine, so a 15° landing kept about 95% of its pace and skipped out.
 `HistoricalReference()` keeps that ported contact (ratio 0) for the golden fixtures.
-`UOpenGolf.Physics.Sand` covers these cases.
+A rolling ball meets `FBallPhysicsProfile::SandRollingFriction` (default **0.45**) in place of
+the catalog's ported 0.30, so a ball that rolls into a bunker at 4 m/s stops after about 1.7 m
+instead of 2.5 m; `HistoricalReference()` keeps 0.30. `UOpenGolf.Physics.Sand` covers these cases.
 
 ## Greens
 
