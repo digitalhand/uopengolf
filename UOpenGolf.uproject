@@ -23,6 +23,10 @@
 			]
 		},
 		{
+			"Name": "AndroidFileServer",
+			"Enabled": false
+		},
+		{
 			"Name": "OpenLaunchMonitor",
 			"Enabled": true
 		},

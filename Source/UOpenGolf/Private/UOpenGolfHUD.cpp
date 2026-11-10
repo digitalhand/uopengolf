@@ -94,10 +94,8 @@ void AUOpenGolfHUD::DrawHUD()
         const FVector Anchor = Flag->GetComponentTransform().TransformPosition(FVector(0, 0, UOpenGolfFlagstickComponent::PoleHeightCm + 30));
         if (Player->ProjectWorldLocationToScreen(Anchor, Screen) && Screen.X >= 0 && Screen.X < Canvas->ClipX && Screen.Y >= 0 && Screen.Y < Canvas->ClipY)
         {
-            FOpenFairwayShotResult Result;
-            PlayMode->GetBall()->GetShotResult(Result);
             const FString Label = PlayMode->GetBall()->IsHoled() ? TEXT("In") :
-                OpenGolfPlay::DistanceToPinLabel(PlayMode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green);
+                OpenGolfPlay::DistanceToPinLabel(PlayMode->GetDistanceToCupM(), PlayMode->GetBall()->GetResult().Surface == EOpenFairwaySurface::Green);
             float Width, Height;
             const float Scale = FMath::Max(1.0f, Canvas->ClipY / 1080.0f);
             GetTextSize(Label, Width, Height, GEngine->GetMediumFont(), Scale);

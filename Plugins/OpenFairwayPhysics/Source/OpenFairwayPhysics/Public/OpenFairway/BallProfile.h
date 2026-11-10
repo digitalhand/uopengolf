@@ -76,6 +76,11 @@ namespace OpenFairway
          * shallow full-shot landing stays near its pitch mark. 0 is the ported hard-sand contact.
          */
         float SandPlowRatio = 2.5f;
+        /**
+         * Rolling friction in sand, in place of the ported catalog value (0.30), so a ball that rolls into a bunker
+         * at 4 m/s stops within 2 m instead of running on 2.5 m. HistoricalReference keeps the catalog value.
+         */
+        float SandRollingFriction = 0.45f;
 
         /** Interpolate calibrated scales and landing responses across launch conditions. */
         bool bInterpolateCalibration = true;

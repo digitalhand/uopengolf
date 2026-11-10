@@ -19,9 +19,8 @@ void FOpenGolfHoleRound::RecordStroke(bool bFromGreen, bool bInCup)
 
 FString FOpenGolfHoleRound::ResultName() const
 {
-    if (!bHoled)
-        return FString();
-    return bPractice ? FString::Printf(TEXT("Holed in %d"), Strokes) : ScoreName(Strokes, Par);
+    // A practice round counts no strokes, so it never ends with a score.
+    return bHoled ? ScoreName(Strokes, Par) : FString();
 }
 
 FString FOpenGolfHoleRound::ScoreName(int32 Strokes, int32 Par)

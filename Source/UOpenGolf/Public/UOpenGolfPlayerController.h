@@ -8,6 +8,10 @@
 class ACameraActor;
 class AOpenFairwayBall;
 class SWidget;
+class UInputAction;
+class UInputMappingContext;
+struct FInputActionValue;
+struct FKey;
 
 /**
  * Range controls and the shot camera. Keys: C connect, T disconnect, H hit selected shot, P presets, Tab next
@@ -122,6 +126,15 @@ public:
     /** Escape: cancels placing the ball, else quits. */
     void HandleEscape();
 
+    /**
+     * Feeds a key from a HUD panel that holds keyboard focus into this controller's input, as the viewport would,
+     * so every play key (and a held A/D) works there too. False when no action uses the key.
+     */
+    bool ForwardUIKey(const FKey& Key, bool bPressed);
+
+    /** The play keys as Enhanced Input actions, built in code with the input component rather than as assets. */
+    const UInputMappingContext* GetKeyMapping() const { return KeyMapping; }
+
     virtual void PlayerTick(float DeltaTime) override;
 
 protected:
@@ -133,9 +146,14 @@ private:
     void UpdateShotCamera(float DeltaTime, bool bSnap);
     void UpdateCupZoom(const AOpenFairwayBall& Ball, float DeltaTime, bool bSnap);
     void HandleLeftClick();
-    void NudgeAimLeft() { NudgeAim(-1); }
-    void NudgeAimRight() { NudgeAim(1); }
-    bool IsFineAim() const;
+    /** A or D going down: one exact step, its sign the turn direction. */
+    void StartTurn(const FInputActionValue& Value);
+    /** While A or D is held, every frame: the direction PlayerTick turns the aim in. */
+    void HoldTurn(const FInputActionValue& Value);
+    void StopTurn() { TurnInput = 0.0f; }
+    void StartFineAim() { bFineAimHeld = true; }
+    void StopFineAim() { bFineAimHeld = false; }
+    bool IsFineAim() const { return bFineAimHeld; }
     /** Writes the HUD's wind to the range. */
     void ApplyWind();
     /** Takes wind the range got elsewhere (the map, Details, the console) into the HUD's setting. */
@@ -161,6 +179,15 @@ private:
     bool bPlacingBall = false;
     // How long A or D has been held, for the turn-rate ramp.
     float AimHeldSeconds = 0.0f;
+    // -1 while A is held, +1 while D is held, 0 otherwise.
+    float TurnInput = 0.0f;
+    bool bFineAimHeld = false;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UInputMappingContext> KeyMapping;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UInputAction>> KeyActions;
     OpenGolfPlay::FOpenGolfWindSetting Wind;
     bool bWindPanelOpen = false;
     // The range's wind as this controller last applied or adopted it; any other value was set elsewhere.

@@ -16,6 +16,7 @@
 AUOpenGolfBall::AUOpenGolfBall()
 {
     bDrawTracer = false;
+    TraceChannel = ContactChannel;
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail"));
     static const TCHAR* RibbonNames[] = {TEXT("ShotTrail"), TEXT("ShotTrail1"), TEXT("ShotTrail2")};
     static_assert(UE_ARRAY_COUNT(RibbonNames) == UE_ARRAY_COUNT(Ribbons), "One name per tracer ribbon");
@@ -42,9 +43,12 @@ AUOpenGolfBall::AUOpenGolfBall()
 void AUOpenGolfBall::BeginPlay()
 {
     Super::BeginPlay();
-    // Normalize the actual imported bounds, rather than assuming the FBX import scale.
-    const float Diameter = BallMesh->GetStaticMesh()->GetBounds().BoxExtent.GetMax() * 2.0f;
-    BallMesh->SetWorldScale3D(FVector(4.267f / FMath::Max(Diameter, 0.001f)));
+    // Normalize the actual imported bounds, rather than assuming the FBX import scale. A missing mesh keeps the base scale.
+    if (const UStaticMesh* Mesh = BallMesh->GetStaticMesh())
+    {
+        const float Diameter = Mesh->GetBounds().BoxExtent.GetMax() * 2.0f;
+        BallMesh->SetWorldScale3D(FVector(4.267f * VisualScale / FMath::Max(Diameter, 0.001f)));
+    }
     for (FUOpenGolfTrailRibbon& Ribbon : Ribbons)
     {
         Ribbon.Mesh->SetWorldTransform(FTransform::Identity);
@@ -109,9 +113,8 @@ void AUOpenGolfBall::StartShotTrail()
     Ribbon.Points.Add(GetActorLocation());
     CurrentOpacity = TrailOpacity;
     bTrailActive = true;
-    FOpenFairwayShotResult ShotResult;
-    if (GetShotResult(ShotResult))
-        TrailShotNumber = ShotResult.ShotNumber;
+    if (GetShotNumber() > 0)
+        TrailShotNumber = GetShotNumber();
     Ribbon.ShotNumber = TrailShotNumber;
 }
 
@@ -142,8 +145,7 @@ void AUOpenGolfBall::PromoteCurrentToHistory()
 void AUOpenGolfBall::Tick(float DeltaSeconds)
 {
     // Also support direct launches used by automation and Blueprint callers.
-    FOpenFairwayShotResult ShotResult;
-    const bool bNewShot = GetShotResult(ShotResult) && ShotResult.ShotNumber != TrailShotNumber;
+    const bool bNewShot = GetShotNumber() > 0 && GetShotNumber() != TrailShotNumber;
     if (IsMoving() && (!bTrailActive || bNewShot))
         StartShotTrail();
     {

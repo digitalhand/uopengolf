@@ -17,6 +17,7 @@ public:
 
     void Construct(const FArguments& Args);
     virtual FReply OnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event) override;
+    virtual FReply OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event) override;
 
 private:
     FText SelectedName() const;

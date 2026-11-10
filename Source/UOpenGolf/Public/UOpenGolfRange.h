@@ -90,6 +90,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UOpenGolf|Wind", meta = (DisplayName = "Wind From (degrees)", ClampMin = "0", ClampMax = "360"))
     float WindFromDeg = 0.0f;
 
+    /**
+     * Sets the wind controls and passes them to the ball, flag and vegetation at once rather than on the range's next
+     * (quarter-second) tick, so a shot hit straight after a change flies in it. A shot already moving keeps its wind.
+     */
+    void SetWind(float SpeedMph, float FromDeg);
+
     /** Animate the flag and vegetation while editing. The viewport must have Realtime enabled. */
     UPROPERTY(EditAnywhere, Category = "UOpenGolf|Wind", meta = (DisplayName = "Preview Wind in Editor"))
     bool bPreviewWindInEditor = true;

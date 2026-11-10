@@ -84,10 +84,42 @@ def apply(terrain, report_path=None):
                       report_path, proxy=PROXY)
 
 
+def tree_presets(definition):
+    """The jacaranda presets a terrain definition places, each once."""
+    presets = list(definition.get_editor_property("vegetation"))
+    presets += [area.get_editor_property("preset") for area in definition.get_editor_property("vegetation_areas")]
+    source = required(SOURCE).get_path_name()
+    unique = {}
+    for preset in presets:
+        if (preset and preset.get_editor_property("kind") == ue.OpenGolfVegetationKind.TREE and
+                any(mesh and mesh.get_path_name() == source for mesh in preset.get_editor_property("meshes"))):
+            unique.setdefault(preset.get_path_name(), preset)
+    return list(unique.values())
+
+
+def remember_canopy(definition):
+    """Give every jacaranda preset the canopy volume, so a later vegetation rebuild places it with the trees.
+
+    Without it a rebuild keeps the wood colliders but drops the canopy (presets made before canopy support).
+    """
+    canopy = required(CANOPY)
+    changed = 0
+    for preset in tree_presets(definition):
+        if preset.get_editor_property("tree_canopy_mesh") != canopy:
+            preset.modify()
+            preset.set_editor_property("tree_canopy_mesh", canopy)
+            if not LIB.save_loaded_asset(preset, only_if_is_dirty=False):
+                raise RuntimeError(f"Could not save {preset.get_path_name()}")
+            changed += 1
+    return changed
+
+
 def apply_canopy(terrain):
-    """Replace the canopy volumes of the baked jacarandas and check one sits on every tree."""
+    """Replace the canopy volumes of the baked jacarandas, check one sits on every tree, and keep the presets placing it."""
     if not has_canopy_support():
         raise RuntimeError("Rebuild DebugGame and restart the editor to load RebuildTreeCanopy")
+    presets = remember_canopy(terrain.get_editor_property("definition"))
+    ue.log(f"TREE_CANOPY_PRESETS {presets} updated")
     result = ue.OpenGolfTerrainBuilder.rebuild_tree_canopy(terrain, required(SOURCE), required(CANOPY))
     if result is None:
         raise RuntimeError("Tree canopy rebuild failed; see LogTemp for the reason")

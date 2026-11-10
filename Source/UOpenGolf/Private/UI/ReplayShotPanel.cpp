@@ -112,33 +112,16 @@ FReply SReplayShotPanel::HitShot()
 
 FReply SReplayShotPanel::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
 {
-    if (Event.GetKey() == EKeys::H)
-        return HitShot();
-    if (Event.GetKey() == EKeys::P && Controller.IsValid())
-    {
-        Controller->ToggleReplayPanel();
+    // The panel can hold keyboard focus, so it hands every play key to the controller's input, as the viewport would.
+    if (!Event.IsRepeat() && Controller.IsValid() && Controller->ForwardUIKey(Event.GetKey(), true))
         return FReply::Handled();
-    }
-    // The panel can hold keyboard focus, so it forwards the play keys the controller binds.
-    if (Event.GetKey() == EKeys::G && Controller.IsValid())
-    {
-        Controller->TogglePlayMode();
-        return FReply::Handled();
-    }
-    if ((Event.GetKey() == EKeys::A || Event.GetKey() == EKeys::D) && Controller.IsValid())
-    {
-        Controller->NudgeAim(Event.GetKey() == EKeys::D ? 1 : -1);
-        return FReply::Handled();
-    }
-    if (Event.GetKey() == EKeys::B && Controller.IsValid())
-    {
-        Controller->TogglePlacingBall();
-        return FReply::Handled();
-    }
-    if (Event.GetKey() == EKeys::W && Controller.IsValid())
-    {
-        Controller->ToggleWindPanel();
-        return FReply::Handled();
-    }
     return SCompoundWidget::OnKeyDown(Geometry, Event);
+}
+
+FReply SReplayShotPanel::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event)
+{
+    // The release ends a held A/D or Shift.
+    if (Controller.IsValid() && Controller->ForwardUIKey(Event.GetKey(), false))
+        return FReply::Handled();
+    return SCompoundWidget::OnKeyUp(Geometry, Event);
 }

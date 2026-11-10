@@ -3,11 +3,17 @@
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
-#include "Components/InputComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputCoreTypes.h"
+#include "InputKeyEventArgs.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "OpenFairwayBall.h"
 #include "Hole/OpenGolfCupComponent.h"
@@ -47,7 +53,8 @@ namespace
     // Respond promptly near the cup, where a firm putt can cross the zoom region in under a second.
     const FVector CupZoomOffset(-250.0f, 0.0f, 80.0f);
     constexpr float CupZoomInSpeed = 6.0f;
-    constexpr float CupZoomOutSpeed = 2.0f;
+    // Fast enough that a ball rolling on past the cup is back at the follow distance by about 8 ft past.
+    constexpr float CupZoomOutSpeed = 3.0f;
     constexpr float CupCameraFollowSpeed = 10.0f;
     // The camera holds the tee view this long after the ball leaves the tee.
     constexpr float FollowDelaySeconds = 0.5f;
@@ -77,6 +84,17 @@ void AUOpenGolfPlayerController::BeginPlay()
     if (!IsLocalController())
     {
         return;
+    }
+
+    if (auto* Input = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()); Input && KeyMapping)
+    {
+        Input->AddMappingContext(KeyMapping, 0);
+    }
+
+    // The camera follows the ball, so it reads the ball's position only after the ball has moved this frame.
+    if (const AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->GetBall())
+    {
+        AddTickPrerequisiteActor(Mode->GetBall());
     }
 
     FActorSpawnParameters Params;
@@ -119,22 +137,80 @@ void AUOpenGolfPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReaso
 void AUOpenGolfPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
-    InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ThisClass::ConnectLaunchMonitor);
-    InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ThisClass::DisconnectLaunchMonitor);
-    InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ThisClass::InjectReplayShot);
-    InputComponent->BindKey(EKeys::P, IE_Pressed, this, &ThisClass::ToggleReplayPanel);
-    InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ThisClass::SelectNextClub);
-    InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ThisClass::ResetBallToTee);
-    InputComponent->BindKey(EKeys::G, IE_Pressed, this, &ThisClass::TogglePlayMode);
-    InputComponent->BindKey(EKeys::B, IE_Pressed, this, &ThisClass::TogglePlacingBall);
-    InputComponent->BindKey(EKeys::W, IE_Pressed, this, &ThisClass::ToggleWindPanel);
-    InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ThisClass::HandleLeftClick);
-    InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ThisClass::CancelPlacingBall);
+    auto* Input = Cast<UEnhancedInputComponent>(InputComponent);
+    if (!ensureMsgf(Input, TEXT("Config/DefaultInput.ini must select the Enhanced Input component.")))
+        return;
+    KeyMapping = NewObject<UInputMappingContext>(this, TEXT("RangeKeys"));
+    KeyActions.Reset();
+    auto MakeAction = [this](const TCHAR* Name, EInputActionValueType Type)
+    {
+        UInputAction* Action = NewObject<UInputAction>(this, Name);
+        Action->ValueType = Type;
+        KeyActions.Add(Action);
+        return Action;
+    };
+
+    struct FPress
+    {
+        const TCHAR* Name;
+        FKey Key;
+        void (ThisClass::*Handler)();
+    };
+    const FPress Presses[] = {
+        {TEXT("IA_Connect"), EKeys::C, &ThisClass::ConnectLaunchMonitor},
+        {TEXT("IA_Disconnect"), EKeys::T, &ThisClass::DisconnectLaunchMonitor},
+        {TEXT("IA_HitTestShot"), EKeys::H, &ThisClass::InjectReplayShot},
+        {TEXT("IA_TestShots"), EKeys::P, &ThisClass::ToggleReplayPanel},
+        {TEXT("IA_NextClub"), EKeys::Tab, &ThisClass::SelectNextClub},
+        {TEXT("IA_TeeUp"), EKeys::R, &ThisClass::ResetBallToTee},
+        {TEXT("IA_PlayMode"), EKeys::G, &ThisClass::TogglePlayMode},
+        {TEXT("IA_PlaceBall"), EKeys::B, &ThisClass::TogglePlacingBall},
+        {TEXT("IA_Wind"), EKeys::W, &ThisClass::ToggleWindPanel},
+        {TEXT("IA_Click"), EKeys::LeftMouseButton, &ThisClass::HandleLeftClick},
+        {TEXT("IA_CancelPlacing"), EKeys::RightMouseButton, &ThisClass::CancelPlacingBall},
+        {TEXT("IA_RecordShots"), EKeys::F9, &ThisClass::ToggleRecordShots},
+        {TEXT("IA_Escape"), EKeys::Escape, &ThisClass::HandleEscape},
+    };
+    for (const FPress& Press : Presses)
+    {
+        UInputAction* Action = MakeAction(Press.Name, EInputActionValueType::Boolean);
+        KeyMapping->MapKey(Action, Press.Key);
+        Input->BindAction(Action, ETriggerEvent::Started, this, Press.Handler);
+    }
+
     // A tap of A or D turns one step; holding them turns faster the longer they are down (PlayerTick).
-    InputComponent->BindKey(EKeys::A, IE_Pressed, this, &ThisClass::NudgeAimLeft);
-    InputComponent->BindKey(EKeys::D, IE_Pressed, this, &ThisClass::NudgeAimRight);
-    InputComponent->BindKey(EKeys::F9, IE_Pressed, this, &ThisClass::ToggleRecordShots);
-    InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ThisClass::HandleEscape);
+    UInputAction* Turn = MakeAction(TEXT("IA_TurnAim"), EInputActionValueType::Axis1D);
+    KeyMapping->MapKey(Turn, EKeys::D);
+    KeyMapping->MapKey(Turn, EKeys::A).Modifiers.Add(NewObject<UInputModifierNegate>(KeyMapping));
+    Input->BindAction(Turn, ETriggerEvent::Started, this, &ThisClass::StartTurn);
+    Input->BindAction(Turn, ETriggerEvent::Triggered, this, &ThisClass::HoldTurn);
+    Input->BindAction(Turn, ETriggerEvent::Completed, this, &ThisClass::StopTurn);
+    // Shift makes both the tap and the held turn fine.
+    UInputAction* FineAim = MakeAction(TEXT("IA_FineAim"), EInputActionValueType::Boolean);
+    KeyMapping->MapKey(FineAim, EKeys::LeftShift);
+    KeyMapping->MapKey(FineAim, EKeys::RightShift);
+    Input->BindAction(FineAim, ETriggerEvent::Started, this, &ThisClass::StartFineAim);
+    Input->BindAction(FineAim, ETriggerEvent::Completed, this, &ThisClass::StopFineAim);
+}
+
+void AUOpenGolfPlayerController::StartTurn(const FInputActionValue& Value)
+{
+    if (const float Direction = Value.Get<float>(); Direction != 0.0f)
+        NudgeAim(Direction > 0.0f ? 1 : -1);
+}
+
+void AUOpenGolfPlayerController::HoldTurn(const FInputActionValue& Value)
+{
+    TurnInput = FMath::Sign(Value.Get<float>());
+}
+
+bool AUOpenGolfPlayerController::ForwardUIKey(const FKey& Key, bool bPressed)
+{
+    if (!KeyMapping || !KeyMapping->GetMappings().ContainsByPredicate([&Key](const FEnhancedActionKeyMapping& Mapping) { return Mapping.Key == Key; }))
+        return false;
+    // The same path a key takes from the viewport, so taps, holds and Shift all behave as they do there.
+    InputKey(FInputKeyEventArgs::CreateSimulated(Key, bPressed ? IE_Pressed : IE_Released, bPressed ? 1.0f : 0.0f));
+    return true;
 }
 
 void AUOpenGolfPlayerController::HandleEscape()
@@ -183,9 +259,9 @@ bool AUOpenGolfPlayerController::PlaceBallAtScreen(const FVector2D& ScreenPositi
     FHitResult Hit;
     if (!GetWorld()->LineTraceSingleByChannel(Hit, Origin, Origin + Direction * PlaceReachCm, ECC_Visibility, Params))
         return false;
-    // The terrain's own query finds the ground under the point, through trees.
+    // The click picks what is visible; the terrain's own query then finds the ground the ball rests on, through trees.
     FVector Ground, Normal;
-    return Range->Terrain->GroundAt(Hit.ImpactPoint, Ground, Normal) && Normal.Z > 0.7 && Mode->PlaceBallAt(Ground);
+    return Range->Terrain->GroundAt(Hit.ImpactPoint, Ground, Normal, AUOpenGolfBall::ContactChannel) && Normal.Z > 0.7 && Mode->PlaceBallAt(Ground);
 }
 
 bool AUOpenGolfPlayerController::IsShortGameView() const
@@ -194,9 +270,7 @@ bool AUOpenGolfPlayerController::IsShortGameView() const
     const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     if (!Ball || Mode->GetPlayMode() != EOpenGolfPlayMode::Hole)
         return false;
-    FOpenFairwayShotResult Result;
-    Ball->GetShotResult(Result);
-    return OpenGolfPlay::IsShortGame(Mode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green);
+    return OpenGolfPlay::IsShortGame(Mode->GetDistanceToCupM(), Ball->GetResult().Surface == EOpenFairwaySurface::Green);
 }
 
 void AUOpenGolfPlayerController::QuitGame()
@@ -207,8 +281,8 @@ void AUOpenGolfPlayerController::QuitGame()
 
 void AUOpenGolfPlayerController::PlayerTick(float DeltaTime)
 {
+    // Input runs first (Super), so TurnInput is this frame's A/D.
     Super::PlayerTick(DeltaTime);
-    const float TurnInput = (IsInputKeyDown(EKeys::D) ? 1.0f : 0.0f) - (IsInputKeyDown(EKeys::A) ? 1.0f : 0.0f);
     AimHeldSeconds = TurnInput != 0.0f ? AimHeldSeconds + DeltaTime : 0.0f;
     if (TurnInput != 0.0f)
     {
@@ -399,11 +473,6 @@ bool AUOpenGolfPlayerController::NudgeAim(int32 Direction)
     return SetAimYaw(GetAimYaw() + FMath::Sign(Direction) * (IsFineAim() ? OpenGolfPlay::FineAimTapStepDeg : OpenGolfPlay::AimTapStepDeg));
 }
 
-bool AUOpenGolfPlayerController::IsFineAim() const
-{
-    return IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
-}
-
 float AUOpenGolfPlayerController::GetAimOffsetDeg() const
 {
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
@@ -445,9 +514,8 @@ void AUOpenGolfPlayerController::ApplyWind()
     AUOpenGolfRange* Range = Mode ? Mode->GetRange() : nullptr;
     if (!Range)
         return;
-    // The same controls as Details: the range passes them to the ball, flag and vegetation on its next tick.
-    Range->WindSpeedMph = Wind.AppliedMph();
-    Range->WindFromDeg = Wind.FromDeg;
+    // The same controls as Details; the range passes them to the ball, flag and vegetation straight away.
+    Range->SetWind(Wind.AppliedMph(), Wind.FromDeg);
     AppliedWindMph = Range->WindSpeedMph;
     AppliedWindFromDeg = Range->WindFromDeg;
 }

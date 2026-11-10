@@ -45,12 +45,26 @@ course, apply_turf, savanna, turf, vegetation, course_hole, s, hole_spec, shadin
 SURFACE_FOLDER = "/Game/UOpenGolf/Terrain/Generated"
 
 
+def numpy_python():
+    """The Python that runs turf_mask.py: OPEN_GOLF_NUMPY_PYTHON, else "python". It must have NumPy, and is checked before
+    the hole changes anything, so a missing NumPy cannot stop the build after the layout and ground are saved."""
+    python = os.environ.get("OPEN_GOLF_NUMPY_PYTHON", "python")
+    try:
+        found = subprocess.run([python, "-c", "import numpy"], capture_output=True).returncode == 0
+    except OSError:
+        found = False
+    if not found:
+        raise RuntimeError(f"turf_mask.py needs NumPy, and '{python}' has none. Set OPEN_GOLF_NUMPY_PYTHON to a Python "
+                           "with NumPy (in this editor: py import os; os.environ['OPEN_GOLF_NUMPY_PYTHON'] = r'<path>') "
+                           "and run again; nothing was changed.")
+    return python
+
+
 def bake_course_field(area):
     """Exports the outlines, bakes them into the turf field with turf_mask.py, imports it and points the cut-turf
     materials at it."""
     apply_turf.write_course_spec(area.definition)
-    python = os.environ.get("OPEN_GOLF_NUMPY_PYTHON", "python")
-    subprocess.run([python, str(HERE / "turf_mask.py"), str(apply_turf.FIELD_SPEC), str(apply_turf.FIELD_SOURCE)], check=True)
+    subprocess.run([numpy_python(), str(HERE / "turf_mask.py"), str(apply_turf.FIELD_SPEC), str(apply_turf.FIELD_SOURCE)], check=True)
     with s.course_helpers("/OpenGolfSavanna", turf.CONTENT, turf.OWNER):
         apply_turf.import_field(area.definition)
         shading.configure_field_all(area, turf.SOURCE, turf.first_cut_width())
@@ -60,6 +74,7 @@ def build():
     editor = ue.get_editor_subsystem(ue.UnrealEditorSubsystem)
     if editor.get_game_world():
         raise RuntimeError("Stop Play before building the hole")
+    numpy_python()
     area = course.terrain_area(apply_turf.MAP)
     ranges = [a for a in ue.get_editor_subsystem(ue.EditorActorSubsystem).get_all_level_actors() if isinstance(a, ue.UOpenGolfRange)]
     if len(ranges) != 1:

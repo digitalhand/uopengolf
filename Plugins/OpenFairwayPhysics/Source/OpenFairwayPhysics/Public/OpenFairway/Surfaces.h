@@ -3,7 +3,8 @@
 // SurfacePhysicsSettings.cs, PhysicsEnums.cs and GreenSpeed.cs
 // at e6d793ae9477efaf55dc9078d7260f76bb532a7d. The default green grass drag differs from that
 // source (see GreenSpeed::GrassViscosity); FBallPhysicsProfile::HistoricalReference keeps the ported value.
-// Sand landings also plow (FBallPhysicsProfile::SandPlowRatio), which the reference profile leaves off.
+// Sand landings also plow (FBallPhysicsProfile::SandPlowRatio), which the reference profile leaves off, and sand
+// rolls at FBallPhysicsProfile::SandRollingFriction; the reference keeps the catalog's ported 0.30.
 #pragma once
 
 #include "OpenFairway/Profiles.h"

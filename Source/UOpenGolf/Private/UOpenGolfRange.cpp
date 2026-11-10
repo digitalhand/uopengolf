@@ -13,6 +13,7 @@
 #include "OpenGolfFlagstickComponent.h"
 #include "OpenGolfTerrain.h"
 #include "OpenGolfWindSubsystem.h"
+#include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
 
 namespace
@@ -101,7 +102,7 @@ void AUOpenGolfRange::BeginPlay()
     if (IsValid(Flagstick))
     {
         FVector Ground, Normal = FVector::UpVector;
-        if (IsValid(Terrain) && Terrain->GroundAt(Flagstick->GetComponentLocation(), Ground, Normal))
+        if (IsValid(Terrain) && Terrain->GroundAt(Flagstick->GetComponentLocation(), Ground, Normal, AUOpenGolfBall::ContactChannel))
             Flagstick->SetWorldLocation(Ground);
         Cup->PlaceAtFlagstick(Flagstick, Normal);
     }
@@ -124,7 +125,7 @@ FVector AUOpenGolfRange::GetTeeLocation() const
     if (bCache && CachedTee.IsSet() && CachedTeeOrigin.Equals(Origin) && CachedTeeTerrain.Get() == Terrain)
         return CachedTee.GetValue();
     FVector Ground, Normal;
-    if (!Terrain->GroundAt(Origin, Ground, Normal))
+    if (!Terrain->GroundAt(Origin, Ground, Normal, AUOpenGolfBall::ContactChannel))
         return Origin;
     if (bCache)
     {
@@ -148,7 +149,7 @@ void AUOpenGolfRange::AlignLayoutToTerrain()
         for (auto* Component : Components)
         {
             FVector Ground, Normal;
-            if (Component == Flagstick && Terrain->GroundAt(Component->GetComponentLocation(), Ground, Normal))
+            if (Component == Flagstick && Terrain->GroundAt(Component->GetComponentLocation(), Ground, Normal, AUOpenGolfBall::ContactChannel))
             {
                 Component->Modify();
                 Component->SetWorldLocation(Ground);
@@ -218,6 +219,14 @@ void AUOpenGolfRange::ApplyWindSettings()
     AppliedRangeWindMph = WindSpeedMph;
     AppliedRangeWindFromDeg = WindFromDeg;
     AppliedWindBall = Ball;
+}
+
+void AUOpenGolfRange::SetWind(float SpeedMph, float FromDeg)
+{
+    WindSpeedMph = SpeedMph;
+    WindFromDeg = FromDeg;
+    ApplyWindSettings();
+    SyncWindToScene();
 }
 
 void AUOpenGolfRange::ApplyGreenConsoleVariable()

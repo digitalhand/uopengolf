@@ -10,7 +10,7 @@ action="${1:-build}"
 if [[ $# -gt 0 ]]; then shift; fi
 engine_root="${UE_ROOT:-}"
 target=editor
-timeout_seconds=180
+timeout_seconds=600
 filter=UOpenGolf
 while [[ $# -gt 0 ]]; do
     case "$1" in

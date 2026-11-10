@@ -9,6 +9,8 @@ backed up, every tree collider is swapped for the trunk-and-main-limb proxy, bal
 that wood blocks and branches and leaves do not, and the map is saved only when the check passes.
 --canopy also replaces each tree's hidden canopy volume (it slows a ball flying through the crown; it
 needs the native RebuildTreeCanopy) before the check, which then also shows the canopy never blocks.
+It also sets the canopy mesh on every jacaranda preset the course uses, so a later vegetation rebuild
+(BuildParFourHole.py, RebuildRangeVegetation.py) places the canopy with the trees instead of dropping it.
 Completion is logged as OPEN_GOLF_TREE_COLLISION_COMPLETE.
 """
 from datetime import datetime, timezone

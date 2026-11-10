@@ -98,8 +98,6 @@ void AUOpenGolfGameMode::ResetBallToTee()
     if (Recorder)
         Recorder->CancelSimulation();
     PlaceOnTee();
-    if (PlayMode == EOpenGolfPlayMode::Hole)
-        Round.Start(AUOpenGolfRange::Par);
 }
 
 void AUOpenGolfGameMode::ResetBall()
@@ -335,15 +333,8 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
         Recorder->OnShot(Shot, LaunchMonitor->GetConnectionState(), LaunchMonitor->GetClub(), LaunchMonitor->IsLeftHanded(), LaunchMonitor->GetFirmware());
     }
 
-    FOpenFairwayLaunch Launch;
-    if (!Ball || !ToLaunch(Shot, Launch))
-    {
-        if (Recorder)
-            Recorder->CancelSimulation();
-        return;
-    }
     // Range mode hits from the tee; Hole mode from wherever the ball lies.
-    if (Ball->Launch(Launch))
+    if (Ball->Launch(CheckedLaunch))
     {
         bAddressReady = false;
         FOpenFairwayShotResult Launched;

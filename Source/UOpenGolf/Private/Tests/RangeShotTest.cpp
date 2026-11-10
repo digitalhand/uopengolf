@@ -174,10 +174,17 @@ public:
             Mode->ResetBallToTee();
             Test->TestTrue(TEXT("Frame-rate shot accepted"), Ball->Launch(DriveLaunch()));
             int32 Frames = 0;
+            int32 StillFlightFrames = 0;
             while (Ball->IsMoving() && Frames < 10000)
             {
                 const float Dt = Case == 4 && Frames % 31 == 0 ? 0.25f : Deltas[Case];
+                const FVector Shown = Ball->GetActorLocation();
+                const bool bInFlight = Ball->GetBallState() == EOpenFairwayBallState::Flight;
                 Ball->Tick(Dt);
+                // At 144 Hz about one frame in six runs no physics step; the shown ball must still move. Before the first
+                // step there is nothing to show between, so the launch frame may hold still.
+                if (Frames > 0 && bInFlight && Ball->GetBallState() == EOpenFairwayBallState::Flight && Ball->GetActorLocation() == Shown)
+                    ++StillFlightFrames;
                 if (Frames == 0 && (Case == 3 || Case == 4))
                 {
                     FOpenFairwayShotResult First;
@@ -189,6 +196,9 @@ public:
             FOpenFairwayShotResult Result;
             Ball->GetShotResult(Result);
             Test->TestTrue(TEXT("Shot reaches rest at every frame rate"), Result.bAtRest);
+            Test->TestEqual(TEXT("The ball in flight moves on screen every frame"), StillFlightFrames, 0);
+            Test->TestTrue(TEXT("At rest the ball is shown where the simulation stopped it"),
+                Ball->GetActorLocation().Equals(Ball->GetSimulatedLocation(), 1e-6));
             if (Case == 0) Baseline = Result;
             Test->TestEqual(TEXT("Carry independent of render rate and stalls"), Result.CarryM, Baseline.CarryM, 0.001f);
             Test->TestEqual(TEXT("Total independent of render rate and stalls"), Result.TotalM, Baseline.TotalM, 0.001f);

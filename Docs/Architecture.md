@@ -11,7 +11,9 @@ seconds after the ball stops, the GameMode puts it back on the tee; the ball kee
 its last shot result until the next launch. The HUD
 adds a Slate widget (`SRangeHud`) with shot tiles and a launch-monitor status box; the player controller
 binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D held
-to turn the aim) and runs the shot camera along the ball's aim line. There is no pawn, course or scoring. `UOpenGolf`
+to turn the aim) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
+actions and one mapping context built in code (no input assets); a HUD panel that holds keyboard
+focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no pawn, course or scoring. `UOpenGolf`
 is the saved range map used for editor and game startup, and the project's only map. A world
 without a range controller gets one with daylight and a flag; the ground always comes from a
 terrain area.
@@ -56,6 +58,10 @@ are reused, topology is recreated only when sample count changes, and camera-fac
 vertices update an existing section otherwise. Unchanged geometry, opacity and
 visibility updates are skipped. The inherited debug tracer is disabled on the game ball. Ground collision comes from the terrain's
 generated surface meshes and outer landscapes, which reach beyond the ball's 1,000 m safety envelope.
+The game ball sweeps and probes on its own trace channel, `GolfBall` (`AUOpenGolfBall::ContactChannel`,
+set in `Config/DefaultEngine.ini`), rather than Visibility: every collision profile answers it as it
+answers Visibility, except 3D UI widgets, which the ball ignores. The range's ground queries use the
+same channel; the physics plugin's own default stays Visibility.
 The terrain's 3D grass and ground cover are collision-free instances; `uopengolf.Grass3D` hides or
 shows them at runtime. The physics plugin has no
 dependency on these assets or on the game module; the course kit depends on the physics
