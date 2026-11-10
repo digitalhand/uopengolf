@@ -7,6 +7,22 @@
 /** Miles per hour in one metre per second. */
 inline constexpr float LaunchMonitorMphPerMps = 2.2369363f;
 
+/** Default Open Connect listening port: GSPro's 921 on Windows; ports below 1024 need root on Linux. */
+inline constexpr int32 LaunchMonitorDefaultOpenConnectPort = PLATFORM_LINUX ? 49152 : 921;
+
+/** FLaunchMonitorShot::Source of an Open Connect shot starts with this, followed by the connector's DeviceID. */
+inline const TCHAR* const LaunchMonitorOpenConnectSource = TEXT("Open Connect");
+
+/** Where launch-monitor shots come from. One provider is active at a time. */
+UENUM(BlueprintType)
+enum class ELaunchMonitorProvider : uint8
+{
+    /** Square Home over Bluetooth LE. */
+    SquareHome UMETA(DisplayName = "Square Home (Bluetooth)"),
+    /** A connector sending GSPro Open Connect v1 compatible JSON over TCP. */
+    OpenConnect UMETA(DisplayName = "GSPro Open Connect (TCP)")
+};
+
 UENUM(BlueprintType)
 enum class ELaunchMonitorConnectionState : uint8
 {
@@ -74,7 +90,7 @@ struct OPENLAUNCHMONITOR_API FLaunchMonitorShot
     UPROPERTY(BlueprintReadOnly, Category = "Launch Monitor")
     FDateTime ReceivedUtc;
 
-    /** "Square Home" or "Replay". */
+    /** "Square Home", "Replay", or "Open Connect" / "Open Connect: <DeviceID>" for a connector shot. */
     UPROPERTY(BlueprintReadOnly, Category = "Launch Monitor")
     FString Source;
 

@@ -11,7 +11,8 @@ param(
     [int]$TimeoutSeconds = 600,
     # Test only: automation test name prefix to run, such as UOpenGolf.LaunchMonitor.
     [ValidatePattern('^[A-Za-z0-9_.]+$')]
-    [string]$Filter = 'UOpenGolf'
+    [string]$Filter = 'UOpenGolf',
+    [switch]$Rendered
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,10 +109,11 @@ try {
             $report = Join-Path $projectRoot "Saved\Automation\$runId"
             New-Item -ItemType Directory -Path $report -Force | Out-Null
             $arguments = @(
-                $project, '-unattended', '-nopause', '-nosplash', '-nosound', '-nullrhi', '-DDC=UOpenGolfSmoke',
+                $project, '-NoMainMenu', '-unattended', '-nopause', '-nosplash', '-nosound', '-DDC=UOpenGolfSmoke',
                 '-stdout', '-FullStdOutLogOutput', "-ExecCmds=Automation RunTests $tests",
                 '-TestExit=Automation Test Queue Empty', "-ReportExportPath=$report", "-abslog=$report\Unreal.log"
             )
+            if (-not $Rendered) { $arguments += '-nullrhi' }
             # Start-Process joins its argument array; quote each argument for paths with spaces.
             foreach ($argument in $arguments) {
                 if ($argument.Contains('"')) { throw 'Double quotes are not supported in engine/project paths.' }

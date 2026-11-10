@@ -47,3 +47,13 @@ FString FOpenGolfHoleRound::ScoreName(int32 Strokes, int32 Par)
         return FString::Printf(TEXT("%+d"), Strokes - Par);
     }
 }
+
+bool FOpenGolfHoleRound::TryConcede(float DistanceM, float RadiusFeet, bool bOnGreen)
+{
+    if (bHoled || bPractice || !bOnGreen || !FMath::IsFinite(DistanceM) || !FMath::IsFinite(RadiusFeet) ||
+        DistanceM < 0 || RadiusFeet <= 0 || RadiusFeet > 10 || DistanceM > RadiusFeet * 0.3048f)
+        return false;
+    RecordStroke(true, true);
+    bConceded = true;
+    return true;
+}

@@ -8,6 +8,7 @@
 #include "UOpenGolfGameMode.generated.h"
 
 class AOpenFairwayBall;
+class UGolfGimmieIndicator;
 class AUOpenGolfRange;
 struct FLaunchMonitorClubData;
 struct FLaunchMonitorShot;
@@ -34,6 +35,7 @@ public:
     AUOpenGolfGameMode();
 
     virtual void StartPlay() override;
+    float GetGimmieRadiusFeet() const { return SessionGimmieFeet; }
 
     UFUNCTION(BlueprintPure, Category = "UOpenGolf")
     AOpenFairwayBall* GetBall() const { return Ball; }
@@ -140,6 +142,7 @@ private:
     /** Turns the ball (and its aim line) toward the cup. */
     void AimAtCup();
     void PlaceOnTee();
+    void StartSessionDefaults();
 
     UPROPERTY()
     TObjectPtr<AUOpenGolfRange> Range;
@@ -160,4 +163,8 @@ private:
     bool bShotFromGreen = false;
     double HoledTime = -1.0;
     FTimerHandle RecordingTimer;
+    float SessionGimmieFeet = 0;
+    float CourseWindMph = 0, CourseWindFrom = 0;
+    int32 LastScoredShot = INDEX_NONE;
+    UPROPERTY() TObjectPtr<UGolfGimmieIndicator> GimmieIndicator;
 };

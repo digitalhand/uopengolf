@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/WindControl.h"
+#include "UI/HudStyle.h"
 
 #include "OpenGolfWindIndicator.h"
 #include "Play/OpenGolfWindSetting.h"
@@ -75,7 +76,7 @@ void SWindControl::Construct(const FArguments& Args)
                     ]
                     + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 3, 0, 0)
                     [
-                        SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).Visibility(EVisibility::HitTestInvisible)
+                        SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).Visibility(EVisibility::HitTestInvisible)
                         .ColorAndOpacity_Lambda([IsOpen] { return FSlateColor(IsOpen() ? HudStyle::AccentColor() : HudStyle::LabelColor()); })
                         .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor)
                         .Text(FText::FromString(TEXT("Wind [W]")))
@@ -113,12 +114,12 @@ TSharedRef<SWidget> SWindControl::MakePanel()
             SNew(SHorizontalBox)
             + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 11)).ColorAndOpacity(FLinearColor::White)
+                SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::TextColor())
                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor).Text(FText::FromString(TEXT("Wind")))
             ]
             + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
+                SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
                 .Text_Lambda([this] { return FText::FromString(IsWindOn() ? TEXT("On") : TEXT("Off")); })
             ]
             + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -133,7 +134,7 @@ TSharedRef<SWidget> SWindControl::MakePanel()
                 TAttribute<float>::CreateLambda([this] { return Controller.IsValid() ? FMath::Min(Controller->GetWind().SpeedMph, MaxWindSettingMph) : 0.0f; }),
                 FOnFloatValueChanged::CreateLambda([this](float Mph) { if (Controller.IsValid()) Controller->SetWindSpeedMph(Mph); }),
                 TAttribute<FText>::CreateLambda([this]
-                    { return FText::FromString(FString::Printf(TEXT("%d mph"), Controller.IsValid() ? FMath::RoundToInt(Controller->GetWind().SpeedMph) : 0)); }))
+                    { return FText::FromString(GolfSettings::Speed(Controller.IsValid() ? Controller->GetWind().SpeedMph * .44704f : 0)); }))
         ]
         + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 0)
         [
@@ -145,7 +146,7 @@ TSharedRef<SWidget> SWindControl::MakePanel()
         ]
         + SVerticalBox::Slot().AutoHeight().Padding(LabelWidth, 2, 0, 0)
         [
-            SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
+            SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
             .Text_Lambda([this] { return GetDirectionText(); })
         ];
     // clang-format on
@@ -160,7 +161,7 @@ TSharedRef<SWidget> SWindControl::MakeSliderRow(const TCHAR* Label, float MaxVal
         [
             SNew(SBox).WidthOverride(LabelWidth)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor()).Text(FText::FromString(Label))
+                SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor()).Text(FText::FromString(Label))
             ]
         ]
         + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
@@ -171,7 +172,7 @@ TSharedRef<SWidget> SWindControl::MakeSliderRow(const TCHAR* Label, float MaxVal
         [
             SNew(SBox).WidthOverride(ValueWidth).HAlign(HAlign_Right)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10)).ColorAndOpacity(FLinearColor::White)
+                SNew(STextBlock).Font(HudStyle::Font("Bold", 10)).ColorAndOpacity(HudStyle::TextColor())
                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor).Text(ValueText)
             ]
         ];

@@ -82,6 +82,17 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Device shot when connected"), IsRecordable(RecordingTestShot(1, TEXT("Square Home")), EState::Connected));
     TestFalse(TEXT("Device shot when disconnected"), IsRecordable(RecordingTestShot(1, TEXT("Square Home")), EState::Disconnected));
     TestFalse(TEXT("Replay shot"), IsRecordable(RecordingTestShot(1, TEXT("Replay")), EState::Ready));
+    TestTrue(TEXT("Open Connect shot"), IsRecordable(RecordingTestShot(1, TEXT("Open Connect: MLM2PRO")), EState::Ready));
+    TestTrue(TEXT("Open Connect shot without a DeviceID"), IsRecordable(RecordingTestShot(1, TEXT("Open Connect")), EState::Connected));
+    TestFalse(TEXT("Open Connect shot when not listening"), IsRecordable(RecordingTestShot(1, TEXT("Open Connect: MLM2PRO")), EState::Disconnected));
+    {
+        // An Open Connect recording names the connector's own DeviceID.
+        FRecordedShot Connector;
+        Connector.Shot = RecordingTestShot(6, TEXT("Open Connect: MLM2PRO"));
+        Connector.RecordedLocal = FDateTime(2026, 11, 9, 20, 0, 0);
+        const TSharedPtr<FJsonObject> ConnectorJson = ParseRecordingJson(BuildShotJson(Connector, 1));
+        TestTrue(TEXT("Connector DeviceID"), ConnectorJson.IsValid() && ConnectorJson->GetStringField(TEXT("DeviceID")) == TEXT("MLM2PRO"));
+    }
 
     // Shot JSON: mph, unmeasured values left out, no ClubData without a reading.
     FRecordedShot Recorded;

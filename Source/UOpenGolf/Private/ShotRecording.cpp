@@ -29,6 +29,13 @@ namespace
     constexpr double RecordingFeetPerMeter = 3.28084;
     const TCHAR* const RecordingDeviceSource = TEXT("Square Home");
 
+    /** "Square Home", or the connector's own DeviceID for "Open Connect: <DeviceID>" ("Open Connect" when it sent none). */
+    FString RecordingDeviceId(const FString& Source)
+    {
+        const FString Prefix = FString(LaunchMonitorOpenConnectSource) + TEXT(": ");
+        return Source.StartsWith(Prefix, ESearchCase::CaseSensitive) ? Source.RightChop(Prefix.Len()) : Source;
+    }
+
     /** Writes a decimal value rounded to hundredths ("10.01"); whole-number fields use SetNumberField. */
     void SetRecordingDecimal(FJsonObject& Object, const TCHAR* Name, double Value)
     {
@@ -192,13 +199,15 @@ namespace ShotRecording
 
     bool IsRecordable(const FLaunchMonitorShot& Shot, ELaunchMonitorConnectionState State)
     {
-        return Shot.Source == RecordingDeviceSource && (State == ELaunchMonitorConnectionState::Connected || State == ELaunchMonitorConnectionState::Ready);
+        // Measured shots only: the Square Home or an Open Connect connector, never replays.
+        const bool bDevice = Shot.Source == RecordingDeviceSource || Shot.Source.StartsWith(LaunchMonitorOpenConnectSource, ESearchCase::CaseSensitive);
+        return bDevice && (State == ELaunchMonitorConnectionState::Connected || State == ELaunchMonitorConnectionState::Ready);
     }
 
     FString BuildShotJson(const FRecordedShot& Recorded, int32 Index)
     {
         const TSharedRef<FJsonObject> Root = MakeShared<FJsonObject>();
-        Root->SetStringField(TEXT("DeviceID"), Recorded.Shot.Source);
+        Root->SetStringField(TEXT("DeviceID"), RecordingDeviceId(Recorded.Shot.Source));
         Root->SetStringField(TEXT("Units"), TEXT("Yards"));
         Root->SetNumberField(TEXT("ShotNumber"), Index);
         Root->SetStringField(TEXT("APIVersion"), TEXT("1"));

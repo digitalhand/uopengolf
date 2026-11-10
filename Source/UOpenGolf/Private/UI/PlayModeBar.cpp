@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/PlayModeBar.h"
+#include "UI/HudStyle.h"
 
 #include "Engine/World.h"
 #include "UI/HudLayers.h"
@@ -71,7 +72,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         [
                             SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Visibility(EVisibility::HitTestInvisible)
                             [
-                                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 10)).ColorAndOpacity(FLinearColor::White)
+                                SNew(STextBlock).Font(HudStyle::Font("Bold", 10)).ColorAndOpacity(HudStyle::TextColor())
                                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor)
                                 .Text_Lambda([this] { return HoleText; })
                             ]
@@ -88,7 +89,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                             SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Visibility_Lambda([this]
                                 { return bPlacing ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
                             [
-                                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
+                                SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
                                 .Text(FText::FromString(TEXT("Click the ground to place the ball  ·  Right-click to cancel")))
                             ]
                         ]
@@ -98,7 +99,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                             SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Visibility_Lambda([this]
                                 { return OverCupText.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
                             [
-                                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
+                                SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
                                 .Text_Lambda([this] { return OverCupText; })
                             ]
                         ]
@@ -115,13 +116,13 @@ void SPlayModeBar::Construct(const FArguments& Args)
                     SNew(SVerticalBox)
                     + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
                     [
-                        SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 30)).ColorAndOpacity(FLinearColor::White)
+                        SNew(STextBlock).Font(HudStyle::Font("Bold", 30)).ColorAndOpacity(HudStyle::TextColor())
                         .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor)
                         .Text_Lambda([this] { return BannerTitle; })
                     ]
                     + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 2, 0, 0)
                     [
-                        SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 11)).ColorAndOpacity(HudStyle::LabelColor())
+                        SNew(STextBlock).Font(HudStyle::Font("Regular", 11)).ColorAndOpacity(HudStyle::LabelColor())
                         .Text_Lambda([this] { return BannerDetail; })
                     ]
                 ]
@@ -141,7 +142,7 @@ TSharedRef<SWidget> SPlayModeBar::MakeIconButton(SHudIconButton::EIcon Icon, TAt
         ]
         + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 3, 0, 0)
         [
-            SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(HudStyle::LabelColor())
+            SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudStyle::LabelColor())
             .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor).Text(Caption).Visibility(EVisibility::HitTestInvisible)
         ];
     // clang-format on
@@ -157,12 +158,12 @@ TSharedRef<SWidget> SPlayModeBar::MakeTile(TAttribute<FText> Value, const TCHAR*
             SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 18)).ColorAndOpacity(FLinearColor::White)
+                SNew(STextBlock).Font(HudStyle::Font("Bold", 18)).ColorAndOpacity(HudStyle::TextColor())
                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor).Text(Value)
             ]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [
-                SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 8)).ColorAndOpacity(HudStyle::LabelColor()).Text(FText::FromString(Label))
+                SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudStyle::LabelColor()).Text(FText::FromString(Label))
             ]
         ]
     ];
@@ -190,22 +191,22 @@ void SPlayModeBar::Refresh()
 
     const FOpenGolfHoleRound& Round = Mode->GetHoleRound();
     const FOpenFairwayShotResult& Result = Ball->GetResult();
-    HoleText = FText::FromString(FString::Printf(TEXT("Hole 1  ·  Par %d  ·  %d yd%s"), Round.Par,
-        FMath::RoundToInt(AUOpenGolfRange::HoleDistanceM * YardsPerMeter), Round.bPractice ? TEXT("  ·  Practice") : TEXT("")));
+    HoleText = FText::FromString(FString::Printf(TEXT("Hole 1  ·  Par %d  ·  %s%s"), Round.Par,
+        *GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM), Round.bPractice ? TEXT("  ·  Practice") : TEXT("")));
     // The stroke about to be played, or the final count once holed.
     StrokeText = FText::AsNumber(Round.bHoled ? Round.Strokes : Round.Strokes + 1);
-    ToPinText = FText::FromString(Ball->IsHoled() ? FString(TEXT("In")) : OpenGolfPlay::DistanceToPinLabel(Mode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green));
+    ToPinText = FText::FromString(Ball->IsHoled() ? FString(TEXT("In")) : GolfSettings::RoundDistance(Mode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green));
     PuttsText = FText::AsNumber(Round.Putts);
     if (Round.bPractice) { StrokeText = FText::FromString(TEXT("?")); PuttsText = StrokeText; }
-    if (Result.bOverCup && !Ball->IsHoled())
-        OverCupText = FText::FromString(FString::Printf(TEXT("Over the cup at %.1f mph  ·  drops under %.1f mph"), Result.OverCupSpeedMps * MphPerMps,
-            Result.OverCupMaxSpeedMps * MphPerMps));
+    if (Result.bOverCup && !Round.bHoled && !Ball->IsHoled())
+        OverCupText = FText::FromString(FString::Printf(TEXT("Over the cup at %s  ·  drops under %s"), *GolfSettings::Speed(Result.OverCupSpeedMps),
+            *GolfSettings::Speed(Result.OverCupMaxSpeedMps)));
 
     const float HoledSeconds = Mode->GetHoledSeconds();
     if (Round.bHoled && HoledSeconds >= 0.0f)
     {
         BannerOpacity = FMath::Clamp((AUOpenGolfGameMode::HoleOutDelayS - HoledSeconds) / BannerFadeSeconds, 0.0f, 1.0f);
-        BannerTitle = FText::FromString(Round.ResultName());
+        BannerTitle = FText::FromString(Round.ResultName() + (Round.bConceded ? TEXT(" - Conceded") : TEXT("")));
         BannerDetail = FText::FromString(FString::Printf(TEXT("%d %s  ·  %d %s"), Round.Strokes, Round.Strokes == 1 ? TEXT("stroke") : TEXT("strokes"),
             Round.Putts, Round.Putts == 1 ? TEXT("putt") : TEXT("putts")));
     }

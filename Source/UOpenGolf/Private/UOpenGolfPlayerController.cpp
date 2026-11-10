@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfPlayerController.h"
+#include "OpenGolfSettings.h"
+#include "GameFramework/PlayerInput.h"
+#include "UI/MainMenu.h"
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -14,6 +17,8 @@
 #include "InputKeyEventArgs.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
+#include "GameFramework/GameModeBase.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "OpenFairwayBall.h"
 #include "Hole/OpenGolfCupComponent.h"
@@ -29,6 +34,9 @@
 
 namespace
 {
+    /** Level URL option: the map was reloaded by "Main menu", so open the main menu. */
+    const TCHAR* ReturnToMainMenuOption = TEXT("MainMenu");
+
     UOpenLaunchMonitorSubsystem* GetLaunchMonitor(const APlayerController& Controller)
     {
         const UGameInstance* GameInstance = Controller.GetGameInstance();
@@ -118,11 +126,21 @@ void AUOpenGolfPlayerController::BeginPlay()
         InputMode.SetHideCursorDuringCapture(false);
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
         SetInputMode(InputMode);
+        MainMenu = SNew(SMainMenu).Controller(this);
+        Viewport->AddViewportWidgetContent(MainMenu.ToSharedRef(), 100);
+        const AGameModeBase* Mode = GetWorld()->GetAuthGameMode();
+        const bool bReturnedToMenu = Mode && UGameplayStatics::HasOption(Mode->OptionsString, ReturnToMainMenuOption);
+        if (!GolfSettings::BypassStartupMenu() || bReturnedToMenu) MainMenu->Open();
     }
 }
 
 void AUOpenGolfPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (MainMenu.IsValid())
+    {
+        if (auto* Viewport = GetWorld()->GetGameViewport()) Viewport->RemoveViewportWidgetContent(MainMenu.ToSharedRef());
+        MainMenu.Reset();
+    }
     if (ReplayPanel.IsValid())
     {
         if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
@@ -206,6 +224,7 @@ void AUOpenGolfPlayerController::HoldTurn(const FInputActionValue& Value)
 
 bool AUOpenGolfPlayerController::ForwardUIKey(const FKey& Key, bool bPressed)
 {
+    if (bMainMenuOpen) return false;
     if (!KeyMapping || !KeyMapping->GetMappings().ContainsByPredicate([&Key](const FEnhancedActionKeyMapping& Mapping) { return Mapping.Key == Key; }))
         return false;
     // The same path a key takes from the viewport, so taps, holds and Shift all behave as they do there.
@@ -219,12 +238,15 @@ void AUOpenGolfPlayerController::HandleEscape()
         SetPlacingBall(false);
     else if (bWindPanelOpen)
         SetWindPanelOpen(false);
+    else if (bReplayPanelOpen)
+        SetReplayPanelOpen(false);
     else
-        QuitGame();
+        OpenMainMenu();
 }
 
 void AUOpenGolfPlayerController::TogglePlayMode()
 {
+    if (bMainMenuOpen) return;
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->TogglePlayMode())
     {
         SetPlacingBall(false);
@@ -303,6 +325,7 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
         return;
     }
 
+    bSnap = bSnap || GolfSettings::Get().ReducedMotion;
     const FVector BallLocation = Ball->GetActorLocation();
     // Both views sit behind the ball along the aim line.
     const FRotator Aim(0.0f, Ball->AimYawDeg, 0.0f);
@@ -345,6 +368,7 @@ void AUOpenGolfPlayerController::UpdateShotCamera(float DeltaTime, bool bSnap)
         return;
     }
 
+    if (GolfSettings::Get().FixedCamera || GolfSettings::Get().ReducedMotion) return;
     if (bCameraAtTee)
     {
         FollowDelayElapsed = 0.0f;
@@ -371,6 +395,7 @@ void AUOpenGolfPlayerController::UpdateCupZoom(const AOpenFairwayBall& Ball, flo
 {
     // Close on a holed ball until it is teed up again. A moving ball only within CupZoomStartM of a cup, so the view
     // backs out as it rolls away, to the normal distance by 8 ft past, and once a miss stops.
+    if (!GolfSettings::Get().CupZoom) { CupZoom = 0; return; }
     float Target = Ball.IsHoled() ? 1.0f : 0.0f;
     if (!Ball.IsHoled() && Ball.IsMoving())
     {
@@ -401,6 +426,7 @@ void AUOpenGolfPlayerController::DisconnectLaunchMonitor()
 
 void AUOpenGolfPlayerController::InjectReplayShot()
 {
+    if (bMainMenuOpen) return;
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetLaunchMonitor(*this))
     {
         LaunchMonitor->InjectReplayShotAt(SelectedReplayIndex);
@@ -434,6 +460,7 @@ void AUOpenGolfPlayerController::SetReplayPanelOpen(bool bOpen)
 
 void AUOpenGolfPlayerController::SelectNextClub()
 {
+    if (bMainMenuOpen) return;
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetLaunchMonitor(*this))
     {
         const int32 ClubCount = static_cast<int32>(ELaunchMonitorClub::Putter) + 1;
@@ -443,6 +470,7 @@ void AUOpenGolfPlayerController::SelectNextClub()
 
 void AUOpenGolfPlayerController::ResetBallToTee()
 {
+    if (bMainMenuOpen) return;
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
         // Only the player's tee-up clears the history tracers; the automatic re-tee keeps them.
@@ -454,6 +482,7 @@ void AUOpenGolfPlayerController::ResetBallToTee()
 
 bool AUOpenGolfPlayerController::SetAimYaw(float Degrees)
 {
+    if (bMainMenuOpen) return false;
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
     AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     // Turning mid-shot or under a stopped ball's result would change how its offline is measured.
@@ -533,8 +562,46 @@ void AUOpenGolfPlayerController::AdoptRangeWind()
 
 void AUOpenGolfPlayerController::ToggleRecordShots()
 {
+    if (bMainMenuOpen) return;
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
         Mode->SetRecordShots(!Mode->IsRecordingShots());
     }
+}
+
+void AUOpenGolfPlayerController::OpenMainMenu()
+{
+    if (MainMenu.IsValid()) MainMenu->Open();
+}
+
+bool AUOpenGolfPlayerController::IsPauseMenu() const
+{
+    return MainMenu.IsValid() && MainMenu->IsPauseMenu();
+}
+
+void AUOpenGolfPlayerController::ReturnToMainMenu()
+{
+    // The MainMenu option makes the reloaded controller open the menu, even under -NoMainMenu (automation).
+    UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, ReturnToMainMenuOption);
+}
+
+void AUOpenGolfPlayerController::SetMainMenuOpen(bool bOpen)
+{
+    bMainMenuOpen = bOpen;
+    TurnInput = 0; AimHeldSeconds = 0; bFineAimHeld = false;
+    if (PlayerInput) PlayerInput->FlushPressedKeys();
+    if (bOpen)
+    {
+        SetPlacingBall(false); SetWindPanelOpen(false); SetReplayPanelOpen(false);
+        FInputModeUIOnly Mode;
+        if (MainMenu.IsValid()) Mode.SetWidgetToFocus(MainMenu);
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        SetInputMode(Mode);
+    }
+    else
+    {
+        FInputModeGameAndUI Mode; Mode.SetHideCursorDuringCapture(false); Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock); SetInputMode(Mode);
+        if (FSlateApplication::IsInitialized()) FSlateApplication::Get().SetAllUserFocusToGameViewport();
+    }
+    bShowMouseCursor = true;
 }

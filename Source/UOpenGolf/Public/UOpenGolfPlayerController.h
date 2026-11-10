@@ -8,6 +8,7 @@
 class ACameraActor;
 class AOpenFairwayBall;
 class SWidget;
+class SMainMenu;
 class UInputAction;
 class UInputMappingContext;
 struct FInputActionValue;
@@ -16,7 +17,7 @@ struct FKey;
 /**
  * Range controls and the shot camera. Keys: C connect, T disconnect, H hit selected shot, P presets, Tab next
  * club, R tee up the ball again, G play the hole / back to the range, B place the ball (Hole mode; then click the
- * ground), hold A/D to turn the aim left/right, W the wind controls, F9 record shots on/off, Escape quit (or cancel
+ * ground), hold A/D to turn the aim left/right, W the wind controls, F9 record shots on/off, Escape menu (or cancel
  * placing, or close the wind controls). The camera
  * waits behind the ball along the aim line, holds that view for half a second after the hit, then follows low behind the
  * ball in flight and at rest, then glides back to the address view when the ball is ready for the next shot. On or near
@@ -30,6 +31,16 @@ class UOPENGOLF_API AUOpenGolfPlayerController : public APlayerController
     GENERATED_BODY()
 
 public:
+    bool IsMainMenuOpen() const { return bMainMenuOpen; }
+    /** The menu is the pause menu (Training was entered) rather than the main menu. */
+    bool IsPauseMenu() const;
+    void SetMainMenuOpen(bool bOpen);
+    void OpenMainMenu();
+    /**
+     * Ends the training session and shows the main menu: reloads the map, so the ball, round and session
+     * defaults start fresh and any recording is finalized. The launch monitor (game-instance) stays connected.
+     */
+    void ReturnToMainMenu();
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Launch Monitor")
     void ConnectLaunchMonitor();
 
@@ -123,7 +134,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Range")
     void QuitGame();
 
-    /** Escape: cancels placing the ball, else quits. */
+    /** Escape: cancels the current tool, otherwise opens the menu. */
     void HandleEscape();
 
     /**
@@ -173,6 +184,8 @@ private:
     // Near the cup: how far the follow view has closed in.
     float CupZoom = 0.0f;
 
+    TSharedPtr<SMainMenu> MainMenu;
+    bool bMainMenuOpen = false;
     TSharedPtr<SWidget> ReplayPanel;
     int32 SelectedReplayIndex = 0;
     bool bReplayPanelOpen = false;

@@ -16,6 +16,7 @@ class UOPENGOLF_API AUOpenGolfHUD : public AHUD
 public:
     /** Draws the uopengolf.WindDebug overlay when it is on. */
     virtual void DrawHUD() override;
+    void RefreshTheme();
 
 protected:
     virtual void BeginPlay() override;

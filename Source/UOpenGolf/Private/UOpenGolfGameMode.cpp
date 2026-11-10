@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfGameMode.h"
+#include "OpenGolfSettings.h"
+#include "GolfGimmieIndicator.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -28,6 +30,7 @@ AUOpenGolfGameMode::AUOpenGolfGameMode()
 
 void AUOpenGolfGameMode::StartPlay()
 {
+    GolfSettings::Load();
     UWorld* World = GetWorld();
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -56,6 +59,8 @@ void AUOpenGolfGameMode::StartPlay()
         Ball->PoleRadiusCm = UOpenGolfFlagstickComponent::PoleDiameterCm * 0.5f;
     }
     Round.Start(AUOpenGolfRange::Par);
+    if (Range) { CourseWindMph = Range->WindSpeedMph; CourseWindFrom = Range->WindFromDeg; }
+    StartSessionDefaults();
 
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
     {
@@ -65,10 +70,14 @@ void AUOpenGolfGameMode::StartPlay()
 
     GetWorldTimerManager().SetTimer(RecordingTimer, FTimerDelegate::CreateWeakLambda(this, [this]
                                                         {
-        if (Recorder) Recorder->Tick(); }),
+        if (Recorder) Recorder->Tick();
+        if (GimmieIndicator && Range)
+            GimmieIndicator->UpdateIndicator(Range->Terrain, GetCupLocation(), SessionGimmieFeet,
+                PlayMode == EOpenGolfPlayMode::Hole && !Round.bPractice && !Round.bHoled); }),
         0.1f, true);
 
     // Spawn the range before players start so the controller can find the ball.
+    GolfSettings::ApplyRuntime(World);
     Super::StartPlay();
     if (Ball && Range && Range->GetCup())
         Ball->SetCups({Range->GetCup()->GetCupDescriptor()});
@@ -95,6 +104,8 @@ void AUOpenGolfGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void AUOpenGolfGameMode::ResetBallToTee()
 {
     Round.Start(AUOpenGolfRange::Par);
+    LastScoredShot = INDEX_NONE;
+    if (PlayMode == EOpenGolfPlayMode::Hole) StartSessionDefaults();
     if (Recorder)
         Recorder->CancelSimulation();
     PlaceOnTee();
@@ -188,7 +199,7 @@ bool AUOpenGolfGameMode::IsBallAtAddress() const
     if (!Ball || Ball->IsMoving())
         return false;
     if (PlayMode == EOpenGolfPlayMode::Hole)
-        return bAddressReady && !Ball->IsHoled();
+        return bAddressReady && !Ball->IsHoled() && !Round.bHoled;
     return !Range || FVector::Dist2D(Ball->GetActorLocation(), Range->GetTeeLocation()) <= 200.0f;
 }
 
@@ -255,12 +266,16 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
     if (Round.bPractice)
     {
         if (Result.bHoled) HoledTime = GetWorld()->GetTimeSeconds();
-        GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::ResetAfterShot, ResetDelayS, false);
+        if (GolfSettings::Get().AutoTee > 0)
+            GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::ResetAfterShot, float(GolfSettings::Get().AutoTee), false);
         return;
     }
     if (PlayMode == EOpenGolfPlayMode::Hole)
     {
+        if (Round.bHoled || LastScoredShot == Result.ShotNumber) return;
+        LastScoredShot = Result.ShotNumber;
         Round.RecordStroke(bShotFromGreen, Result.bHoled);
+        Round.TryConcede(GetDistanceToCupM(), SessionGimmieFeet, Result.Surface == EOpenFairwaySurface::Green);
         if (Round.bHoled)
         {
             HoledTime = GetWorld()->GetTimeSeconds();
@@ -275,7 +290,8 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
         return;
     }
     // Leave the ball where it stopped so the shot can be seen, then tee up for the next one.
-    GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::ResetAfterShot, ResetDelayS, false);
+    if (GolfSettings::Get().AutoTee > 0)
+        GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::ResetAfterShot, float(GolfSettings::Get().AutoTee), false);
 }
 
 void AUOpenGolfGameMode::ResetAfterShot()
@@ -312,8 +328,21 @@ bool AUOpenGolfGameMode::ToLaunch(const FLaunchMonitorShot& Shot, FOpenFairwayLa
 
 void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
 {
+    UOpenLaunchMonitorSubsystem* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>();
+    // A refused shot is reported, so an Open Connect connector receives an error rather than a confirmation.
+    auto Reject = [LaunchMonitor, &Shot](const TCHAR* Reason) { if (LaunchMonitor) LaunchMonitor->RejectShot(Shot.ShotNumber, Reason); };
+    const auto* Player = Cast<AUOpenGolfPlayerController>(GetWorld()->GetFirstPlayerController());
+    if (Player && Player->IsMainMenuOpen())
+    {
+        Reject(TEXT("UOpenGolf menu is open; shot ignored"));
+        return;
+    }
     FOpenFairwayLaunch CheckedLaunch;
-    if (!Ball || !ToLaunch(Shot, CheckedLaunch)) return;
+    if (!Ball || !ToLaunch(Shot, CheckedLaunch))
+    {
+        Reject(TEXT("Shot needs ball speed and vertical launch angle"));
+        return;
+    }
     if (Round.bPractice) ResetBall();
     else if (PlayMode == EOpenGolfPlayMode::Range || Round.bHoled)
         ResetBallToTee();
@@ -326,7 +355,6 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     else if (!bAddressReady)
         ReadyForNextShot();
     GetWorldTimerManager().ClearTimer(AddressTimer);
-    const UOpenLaunchMonitorSubsystem* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>();
     if (Recorder && LaunchMonitor)
     {
         // The club selected now is the club this shot was hit with.
@@ -345,8 +373,12 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
         if (auto* PresentedBall = Cast<AUOpenGolfBall>(Ball))
             PresentedBall->StartShotTrail();
     }
-    else if (Recorder)
-        Recorder->CancelSimulation();
+    else
+    {
+        Reject(TEXT("The ball could not be launched"));
+        if (Recorder)
+            Recorder->CancelSimulation();
+    }
 }
 
 void AUOpenGolfGameMode::HandleClubData(const FLaunchMonitorClubData& ClubData)
@@ -354,5 +386,22 @@ void AUOpenGolfGameMode::HandleClubData(const FLaunchMonitorClubData& ClubData)
     if (Recorder)
     {
         Recorder->OnClubData(ClubData);
+    }
+}
+
+void AUOpenGolfGameMode::StartSessionDefaults()
+{
+    SessionGimmieFeet = GolfSettings::Get().GimmieFeet;
+    if (Ball) Ball->GreenStimpFeet = GolfSettings::Get().Stimp;
+    if (Range) Range->SetWind(GolfSettings::Get().WindMph >= 0 ? GolfSettings::Get().WindMph : CourseWindMph, CourseWindFrom);
+    if (!GimmieIndicator)
+    {
+        // The game mode is an AInfo, hidden in game, so its own components never render; the ring gets a visible host.
+        FActorSpawnParameters Params;
+        Params.ObjectFlags |= RF_Transient;
+        AActor* Host = GetWorld()->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, Params);
+        GimmieIndicator = NewObject<UGolfGimmieIndicator>(Host, TEXT("GimmieRing"));
+        Host->SetRootComponent(GimmieIndicator);
+        GimmieIndicator->RegisterComponent();
     }
 }

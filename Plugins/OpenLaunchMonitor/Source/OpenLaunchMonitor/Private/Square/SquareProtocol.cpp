@@ -3,6 +3,8 @@
 // SquareCommandBuilder.cs at 92eb021abe28d8eb1abe43f87767d3eb73e5939e.
 #include "Square/SquareProtocol.h"
 
+#include "LaunchMonitorLimits.h"
+
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -14,14 +16,13 @@ namespace
     constexpr int32 ClubFieldsOffset = 3;
     constexpr int32 ImpactHorizontalField = 4;
     constexpr int32 ImpactVerticalField = 5;
-    constexpr float MaxImpactHorizontalMm = 40.0f;
-    constexpr float MaxImpactVerticalMm = 30.0f;
+    using LaunchMonitorLimits::MaxImpactHorizontalMm;
+    using LaunchMonitorLimits::MaxImpactVerticalMm;
     // The device sends 0x8000 for a field it could not measure this shot.
     constexpr int16 InvalidReadingSentinel = static_cast<int16>(0x8000);
     // Club frames mark unmeasured fields with 0xFFFF.
     constexpr int16 ClubSentinel = -1;
-    // A putt or topped shot can launch slightly downward; a quarter turn or more is garbage.
-    constexpr float MaxAbsVerticalAngleDeg = 90.0f;
+    using LaunchMonitorLimits::MaxAbsVerticalAngleDeg;
 
     int16 ReadInt16LE(TConstArrayView<uint8> Data, int32 Offset)
     {
@@ -100,8 +101,8 @@ namespace
 
     bool IsPlausible(const FSquareShotMetrics& Metrics)
     {
-        return Metrics.BallSpeedMps > 0.0f && Metrics.BallSpeedMps < 250.0f && Metrics.TotalSpinRpm >= 0 &&
-               Metrics.TotalSpinRpm < 30000 && FMath::Abs(Metrics.VerticalAngleDeg) < MaxAbsVerticalAngleDeg;
+        return Metrics.BallSpeedMps > 0.0f && Metrics.BallSpeedMps < LaunchMonitorLimits::MaxBallSpeedMps && Metrics.TotalSpinRpm >= 0 &&
+               Metrics.TotalSpinRpm < LaunchMonitorLimits::MaxSpinRpm && FMath::Abs(Metrics.VerticalAngleDeg) < MaxAbsVerticalAngleDeg;
     }
 
     TArray<uint8> CommandFromHex(const FString& Hex)

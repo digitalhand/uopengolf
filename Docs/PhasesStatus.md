@@ -207,6 +207,63 @@ The `UOpenGolf.Range` tests cover all of these on both platforms.
 
 Newest first. Evidence paths are relative to the repository root.
 
+- **2026-11-09, Windows 11, Unreal 5.8.4 Development editor: GSPro Open Connect compatible listener.**
+  - **Added:** a second launch-monitor provider that accepts shots from third-party connector
+    apps over TCP ([details](LaunchMonitorIntegration.md#open-connect-provider-third-party-connectors)).
+    It is chosen in Settings → Simulator, which has the live status, Start/Stop listening, the port
+    (921 on Windows, 49152 on Linux), LAN access and a list of compatible connectors.
+  - **Behaviour:**
+    - Shots refused by the game (menu open, unusable data) are answered with 501, and accepted shots with 200.
+    - Club and handedness are sent to the connector as 201 player information.
+    - F9 records Open Connect shots under the connector's DeviceID.
+    - The disconnected HUD tip now ends with "Set up: Esc".
+  - **Menu:**
+    - Home shows Exit, and the exit confirmation button is Yes.
+    - Simulator is the second settings category.
+  - **Tests:**
+    - `Scripts/ue.ps1 Test` passes all 84 (`Saved/Automation/20261109-221728-3ad6df34`), including
+      `UOpenGolf.LaunchMonitor.OpenConnect.Protocol` and `.Loopback`. The loopback test drives a real
+      socket client through split messages, 200/501/201 replies, heartbeats, a club change, disconnect,
+      stop and a provider switch.
+    - `Test -Filter UOpenGolf.Visual -Rendered` passes all 9 (`Saved/Automation/20261109-221218-315e5753`).
+      The menu captures now include the Simulator and Open Connect pages.
+  - **Not yet done:**
+    - A real connector (MLM2PRO / Mevo+, SkyTrak, Garmin R10 or PiTrac) against uopengolf.
+    - LAN mode, and the Windows firewall prompt.
+    - Linux.
+
+- **2026-11-09, Windows 11, Unreal 5.8.4 Development editor: main menu and settings ([design](menu-design.md)).**
+  - **Added:** a Slate home/pause menu (Training or Resume training, Settings, Exit) with
+    a header chip showing the real launch-monitor state that opens Settings → Simulator. Settings has
+    eight categories, Apply/Discard/Reset All, a 15 s Keep/Revert for display changes, and Escape/B
+    to go back. Preferences live in `Saved/Config/<platform>/UOpenGolfPreferences.ini`
+    (`[UOpenGolf.Preferences.v1]`, not read under `-NoMainMenu`). Also: units, auto tee delay,
+    camera, tracer, shot-data detail, HUD and text scale, high contrast, reduced motion, stimp,
+    wind, Square spin mode, gimmie radius and ring, and the HUD in the menu palette. Shots that
+    arrive while the menu is open are rejected, not queued.
+  - **Fixes during handover:**
+    - Preferences save (`FConfigFile::SetInt64`).
+    - Garbled `·`/`—` in HUD text.
+    - Pin distance back to whole units.
+    - The Settings category list overflowing the footer at 720p.
+    - The gimmie ring never rendering: it was owned by the hidden game mode and is now on its own actor.
+    - The rendered test helper hovers before clicking, because `SButton` needs hover.
+  - **Tests:** `Scripts/ue.ps1 Test` passes all 82 (`Saved/Automation/20261109-212719-e88d3e9d`).
+    `Test -Filter UOpenGolf.Visual -Rendered` passes all 9 (`Saved/Automation/20261109-213015-7d4ddfcf`).
+    Menu captures are in `Saved/Screenshots/Menu`.
+  - **Not done** (shown disabled with a reason, per the design):
+    - Audio.
+    - Club suggestion, landing camera, green contours, color palettes and subtitles.
+    - Mulligans, fairway firmness and time of day.
+    - Diagnostic logging and recording retention.
+    - Readiness sound and device selection.
+  - **Also not done:**
+    - Live search (it applies on Enter).
+    - D-pad row navigation.
+    - HDR/upscaler capability checks.
+    - 4K and ultrawide captures.
+    - Owner visual review.
+
 - **2026-11-09, Windows 11, Unreal 5.8.4 Development editor: audit fixes and the seven failing tests.**
   - **Baseline:** unchanged `main` failed 7 of 68 tests (`Saved/Automation/20261109-170347-02ef9b82`).
     After the changes below all 78 pass (`Saved/Automation/20261109-180842-0eb74dc7`); the golden

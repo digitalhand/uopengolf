@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/WindIndicator.h"
+#include "UI/HudStyle.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
@@ -28,7 +29,7 @@ int32 SWindIndicator::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry,
         &CircleBrush, ESlateDrawEffect::None, Tint);
 
     const FString Label = State.SpeedLabel();
-    const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", 16);
+    const FSlateFontInfo Font = HudStyle::Font("Bold", 16);
     const FVector2D TextSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(Label, Font);
     FSlateDrawElement::MakeText(Elements, Layer + 1,
         Geometry.ToPaintGeometry(FVector2f(TextSize), FSlateLayoutTransform(FVector2f((CircleX - TextSize.X) * 0.5, (PanelHeight - TextSize.Y) * 0.5))),

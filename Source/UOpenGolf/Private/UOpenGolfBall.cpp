@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfBall.h"
+#include "OpenGolfSettings.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
@@ -68,6 +69,8 @@ void AUOpenGolfBall::ClearRibbon(FUOpenGolfTrailRibbon& Ribbon)
 
 void AUOpenGolfBall::ApplyRibbonLook(FUOpenGolfTrailRibbon& Ribbon, const FLinearColor& Color, float Opacity)
 {
+    if (GolfSettings::Get().Tracer == 0) Opacity = 0;
+    else if (GolfSettings::Get().Tracer == 2) Opacity = FMath::Min(1.f, Opacity * 2.f);
     if (Ribbon.Material && Ribbon.AppliedColor != Color)
     {
         Ribbon.Material->SetVectorParameterValue(TEXT("Color"), Color);
@@ -159,7 +162,10 @@ void AUOpenGolfBall::Tick(float DeltaSeconds)
     RangePerformance::FScope Timing(RangePerformance::Trail);
     // History ribbons only re-orient when the camera moves.
     for (const int32 Index : HistoryRibbons)
+    {
+        ApplyRibbonLook(Ribbons[Index], HistoryTrailColor, HistoryTrailOpacity);
         UpdateTrailGeometry(Ribbons[Index]);
+    }
     if (!bTrailActive)
         return;
     FUOpenGolfTrailRibbon& Ribbon = Ribbons[CurrentRibbon];
