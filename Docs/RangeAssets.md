@@ -27,7 +27,7 @@ Cut turf has no world-position displacement; the tall rough, the grass under the
 jacarandas move in the wind (see [Wind on trees and grass](#wind-on-trees-and-grass)).
 
 The flag is simulated cloth: gravity drops it, and the wind flies and flaps it (see the
-[kit README](../Plugins/OpenGolfCourse/README.md#flagstick)). Its pole is 213.36 cm above ground,
+[kit README](../Plugins/OpenGolfCourse/Docs/Reference.md#flagstick)). Its pole is 213.36 cm above ground,
 1.27 cm in diameter, with a 35.56 by 50.8 cm flag. These are conventional flag dimensions, not prescribed
 PGA dimensions. The ball is rendered at 42.67 mm diameter, matching the
 [USGA minimum](https://www.usga.org/equipment-standards/equipment-rules-2019/equipment-rules/part-4-rule-4.html).
@@ -132,7 +132,7 @@ Offset from the course kit's `MF_VegetationWind`, driven by `MPC_Wind`. Leaves f
 sway and the whole plant leans and sways about its base, each from its Beaufort force upward; gusts
 roll downwind at the wind's speed. Trees hold still beyond 150 m and grass where it fades out, so
 distant shadows stay cached. Cut turf, litter, moss, rocks and seedlings stay still. To add wind to
-other vegetation, see the [kit README](../Plugins/OpenGolfCourse/README.md#vegetation-wind).
+other vegetation, see the [kit README](../Plugins/OpenGolfCourse/Docs/Reference.md#vegetation-wind).
 
 ## Sources and regeneration
 
@@ -191,16 +191,12 @@ Run only one editor at a time, and check again before measuring. Another editor 
 GPU time and shader-working files, so its presence invalidates a controlled FPS comparison.
 The first rendered run using the project-local cache may spend several minutes
 compiling shaders.
-Static tee, grass-off, closeup and coverage-edge views additionally capture 20
-frames at half-second intervals to inspect flicker. The tee views match the startup
-camera's 70-degree field of view and unrestricted aspect ratio. The report records
-actual viewport dimensions and anti-aliasing settings; editor captures may differ
-from the requested command-line resolution. Compare equal-sized sequences with
-`python3 Scripts/grass_stability.py Saved/Screenshots/RangeAssets --sequence <id>`.
-This measures changes over the lower 40% of the image, averaging consecutive pairs;
-it counts a pixel as changed when any RGB channel differs by more than 3/255. Each view
-also reports its worst 5%-high horizontal band, which catches localized flicker such as
-distant moire near the horizon that the lower-40% figure misses.
+For terrain and vegetation shimmer, use `UOpenGolf.Visual.CoastalTerrain` in Play
+and `Scripts/grass_stability.py --profile coastal`. The older RangeAssets views above
+remain useful for the ball and flag; they are not the coastal shimmer baseline.
+Compare equal-sized sequences at fixed cameras and AA settings, including grass on/off
+and slow camera motion. See [phase status](PhasesStatus.md#tree-canopy-shimmer--2026-10-27)
+for the baseline, canopy measurements and remaining checks.
 
 `UOpenGolf.Range.ShotTrail`
 checks path creation, monotonic rollout fade, disappearance at rest and reset for

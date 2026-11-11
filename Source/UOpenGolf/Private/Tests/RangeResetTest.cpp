@@ -109,6 +109,9 @@ public:
         Test->TestEqual(TEXT("Total kept"), Result.TotalM, Rested.TotalM);
         FLaunchMonitorShot Shot;
         Test->TestTrue(TEXT("Launch-monitor shot kept"), Monitor && Monitor->GetLastShot(Shot) && Shot.ShotNumber == MonitorShotNumber);
+        Mode->RouteEndPlay(EEndPlayReason::RemovedFromWorld);
+        Test->TestFalse(TEXT("Ending play releases the ball's rest callback"),
+            Ball->OnBallAtRest.Contains(Mode, FName(TEXT("HandleBallAtRest"))));
         return true;
     }
 

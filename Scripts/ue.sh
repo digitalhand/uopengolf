@@ -101,7 +101,7 @@ case "$action" in
         # Linux uses UnrealEditor with unattended/NullRHI flags; no separate -Cmd binary is required.
         result=0
         timeout --kill-after=10s "${timeout_seconds}s" "$editor" "$project" \
-            -unattended -nopause -nosplash -nosound -nullrhi -DDC=UOpenGolfSmoke -stdout -FullStdOutLogOutput \
+            -unattended -nopause -nosplash -nosound -nullrhi -NoMainMenu -DDC=UOpenGolfSmoke -stdout -FullStdOutLogOutput \
             "-ExecCmds=Automation RunTests $tests" '-TestExit=Automation Test Queue Empty' \
             "-ReportExportPath=$report" "-abslog=$report/Unreal.log" \
             >"$report/stdout.log" 2>"$report/stderr.log" || result=$?

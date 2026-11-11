@@ -2,6 +2,7 @@
 #include "UI/MainMenu.h"
 #include "UI/HudStyle.h"
 #include "UI/ShotDisplay.h"
+#include "OpenGolfGameUserSettings.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfHUD.h"
 #include "Engine/Engine.h"
@@ -29,6 +30,10 @@ namespace
 {
     const TCHAR* Categories[] = {TEXT("Player"), TEXT("Simulator"), TEXT("Video"), TEXT("Audio"), TEXT("Camera & HUD"), TEXT("Accessibility"), TEXT("Game Defaults"), TEXT("Data & system")};
     UGameUserSettings* EngineSettings() { return GEngine ? GEngine->GetGameUserSettings() : nullptr; }
+    /** Null when the project settings class is not configured; render resolutions are then not offered. */
+    UOpenGolfGameUserSettings* RenderSettings() { return Cast<UOpenGolfGameUserSettings>(EngineSettings()); }
+    // SDL gives Borderless and Fullscreen the same desktop-fullscreen window (FLinuxWindow::SetWindowMode).
+    constexpr bool BorderlessIsFullscreen = PLATFORM_LINUX != 0;
     // Confirmation dialogs, identified by their titles.
     const TCHAR* MainMenuDialog = TEXT("Return to the main menu?");
     const TCHAR* ExitDialog = TEXT("Exit to desktop?");
@@ -39,13 +44,35 @@ bool SMainMenu::FVideo::operator==(const FVideo& Other) const
     for (int32 I=0; I<10; ++I) if (Quality[I] != Other.Quality[I]) return false;
     return true;
 }
+DisplayOptions::FFacts SMainMenu::Facts()
+{
+    DisplayOptions::FFacts F;
+    F.bBorderlessIsFullscreen=BorderlessIsFullscreen;
+    UKismetSystemLibrary::GetSupportedFullscreenResolutions(F.RhiModes);
+    if(const auto* S=EngineSettings()) F.Desktop=S->GetDesktopResolution();
+    if(FSlateApplication::IsInitialized())
+    {
+        FDisplayMetrics Metrics; FSlateApplication::Get().GetCachedDisplayMetrics(Metrics);
+        const FPlatformRect& Work=Metrics.PrimaryDisplayWorkAreaRect;
+        F.WorkArea=FIntPoint(Work.Right-Work.Left,Work.Bottom-Work.Top);
+    }
+    // Without the project settings class a render resolution cannot be stored, so desktop-sized modes offer the desktop only.
+    F.bRenderResolution=RenderSettings()!=nullptr;
+    return F;
+}
 SMainMenu::FVideo SMainMenu::ReadVideo()
 {
     FVideo V;
     if (auto* S = EngineSettings())
     {
-        V.Resolution=S->GetScreenResolution(); V.Mode=int32(S->GetFullscreenMode()); V.VSync=S->IsVSyncEnabled(); V.FPS=FMath::RoundToInt(S->GetFrameRateLimit());
-        float Normalized, Current, Min, Max; S->GetResolutionScaleInformationEx(Normalized, Current, Min, Max); V.Scale=FMath::RoundToInt(Current);
+        const DisplayOptions::FFacts F=Facts();
+        V.Mode=DisplayOptions::ShownMode(int32(S->GetFullscreenMode()),BorderlessIsFullscreen);
+        const auto* R=RenderSettings();
+        const FIntPoint Stored=R?R->GetRenderResolution():S->GetScreenResolution();
+        V.Resolution=DisplayOptions::Choose(DisplayOptions::Resolutions(V.Mode,F,Stored),Stored);
+        V.VSync=S->IsVSyncEnabled(); V.FPS=FMath::RoundToInt(S->GetFrameRateLimit());
+        // A zero resolution quality is the engine's "project default", which renders at full size.
+        float Normalized, Current, Min, Max; S->GetResolutionScaleInformationEx(Normalized, Current, Min, Max); V.Scale=Current>0?FMath::RoundToInt(Current):100;
         const int32 Q[] = {S->GetViewDistanceQuality(),S->GetAntiAliasingQuality(),S->GetShadowQuality(),S->GetGlobalIlluminationQuality(),S->GetReflectionQuality(),S->GetPostProcessingQuality(),S->GetTextureQuality(),S->GetVisualEffectQuality(),S->GetFoliageQuality(),S->GetShadingQuality()};
         for(int32 I=0;I<10;++I)V.Quality[I]=Q[I];
     }
@@ -246,14 +273,24 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
             AddPreference(Rows,TEXT("Auto tee delay"),TEXT("After the next shot stops. Manual uses R to reset."),&P::AutoTee,{TEXT("3 seconds"),TEXT("5 seconds"),TEXT("8 seconds"),TEXT("Manual")},{3,5,8,0});break;
         case 2:
         {
-            AddChoice(Rows,TEXT("Display mode"),TEXT("Display changes require confirmation."),{TEXT("Fullscreen"),TEXT("Borderless"),TEXT("Windowed")},{0,1,2},[this]{return Video.Mode;},[this](int32 V){Video.Mode=V;});
-            TArray<FIntPoint> Resolutions; UKismetSystemLibrary::GetSupportedFullscreenResolutions(Resolutions);Resolutions.AddUnique(Video.Resolution);
+            const DisplayOptions::FFacts F=Facts();
+            const DisplayOptions::FModeChoice ModeChoice=DisplayOptions::Modes(BorderlessIsFullscreen);
+            // A mode change re-selects a resolution the new mode offers and rebuilds the page from the next tick.
+            AddChoice(Rows,TEXT("Display mode"),TEXT("Display changes require confirmation."),ModeChoice.Labels,ModeChoice.Values,[this]{return Video.Mode;},
+                [this,F](int32 V){Video.Mode=V;Video.Resolution=DisplayOptions::Choose(DisplayOptions::Resolutions(V,F,Video.Resolution),Video.Resolution);bRebuildPending=true;});
+            const bool bDesktopSized=DisplayOptions::DesktopSized(Video.Mode,F);
+            TArray<FIntPoint> Resolutions=DisplayOptions::Resolutions(Video.Mode,F,Video.Resolution);
+            if(Resolutions.IsEmpty())Resolutions.Add(Video.Resolution);
             TArray<FString> Labels;TArray<int32> Values;
             for(int32 I=0;I<Resolutions.Num();++I){Labels.Add(FString::Printf(TEXT("%d x %d"),Resolutions[I].X,Resolutions[I].Y));Values.Add(I);}
-            AddChoice(Rows,TEXT("Resolution"),TEXT("Modes reported by the display."),Labels,Values,[this,Resolutions]{return Resolutions.IndexOfByKey(Video.Resolution);},[this,Resolutions](int32 V){Video.Resolution=Resolutions[V];},Video.Mode!=1);
+            const TCHAR* ResolutionHelp=Video.Mode==DisplayOptions::Windowed?TEXT("Window sizes that fit the desktop."):bDesktopSized?TEXT("Rendered at this size and scaled to the display."):TEXT("Modes reported by the display.");
+            AddChoice(Rows,TEXT("Resolution"),ResolutionHelp,Labels,Values,[this,Resolutions]{return Resolutions.IndexOfByKey(Video.Resolution);},[this,Resolutions](int32 V){Video.Resolution=Resolutions[V];},Resolutions.Num()>1);
             AddChoice(Rows,TEXT("Frame rate limit"),TEXT("Limit rendering work and power use."),{TEXT("60 FPS"),TEXT("120 FPS"),TEXT("144 FPS"),TEXT("Unlimited")},{60,120,144,0},[this]{return Video.FPS;},[this](int32 V){Video.FPS=V;});
             AddChoice(Rows,TEXT("VSync"),TEXT("Synchronize with the display."),{TEXT("Off"),TEXT("On")},{0,1},[this]{return Video.VSync;},[this](int32 V){Video.VSync=V;});
-            AddChoice(Rows,TEXT("Render scale"),TEXT("Percentage of output resolution used for rendering."),{TEXT("75%"),TEXT("85%"),TEXT("100%")},{75,85,100},[this]{return Video.Scale;},[this](int32 V){Video.Scale=V;});
+            if(bDesktopSized)
+                AddChoice(Rows,TEXT("Render scale"),TEXT("Set by Resolution in this mode."),{FString::Printf(TEXT("%d%%"),Video.Scale)},{Video.Scale},[this]{return Video.Scale;},[](int32){},false);
+            else
+                AddChoice(Rows,TEXT("Render scale"),TEXT("Percentage of output resolution used for rendering."),{TEXT("75%"),TEXT("85%"),TEXT("100%")},{75,85,100},[this]{return Video.Scale;},[this](int32 V){Video.Scale=V;});
             const TArray<FString> Quality={TEXT("Low"),TEXT("Medium"),TEXT("High"),TEXT("Epic")}; const TArray<int32> Levels={0,1,2,3};
             AddChoice(Rows,TEXT("Quality preset"),TEXT("Individual changes produce a Custom preset."),Quality,Levels,[this]{for(int32 I=1;I<10;++I)if(Video.Quality[I]!=Video.Quality[0])return -1;return Video.Quality[0];},[this](int32 V){for(int32& Q:Video.Quality)Q=V;});
             const TCHAR* Names[]={TEXT("View distance"),TEXT("Anti-aliasing"),TEXT("Shadows"),TEXT("Global illumination"),TEXT("Reflections"),TEXT("Post-processing"),TEXT("Textures"),TEXT("Effects"),TEXT("Foliage"),TEXT("Shading")};
@@ -303,7 +340,8 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
         +SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Reset All"),[this]{
             // The launch-monitor connection is changed live, never by Reset All.
             Draft={};Draft.Provider=Saved.Provider;Draft.OpenConnectPort=Saved.OpenConnectPort;Draft.OpenConnectLan=Saved.OpenConnectLan;
-            Video.VSync=0;Video.FPS=60;Video.Scale=100;for(int32& Q:Video.Quality)Q=2;Video.Mode=1;Video.Resolution=EngineSettings()->GetDesktopResolution();Rebuild();})]
+            Video.VSync=0;Video.FPS=60;Video.Scale=100;for(int32& Q:Video.Quality)Q=2;
+            Video.Mode=DisplayOptions::ShownMode(DisplayOptions::Borderless,BorderlessIsFullscreen);Video.Resolution=EngineSettings()->GetDesktopResolution();Rebuild();})]
         +SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Discard"),[this]{Draft=Saved;Video=SavedVideo;Rebuild();})]
         +SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Apply"),[this]{Apply();},true)]];
 }
@@ -311,9 +349,12 @@ void SMainMenu::Apply()
 {
     if(!Dirty())return;
     auto* S=EngineSettings();if(!S)return;
-    if(Video.Resolution!=SavedVideo.Resolution || Video.Mode!=SavedVideo.Mode)
+    // Only a different window needs the Keep/Revert countdown; a render size inside the same window applies at once.
+    const DisplayOptions::FFacts F=Facts();
+    const DisplayOptions::FRequest Next=DisplayOptions::Plan(Video.Mode,Video.Resolution,F), Prev=DisplayOptions::Plan(SavedVideo.Mode,SavedVideo.Resolution,F);
+    if(Next.EngineMode!=Prev.EngineMode || Next.ScreenResolution!=Prev.ScreenResolution)
     {
-        S->SetScreenResolution(Video.Resolution);S->SetFullscreenMode(EWindowMode::Type(Video.Mode));S->ApplyResolutionSettings(false);
+        S->SetScreenResolution(Next.ScreenResolution);S->SetFullscreenMode(EWindowMode::Type(Next.EngineMode));S->ApplyResolutionSettings(false);
         bConfirmDisplay=true;ConfirmDeadline=FPlatformTime::Seconds()+15;Rebuild();
     }
     else Commit();
@@ -322,13 +363,21 @@ void SMainMenu::RevertDisplay()
 {
     if(!bConfirmDisplay)return;
     bConfirmDisplay=false;
-    if(auto* S=EngineSettings()){S->SetScreenResolution(SavedVideo.Resolution);S->SetFullscreenMode(EWindowMode::Type(SavedVideo.Mode));S->ApplyResolutionSettings(false);S->ConfirmVideoMode();}
+    if(auto* S=EngineSettings())
+    {
+        const DisplayOptions::FRequest Prev=DisplayOptions::Plan(SavedVideo.Mode,SavedVideo.Resolution,Facts());
+        S->SetScreenResolution(Prev.ScreenResolution);S->SetFullscreenMode(EWindowMode::Type(Prev.EngineMode));S->ApplyResolutionSettings(false);S->ConfirmVideoMode();
+    }
     Video.Resolution=SavedVideo.Resolution;Video.Mode=SavedVideo.Mode;
 }
 void SMainMenu::Commit()
 {
     auto* S=EngineSettings();if(!S)return;
-    S->SetVSyncEnabled(Video.VSync!=0);S->SetFrameRateLimit(Video.FPS);S->SetResolutionScaleValueEx(Video.Scale);
+    // In a desktop-sized mode the chosen resolution is the render size, from which the engine derives the render scale.
+    auto* R=RenderSettings();
+    if(R && DisplayOptions::DesktopSized(Video.Mode,Facts())) R->SetRenderResolution(Video.Resolution);
+    else { if(R) R->ClearRenderResolution(); S->SetResolutionScaleValueEx(Video.Scale); }
+    S->SetVSyncEnabled(Video.VSync!=0);S->SetFrameRateLimit(Video.FPS);
     S->SetViewDistanceQuality(Video.Quality[0]);S->SetAntiAliasingQuality(Video.Quality[1]);S->SetShadowQuality(Video.Quality[2]);S->SetGlobalIlluminationQuality(Video.Quality[3]);S->SetReflectionQuality(Video.Quality[4]);S->SetPostProcessingQuality(Video.Quality[5]);S->SetTextureQuality(Video.Quality[6]);S->SetVisualEffectQuality(Video.Quality[7]);S->SetFoliageQuality(Video.Quality[8]);S->SetShadingQuality(Video.Quality[9]);
     S->ApplyNonResolutionSettings();S->SaveSettings();
     SavedVideo=Video=ReadVideo();

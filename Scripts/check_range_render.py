@@ -39,7 +39,7 @@ def main():
     prefix = 'UOpenGolf.Visual.ShotTrail' if args.shot_trail else 'UOpenGolf.Visual.RangeAssets'
     report = root / 'Saved/Automation' / (datetime.now().strftime('%Y%m%d-%H%M%S') + '-render-' + uuid.uuid4().hex[:8])
     report.mkdir(parents=True)
-    command = [str(binary), str(root / 'UOpenGolf.uproject'), '-unattended', '-nopause', '-nosplash', '-nosound',
+    command = [str(binary), str(root / 'UOpenGolf.uproject'), '-NoMainMenu', '-unattended', '-nopause', '-nosplash', '-nosound',
                '-DDC=UOpenGolfSmoke', f'-ExecCmds=Automation RunTests {prefix}',
                '-TestExit=Automation Test Queue Empty', f'-ReportExportPath={report}',
                f'-abslog={report / "Editor.log"}', f'-RangeVisualMap={args.map}', '-RenderOffscreen', '-ResX=1280', '-ResY=720']
