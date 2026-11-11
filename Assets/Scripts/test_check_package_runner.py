@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from check_package_runner import (
+from Assets.Scripts.check_package_runner import (
     check_checkout,
     check_engine,
     check_no_editor,
