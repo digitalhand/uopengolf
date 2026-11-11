@@ -152,7 +152,7 @@ def main(argv: list[str]) -> int:
         print(f"Set UE_ROOT on the runner to its {ENGINE_NAME} installation.", file=sys.stderr)
         return 1
     engine = Path(args.engine_root)
-    project = Path(__file__).resolve().parent.parent
+    project = Path(__file__).resolve().parent.parent.parent
     try:
         check_engine(engine, system)
         check_tools(engine, system)

@@ -6,7 +6,7 @@ import unittest
 
 from PIL import Image
 
-from grass_stability import compare_frames, compare_sequence, find_sequence, latest_sequence, worst_band
+from Assets.Scripts.grass_stability import compare_frames, compare_sequence, find_sequence, latest_sequence, worst_band
 
 
 class GrassStabilityTests(unittest.TestCase):

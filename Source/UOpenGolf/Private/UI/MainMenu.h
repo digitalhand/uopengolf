@@ -2,6 +2,7 @@
 #pragma once
 #include "Widgets/SCompoundWidget.h"
 #include "OpenGolfSettings.h"
+#include "UI/DisplayOptions.h"
 #include "Styling/SlateTypes.h"
 class AUOpenGolfPlayerController;
 class SVerticalBox;
@@ -30,6 +31,8 @@ private:
         bool operator!=(const FVideo& Other) const { return !(*this == Other); }
     };
     static FVideo ReadVideo();
+    /** The display as the engine and Slate report it: exclusive modes, desktop and work area. */
+    static DisplayOptions::FFacts Facts();
     void Rebuild();
     void BuildSettings(TSharedRef<SVerticalBox> Body);
     void AddChoice(TSharedRef<SVerticalBox> Rows, const FString& Label, const FString& Help,

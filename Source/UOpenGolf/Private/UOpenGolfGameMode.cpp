@@ -85,6 +85,11 @@ void AUOpenGolfGameMode::StartPlay()
 
 void AUOpenGolfGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (IsValid(Ball))
+        Ball->OnBallAtRest.RemoveDynamic(this, &ThisClass::HandleBallAtRest);
+    GetWorldTimerManager().ClearTimer(ResetTimer);
+    GetWorldTimerManager().ClearTimer(AddressTimer);
+    GetWorldTimerManager().ClearTimer(RecordingTimer);
     if (UGameInstance* GameInstance = GetGameInstance())
     {
         if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GameInstance->GetSubsystem<UOpenLaunchMonitorSubsystem>())
@@ -97,7 +102,6 @@ void AUOpenGolfGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     {
         Recorder->Shutdown();
     }
-    GetWorldTimerManager().ClearTimer(RecordingTimer);
     Super::EndPlay(EndPlayReason);
 }
 

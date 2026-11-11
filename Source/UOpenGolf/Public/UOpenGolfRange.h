@@ -11,10 +11,9 @@ class AOpenFairwayBall;
 class AOpenGolfTerrainArea;
 
 /**
- * Driving range controller on a course terrain area: daylight, the target flagstick, wind for the ball,
- * flag and the world's vegetation (through UOpenGolfWindSubsystem), green speed, and the 3D grass switch. The terrain provides the ground, whose
- * surfaces declare their physics through physical materials. The tee is on the terrain at the actor's
- * origin and the target line is world +X.
+ * Controls daylight, the flag, wind, green speed and grass visibility.
+ * The terrain supplies ground and physical surfaces. The tee is at this actor's origin;
+ * the target line follows world +X.
  */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfRange : public AActor
@@ -91,8 +90,7 @@ public:
     float WindFromDeg = 0.0f;
 
     /**
-     * Sets the wind controls and passes them to the ball, flag and vegetation at once rather than on the range's next
-     * (quarter-second) tick, so a shot hit straight after a change flies in it. A shot already moving keeps its wind.
+     * Applies wind immediately so the next shot uses it. A moving shot keeps its captured wind.
      */
     void SetWind(float SpeedMph, float FromDeg);
 

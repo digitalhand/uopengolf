@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import sys
 
-DEFAULT_INI = Path(__file__).resolve().parent.parent / "Config" / "DefaultGame.ini"
+DEFAULT_INI = Path(__file__).resolve().parent.parent.parent / "Config" / "DefaultGame.ini"
 SECTION = "[/Script/EngineSettings.GeneralProjectSettings]"
 KEY = "ProjectVersion="
 # MAJOR.MINOR.PATCH with an optional -prerelease; build metadata (+...) is not accepted.

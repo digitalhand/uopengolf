@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-import flightscope_compare as compare_script
+import Assets.Scripts.flightscope_compare as compare_script
 
 
 LIBRARY_HEADER = ("shot_name,filename,speed_mph,vla_deg,hla_deg,total_spin_rpm,spin_axis_deg,"

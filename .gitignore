@@ -27,6 +27,9 @@ AGENTS.md
 CLAUDE.md
 CLAUDE.local.md
 .claude
+*.superpowers
+.mcp.*
+
 
 # Agent Docs
 /Docs/superpowers/*

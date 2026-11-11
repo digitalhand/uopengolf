@@ -5,7 +5,7 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: bash Scripts/draft_release.sh TAG PRERELEASE(true|false) FILE..." >&2
+    echo "Usage: bash Assets/Scripts/draft_release.sh TAG PRERELEASE(true|false) FILE..." >&2
 }
 
 [[ $# -ge 3 ]] || { usage; exit 2; }

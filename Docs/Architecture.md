@@ -3,17 +3,15 @@
 ## Current foundation
 
 The game module is `UOpenGolf`. Its C++ GameMode uses the map's saved range controller
-(`AUOpenGolfRange`) and spawns a game-side `AUOpenGolfBall` on its tee. Ground, tee box,
-flagstick and lighting are separate saved actors, selectable before Play. A blank legacy map
-still builds the same layout at runtime. Multiple controllers are rejected to prevent duplicate
-scenes. Every launch-monitor shot starts from the tee. Three
-seconds after the ball stops, the GameMode puts it back on the tee; the ball keeps
+(`AUOpenGolfRange`) and spawns a game-side `AUOpenGolfBall` on its tee. The terrain owns the ground. The flagstick and lighting are saved actors, selectable before Play. Multiple controllers are rejected to prevent duplicate
+scenes. Range shots start from the tee; hole play uses the current lie and counts strokes and putts.
+In range mode, the GameMode returns a stopped ball to the tee after the configured delay; the ball keeps
 its last shot result until the next launch. The HUD
 adds a Slate widget (`SRangeHud`) with shot tiles and a launch-monitor status box; the player controller
 binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D held
 to turn the aim) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
 actions and one mapping context built in code (no input assets); a HUD panel that holds keyboard
-focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no pawn, course or scoring. `UOpenGolf`
+focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no player pawn. Hole play supports a par 4, practice placement and gimmies. `UOpenGolf`
 is the saved range map used for editor and game startup, and the project's only map. A world
 without a range controller gets one with daylight and a flag; the ground always comes from a
 terrain area.
@@ -98,7 +96,7 @@ Green speed is the ball's `GreenStimpFeet` (8–15, default 10); during Play,
 `uopengolf.GreenStimp` changes it from the next shot. OpenFairway solves the green's rolling
 friction from the stimp together with the green's grass drag, so the range supplies only the
 setting and no green formula. See
-[Surfaces](../Plugins/OpenFairwayPhysics/README.md#surfaces).
+[Surfaces](../Plugins/OpenFairwayPhysics/Docs/Reference.md#surfaces).
 
 The `OpenLaunchMonitor` runtime plugin is the launch-monitor adapter:
 
@@ -136,7 +134,7 @@ rendered CPU measurements and their limits are recorded in
 Game and editor targets use UnrealBuildTool's standard C# configuration files.
 Gameplay remains native C++. Python is used only by developer utilities.
 
-## Future boundaries
+## Responsibilities
 
 | Component | Owns | Must remain separate from |
 | --- | --- | --- |
@@ -151,7 +149,7 @@ These are architectural responsibilities, not frozen APIs. The launch-monitor
 adapter, OpenFairway core and Unreal physics wrapper now exist as the two plugins
 above; the game/session layer is the range mode in `UOpenGolf`. The course/surface
 layer is the OpenGolfCourse plugin (surface materials, flagstick, ball, turf) and the
-whitebox range built from it.
+saved savanna range.
 
 ```mermaid
 flowchart LR
@@ -165,7 +163,7 @@ flowchart LR
 ```
 
 Every node exists in a first form: replay is built in, physics is the OpenFairway
-plugin, course geometry is the whitebox range built from the OpenGolfCourse kit, and presentation
+plugin, course geometry is the saved terrain built from the OpenGolfCourse kit, and presentation
 is the ball, tracer, shot camera and Slate HUD (shot tiles and launch-monitor status box).
 
 ## Reference projects
@@ -193,29 +191,20 @@ The sibling repositories are not required, modified, or linked by the build. The
 connector port is described in [launch-monitor integration](LaunchMonitorIntegration.md);
 the physics port in the [OpenFairway Physics README](../Plugins/OpenFairwayPhysics/README.md).
 
-## Contracts to establish in Phase 1
+## Data and simulation contracts
 
-Launch-monitor contracts are recorded in
-[launch-monitor integration](LaunchMonitorIntegration.md). The physics-side contracts
-below are recorded in the [OpenFairway Physics README](../Plugins/OpenFairwayPhysics/README.md):
-units and frames, the 120 Hz fixed step owned by the ball actor, game-thread only
-execution, and 21 golden fixtures with their tolerances.
-
-Document measured-shot units and optional values, axis/handedness and spin signs,
-Unreal centimeters versus physics units, timing and fixed-step ownership, thread
-handoff, connection lifecycle, and shot/club-data association. Preserve measured
-input independently of any game-side lie adjustment. Define baseline fixtures and
-comparison tolerances before porting the simulation.
-
-Resolve these from the actual upstream revisions and platform feasibility work;
-do not create speculative public structs or transports in the UOpenGolf module.
+[Launch-monitor integration](LaunchMonitorIntegration.md) defines device units, optional
+measurements, signs, threading and shot association. The [physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#units-and-coordinate-frames)
+defines coordinate conversion and fixed-step ownership. Preserve measured input separately
+from game-side lie adjustments. Historical fixtures check the port; they do not establish
+physical accuracy.
 
 ## Windows and Linux
 
 Both are supported targets. Shared game and physics code must stay portable;
 Bluetooth/platform dependencies belong behind the connector boundary. Case-correct
 paths, explicit engine locations, and equivalent Bash/PowerShell workflows are required.
-Mock and replay input will enable hardware-free community development.
+Replay input supports development without hardware.
 
 Track actual validation independently for each OS in [phase status](PhasesStatus.md).
 A build or test run on one OS does not establish compiler, rendering, Bluetooth or

@@ -6,7 +6,7 @@ import io
 import tempfile
 import unittest
 
-from project_version import main, read_project_version, stamp_version, version_for_ref
+from Assets.Scripts.project_version import main, read_project_version, stamp_version, version_for_ref
 
 
 SHA = "0123abcdef0123abcdef0123abcdef0123abcdef"

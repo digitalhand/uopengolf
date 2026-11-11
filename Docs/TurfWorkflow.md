@@ -253,7 +253,7 @@ rebuilding a graph with its final compilation result.
 
 After any turf edit, run `UOpenGolf.Visual.CoastalTerrain` in Play with one editor and a fixed
 layout. Compare grass-on and grass-off views (0/1, 4/5, 6/7); the cut turf should match its
-ground within a couple of sRGB levels. Analyze with `Scripts/grass_stability.py --profile coastal`,
+ground within a couple of sRGB levels. Analyze with `Assets/Scripts/grass_stability.py --profile coastal`,
 and compare second differences in the View 9 pan for motion flicker. Blender previews are not
 Unreal shimmer or performance evidence.
 

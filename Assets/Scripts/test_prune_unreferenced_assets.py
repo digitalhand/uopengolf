@@ -4,7 +4,7 @@
 import unittest
 from pathlib import Path
 
-from prune_unreferenced_assets import decide, expand, named_in_sources, package_file
+from Assets.Scripts.prune_unreferenced_assets import decide, expand, named_in_sources, package_file
 
 ART = "/Game/Fixture/Art"
 MAP = "/Game/Fixture/Maps/Range"

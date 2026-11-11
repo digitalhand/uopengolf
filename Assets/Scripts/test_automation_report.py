@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from check_automation_report import validate_report
+from Assets.Scripts.check_automation_report import validate_report
 
 
 SUCCESS = {

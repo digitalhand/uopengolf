@@ -19,12 +19,9 @@ namespace ShotRecording
 }
 
 /**
- * Uses the map's range controller (or spawns one with daylight and a flag), tees up an OpenFairway ball on its terrain
- * and hits every launch-monitor shot (device or replay). In Range mode every shot is hit from the tee and a stopped ball
- * goes back to it after ResetDelayS. In Hole mode the ball is played as it lies, strokes and putts are counted, and the
- * ball can be placed anywhere for practice; after it drops into the cup it goes back to the tee for a new hole. A shot
- * result stays available until the next launch. While shot recording is on, device shots are saved as JSON under
- * Documents/UOpenGolf/Saved/ShotRecordings.
+ * Runs range practice and hole play, receives launch-monitor shots and records device data.
+ * Range mode tees up each shot. Hole mode plays from the current lie and counts strokes and putts.
+ * Shot results remain available until the next launch.
  */
 UCLASS(Config = Game)
 class UOPENGOLF_API AUOpenGolfGameMode : public AGameModeBase
@@ -118,8 +115,6 @@ public:
     /** Hole mode: seconds after a hole-out before the ball goes back to the tee for a new hole. */
     static constexpr float HoleOutDelayS = 5.0f;
 
-
-
     /** Converts a launch-monitor shot; false when speed or launch angles were not measured. */
     static bool ToLaunch(const FLaunchMonitorShot& Shot, FOpenFairwayLaunch& OutLaunch);
 
@@ -166,5 +161,6 @@ private:
     float SessionGimmieFeet = 0;
     float CourseWindMph = 0, CourseWindFrom = 0;
     int32 LastScoredShot = INDEX_NONE;
-    UPROPERTY() TObjectPtr<UGolfGimmieIndicator> GimmieIndicator;
+    UPROPERTY()
+    TObjectPtr<UGolfGimmieIndicator> GimmieIndicator;
 };

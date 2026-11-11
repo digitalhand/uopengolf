@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from check_package_start import validate_start_log
+from Assets.Scripts.check_package_start import validate_start_log
 
 
 INIT = "LogInit: Display: Starting Game.\n"

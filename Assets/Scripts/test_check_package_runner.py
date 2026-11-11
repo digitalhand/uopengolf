@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from check_package_runner import (
+from Assets.Scripts.check_package_runner import (
     check_checkout,
     check_engine,
     check_no_editor,
@@ -82,7 +82,7 @@ class PackageRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Local Config"):
             check_checkout(self.root)
 
-    @patch("check_package_runner.run")
+    @patch("Assets.Scripts.check_package_runner.run")
     def test_accepts_downloaded_assets_with_spaces_and_unicode(self, command):
         names = ("Content/Map.umap", "Plugins/Open/Content/tree é.uasset")
         for name in names:
@@ -93,7 +93,7 @@ class PackageRunnerTests(unittest.TestCase):
             ["git", "ls-files", "-z", "--", "*.uasset", "*.umap"], cwd=self.root,
         )
 
-    @patch("check_package_runner.run", return_value="Content/Map.umap\0")
+    @patch("Assets.Scripts.check_package_runner.run", return_value="Content/Map.umap\0")
     def test_rejects_pointer_and_missing_asset(self, command):
         self.write("Content/Map.umap", "version https://git-lfs.github.com/spec/v1\noid sha256:123\n")
         with self.assertRaisesRegex(ValueError, "git lfs pull"):
@@ -102,12 +102,12 @@ class PackageRunnerTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             check_checkout(self.root)
 
-    @patch("check_package_runner.run", return_value="")
+    @patch("Assets.Scripts.check_package_runner.run", return_value="")
     def test_rejects_checkout_without_assets(self, command):
         with self.assertRaisesRegex(ValueError, "No tracked Unreal assets"):
             check_checkout(self.root)
 
-    @patch("check_package_runner.run")
+    @patch("Assets.Scripts.check_package_runner.run")
     def test_rejects_linux_development_and_debuggame_editors(self, command):
         for name in ("UnrealEditor", "UnrealEditor-Li", "UnrealEditor-Linux-DebugGame"):
             with self.subTest(name=name):
@@ -115,7 +115,7 @@ class PackageRunnerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Close it yourself"):
                     check_no_editor("Linux")
 
-    @patch("check_package_runner.run")
+    @patch("Assets.Scripts.check_package_runner.run")
     def test_rejects_windows_editors_and_command_editors(self, command):
         for name in ("UnrealEditor.exe", "UnrealEditor-Win64-DebugGame.exe", "UnrealEditor-Cmd.exe"):
             with self.subTest(name=name):
@@ -123,26 +123,26 @@ class PackageRunnerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "PID 123"):
                     check_no_editor("Windows")
 
-    @patch("check_package_runner.run")
+    @patch("Assets.Scripts.check_package_runner.run")
     def test_accepts_machine_without_editor(self, command):
         command.return_value = "  123 ShaderCompileWo\n  456 bash\n"
         check_no_editor("Linux")
         command.return_value = '"powershell.exe","456","Console","1","10 K"\n'
         check_no_editor("Windows")
 
-    @patch("check_package_runner.shutil.which", return_value=None)
+    @patch("Assets.Scripts.check_package_runner.shutil.which", return_value=None)
     def test_rejects_missing_tools(self, which):
         with self.assertRaisesRegex(ValueError, "Missing git"):
             check_tools(self.engine, "Linux")
 
-    @patch("check_package_runner.run", side_effect=ValueError("git failed"))
-    @patch("check_package_runner.shutil.which", return_value="tool")
+    @patch("Assets.Scripts.check_package_runner.run", side_effect=ValueError("git failed"))
+    @patch("Assets.Scripts.check_package_runner.shutil.which", return_value="tool")
     def test_explains_missing_git_lfs(self, which, command):
         with self.assertRaisesRegex(ValueError, "Install Git LFS"):
             check_tools(self.engine, "Linux")
 
-    @patch("check_package_runner.run")
-    @patch("check_package_runner.shutil.which", return_value="tool")
+    @patch("Assets.Scripts.check_package_runner.run")
+    @patch("Assets.Scripts.check_package_runner.shutil.which", return_value="tool")
     def test_checks_linux_toolchain_and_permissions(self, which, command):
         self.make_engine()
         command.side_effect = lambda args: "GNU tar" if args[0] == "tar" else "clang version 20.1.8"
@@ -156,8 +156,8 @@ class PackageRunnerTests(unittest.TestCase):
                        "v26_clang-20.1.8-rockylinux8/x86_64-unknown-linux-gnu/bin/clang++", root=self.engine)
             check_tools(self.engine, "Linux")
 
-    @patch("check_package_runner.run")
-    @patch("check_package_runner.registry_path")
+    @patch("Assets.Scripts.check_package_runner.run")
+    @patch("Assets.Scripts.check_package_runner.registry_path")
     def test_checks_windows_compiler_sdk_and_framework(self, registry, command):
         program_files = self.root / "Program Files (x86)"
         self.write("Microsoft Visual Studio/Installer/vswhere.exe", root=program_files)
@@ -184,20 +184,20 @@ class PackageRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "MSVC x64"):
                 check_windows_tools()
 
-    @patch("check_package_runner.subprocess.run")
+    @patch("Assets.Scripts.check_package_runner.subprocess.run")
     def test_rejects_failed_native_commands(self, command):
         command.return_value = subprocess.CompletedProcess(["git"], 1, "", "failed")
         with self.assertRaisesRegex(ValueError, "git failed"):
             run(["git", "lfs", "version"])
 
-    @patch("check_package_runner.platform.machine", return_value="x86_64")
-    @patch("check_package_runner.platform.system", return_value="Linux")
+    @patch("Assets.Scripts.check_package_runner.platform.machine", return_value="x86_64")
+    @patch("Assets.Scripts.check_package_runner.platform.system", return_value="Linux")
     def test_missing_engine_has_clear_error(self, system, machine):
         with patch.dict(os.environ, {"UE_ROOT": ""}), patch("sys.stderr", new_callable=io.StringIO) as error:
             self.assertEqual(main([]), 1)
         self.assertIn("Set UE_ROOT", error.getvalue())
 
-    @patch("check_package_runner.platform.system", return_value="Darwin")
+    @patch("Assets.Scripts.check_package_runner.platform.system", return_value="Darwin")
     def test_rejects_unsupported_platform(self, system):
         with patch("sys.stderr", new_callable=io.StringIO) as error:
             self.assertEqual(main(["--engine-root", str(self.engine)]), 1)
