@@ -18,16 +18,16 @@ Windows PowerShell:
 
 ```powershell
 $env:UE_ROOT = 'C:\Program Files\Epic Games\UE_5.8'
-powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Build
-powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Editor
+powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Build
+powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Editor
 ```
 
 Linux:
 
 ```bash
 export UE_ROOT='/path/to/UnrealEngine-5.8.4'
-bash Scripts/ue.sh build
-bash Scripts/ue.sh editor
+bash Assets/Scripts/ue.sh build
+bash Assets/Scripts/ue.sh editor
 ```
 
 Press **Play**, then choose **Training**. Press **H** for a replay shot and **P** to

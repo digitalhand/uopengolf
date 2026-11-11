@@ -15,9 +15,9 @@ each action on the same ref; a dual-boot machine can do this at different times.
 | Job | Runs on | What it does |
 | --- | --- | --- |
 | Version | GitHub-hosted Ubuntu | Runs the release-script unit tests and works out the version from the ref; an invalid tag fails here |
-| Linux package | Self-hosted, labels `self-hosted, Linux, X64, ue-5.8` | Stamps the version, runs `Scripts/ue.sh package` (build, cook, stage, 60 s start check) and archives the result |
-| Windows package | Self-hosted, labels `self-hosted, Windows, X64, ue-5.8` | The same with `Scripts/ue.ps1 Package` |
-| Draft release (Linux, Windows) | GitHub-hosted Ubuntu | Tags only, one per platform, as soon as that platform's package succeeds: creates the tag's draft release if needed and uploads that platform's archives with `Scripts/draft_release.sh` |
+| Linux package | Self-hosted, labels `self-hosted, Linux, X64, ue-5.8` | Stamps the version, runs `Assets/Scripts/ue.sh package` (build, cook, stage, 60 s start check) and archives the result |
+| Windows package | Self-hosted, labels `self-hosted, Windows, X64, ue-5.8` | The same with `Assets/Scripts/ue.ps1 Package` |
+| Draft release (Linux, Windows) | GitHub-hosted Ubuntu | Tags only, one per platform, as soon as that platform's package succeeds: creates the tag's draft release if needed and uploads that platform's archives with `Assets/Scripts/draft_release.sh` |
 
 Each platform allows one package job at a time, without cancelling an active build.
 Both workflows use the same release lock for a tag, so their uploads cannot race.
@@ -43,7 +43,7 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 4. Start the runner with `./run.sh` (Linux) or `run.cmd` (Windows) when you want to
    package, and stop it with Ctrl+C afterwards. Installing it as a service is optional.
 5. After an engine patch update, point each runner's `UE_ROOT` at the new installation
-   and update `ENGINE_VERSION` in `Scripts/check_package_runner.py`.
+   and update `ENGINE_VERSION` in `Assets/Scripts/check_package_runner.py`.
 
 | | Linux | Windows |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 | Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](Development.md#windows) |
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
-Before packaging, `Scripts/check_package_runner.py` checks the engine version, build
+Before packaging, `Assets/Scripts/check_package_runner.py` checks the engine version, build
 tools, Git LFS assets and absence of local `Config/User*.ini` files.
 It also checks for Development, DebugGame and command-line Unreal editors anywhere on
 the machine. Close the editor before starting a build and leave it closed until the
@@ -97,11 +97,11 @@ build:
 
 The job writes the version into its own checkout; nothing is committed. Release tags are
 `v` followed by `MAJOR.MINOR.PATCH`, with an optional `-prerelease`. Build metadata
-(`+...`) is rejected. `Scripts/project_version.py` does the checking and stamping. To see
+(`+...`) is rejected. `Assets/Scripts/project_version.py` does the checking and stamping. To see
 what a ref would produce:
 
 ```bash
-python3 Scripts/project_version.py for-ref tag v1.2.3 "$(git rev-parse HEAD)"
+python3 Assets/Scripts/project_version.py for-ref tag v1.2.3 "$(git rev-parse HEAD)"
 ```
 
 ### Making a release

@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 LIBRARY_DIR = ROOT / "Data" / "ShotLibrary"
 RESULTS_PATH = ROOT / "Saved" / "ShotLibrary" / "results.csv"
 HISTORY_DIR = ROOT / "Saved" / "ShotLibrary" / "history"

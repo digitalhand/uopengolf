@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: bash Scripts/ue.sh {build|editor|run|smoke|test|package|projectfiles|compilecommands} [--engine-root PATH] [--target editor|game] [--timeout SECONDS] [--filter TEST.PREFIX]"
+    echo "Usage: bash Assets/Scripts/ue.sh {build|editor|run|smoke|test|package|projectfiles|compilecommands} [--engine-root PATH] [--target editor|game] [--timeout SECONDS] [--filter TEST.PREFIX]"
 }
 
 action="${1:-build}"
@@ -33,7 +33,7 @@ case "$target" in editor|game) ;; *) usage; exit 2 ;; esac
 [[ -n "$engine_root" ]] || { echo 'Set UE_ROOT or supply --engine-root pointing to Unreal Engine 5.8.' >&2; exit 2; }
 
 script_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-project_root="$(cd -- "$script_root/.." && pwd)"
+project_root="$(cd -- "$script_root/../.." && pwd)"
 project="$project_root/UOpenGolf.uproject"
 engine_root="$(cd -- "$engine_root" && pwd)"
 editor="$engine_root/Engine/Binaries/Linux/UnrealEditor"

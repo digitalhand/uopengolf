@@ -17,7 +17,7 @@ import sys
 
 import unreal as ue
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Plugins/OpenGolfCourse/Scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Plugins/OpenGolfCourse/Scripts"))
 import generated_folders
 
 MAP = "/Game/UOpenGolf/Maps/UOpenGolf"

@@ -33,7 +33,7 @@ def main():
         parser.error('--map must be an Unreal package path without spaces or command separators')
     if not args.engine_root:
         parser.error('Set UE_ROOT or supply --engine-root')
-    root = Path(__file__).resolve().parent.parent
+    root = Path(__file__).resolve().parent.parent.parent
     engine = Path(args.engine_root)
     binary = engine / ('Engine/Binaries/Win64/UnrealEditor-Cmd.exe' if os.name == 'nt' else 'Engine/Binaries/Linux/UnrealEditor')
     prefix = 'UOpenGolf.Visual.ShotTrail' if args.shot_trail else 'UOpenGolf.Visual.RangeAssets'
@@ -58,7 +58,7 @@ def main():
         # (FUnixPlatformMisc::RequestExit), so the report decides pass/fail for 0 and 1.
         if result.returncode not in (0, 1) or not (report / 'index.json').is_file():
             raise subprocess.CalledProcessError(result.returncode, command)
-        subprocess.run([sys.executable, str(root / 'Scripts/check_automation_report.py'), str(report / 'index.json'), '--prefix', prefix], check=True)
+        subprocess.run([sys.executable, str(root / 'Assets/Scripts/check_automation_report.py'), str(report / 'index.json'), '--prefix', prefix], check=True)
     except (subprocess.SubprocessError, OSError) as error:
         print(f'Verification failed: {error}. See {report}', file=sys.stderr)
         return 1

@@ -10,7 +10,7 @@ grass, View1 the same camera without grass, View4 the grass closeup and View5 th
 The coastal profile also measures a fixed tree-canopy box in the views that show trees, with
 the share of pixels that sparkle (change by more than 16/255). Requires Pillow. Example:
 
-    python3 Scripts/grass_stability.py Saved/Screenshots/RangeAssets --sequence 20261016-010000
+    python3 Assets/Scripts/grass_stability.py Saved/Screenshots/RangeAssets --sequence 20261016-010000
 """
 import argparse
 from dataclasses import dataclass

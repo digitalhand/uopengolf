@@ -141,7 +141,7 @@ The flagstick, ball, turf, grass and their materials belong to the
 sources, conversions, checksums, the editable Blender sources and the rebuild steps. See
 [third-party notices](../THIRD_PARTY_NOTICES.md) for asset licenses and authors.
 
-The game keeps only the tracer material. Run `Scripts/UpdateRangePresentation.py` through
+The game keeps only the tracer material. Run `Assets/Scripts/UpdateRangePresentation.py` through
 Unreal Python (`-ExecutePythonScript`, or `py` in the editor) to regenerate `M_ShotTrail`.
 The game-owned ribbon uses a two-sided unlit translucent material with feathered
 edges and a `Color` parameter (white by default) that tints the history tracers
@@ -192,7 +192,7 @@ GPU time and shader-working files, so its presence invalidates a controlled FPS 
 The first rendered run using the project-local cache may spend several minutes
 compiling shaders.
 For terrain and vegetation shimmer, use `UOpenGolf.Visual.CoastalTerrain` in Play
-and `Scripts/grass_stability.py --profile coastal`. The older RangeAssets views above
+and `Assets/Scripts/grass_stability.py --profile coastal`. The older RangeAssets views above
 remain useful for the ball and flag; they are not the coastal shimmer baseline.
 Compare equal-sized sequences at fixed cameras and AA settings, including grass on/off
 and slow camera motion. See [phase status](PhasesStatus.md#tree-canopy-shimmer--2026-10-27)
@@ -206,8 +206,8 @@ For a CPU comparison without screenshot encoding, set `UE_ROOT`, build the edito
 and run these sequentially on an otherwise idle machine:
 
 ```powershell
-python Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing --legacy-trail
-python Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing
+python Assets/Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing --legacy-trail
+python Assets/Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing
 ```
 
 `--legacy-trail` selects the previous geometry implementation in development automation

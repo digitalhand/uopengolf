@@ -59,13 +59,13 @@ Linux scripts accept `--engine-root PATH`. Windows falls back to the standard
 
 | Action | Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File` | Linux: `bash` |
 | --- | --- | --- |
-| Build Development Editor | `Scripts/ue.ps1 Build` | `Scripts/ue.sh build` |
-| Open editor | `Scripts/ue.ps1 Editor` | `Scripts/ue.sh editor` |
-| Run through editor executable in game mode | `Scripts/ue.ps1 Run` | `Scripts/ue.sh run` |
-| Run headless startup smoke test | `Scripts/ue.ps1 Smoke` | `Scripts/ue.sh smoke` |
-| Run automation tests by name prefix | `Scripts/ue.ps1 Test -Filter UOpenGolf.LaunchMonitor` | `Scripts/ue.sh test --filter UOpenGolf.LaunchMonitor` |
-| Compile Development game target | `Scripts/ue.ps1 Build -Target Game` | `Scripts/ue.sh build --target game` |
-| Package the game and check it starts | `Scripts/ue.ps1 Package` | `Scripts/ue.sh package` |
+| Build Development Editor | `Assets/Scripts/ue.ps1 Build` | `Assets/Scripts/ue.sh build` |
+| Open editor | `Assets/Scripts/ue.ps1 Editor` | `Assets/Scripts/ue.sh editor` |
+| Run through editor executable in game mode | `Assets/Scripts/ue.ps1 Run` | `Assets/Scripts/ue.sh run` |
+| Run headless startup smoke test | `Assets/Scripts/ue.ps1 Smoke` | `Assets/Scripts/ue.sh smoke` |
+| Run automation tests by name prefix | `Assets/Scripts/ue.ps1 Test -Filter UOpenGolf.LaunchMonitor` | `Assets/Scripts/ue.sh test --filter UOpenGolf.LaunchMonitor` |
+| Compile Development game target | `Assets/Scripts/ue.ps1 Build -Target Game` | `Assets/Scripts/ue.sh build --target game` |
+| Package the game and check it starts | `Assets/Scripts/ue.ps1 Package` | `Assets/Scripts/ue.sh package` |
 
 Build the editor target **before** running the editor, game-mode preview, or smoke test.
 The game-target command compiles native code; it does not cook or package a standalone
@@ -94,7 +94,7 @@ Default timeout is 600 seconds; use `-TimeoutSeconds` or `--timeout` (up to 3600
 Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
 
 The report validator and the FlightScope comparison script also have engine-free checks:
-`python Scripts/test_automation_report.py` and `python Scripts/test_flightscope_compare.py`
+`python3 -m unittest Assets.Scripts.test_automation_report` and `python3 -m unittest Assets.Scripts.test_flightscope_compare` from the repository root
 (Windows), or the same with `python3` (Linux).
 
 The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
@@ -107,7 +107,7 @@ without the editor. Close the Unreal Editor first, then run from the repository 
 
 | | Windows | Linux |
 | --- | --- | --- |
-| Command | `powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Package` | `bash Scripts/ue.sh package` |
+| Command | `powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Package` | `bash Assets/Scripts/ue.sh package` |
 | Output | `Packaged/Windows/` | `Packaged/Linux/` |
 | Run the game | `Packaged/Windows/UOpenGolf.exe` | `Packaged/Linux/UOpenGolf.sh` |
 | Game logs | `Packaged/Windows/UOpenGolf/Saved/Logs/` | `Packaged/Linux/UOpenGolf/Saved/Logs/` |
@@ -116,7 +116,7 @@ without the editor. Close the Unreal Editor first, then run from the repository 
 The action deletes the previous `Packaged/<platform>/` folder, runs `RunUAT BuildCookRun`
 for a Development package (log: `Saved/Logs/Package.log`), then starts the packaged game
 headless for 60 s with its log in a new `Saved/Automation/<stamp>-package-*/Game.log`.
-`Scripts/check_package_start.py` fails the run unless that log shows the startup map
+`Assets/Scripts/check_package_start.py` fails the run unless that log shows the startup map
 loaded and contains no `Fatal error`, `Assertion failed`, `Unhandled Exception` or
 `appError called`. The script takes the same `--engine-root` / `-EngineRoot` as the
 other actions. `Packaged/` is ignored by Git. To share or move the game, copy the whole
@@ -160,7 +160,7 @@ for Unreal **5.8.4**, not a request to downgrade to 5.8.0. The original map was
 generated with 5.8.3. Do not change the association to `5.8.4` merely to match the
 patch number: it identifies a registered engine installation. Patch updates within 5.8
 (for example 5.8.3 to 5.8.4) keep the same association; the package check requires the
-exact patch named in `Scripts/check_package_runner.py`.
+exact patch named in `Assets/Scripts/check_package_runner.py`.
 
 Unreal's project browser shows "This project was made with a different version"
 when the project's engine identifier differs from the running editor's identifier.
@@ -170,8 +170,8 @@ or registered under a custom identifier.
 Select the intended engine explicitly and launch directly after building:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Build -EngineRoot 'C:\Program Files\Epic Games\UE_5.8'
-powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Editor -EngineRoot 'C:\Program Files\Epic Games\UE_5.8'
+powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Build -EngineRoot 'C:\Program Files\Epic Games\UE_5.8'
+powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Editor -EngineRoot 'C:\Program Files\Epic Games\UE_5.8'
 ```
 
 This bypasses the project browser's identifier-based conversion prompt. If already
@@ -193,10 +193,10 @@ Install Microsoft's **C/C++** extension (`ms-vscode.cpptools`) and open the actu
 Generate the native Unreal VS Code workspace and IntelliSense configuration:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 ProjectFiles
+powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 ProjectFiles
 ```
 
-On Linux, set `UE_ROOT` and run `bash Scripts/ue.sh projectfiles` instead. This
+On Linux, set `UE_ROOT` and run `bash Assets/Scripts/ue.sh projectfiles` instead. This
 uses UnrealBuildTool's VS Code generator, following
 [Epic's VS Code setup workflow](https://dev.epicgames.com/documentation/en-us/unreal-engine/setting-up-visual-studio-code-for-unreal-engine).
 Open the resulting `UOpenGolf.code-workspace` file. Generation creates local
@@ -223,11 +223,11 @@ Do not copy `MyProject` or compiler paths from tutorial screenshots.
 To refresh just the compilation database after building:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 CompileCommands
+powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 CompileCommands
 ```
 
 The local VS Code task **uopengolf: refresh compile commands** runs the same command.
-On Linux, use `bash Scripts/ue.sh compilecommands`. Run it again after
+On Linux, use `bash Assets/Scripts/ue.sh compilecommands`. Run it again after
 `projectfiles`, which replaces the database with a smaller one.
 This uses UnrealBuildTool's `GenerateClangDatabase` mode with the Windows MSVC
 toolchain explicitly selected; installing Clang is not necessary for this Windows
@@ -257,5 +257,5 @@ the **DebugGame** editor keeps project modules unoptimized for stepping. To disp
 `python import sys, gdb.printing; sys.path.insert(0, '<UE_ROOT>/Engine/Extras/GDBPrinters'); from UEPrinters import register_ue_printers; register_ue_printers(None)`
 (the `gdb.printing` import is required). Folder-level `.vscode/tasks.json` and
 `.vscode/launch.json` are not overwritten by regeneration, unlike the workspace file.
-Generation also writes a local `.ignore` that excludes `Docs/`, `Scripts/`, `Content/` and
+Generation also writes a local `.ignore` that excludes `Docs/`, `Assets/`, `Content/` and
 `Data/` from ripgrep-based search.

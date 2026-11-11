@@ -16,7 +16,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$projectRoot = Split-Path $PSScriptRoot -Parent
+$projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $project = Join-Path $projectRoot 'UOpenGolf.uproject'
 
 try {

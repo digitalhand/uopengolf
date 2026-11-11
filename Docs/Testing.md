@@ -16,12 +16,12 @@ interactive editor before starting an automated one. Use the public map:
 Set `UE_ROOT` and run from the repository root:
 
 ```bash
-bash Scripts/ue.sh build
-bash Scripts/ue.sh smoke
-bash Scripts/ue.sh test --filter UOpenGolf.Range.AutoReset
+bash Assets/Scripts/ue.sh build
+bash Assets/Scripts/ue.sh smoke
+bash Assets/Scripts/ue.sh test --filter UOpenGolf.Range.AutoReset
 ```
 
-On Windows, use `Scripts/ue.ps1 Build`, `Smoke`, or `Test -Filter <prefix>` through
+On Windows, use `Assets/Scripts/ue.ps1 Build`, `Smoke`, or `Test -Filter <prefix>` through
 PowerShell. Headless runs use NullRHI, so they do not validate rendering. Automation passes
 `-NoMainMenu` to enter Play directly and use default preferences. Reports and
 logs go to a fresh directory under `Saved/Automation/`. The report must contain
@@ -52,11 +52,11 @@ for an isolated change once its results are understood.
 
 `UOpenGolf.Visual.*` tests require rendering and are excluded from NullRHI runs.
 Use the relevant rendered test and inspect its images. A successful screenshot request
-alone is not visual evidence. `Scripts/check_range_render.py` runs range/flag captures
+alone is not visual evidence. `Assets/Scripts/check_range_render.py` runs range/flag captures
 or tracer captures with `--shot-trail`.
 
 Use `UOpenGolf.Visual.CoastalTerrain` for terrain and vegetation stability. Compare
-stationary Play sequences with grass on and off using `Scripts/grass_stability.py
+stationary Play sequences with grass on and off using `Assets/Scripts/grass_stability.py
 --profile coastal`, then inspect slow camera motion. Keep the camera, resolution,
 AA settings and editor layout fixed. See [Range assets](RangeAssets.md) for wind checks
 and [phase status](PhasesStatus.md) for baseline measurements and pending acceptance.
