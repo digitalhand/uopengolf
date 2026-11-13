@@ -74,7 +74,11 @@ try {
                     Out-File -LiteralPath "$logs\Package.log" -Encoding utf8
             }
             finally { $ErrorActionPreference = $previousPreference }
-            if ($LASTEXITCODE -ne 0) { throw "Packaging failed (exit $LASTEXITCODE). See $logs\Package.log" }
+            $packageExitCode = $LASTEXITCODE
+            if ($packageExitCode -ne 0) {
+                Get-Content -LiteralPath "$logs\Package.log" -Tail 200 | ForEach-Object { Write-Host $_ }
+                throw "Packaging failed (exit $packageExitCode). See $logs\Package.log"
+            }
             $game = Join-Path $packaged 'UOpenGolf.exe'
             if (-not (Test-Path -LiteralPath $game)) { throw "Packaged game not found: $game" }
             $runId = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-package-' + [guid]::NewGuid().ToString('N').Substring(0, 8)

@@ -392,10 +392,10 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     if (CloudRecorder && LaunchMonitor)
     {
         auto* Online = GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>();
-        OpenGolfOnline::FShotOwner Owner;
+        OpenGolfOnline::FShotOwner ShotOwner;
         // Recording (F9) saves shots; while signed in they go to the online profile as well as to local files.
-        if (Online) { Owner.Key=Online->GetAccountKey(); Owner.bSave=Online->HasSession() && IsRecordingShots(); }
-        CloudRecorder->Begin(Shot,LaunchMonitor->GetClub(),Owner,PlayMode==EOpenGolfPlayMode::Range && !Round.bPractice,
+        if (Online) { ShotOwner.Key=Online->GetAccountKey(); ShotOwner.bSave=Online->HasSession() && IsRecordingShots(); }
+        CloudRecorder->Begin(Shot,LaunchMonitor->GetClub(),ShotOwner,PlayMode==EOpenGolfPlayMode::Range && !Round.bPractice,
             ShotRecording::IsRecordable(Shot,LaunchMonitor->GetConnectionState()));
     }
     // Range mode hits from the tee; Hole mode from wherever the ball lies.
