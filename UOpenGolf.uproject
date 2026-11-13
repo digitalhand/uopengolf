@@ -55,6 +55,10 @@
 			"Enabled": true,
 			"Optional": true,
 			"TargetAllowList": [ "Editor" ]
+		},
+		{
+			"Name": "OpenGolfOnline",
+			"Enabled": true
 		}
 	],
 	"TargetPlatforms": [

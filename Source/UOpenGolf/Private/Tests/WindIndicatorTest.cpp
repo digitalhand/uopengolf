@@ -5,8 +5,8 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Misc/AutomationTest.h"
 #include "OpenGolfWindIndicator.h"
-#include "UI/WindDisplay.h"
-#include "UI/WindIndicator.h"
+#include "UI/Wind/WindDisplay.h"
+#include "UI/Wind/WindIndicator.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindDisplayTest, "UOpenGolf.Range.WindIndicator.Direction",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

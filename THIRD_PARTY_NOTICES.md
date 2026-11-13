@@ -1,6 +1,7 @@
 # Third-party notices
 
-No third-party code or purchased content is bundled. The public range includes
+The project bundles the MIT-licensed Project Nayuki QR encoder in
+[OpenGolfOnline](Plugins/OpenGolfOnline/NOTICE.md). No purchased content is bundled. The public range includes
 the following redistributable CC0 assets, with import dates recorded below. They retain CC0
 1.0 Universal rather than the project's MIT license; attribution is not required
 by CC0 and is recorded here for provenance.

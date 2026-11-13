@@ -37,6 +37,10 @@ CLAUDE.local.md
 # Per-machine config layer.
 /Config/User*.ini
 
+# The editor's per-user content folders, named after the OS account.
+/Content/Developers/
+/Plugins/*/Content/Developers/
+
 # Blender projects live outside the repository under the Blender art root
 # (Plugins/OpenGolfCourse/Scripts/art_root.py); only Unreal-ready assets are committed.
 *.blend

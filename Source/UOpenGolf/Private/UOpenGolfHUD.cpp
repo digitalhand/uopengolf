@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfHUD.h"
 #include "OpenGolfSettings.h"
-#include "UI/HudStyle.h"
+#include "UI/Common/HudStyle.h"
 #include "OpenFairwayBall.h"
 
 #include "Engine/Canvas.h"
@@ -10,10 +10,10 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
-#include "UI/HudLayers.h"
-#include "UI/PlayModeBar.h"
-#include "UI/RangeHud.h"
-#include "UI/WindControl.h"
+#include "UI/Common/HudLayers.h"
+#include "UI/Hud/PlayModeBar.h"
+#include "UI/Hud/RangeHud.h"
+#include "UI/Wind/WindControl.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfRange.h"
@@ -22,7 +22,7 @@
 #include "OpenGolfFlagstickComponent.h"
 #include "OpenGolfWindIndicator.h"
 #include "OpenGolfWindSubsystem.h"
-#include "UI/WindDebug.h"
+#include "UI/Wind/WindDebug.h"
 
 namespace
 {

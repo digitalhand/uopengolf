@@ -10,8 +10,8 @@ nothing until it does.
 | --- | --- |
 | **C** | Connect to a Square Home (scans for up to 30 s) |
 | **T** | Disconnect the launch monitor |
-| **Tab** | Next club: Driver, 3/5/7 Wood, 4–9 Iron, Pitching/Gap/Sand Wedge, Lob Wedge (club code `0d06`; the Square Home arms and measures with it, but it may treat it like a sand wedge), Putter, then back to Driver |
-| **F9** | Record shots on/off (only while a launch monitor is connected) |
+| **Tab** | Next club: Driver (**DR**), 3/5/7 Wood (**3W**–**7W**), 4–9 Iron (**4i**–**9i**), Pitching/Gap/Sand Wedge (**PW**, **GW**, **SW**), Lob Wedge (**LW**; club code `0d06`; the Square Home arms and measures with it, but it may treat it like a sand wedge), Putter (**PT**), then back to Driver |
+| **F9** | On the range: record shots on/off, the same as clicking the record icon; while signed in, recorded shots also go to your online profile. Does nothing on the hole |
 | **H** | Hit the selected test shot again |
 | **P** | Open or close the test-shot list |
 | **R** | Tee the ball up again straight away (on the hole, a new hole) |
@@ -20,34 +20,67 @@ nothing until it does.
 | **W** | Open or close the wind controls under the wind indicator (the same as clicking the indicator) |
 | **A** / **D** | Turn the aim line left / right: a tap turns exactly 0.25° (0.1° with **Shift**), a hold starts slowly and speeds up to 20°/s (with **Shift**, stays at 2°/s), up to 45° either way (from the target line on the range, from the line to the cup on the hole), while the ball waits for the shot. The camera turns with it, the aim stays set across shots, and Offline is measured from it. Use it to hit into the rough |
 | **~** | Unreal console, for the [settings](#settings) below |
-| **Escape** | Cancel placing the ball, or close the wind controls; otherwise open the pause menu |
+| **Escape** | Cancel placing the ball, or close the wind controls or the test-shot list; otherwise open the pause menu |
+| **F6** | Move the keys onto the HUD's buttons, or back to the game (see [Without a mouse](#without-a-mouse)) |
 
 The mouse is used for the test-shot panel at the bottom left, the play buttons at the top
-left, the wind indicator and its controls at the top centre, and placing the ball. The shot
-tiles and the status box do not take clicks.
+left, the wind indicator and its controls at the top centre, the club picker, the status
+box's two icons, and placing the ball. The shot tiles take no clicks. Nothing in the game
+shows a tooltip; captions under the icons name what they do.
+
+#### Without a mouse
+
+The HUD's buttons also work from the keyboard or a gamepad:
+
+- **F6** (gamepad: **View**) moves the keys onto the HUD's buttons. These are the club picker,
+  the status icons, the play buttons, the wind controls and the test-shot list.
+- **Up**/**Down**, **Tab**/**Shift+Tab** or the D-pad move between them.
+- **Enter**, **Space** or **A** presses the focused one.
+- **Escape** (gamepad: **B**) or **F6** again hands the keys back to the game, so **Tab**
+  changes club again.
+- The gamepad **Menu** button opens the menu, and goes back a page while it is open. In the
+  menu, **B** goes back like **Escape**, and the shoulder buttons change Settings category.
+- While placing a ball (**B** key or the ball button), the left stick moves the cursor and **A**
+  places the ball there.
+
+Only simulated key events are covered by the automated tests; a real gamepad has not been
+checked.
 
 ### HUD
 
-- **Shot tiles** (right edge): a header with the shot number, its state (in flight,
-  rolling, at rest) and the selected club, then the results (total, carry, roll, apex,
-  offline, hang time, landing), the club data and, in darker tiles, the raw
-  launch-monitor values. `…` means the value is still coming, `—` that it is missing,
-  `*` that it is derived from other measurements, and `L`/`R` the direction.
-- **Status box** (bottom right): the launch-monitor state (Disconnected, Scanning,
-  Connecting, Connected, Ready), battery and **Aim** (Straight, or degrees
-  left/right of the target line, in tenths under 10°; on the hole also how far wide of the
-  cup the line passes, in yards, or feet in the short game). While connected it also shows
-  **Record Shots** (Off, or On with the number of shots saved). Failed saves keep
-  the status visible after disconnect and show the unsaved count and error while
-  retrying; see [Recording errors and retries](#recording-errors-and-retries).
-  The usual key tips are
-  **Connect [C]**, or **Disconnect [T] · Record [F9]**.
+- **Ball-ready glow**: while the ball waits at address, a soft ring hugs its outline:
+  red until the launch monitor detects the ball, green once it does. Without a launch
+  monitor it stays red. It hides while the ball flies or rolls, until it is teed up again,
+  while you place a ball and on a practice hole (a placed ball).
+- **Shot tiles** (right edge): a header with the shot number and its state (in flight,
+  rolling, at rest; empty before the first shot) and the club picker, then the results
+  (total, carry, roll, apex, offline, hang time, landing), the club data and, in darker
+  tiles, the raw launch-monitor values. The column keeps its width whatever the club or
+  heading. `…` means the value is still coming, `—` that it is missing, `*` that it is
+  derived from other measurements, and `L`/`R` the direction.
+- **Club picker** (in the tile header): the club face and its abbreviation (**DR**, **7i**,
+  **PW**, …). Click it to choose a club from the list; **Tab** also changes clubs.
+- **Status box** (bottom right): **Aim** (Straight, or degrees left/right of the target
+  line, in tenths under 10°; on the hole also how far wide of the cup the line passes, in
+  yards, or feet in the short game), then two icons:
+  - the **launch monitor**, green when Ready, amber while scanning or connecting and gray
+    when disconnected, with its battery level when the device reports one. Its caption reads
+    **Connect [C]** while disconnected. Click it to open Settings › Simulator; **C** connects
+    and **T** disconnects.
+  - on the range only, the **record** toggle, captioned **Record [F9]**: a red dot with the
+    number of shots saved while recording, a gray ring when off. Click it or press **F9**. The
+    hole has no record toggle and never records.
+
+  A failed save turns the record icon amber with the unsaved count, and the error shows
+  beside the icons while retrying; see [Recording errors and retries](#recording-errors-and-retries).
+  A launch-monitor error shows there too.
 - **Play buttons** (top left): round icon buttons in the tile style. The flag button
   (**Play hole [G]**) switches to the hole; while playing it is ringed and reads **Range [G]**,
   and a ball button (**Place ball [B]**) appears beside it. Under them the hole tiles show
-  **Hole 1 · Par 4 · 400 yd** (and **Practice** once the ball was placed), the stroke being
-  played, the distance **To Pin** (feet on the green, yards elsewhere) and **Putts**. A banner
-  names the score when the ball drops.
+  **Hole 1 · Par 4 · 400 yd**, the stroke being played, the distance **To Pin** (feet on the
+  green, yards elsewhere) and **Putts**. While you place a ball, and for the rest of a hole
+  with a placed ball, the heading reads **Practice · Ball placement** and those three tiles
+  are hidden. A banner names the score when the ball drops.
 - **Wind** (top centre): the wind speed and an arrow for the way it blows, turned with the
   camera. Click it (or press **W**) to slide out the wind controls under it:
   - an **On/Off** switch; off is calm, and the speed is kept for when it is switched back on;
@@ -65,7 +98,7 @@ tiles and the status box do not take clicks.
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
   from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
-  currently **v0.0.6**. Change the version there; packaged builds use the same value.
+  currently **v0.0.7**. Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](Releases.md#versioning)).
 
 On the range, a stopped ball stays put for 3 seconds with its result shown, then goes back to
@@ -102,22 +135,26 @@ bunker right of the green.
 
 ### Changing clubs
 
-Press **Tab** to select the next club. The current club is shown at the top of the shot
-tiles. When a Square Home is connected, the club is also sent to the device. Choose the
-club before you hit: recorded shots are tagged with the club selected when the shot
-arrives. The club resets to Driver at the start of every Play session, and there is
-no mouse club picker yet.
+Press **Tab** to select the next club, or click the club at the top of the shot tiles and
+pick one from the list. When a Square Home is connected, the club is also sent to the
+device. Choose the club before you hit: recorded shots are tagged with the club selected
+when the shot arrives. The club resets to Driver at the start of every Play session.
 
 ### Recording shots
 
 Real launch-monitor shots can be saved, tagged with the selected club, to replay them
 in other tools (openfairway's shot injector, the FlightScope Trajectory Optimizer) and
-compare with this engine.
+compare with this engine. While you are signed in, recording also saves eligible range
+shots to your online profile, for the club averages and shot history in Settings › Player
+(see [Menu and account](#menu-and-account)). Recording off saves
+nothing, locally or online. Recording is a range feature: the hole shows no record icon,
+**F9** does nothing there, and hole shots are never recorded. Recording keeps its on/off
+state for when you return to the range.
 
-1. Connect the launch monitor (**C**) and wait for **Ready**. The status box shows
-   **Record Shots: Off**.
-2. Press **F9** to start recording. The cell turns red and counts saved shots
-   (**On · 3**). Press **F9** again to stop. Recording is off at every Play start.
+1. Connect the launch monitor (**C**) and wait for **Ready**: the launch-monitor icon turns
+   green. The record icon is a gray ring.
+2. Press **F9** or click the record icon to start recording. The dot turns red and counts
+   saved shots. Press **F9** or click it again to stop. Recording is off at every Play start.
 3. Select the club with **Tab** before each shot; the club selected when the shot
    arrives is the one recorded.
 
@@ -181,6 +218,26 @@ remains open to let the retries complete. Ending Play makes one final save attem
 and logs any remaining unsaved count and destination. **There is no recovery across
 Play sessions or application restarts**; failed recordings still in memory are lost.
 
+### Menu and account
+
+The home page, and the pause menu that **Escape** opens during Training, share a top bar:
+**UOPEN GOLF**, the launch-monitor status (click it for Settings › Simulator), an account icon
+and a cog. The cog is the only way into **Settings**; the pages have no Settings button. While
+signed out the account icon signs in (it opens Settings › Player); while signed in it is the
+logout icon.
+
+**Settings › Player** holds the account:
+
+- Signed out: the sign-in choices (QR code, this computer, create account) and no profile
+  options.
+- Signed in: the member-since date, the **Display name** (**Save display name** saves it at
+  once) and **Shot history**. Its **View** opens the club averages of the last 90 days, with
+  clubs abbreviated (**DR**, **7i**, **PW**); select a club for its shots. Back returns to
+  Player.
+- **Time zone**: the zone for shot-history times and the member-since date. **Local** (this
+  computer's zone) is the default; UTC and common zones such as **Pacific (PT)** are listed,
+  with daylight saving applied. It changes at once, without Apply. CSV exports stay in UTC.
+
 ### Settings
 
 Wind controls on **Range settings** save with the map. Changes made during Play do not
@@ -190,7 +247,7 @@ remain between Play sessions in the same editor process.
 | Setting | Default | How to change |
 | --- | --- | --- |
 | Club | Driver | **Tab** |
-| Record shots | Off | **F9** while connected |
+| Record shots | Off | **F9** or the record icon |
 | Recording folder | `Documents/UOpenGolf/Saved/ShotRecordings` | Fixed |
 | Selected test shot | First preset (low wood) | **P**, then pick one |
 | 3D grass and ground cover | On | Console: `uopengolf.Grass3D 0` (off) or `1` (on); see [Range assets](RangeAssets.md) |

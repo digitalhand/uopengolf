@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
-#include "UI/DisplayOptions.h"
+#include "UI/Menu/DisplayOptions.h"
 #include "OpenGolfGameUserSettings.h"
 
 namespace DisplayOptionsTestDetail
@@ -96,8 +96,11 @@ bool FRenderResolutionTest::RunTest(const FString&)
     // Settings → Video needs the project class, which DefaultEngine.ini selects with GameUserSettingsClassName.
     TestNotNull(TEXT("The engine uses the project settings class"),GEngine?Cast<UOpenGolfGameUserSettings>(GEngine->GetGameUserSettings()):nullptr);
     auto* S=NewObject<UOpenGolfGameUserSettings>();
+    // NewObject copies the class defaults, which carry this machine's saved GameUserSettings.ini; a render resolution
+    // chosen in Settings › Video would otherwise be in use here. Start from a cleared state.
+    S->ClearRenderResolution();
     S->SetFullscreenMode(EWindowMode::WindowedFullscreen);
-    TestFalse(TEXT("No render resolution by default"),S->UsesRenderResolution());
+    TestFalse(TEXT("No render resolution once cleared"),S->UsesRenderResolution());
     S->SetRenderResolution({1920,1080});
     TestTrue(TEXT("Render resolution in use"),S->UsesRenderResolution());
     TestEqual(TEXT("Render resolution read back"),S->GetRenderResolution(),FIntPoint(1920,1080));

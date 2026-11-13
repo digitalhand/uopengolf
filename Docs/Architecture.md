@@ -131,6 +131,21 @@ simulation relative to wall time. The game tests cover frame-rate/hitch equivale
 rendered CPU measurements and their limits are recorded in
 [phase status](PhasesStatus.md#reference-measurements).
 
+The game's Slate UI lives in feature folders under `Source/UOpenGolf/Private/UI/`, included
+by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
+
+| Folder | Contents |
+| --- | --- |
+| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, icon button, slider, switch, status glyph, page header |
+| `Hud/` | The Training HUD: `SRangeHud` (shot tiles, status box), play buttons and hole tiles, shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
+| `Club/` | Club picker and club-face glyph |
+| `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |
+| `Menu/` | `SMainMenu` (home, pause, Settings, Shot history, dialogs) and display-mode options |
+
+A widget used by more than one area goes in `Common/`; a new screen or HUD feature gets its
+own folder. Raw-pointer Slate arguments always get a `nullptr` default, which
+`UOpenGolf.UI.ArgumentDefaults` checks.
+
 Game and editor targets use UnrealBuildTool's standard C# configuration files.
 Gameplay remains native C++. Python is used only by developer utilities.
 
@@ -218,3 +233,16 @@ Restricted packs are never committed.
 
 The game mode's editable `RangeClass` defaults to the native range; a map's game-mode subclass can
 choose a range subclass.
+
+### Before publishing
+
+The repository is public, so machine and account details stay out of it:
+
+- The editor's per-user folders (`Content/Developers/<account>/`) are ignored.
+- Machine-specific settings, such as paths in editor terminal startup commands, go in the
+  ignored per-user layer (`Saved/Config/<Platform>Editor/`) or `Config/User*.ini`, never in
+  `Config/Default*.ini`.
+- An imported asset records the path of its source file, which includes the importing
+  account's home folder. Existing assets carry such paths; they grant no access.
+- No credential belongs in the tree. The Auth0 client ID in `Config/DefaultGame.ini` is a
+  public native-application identifier, and there is no client secret.
