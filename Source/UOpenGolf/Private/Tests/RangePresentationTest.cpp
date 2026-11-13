@@ -32,6 +32,8 @@ public:
     FCheckRangePresentation(FAutomationTestBase* InTest, bool bInCapture)
         : Test(InTest), bCapture(bInCapture)
     {
+        // Set at console priority below: the coastal capture test sets it at that priority, and in a run of the whole
+        // UOpenGolf.Visual group a lower-priority set is then ignored.
         GrassVar = IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.Grass3D"));
     }
     bool Update() override
@@ -85,7 +87,7 @@ public:
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindMph"))->Set(10.0f, ECVF_SetByTemp, TEXT("RangePresentation"));
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindFromDeg"))->Set(90.0f, ECVF_SetByTemp, TEXT("RangePresentation"));
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.GreenStimp"))->Set(13.0f, ECVF_SetByTemp, TEXT("RangePresentation"));
-            GrassVar->Set(1, ECVF_SetByTemp, TEXT("RangePresentation"));
+            GrassVar->Set(1, ECVF_SetByConsole, TEXT("RangePresentation"));
             ReadyAt = GetCurrentRunTime() + 0.5;
             Stage = 1;
             return false;
@@ -107,7 +109,7 @@ public:
             // The switch shows and hides the terrain's 3D grass and ground cover; its instances stay saved in the map.
             InitialCount = Range->GetGrassInstanceCount();
             Test->TestTrue(TEXT("Grass is instantiated"), InitialCount > 1000);
-            GrassVar->Set(0, ECVF_SetByTemp, TEXT("RangePresentation"));
+            GrassVar->Set(0, ECVF_SetByConsole, TEXT("RangePresentation"));
             ReadyAt = GetCurrentRunTime() + 0.5;
             Stage = 2;
             return false;
@@ -115,7 +117,7 @@ public:
         if (Stage == 2)
         {
             Test->TestEqual(TEXT("Disabling grass hides its instances"), Range->GetGrassInstanceCount(), 0);
-            GrassVar->Set(1, ECVF_SetByTemp, TEXT("RangePresentation"));
+            GrassVar->Set(1, ECVF_SetByConsole, TEXT("RangePresentation"));
             ReadyAt = GetCurrentRunTime() + 0.5;
             Stage = 3;
             return false;
@@ -144,7 +146,7 @@ public:
                 FVector(-200, -380, 0), FVector(2300, 0, 0), FVector(AUOpenGolfRange::HoleDistanceM * 100, 0, 140)};
             Camera->SetActorLocation(Locations[View]);
             Camera->SetActorRotation((Targets[View] - Locations[View]).Rotation());
-            GrassVar->Set(View == 1 ? 0 : 1, ECVF_SetByTemp, TEXT("RangePresentation"));
+            GrassVar->Set(View == 1 ? 0 : 1, ECVF_SetByConsole, TEXT("RangePresentation"));
             if (View == 6)
             {
                 IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindFromDeg"))->Set(90.0f, ECVF_SetByTemp, TEXT("RangePresentation"));

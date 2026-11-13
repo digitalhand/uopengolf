@@ -2,7 +2,8 @@
 #include "UOpenGolfPlayerController.h"
 #include "OpenGolfSettings.h"
 #include "GameFramework/PlayerInput.h"
-#include "UI/MainMenu.h"
+#include "UI/Menu/MainMenu.h"
+#include "UI/Hud/HudNavigation.h"
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -28,8 +29,8 @@
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
-#include "UI/HudLayers.h"
-#include "UI/ReplayShotPanel.h"
+#include "UI/Common/HudLayers.h"
+#include "UI/Hud/ReplayShotPanel.h"
 #include "Framework/Application/SlateApplication.h"
 
 namespace
@@ -126,6 +127,8 @@ void AUOpenGolfPlayerController::BeginPlay()
         InputMode.SetHideCursorDuringCapture(false);
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
         SetInputMode(InputMode);
+        HudNavigation=MakeShared<FHudNavigation>(this);
+        FSlateApplication::Get().RegisterInputPreProcessor(HudNavigation);
         MainMenu = SNew(SMainMenu).Controller(this);
         Viewport->AddViewportWidgetContent(MainMenu.ToSharedRef(), 100);
         const AGameModeBase* Mode = GetWorld()->GetAuthGameMode();
@@ -136,6 +139,8 @@ void AUOpenGolfPlayerController::BeginPlay()
 
 void AUOpenGolfPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if(HudNavigation && FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(HudNavigation);
+    HudNavigation.Reset();
     if (MainMenu.IsValid())
     {
         if (auto* Viewport = GetWorld()->GetGameViewport()) Viewport->RemoveViewportWidgetContent(MainMenu.ToSharedRef());
@@ -563,7 +568,9 @@ void AUOpenGolfPlayerController::AdoptRangeWind()
 void AUOpenGolfPlayerController::ToggleRecordShots()
 {
     if (bMainMenuOpen) return;
-    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
+    // Recording is for the range; the hole never records, so F9 does nothing there.
+    AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    if (Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Range)
     {
         Mode->SetRecordShots(!Mode->IsRecordingShots());
     }
@@ -572,6 +579,11 @@ void AUOpenGolfPlayerController::ToggleRecordShots()
 void AUOpenGolfPlayerController::OpenMainMenu()
 {
     if (MainMenu.IsValid()) MainMenu->Open();
+}
+
+void AUOpenGolfPlayerController::OpenLaunchMonitorSettings()
+{
+    if (MainMenu.IsValid()) MainMenu->OpenLaunchMonitorSettings();
 }
 
 bool AUOpenGolfPlayerController::IsPauseMenu() const
@@ -605,3 +617,5 @@ void AUOpenGolfPlayerController::SetMainMenuOpen(bool bOpen)
     }
     bShowMouseCursor = true;
 }
+
+void AUOpenGolfPlayerController::HandleMenuBack() { if(MainMenu.IsValid()) MainMenu->NavigateBack(); }

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
-#include "UI/ShotDisplay.h"
+#include "UI/Hud/ShotDisplay.h"
+#include "UI/Common/HudStyle.h"
 
 namespace
 {
@@ -104,7 +105,7 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
         TestFalse(FString::Printf(TEXT("No %s tile"), Removed), Labels.Contains(Removed));
     }
     TestEqual(TEXT("Heading in flight"), ShotDisplay::Heading(&Flight), FString(TEXT("Shot 3 · in flight")));
-    TestEqual(TEXT("Heading before a shot"), ShotDisplay::Heading(nullptr), FString(TEXT("Waiting for a shot")));
+    TestEqual(TEXT("No heading before a shot"), ShotDisplay::Heading(nullptr), FString());
 
     Shot.HorizontalLaunchDeg = 0.97f;
     TestEqual(TEXT("Positive HLA is right"), ShotTileValue(ShotDisplay::BuildTiles(&Flight, &Shot, &Club), TEXT("HLA")), FString(TEXT("R1.0°")));
@@ -125,15 +126,42 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("No landing, no roll"), ShotTileValue(ShotDisplay::BuildTiles(&Rest, &Shot, &Club), TEXT("Roll (yd)")), Dash);
 
     using EState = ELaunchMonitorConnectionState;
-    TestEqual(TEXT("Disconnected tip"), ShotDisplay::StatusTip(EState::Disconnected, TEXT(""), 0, TEXT("")), FString(TEXT("Connect [C]  ·  Set up: Esc")));
-    TestEqual(TEXT("Connected tip"), ShotDisplay::StatusTip(EState::Ready, TEXT(""), 0, TEXT("")),
-        FString(TEXT("Disconnect [T]  ·  Record [F9]")));
-    TestEqual(TEXT("Launch-monitor error persists while disconnected"),
-        ShotDisplay::StatusTip(EState::Disconnected, TEXT("Scan timed out"), 0, TEXT("")), FString(TEXT("Scan timed out  ·  Connect [C]")));
-    TestEqual(TEXT("Launch-monitor error shown alone while reconnecting"),
-        ShotDisplay::StatusTip(EState::Scanning, TEXT("Link lost"), 0, TEXT("")), FString(TEXT("Link lost")));
+    TestEqual(TEXT("Disconnected caption"), ShotDisplay::LaunchMonitorCaption(EState::Disconnected), FString(TEXT("Connect [C]")));
+    TestEqual(TEXT("Connected caption"), ShotDisplay::LaunchMonitorCaption(EState::Ready), FString(TEXT("Launch monitor")));
+    TestEqual(TEXT("Reconnecting caption"), ShotDisplay::LaunchMonitorCaption(EState::Scanning), FString(TEXT("Launch monitor")));
+    TestEqual(TEXT("Unknown battery"), ShotDisplay::BatteryLabel(-1), FString(TEXT("—")));
+    TestEqual(TEXT("Battery percent"), ShotDisplay::BatteryLabel(80), FString(TEXT("80%")));
+    TestEqual(TEXT("Connected launch-monitor accessible name"), ShotDisplay::LaunchMonitorTip(EState::Ready, 80),
+        FString(TEXT("Ready · battery 80%. Click for launch monitor settings. T disconnects.")));
+    TestEqual(TEXT("Connected accessible name without battery"), ShotDisplay::LaunchMonitorTip(EState::Ready, -1),
+        FString(TEXT("Ready. Click for launch monitor settings. T disconnects.")));
+    TestEqual(TEXT("Disconnected launch-monitor accessible name"), ShotDisplay::LaunchMonitorTip(EState::Disconnected, -1),
+        FString(TEXT("Disconnected. Click for launch monitor settings. C connects.")));
+    TestEqual(TEXT("No error"), ShotDisplay::StatusError(TEXT(""), 0, TEXT("")), FString());
+    TestEqual(TEXT("Launch-monitor error shown"), ShotDisplay::StatusError(TEXT("Scan timed out"), 0, TEXT("")), FString(TEXT("Scan timed out")));
     TestEqual(TEXT("Recording error outranks launch-monitor error"),
-        ShotDisplay::StatusTip(EState::Disconnected, TEXT("Link lost"), 2, TEXT("Disk full")), FString(TEXT("Disk full - retrying")));
+        ShotDisplay::StatusError(TEXT("Link lost"), 2, TEXT("Disk full")), FString(TEXT("Disk full - retrying")));
+
+    // The club picker's standard abbreviations.
+    TestEqual(TEXT("Driver label"), ShotDisplay::ClubLabel(ELaunchMonitorClub::Driver), FString(TEXT("DR")));
+    TestEqual(TEXT("3 wood label"), ShotDisplay::ClubLabel(ELaunchMonitorClub::Wood3), FString(TEXT("3W")));
+    TestEqual(TEXT("7 iron label"), ShotDisplay::ClubLabel(ELaunchMonitorClub::Iron7), FString(TEXT("7i")));
+    TestEqual(TEXT("Pitching wedge label"), ShotDisplay::ClubLabel(ELaunchMonitorClub::PitchingWedge), FString(TEXT("PW")));
+    TestEqual(TEXT("Lob wedge label"), ShotDisplay::ClubLabel(ELaunchMonitorClub::LobWedge), FString(TEXT("LW")));
+    TestEqual(TEXT("Putter label"), ShotDisplay::ClubLabel(ELaunchMonitorClub::Putter), FString(TEXT("PT")));
+    for (int32 Index = 0; Index <= static_cast<int32>(ELaunchMonitorClub::Putter); ++Index)
+    {
+        const FString Label = ShotDisplay::ClubLabel(static_cast<ELaunchMonitorClub>(Index));
+        TestTrue(FString::Printf(TEXT("Club %d has a short label"), Index), Label.Len() >= 2 && Label.Len() <= 3);
+    }
+
+    TestEqual(TEXT("Hole heading"), ShotDisplay::HoleHeading(4, TEXT("400 yd"), false), FString(TEXT("Hole 1  ·  Par 4  ·  400 yd")));
+    TestEqual(TEXT("Practice heading"), ShotDisplay::HoleHeading(4, TEXT("400 yd"), true), FString(TEXT("Practice  ·  Ball placement")));
+
+    const FLinearColor Ready = HudStyle::BallReadyColor(true);
+    const FLinearColor NotReady = HudStyle::BallReadyColor(false);
+    TestTrue(TEXT("Ready glow is green"), Ready.G > Ready.R && Ready.G > Ready.B);
+    TestTrue(TEXT("Waiting glow is red"), NotReady.R > NotReady.G && NotReady.R > NotReady.B);
 
     return true;
 }

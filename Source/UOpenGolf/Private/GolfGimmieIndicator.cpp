@@ -3,7 +3,7 @@
 #include "OpenGolfTerrain.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
-#include "UI/HudStyle.h"
+#include "UI/Common/HudStyle.h"
 
 UGolfGimmieIndicator::UGolfGimmieIndicator(const FObjectInitializer& ObjectInitializer) : Super(ObjectInitializer)
 {

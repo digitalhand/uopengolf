@@ -11,10 +11,10 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "UI/RangeHud.h"
+#include "UI/Hud/RangeHud.h"
 #include "OpenGolfWindIndicator.h"
 #include "Tests/RenderedPlay.h"
-#include "UI/WindIndicator.h"
+#include "UI/Wind/WindIndicator.h"
 #include "Slate/WidgetRenderer.h"
 #include "Slate/SceneViewport.h"
 #include "Tests/AutomationEditorCommon.h"
@@ -55,7 +55,8 @@ namespace
                 World->GetGameViewport()->GetGameViewport()->SetFixedViewportSize(Size.X, Size.Y);
                 const TSharedRef<SRangeHud> Hud = SNew(SRangeHud).Controller(Controller);
                 FSlateAttributeMetaData::UpdateAllAttributes(*Hud, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidation);
-                Test->TestEqual(TEXT("HUD allows clicks through"), Hud->GetVisibility(), EVisibility::HitTestInvisible);
+                // The HUD itself takes no clicks, so the range stays clickable; its club picker and status icons do.
+                Test->TestEqual(TEXT("HUD allows clicks through"), Hud->GetVisibility(), EVisibility::SelfHitTestInvisible);
                 Controller->GetHUD()->bShowHUD = false;
                 FSlateAttributeMetaData::UpdateAllAttributes(*Hud, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidation);
                 Test->TestEqual(TEXT("showhud hides indicator with HUD"), Hud->GetVisibility(), EVisibility::Collapsed);

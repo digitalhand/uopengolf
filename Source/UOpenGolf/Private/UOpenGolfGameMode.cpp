@@ -11,6 +11,8 @@
 #include "UOpenGolfBall.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "ShotRecording.h"
+#include "Online/CloudShotRecorder.h"
+#include "OpenGolfOnlineSubsystem.h"
 #include "TimerManager.h"
 #include "UOpenGolfHUD.h"
 #include "UOpenGolfPlayerController.h"
@@ -31,6 +33,14 @@ AUOpenGolfGameMode::AUOpenGolfGameMode()
 void AUOpenGolfGameMode::StartPlay()
 {
     GolfSettings::Load();
+    if (auto* Online = GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>())
+    {
+        TWeakObjectPtr<UOpenGolfOnlineSubsystem> WeakOnline(Online);
+        CloudRecorder = MakeShared<OpenGolfOnline::FCloudShotRecorder>([WeakOnline](const auto& Shot, const FString& Owner)
+        { return WeakOnline.IsValid() && WeakOnline->QueueShot(Shot,Owner); });
+        CloudReadHandle = Online->OnBeforeReadProfile.AddWeakLambda(this,[this]{if(CloudRecorder)CloudRecorder->Release();});
+        CloudAccountHandle = Online->OnAccountChanged.AddWeakLambda(this,[this]{if(CloudRecorder)CloudRecorder->Clear();});
+    }
     UWorld* World = GetWorld();
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -71,6 +81,7 @@ void AUOpenGolfGameMode::StartPlay()
     GetWorldTimerManager().SetTimer(RecordingTimer, FTimerDelegate::CreateWeakLambda(this, [this]
                                                         {
         if (Recorder) Recorder->Tick();
+        if (CloudRecorder) CloudRecorder->Retry();
         if (GimmieIndicator && Range)
             GimmieIndicator->UpdateIndicator(Range->Terrain, GetCupLocation(), SessionGimmieFeet,
                 PlayMode == EOpenGolfPlayMode::Hole && !Round.bPractice && !Round.bHoled); }),
@@ -102,6 +113,14 @@ void AUOpenGolfGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     {
         Recorder->Shutdown();
     }
+    if (auto* Online = GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>())
+    {
+        if (CloudRecorder) CloudRecorder->Release();
+        Online->OnBeforeReadProfile.Remove(CloudReadHandle);
+        Online->OnAccountChanged.Remove(CloudAccountHandle);
+        Online->Flush();
+    }
+    CloudRecorder.Reset();
     Super::EndPlay(EndPlayReason);
 }
 
@@ -110,6 +129,7 @@ void AUOpenGolfGameMode::ResetBallToTee()
     Round.Start(AUOpenGolfRange::Par);
     LastScoredShot = INDEX_NONE;
     if (PlayMode == EOpenGolfPlayMode::Hole) StartSessionDefaults();
+    if (CloudRecorder) CloudRecorder->Cancel();
     if (Recorder)
         Recorder->CancelSimulation();
     PlaceOnTee();
@@ -122,6 +142,7 @@ void AUOpenGolfGameMode::ResetBall()
         ResetBallToTee();
         return;
     }
+    if (CloudRecorder) CloudRecorder->Cancel();
     if (Recorder) Recorder->CancelSimulation();
     GetWorldTimerManager().ClearTimer(ResetTimer);
     GetWorldTimerManager().ClearTimer(AddressTimer);
@@ -173,6 +194,7 @@ bool AUOpenGolfGameMode::PlaceBallAt(const FVector& Location)
         return false;
     GetWorldTimerManager().ClearTimer(ResetTimer);
     GetWorldTimerManager().ClearTimer(AddressTimer);
+    if (CloudRecorder) CloudRecorder->Cancel();
     if (Recorder)
         Recorder->CancelSimulation();
     // A finished hole starts over; either way the hole is now practice.
@@ -263,6 +285,7 @@ FString AUOpenGolfGameMode::GetRecordingFolder() const
 
 void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
 {
+    if (CloudRecorder) CloudRecorder->OnRest(Result);
     if (Recorder)
     {
         Recorder->OnBallAtRest(Result);
@@ -359,12 +382,22 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     else if (!bAddressReady)
         ReadyForNextShot();
     GetWorldTimerManager().ClearTimer(AddressTimer);
-    if (Recorder && LaunchMonitor)
+    // Only range shots are recorded; on the hole, recording keeps its state for the return to the range.
+    if (Recorder && LaunchMonitor && PlayMode == EOpenGolfPlayMode::Range)
     {
         // The club selected now is the club this shot was hit with.
         Recorder->OnShot(Shot, LaunchMonitor->GetConnectionState(), LaunchMonitor->GetClub(), LaunchMonitor->IsLeftHanded(), LaunchMonitor->GetFirmware());
     }
 
+    if (CloudRecorder && LaunchMonitor)
+    {
+        auto* Online = GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>();
+        OpenGolfOnline::FShotOwner Owner;
+        // Recording (F9) saves shots; while signed in they go to the online profile as well as to local files.
+        if (Online) { Owner.Key=Online->GetAccountKey(); Owner.bSave=Online->HasSession() && IsRecordingShots(); }
+        CloudRecorder->Begin(Shot,LaunchMonitor->GetClub(),Owner,PlayMode==EOpenGolfPlayMode::Range && !Round.bPractice,
+            ShotRecording::IsRecordable(Shot,LaunchMonitor->GetConnectionState()));
+    }
     // Range mode hits from the tee; Hole mode from wherever the ball lies.
     if (Ball->Launch(CheckedLaunch))
     {
@@ -372,6 +405,8 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
         FOpenFairwayShotResult Launched;
         bShotFromGreen = Ball->GetShotResult(Launched) && Launched.Surface == EOpenFairwaySurface::Green;
         FOpenFairwayShotResult Result;
+        if (CloudRecorder && Ball->GetShotResult(Result))
+            CloudRecorder->BindSimulation(Shot.ShotNumber,Result.ShotNumber);
         if (Recorder && Ball->GetShotResult(Result))
             Recorder->BindSimulation(Shot.ShotNumber, Result.ShotNumber);
         if (auto* PresentedBall = Cast<AUOpenGolfBall>(Ball))
@@ -380,6 +415,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     else
     {
         Reject(TEXT("The ball could not be launched"));
+        if (CloudRecorder) CloudRecorder->Cancel();
         if (Recorder)
             Recorder->CancelSimulation();
     }
@@ -387,6 +423,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
 
 void AUOpenGolfGameMode::HandleClubData(const FLaunchMonitorClubData& ClubData)
 {
+    if (CloudRecorder) CloudRecorder->OnClubData(ClubData);
     if (Recorder)
     {
         Recorder->OnClubData(ClubData);

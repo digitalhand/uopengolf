@@ -7,7 +7,9 @@ public class UOpenGolf : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "UMG" });
-        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "EnhancedInput", "Json", "OpenLaunchMonitor", "OpenFairwayPhysics", "OpenGolfCourse", "Slate", "SlateCore", "RenderCore", "ProceduralMeshComponent" });
+        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "EnhancedInput", "Json", "OpenLaunchMonitor", "OpenFairwayPhysics", "OpenGolfCourse", "Slate", "SlateCore", "RenderCore", "ProceduralMeshComponent", "OpenGolfOnline" });
+
+        RuntimeDependencies.Add("$(ProjectDir)/Content/UI/Clubs/*.png", StagedFileType.NonUFS);
 
         if (Target.bBuildEditor)
         {

@@ -13,6 +13,8 @@ class AUOpenGolfRange;
 struct FLaunchMonitorClubData;
 struct FLaunchMonitorShot;
 
+namespace OpenGolfOnline { class FCloudShotRecorder; }
+
 namespace ShotRecording
 {
     class FShotRecorder;
@@ -85,7 +87,7 @@ public:
     /** Seconds since the ball dropped into the cup (Hole mode), or a negative value. */
     float GetHoledSeconds() const;
 
-    /** Records real launch-monitor shots (never replays) while connected; off at the start of play. */
+    /** Records real launch-monitor shots on the range (never replays or hole shots) while connected; off at the start of play. */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Recording")
     void SetRecordShots(bool bRecord);
 
@@ -147,6 +149,8 @@ private:
 
     // Shared, not unique: generated code destroys the mode where the recorder type is incomplete.
     TSharedPtr<ShotRecording::FShotRecorder> Recorder;
+    TSharedPtr<OpenGolfOnline::FCloudShotRecorder> CloudRecorder;
+    FDelegateHandle CloudReadHandle, CloudAccountHandle;
     FDelegateHandle ShotHandle;
     FDelegateHandle ClubDataHandle;
     FTimerHandle ResetTimer;

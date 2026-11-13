@@ -34,11 +34,35 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     P.Provider=7;P.OpenConnectPort=70000;P.OpenConnectLan=4;P.Validate();
     TestEqual(TEXT("Provider clamps"),P.Provider,1);TestEqual(TEXT("Invalid port recovers"),P.OpenConnectPort,LaunchMonitorDefaultOpenConnectPort);TestEqual(TEXT("LAN clamps"),P.OpenConnectLan,1);
     P.OpenConnectPort=5921;P.Validate();TestEqual(TEXT("Custom port kept"),P.OpenConnectPort,5921);
+    TestEqual(TEXT("Time zone defaults to this computer's"),GolfSettings::FPreferences().TimeZone,0);
+    P.TimeZone=99;P.Validate();TestEqual(TEXT("Unknown time zone recovers"),P.TimeZone,0);
+    P.TimeZone=-1;P.Validate();TestEqual(TEXT("Negative time zone recovers"),P.TimeZone,0);
+    {
+        const TConstArrayView<GolfSettings::FTimeZoneChoice> Zones=GolfSettings::TimeZones();
+        TestTrue(TEXT("Local is the first zone"),FString(Zones[0].Id).IsEmpty());
+        // ICU reads an unknown zone ID as GMT, so a mistyped ID would show UTC times. In July every offered zone but
+        // UTC is away from GMT, so each formats a fixed instant differently from UTC.
+        const FDateTime July(2026,7,1,12,0,0);
+        const FString InUtc=FText::AsDateTime(July,EDateTimeStyle::Medium,EDateTimeStyle::Short,TEXT("Etc/UTC")).ToString();
+        TSet<FString> Ids;
+        for(int32 I=1;I<Zones.Num();++I)
+        {
+            const FString Id=Zones[I].Id;
+            TestFalse(FString::Printf(TEXT("%s has an ID"),Zones[I].Label),Id.IsEmpty());
+            TestFalse(FString::Printf(TEXT("%s is listed once"),Zones[I].Label),Ids.Contains(Id));Ids.Add(Id);
+            TestFalse(FString::Printf(TEXT("%s has a short name"),Zones[I].Label),FString(Zones[I].Short).IsEmpty());
+            // Longer labels are clipped by the settings drop-down.
+            TestTrue(FString::Printf(TEXT("%s fits the drop-down"),Zones[I].Label),FCString::Strlen(Zones[I].Label)<=14);
+            if(Id!=TEXT("Etc/UTC"))
+                TestNotEqual(FString::Printf(TEXT("%s converts from UTC"),Zones[I].Label),FText::AsDateTime(July,EDateTimeStyle::Medium,EDateTimeStyle::Short,Id).ToString(),InUtc);
+        }
+        P.TimeZone=Zones.Num()-1;P.Validate();TestEqual(TEXT("Last zone kept"),P.TimeZone,Zones.Num()-1);
+    }
     auto* Monitor=NewObject<UOpenLaunchMonitorSubsystem>(NewObject<UGameInstance>());Monitor->SetSpinMode(ESquareSpinMode::Calculated);
     TestEqual(TEXT("Spin mode retained before connection"),Monitor->GetSpinMode(),ESquareSpinMode::Calculated);
     Monitor->SetSpinMode(ESquareSpinMode::Measured);TestEqual(TEXT("Measured selectable"),Monitor->GetSpinMode(),ESquareSpinMode::Measured);
     const FString File=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/TEXT("Automation")/(FGuid::NewGuid().ToString()+TEXT(".ini")));
-    P.CalculatedSpin=1;P.AutoTee=0;P.GimmieFeet=8;TestTrue(TEXT("Write preferences"),P.WriteConfig(File));
+    P.CalculatedSpin=1;P.AutoTee=0;P.GimmieFeet=8;P.TimeZone=4;TestTrue(TEXT("Write preferences"),P.WriteConfig(File));
     GConfig->UnloadFile(File);
     GolfSettings::FPreferences Loaded;Loaded.ReadConfig(File);
     TestTrue(TEXT("Preferences survive disk round trip"),P==Loaded);

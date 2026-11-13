@@ -3,8 +3,8 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
-#include "UI/HudSlider.h"
-#include "UI/HudSwitch.h"
+#include "UI/Common/HudSlider.h"
+#include "UI/Common/HudSwitch.h"
 
 namespace HudControlsTestDetail
 {

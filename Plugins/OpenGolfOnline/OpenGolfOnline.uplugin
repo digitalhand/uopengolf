@@ -1,0 +1,10 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0.0",
+  "FriendlyName": "Open Golf Online",
+  "Description": "Native Auth0 sign-in, secure sessions and the shared golf player API. Host projects supply public configuration and shot data.",
+  "Category": "Online",
+  "CanContainContent": true,
+  "Modules": [{"Name": "OpenGolfOnline", "Type": "Runtime", "LoadingPhase": "Default"}]
+}

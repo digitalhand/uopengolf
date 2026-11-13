@@ -36,6 +36,8 @@ public:
     bool IsPauseMenu() const;
     void SetMainMenuOpen(bool bOpen);
     void OpenMainMenu();
+    /** Opens the menu at Settings › Simulator: the HUD's launch-monitor status does this when clicked. */
+    void OpenLaunchMonitorSettings();
     /**
      * Ends the training session and shows the main menu: reloads the map, so the ball, round and session
      * defaults start fresh and any recording is finalized. The launch monitor (game-instance) stays connected.
@@ -126,7 +128,7 @@ public:
     void SetWindSpeedMph(float Mph);
     void SetWindFromDeg(float FromDeg);
 
-    /** Switches saving of real launch-monitor shots on or off. */
+    /** Switches saving of real launch-monitor shots on or off; on the range only, since the hole never records. */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Recording")
     void ToggleRecordShots();
 
@@ -136,6 +138,7 @@ public:
 
     /** Escape: cancels the current tool, otherwise opens the menu. */
     void HandleEscape();
+    void HandleMenuBack();
 
     /**
      * Feeds a key from a HUD panel that holds keyboard focus into this controller's input, as the viewport would,
@@ -184,6 +187,7 @@ private:
     // Near the cup: how far the follow view has closed in.
     float CupZoom = 0.0f;
 
+    TSharedPtr<class FHudNavigation> HudNavigation;
     TSharedPtr<SMainMenu> MainMenu;
     bool bMainMenuOpen = false;
     TSharedPtr<SWidget> ReplayPanel;

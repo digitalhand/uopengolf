@@ -8,6 +8,8 @@
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
 #include "UOpenGolfPlayerController.h"
+#include "OpenGolfOnlineSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
 #include "GolfGimmieIndicator.h"
@@ -23,17 +25,25 @@ namespace
 {
     /** A step that presses Escape instead of clicking a button. */
     const TCHAR* EscapeStep=TEXT("@Escape");
-    bool HasText(const TSharedRef<SWidget>& Root,const FString& Label)
+    /** A step that clicks the page header's back icon, found by its tag. */
+    const TCHAR* BackStep=TEXT("#PageBack");
+    bool MenuIconShown(const TSharedPtr<SWidget>& Widget){return Widget.IsValid()&&Widget->GetVisibility().IsVisible();}
+    /**
+     * The menu pages have no Settings button: the top bar's cog is the way in. Right of the launch-monitor status sits
+     * one account icon, matching the session, then the cog.
+     */
+    void ExpectMenuTopBar(FAutomationTestBase& Test,const TSharedRef<SWindow>& Window,const UOpenGolfOnlineSubsystem* Online,const FString& Where)
     {
-        if(Root->GetTypeAsString()==TEXT("STextBlock") && StaticCastSharedRef<STextBlock>(Root)->GetText().ToString()==Label)return true;
-        auto* Children=Root->GetChildren();for(int32 I=0;I<Children->Num();++I)if(HasText(Children->GetChildAt(I),Label))return true;
-        return false;
-    }
-    TSharedPtr<SWidget> FindButton(const TSharedRef<SWidget>& Root,const FString& Label)
-    {
-        if(Root->GetTypeAsString()==TEXT("SButton") && HasText(Root,Label))return Root;
-        auto* Children=Root->GetChildren();for(int32 I=0;I<Children->Num();++I)if(auto Found=FindButton(Children->GetChildAt(I),Label))return Found;
-        return nullptr;
+        Test.TestFalse(TEXT("No Settings button on ")+Where,RenderedPlay::FindButton(Window,TEXT("Settings")).IsValid());
+        const TSharedPtr<SWidget> Monitor=RenderedPlay::WithTag(Window,TEXT("MenuLaunchMonitor")),SignIn=RenderedPlay::WithTag(Window,TEXT("AccountSignIn"));
+        const TSharedPtr<SWidget> SignOut=RenderedPlay::WithTag(Window,TEXT("AccountSignOut")),Cog=RenderedPlay::WithTag(Window,TEXT("MenuSettings"));
+        const bool bSignedIn=Online&&Online->HasSession();
+        const TSharedPtr<SWidget> Account=bSignedIn?SignOut:SignIn;
+        Test.TestTrue(TEXT("The account icon matches the session on ")+Where,MenuIconShown(Account)&&!MenuIconShown(bSignedIn?SignIn:SignOut));
+        Test.TestTrue(TEXT("The cog shows on ")+Where,MenuIconShown(Cog));
+        if(MenuIconShown(Monitor)&&MenuIconShown(Account)&&MenuIconShown(Cog))
+            Test.TestTrue(TEXT("Launch monitor, then the account icon, then the cog, on ")+Where,
+                RenderedPlay::PointOn(*Monitor).X<RenderedPlay::PointOn(*Account).X&&RenderedPlay::PointOn(*Account).X<RenderedPlay::PointOn(*Cog).X);
     }
 }
 class FMenuVisualCapture : public IAutomationLatentCommand
@@ -53,9 +63,9 @@ public:
         // so the test switches to Open Connect and back; nothing is left pending, and Back needs no dialog.
         // Under -NoMainMenu the switch is not written to the player's preferences file.
         struct FStep{const TCHAR* Capture;const TCHAR* Click;};
-        static const FStep Steps[]={{TEXT("home"),nullptr},{nullptr,TEXT("Settings")},{TEXT("player"),nullptr},{nullptr,TEXT("Video")},{TEXT("video"),nullptr},
+        static const FStep Steps[]={{TEXT("home"),nullptr},{nullptr,TEXT("#MenuSettings")},{TEXT("player"),nullptr},{nullptr,TEXT("Video")},{TEXT("video"),nullptr},
             {nullptr,TEXT("Simulator")},{TEXT("simulator"),nullptr},{nullptr,TEXT("Square Home")},{nullptr,TEXT("Open Connect")},{TEXT("open-connect"),nullptr},
-            {nullptr,TEXT("Open Connect")},{nullptr,TEXT("Square Home")},{TEXT("square-home-again"),nullptr},{nullptr,TEXT("\u2190  Back")},{TEXT("gimmie-hud"),nullptr},{nullptr,EscapeStep},{TEXT("pause"),nullptr}};
+            {nullptr,TEXT("Open Connect")},{nullptr,TEXT("Square Home")},{TEXT("square-home-again"),nullptr},{nullptr,BackStep},{TEXT("gimmie-hud"),nullptr},{nullptr,EscapeStep},{TEXT("pause"),nullptr}};
         if(!File.IsEmpty())
         {
             if(!IFileManager::Get().FileExists(*File))return false;
@@ -65,6 +75,9 @@ public:
         const FStep& Step=Steps[Stage];
         if(Step.Capture)
         {
+            RenderedPlay::ExpectNoToolTips(*Test,Window.ToSharedRef(),Step.Capture);
+            if(FCString::Strcmp(Step.Capture,TEXT("home"))==0||FCString::Strcmp(Step.Capture,TEXT("pause"))==0)
+                ExpectMenuTopBar(*Test,Window.ToSharedRef(),W->GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>(),Step.Capture);
             File=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/TEXT("Screenshots/Menu")/FString::Printf(TEXT("%s-%s.png"),*FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")),Step.Capture));
             IFileManager::Get().MakeDirectory(*FPaths::GetPath(File),true);FScreenshotRequest::RequestScreenshot(File,true,false);return false;
         }
@@ -72,13 +85,17 @@ public:
         if(Label==EscapeStep)
         {
             // Escape during Training opens the pause menu.
-            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape,FModifierKeysState(),0,false,0,0));
+            // Route through the game so the editor's Escape shortcut does not end Play.
+            P->ForwardUIKey(EKeys::Escape,true);
             ++Stage;WaitUntil=GetCurrentRunTime()+2;return false;
         }
         // A drop-down may open in its own window, so every visible window is searched, front-most first.
+        // A label starting with # names a widget tag instead of a button label.
         TArray<TSharedRef<SWindow>> Windows;FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
         TSharedPtr<SWidget> B;TSharedPtr<SWindow> Owner;
-        for(int32 I=Windows.Num()-1;I>=0 && !B;--I)if((B=FindButton(Windows[I],Label)))Owner=Windows[I];
+        const bool bByTag=Label.StartsWith(TEXT("#"));
+        for(int32 I=Windows.Num()-1;I>=0 && !B;--I)
+            if((B=bByTag?RenderedPlay::WithTag(Windows[I],FName(*Label.Mid(1))):RenderedPlay::FindButton(Windows[I],Label)))Owner=Windows[I];
         if(!B){Test->AddError(TEXT("Missing menu button: ")+Label);return true;}
         const FVector2D At=RenderedPlay::PointOn(*B);const FWidgetPath Path=RenderedPlay::PathAt(Owner.ToSharedRef(),At);
         if(!Path.IsValid()||!Path.ContainsWidget(B.Get()))
@@ -87,7 +104,7 @@ public:
             Test->AddError(FString::Printf(TEXT("A click on '%s' at %s does not reach it; hit path: %s"),*Label,*At.ToString(),*Hit));return true;
         }
         RenderedPlay::Click(Owner.ToSharedRef(),At);
-        if(Label==TEXT("\u2190  Back"))
+        if(Label==BackStep)
         {
             // Escape from the home page resumes training through the actual Slate menu handler.
             FKeyEvent Escape(EKeys::Escape,FModifierKeysState(),0,false,0,0);

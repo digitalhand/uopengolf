@@ -9,7 +9,7 @@
 #include "Misc/Guid.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
-#include "UI/ShotDisplay.h"
+#include "UI/Hud/ShotDisplay.h"
 #include "ShotRecording.h"
 
 #include <cerrno>
@@ -74,8 +74,16 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     const FString DefaultRoot = DefaultRootDir();
     TestTrue(TEXT("Default root is in the user's documents"), DefaultRoot.StartsWith(FPlatformProcess::UserDir()));
     TestTrue(TEXT("Default root folder"), DefaultRoot.EndsWith(TEXT("UOpenGolf/Saved/ShotRecordings")));
-    TestEqual(TEXT("Recording status off"), ShotDisplay::RecordingStatus(false, 4), FString(TEXT("Off")));
-    TestEqual(TEXT("Recording status on"), ShotDisplay::RecordingStatus(true, 3), FString(TEXT("On · 3")));
+    TestEqual(TEXT("Record count off"), ShotDisplay::RecordCount(false, 4, 0), FString());
+    TestEqual(TEXT("Record count on"), ShotDisplay::RecordCount(true, 3, 0), FString(TEXT("3")));
+    TestEqual(TEXT("Record count with unsaved shots"), ShotDisplay::RecordCount(true, 3, 2), FString(TEXT("3 · 2 unsaved")));
+    TestEqual(TEXT("Unsaved shots after stopping"), ShotDisplay::RecordCount(false, 3, 2), FString(TEXT("2 unsaved")));
+    TestEqual(TEXT("Record accessible name, signed in"), ShotDisplay::RecordTip(true, true),
+        FString(TEXT("Recording: shots are saved on this computer and to your online profile. Click or press F9 to stop.")));
+    TestEqual(TEXT("Record accessible name, signed out"), ShotDisplay::RecordTip(true, false),
+        FString(TEXT("Recording: shots are saved on this computer. Sign in to also save them to your online profile. Click or press F9 to stop.")));
+    TestEqual(TEXT("Record accessible name, off"), ShotDisplay::RecordTip(false, true),
+        FString(TEXT("Not recording. Click or press F9 to save shots on this computer and to your online profile.")));
 
     // Only real device shots while connected.
     TestTrue(TEXT("Device shot when ready"), IsRecordable(RecordingTestShot(1, TEXT("Square Home")), EState::Ready));

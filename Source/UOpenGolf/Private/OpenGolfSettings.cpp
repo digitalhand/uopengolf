@@ -21,10 +21,33 @@ namespace GolfSettings
             FIELD(MotionBlur), FIELD(DepthOfField), FIELD(LeftHanded), FIELD(DistanceUnits), FIELD(PuttingUnits), FIELD(SpeedUnits), FIELD(AutoTee),
             FIELD(FixedCamera), FIELD(CupZoom), FIELD(Tracer), FIELD(ShotData), FIELD(HudPercent), FIELD(TextPercent),
             FIELD(HighContrast), FIELD(ReducedMotion), FIELD(CalculatedSpin), FIELD(Reconnect), FIELD(Stimp), FIELD(GimmieFeet), FIELD(WindMph),
-            FIELD(Provider), FIELD(OpenConnectPort), FIELD(OpenConnectLan)
+            FIELD(Provider), FIELD(OpenConnectPort), FIELD(OpenConnectLan), FIELD(TimeZone)
 #undef FIELD
         };
+        // Append only: preferences store the index. Labels stay short enough for the settings drop-down.
+        const FTimeZoneChoice Zones[] = {
+            {TEXT("Local"), TEXT(""), TEXT("local")},
+            {TEXT("UTC"), TEXT("Etc/UTC"), TEXT("UTC")},
+            {TEXT("Hawaii (HST)"), TEXT("Pacific/Honolulu"), TEXT("HST")},
+            {TEXT("Alaska (AKT)"), TEXT("America/Anchorage"), TEXT("AKT")},
+            {TEXT("Pacific (PT)"), TEXT("America/Los_Angeles"), TEXT("PT")},
+            {TEXT("Mountain (MT)"), TEXT("America/Denver"), TEXT("MT")},
+            {TEXT("Arizona (MST)"), TEXT("America/Phoenix"), TEXT("MST")},
+            {TEXT("Central (CT)"), TEXT("America/Chicago"), TEXT("CT")},
+            {TEXT("Eastern (ET)"), TEXT("America/New_York"), TEXT("ET")},
+            {TEXT("Atlantic (AT)"), TEXT("America/Halifax"), TEXT("AT")},
+            {TEXT("London (UK)"), TEXT("Europe/London"), TEXT("UK")},
+            {TEXT("Paris (CET)"), TEXT("Europe/Paris"), TEXT("CET")},
+            {TEXT("Athens (EET)"), TEXT("Europe/Athens"), TEXT("EET")},
+            {TEXT("India (IST)"), TEXT("Asia/Kolkata"), TEXT("IST")},
+            {TEXT("Shanghai"), TEXT("Asia/Shanghai"), TEXT("China")},
+            {TEXT("Tokyo (JST)"), TEXT("Asia/Tokyo"), TEXT("JST")},
+            {TEXT("Sydney (AET)"), TEXT("Australia/Sydney"), TEXT("AET")},
+            {TEXT("Auckland (NZT)"), TEXT("Pacific/Auckland"), TEXT("NZT")},
+        };
     }
+    TConstArrayView<FTimeZoneChoice> TimeZones() { return Zones; }
+    const FTimeZoneChoice& ChosenTimeZone() { return Zones[Current.TimeZone]; }
     bool BypassStartupMenu() { return FParse::Param(FCommandLine::Get(), TEXT("NoMainMenu")); }
     void FPreferences::Validate()
     {
@@ -39,6 +62,7 @@ namespace GolfSettings
         if (GimmieFeet != 0 && GimmieFeet != 3 && GimmieFeet != 5 && GimmieFeet != 8 && GimmieFeet != 10) GimmieFeet = 0;
         if (WindMph != -1 && WindMph != 0 && WindMph != 5 && WindMph != 10 && WindMph != 20) WindMph = -1;
         if (OpenConnectPort < 1 || OpenConnectPort > 65535) OpenConnectPort = LaunchMonitorDefaultOpenConnectPort;
+        if (!TimeZones().IsValidIndex(TimeZone)) TimeZone = 0;
     }
     bool FPreferences::operator==(const FPreferences& Other) const
     {
