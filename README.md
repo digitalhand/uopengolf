@@ -39,6 +39,7 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 
 ## Guides
 
+- [Course-design research, tools and learning resources](Docs/CourseDesign/README.md)
 - [Playing, controls and recording](Docs/Playing.md)
 - [Build and editor setup](Docs/Development.md)
 - [Tests and validation](Docs/Testing.md)
