@@ -51,7 +51,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                     [
                         MakeIconButton(SHudIconButton::EIcon::Flag, TAttribute<bool>::CreateLambda([this] { return bHoleMode; }),
                             FSimpleDelegate::CreateLambda([this] { if (Controller.IsValid()) Controller->TogglePlayMode(); }),
-                            TAttribute<FText>::CreateLambda([this] { return FText::FromString(bHoleMode ? TEXT("Range [G]") : TEXT("Play hole [G]")); }))
+                            TAttribute<FText>::CreateLambda([this] { return FText::FromString(bHoleMode ? TEXT("Range [G]") : TEXT("Game Mode [G]")); }))
                     ]
                     + SHorizontalBox::Slot().AutoWidth().Padding(10, 0, 0, 0)
                     [

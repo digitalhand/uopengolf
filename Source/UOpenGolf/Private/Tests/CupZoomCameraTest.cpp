@@ -4,6 +4,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -66,6 +67,7 @@ public:
         switch (Stage)
         {
         case 0:
+            FOpenGolfPermissionTestAccess::Set(World);
             Controller->TogglePlayMode();
             Test->TestTrue(TEXT("The ball is placed 3 m from the cup"), Mode->PlaceBallAt(GreenSpot(300)));
             // Off line, it passes about 26 cm beside the cup and rolls on well past 8 ft.

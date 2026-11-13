@@ -5,6 +5,7 @@
 #include "Play/OpenGolfHoleRound.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/World.h"
 #include "Engine/GameInstance.h"
 #include "FileHelpers.h"
@@ -24,6 +25,13 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     GolfSettings::FPreferences P;
     TestEqual(TEXT("Stimp preserves existing default"),P.Stimp,10);
     TestEqual(TEXT("Auto tee preserves existing default"),P.AutoTee,3);
+    TestEqual(TEXT("Default diagnostic level"), P.DiagnosticLevel, 3);
+    TestEqual(TEXT("Default recording detail"), P.RecordingDetail, 1);
+    P.DiagnosticLevel = 99; P.RecordingDetail = -1; P.Validate();
+    TestEqual(TEXT("Log level clamps"), P.DiagnosticLevel, 4);
+    TestEqual(TEXT("Recording detail clamps"), P.RecordingDetail, 0);
+    P.DiagnosticDirectory = FPaths::ProjectSavedDir() / TEXT("Automation/Logs");
+    P.RecordingDirectory = FPaths::ProjectSavedDir() / TEXT("Automation/Recordings");
     P.Stimp=999;P.AutoTee=-7;P.GimmieFeet=11;P.HudPercent=0;P.SpeedUnits=9;P.Validate();
     TestEqual(TEXT("Stimp clamps"),P.Stimp,15);TestEqual(TEXT("Invalid tee time recovers"),P.AutoTee,3);
     TestEqual(TEXT("Invalid radius is off"),P.GimmieFeet,0);TestEqual(TEXT("Invalid scale recovers"),P.HudPercent,100);
@@ -106,6 +114,7 @@ public:
             P->SetMainMenuOpen(false);Stage=1;return false;
         }
         Test->TestEqual(TEXT("Rejected shot not queued on resume"),M->GetBall()->GetShotNumber(),Before);
+        FOpenGolfPermissionTestAccess::Set(W);
         Monitor->InjectReplayShotAt(0);Test->TestTrue(TEXT("Shots work after resume"),M->GetBall()->GetShotNumber()>Before);
         return true;
     }

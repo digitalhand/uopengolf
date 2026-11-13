@@ -4,6 +4,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "HAL/IConsoleManager.h"
@@ -141,6 +142,7 @@ public:
             Test->TestFalse(TEXT("Escape closes the wind controls"), Controller->IsWindPanelOpen());
             Test->TestNotNull(TEXT("Escape with the wind controls open keeps playing"), GEditor->PlayWorld.Get());
             {
+                FOpenGolfPermissionTestAccess::Set(World);
                 Controller->SetReplayPanelOpen(true);
                 const TSharedRef<SWindControl> Control = SNew(SWindControl).Controller(Controller);
                 FSlateAttributeMetaData::UpdateAllAttributes(*Control, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidation);

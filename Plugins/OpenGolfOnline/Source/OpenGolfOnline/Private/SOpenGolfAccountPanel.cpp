@@ -5,7 +5,6 @@
 #include "OpenGolfOnlineSubsystem.h"
 #include "OnlineFormat.h"
 #include "OnlineJson.h"
-#include "ThirdParty/qrcodegen.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -23,7 +22,9 @@
 using namespace OpenGolfOnline;
 namespace OpenGolfAccountPanelDetail
 {
-    constexpr float QrSize = 256, NameFieldWidth = 320, SectionPadding = 12, SectionGap = 8, ButtonGap = 8;
+    constexpr float NameFieldWidth = 320, SectionPadding = 12, SectionGap = 8, ButtonGap = 8;
+    /** The Account page keeps this height signed out, loading and signed in, so the host's rows below do not jump. */
+    constexpr float AccountMinHeight = 170;
     constexpr float ClubColumn = 80, AverageColumn = 200, ShotsColumn = 120;
     constexpr float DeleteColumn = 110, DeleteIconSize = 32, TimeColumn = 230, ValueColumn = 125;
     const TCHAR* BackTag = TEXT("PageBack");
@@ -31,36 +32,6 @@ namespace OpenGolfAccountPanelDetail
     const TCHAR* HistoryCaptions[] = {TEXT("Time"),TEXT("Carry"),TEXT("Roll"),TEXT("Ball speed"),TEXT("Launch angle"),TEXT("Launch direction"),TEXT("Total spin"),TEXT("Spin axis"),TEXT("Backspin"),TEXT("Sidespin"),TEXT("Face angle"),TEXT("Club path"),TEXT("Face to path"),TEXT("Attack angle"),TEXT("Dynamic loft")};
     static_assert(UE_ARRAY_COUNT(HistoryFields) == UE_ARRAY_COUNT(HistoryCaptions), "Every history field has a caption.");
 
-    class SSignInQr : public SLeafWidget
-    {
-    public:
-        SLATE_BEGIN_ARGS(SSignInQr) {} SLATE_ARGUMENT(FString, Url) SLATE_END_ARGS()
-        void Construct(const FArguments& Args)
-        {
-            uint8 Temp[qrcodegen_BUFFER_LEN_FOR_VERSION(20)];
-            Code.SetNumZeroed(qrcodegen_BUFFER_LEN_FOR_VERSION(20));
-            const FTCHARToUTF8 Url(*Args._Url);
-            Valid=qrcodegen_encodeText(Url.Get(),Temp,Code.GetData(),qrcodegen_Ecc_MEDIUM,1,20,qrcodegen_Mask_AUTO,true);
-        }
-        virtual FVector2D ComputeDesiredSize(float) const override {return FVector2D(QrSize,QrSize);}
-        virtual int32 OnPaint(const FPaintArgs&, const FGeometry& G, const FSlateRect&, FSlateWindowElementList& Elements,
-            int32 Layer, const FWidgetStyle&, bool) const override
-        {
-            const auto* Brush=FCoreStyle::Get().GetBrush("WhiteBrush");
-            FSlateDrawElement::MakeBox(Elements,Layer,G.ToPaintGeometry(),Brush,ESlateDrawEffect::None,FLinearColor::White);
-            if (!Valid) return Layer;
-            const int32 Size=qrcodegen_getSize(Code.GetData());
-            const float Cell=FMath::FloorToFloat(FMath::Min(G.GetLocalSize().X,G.GetLocalSize().Y)/(Size+8));
-            const FVector2D Start=(G.GetLocalSize()-FVector2D(Cell*(Size+8)))*0.5f+FVector2D(Cell*4);
-            for(int32 Y=0;Y<Size;++Y)for(int32 X=0;X<Size;++X)
-                if(qrcodegen_getModule(Code.GetData(),X,Y))
-                    FSlateDrawElement::MakeBox(Elements,Layer+1,G.ToPaintGeometry(FVector2f(Cell,Cell),FSlateLayoutTransform(FVector2f(Start+FVector2D(X*Cell,Y*Cell)))),Brush,ESlateDrawEffect::None,FLinearColor::Black);
-            return Layer+1;
-        }
-    private:
-        TArray<uint8> Code;
-        bool Valid=false;
-    };
     /** One history cell: the shot time in TimeZone, or a number to one decimal. Face to path is derived. */
     FString HistoryValue(const TSharedPtr<FJsonObject>& Row,int32 Field,const FString& TimeZone)
     {
@@ -75,6 +46,58 @@ namespace OpenGolfAccountPanelDetail
     }
 } // namespace OpenGolfAccountPanelDetail
 using namespace OpenGolfAccountPanelDetail;
+
+void FOpenGolfDisplayNameDraft::Synchronize(const UOpenGolfOnlineSubsystem* Online)
+{
+    const FString Key = Online && Online->HasSession() ? Online->GetAccountKey() : FString();
+    if (AccountKey != Key)
+    {
+        AccountKey = Key; Name.Empty(); Error.Empty(); bEditing = bSaving = false;
+    }
+    if (!bEditing && !bSaving)
+        Name = Online && !Key.IsEmpty() ? OpenGolfOnline::Text(Online->GetProfile(), TEXT("display_name")) : FString();
+}
+bool FOpenGolfDisplayNameDraft::IsDirty(const UOpenGolfOnlineSubsystem* Online) const
+{
+    return Online && Online->HasSession() && Online->GetProfile().IsValid() && AccountKey == Online->GetAccountKey()
+        && bEditing && !Name.TrimStartAndEnd().Equals(OpenGolfOnline::Text(Online->GetProfile(), TEXT("display_name")), ESearchCase::CaseSensitive);
+}
+FString FOpenGolfDisplayNameDraft::ValidationError(const UOpenGolfOnlineSubsystem* Online) const
+{
+    if (!IsDirty(Online)) return {};
+    if (Name.TrimStartAndEnd().IsEmpty()) return TEXT("Enter a display name.");
+    if (Name.Len() > 40) return TEXT("Display name must be 40 characters or fewer.");
+    for (TCHAR C : Name) if (C < 32 || C == 127) return TEXT("Display name cannot contain control characters.");
+    return {};
+}
+void FOpenGolfDisplayNameDraft::Discard(const UOpenGolfOnlineSubsystem* Online)
+{
+    if (bSaving) return;
+    bEditing = false; Error.Empty(); Synchronize(Online);
+}
+void FOpenGolfDisplayNameDraft::Apply(UOpenGolfOnlineSubsystem* Online)
+{
+    Synchronize(Online);
+    if (bSaving) return;
+    Error = ValidationError(Online);
+    if (!Error.IsEmpty()) return;
+    if (!IsDirty(Online)) { Discard(Online); return; }
+    if (Online->IsBusy()) { Error = TEXT("Account is busy. Try Apply again when it finishes."); return; }
+    bSaving = true;
+    const FString Key = AccountKey;
+    const TWeakPtr<FOpenGolfDisplayNameDraft> WeakDraft = AsShared();
+    const TWeakObjectPtr<UOpenGolfOnlineSubsystem> Service = Online;
+    Online->UpdateDisplayName(Name.TrimStartAndEnd(), [WeakDraft, Service, Key](bool bSaved)
+    {
+        const auto Draft = WeakDraft.Pin();
+        if (!Draft) return;
+        Draft->Synchronize(Service.Get());
+        if (Draft->AccountKey != Key) return;
+        Draft->bSaving = false;
+        if (bSaved) Draft->Discard(Service.Get());
+        else Draft->Error = TEXT("Could not save the display name. Try Apply again.");
+    });
+}
 
 TSharedRef<SWidget> SOpenGolfAccountPanel::Text(const FString& Value,int32 Size,bool bMuted) const
 {
@@ -98,6 +121,8 @@ TSharedRef<SVerticalBox> SOpenGolfAccountPanel::AddSection(const TSharedRef<SVer
 void SOpenGolfAccountPanel::Construct(const FArguments& Args)
 {
     Online=Args._Online;Style=Args._Style;bShowHeading=Args._ShowHeading;PageType=Args._Page;
+    DisplayNameDraft=Args._DisplayNameDraft.IsValid()?Args._DisplayNameDraft:MakeShared<FOpenGolfDisplayNameDraft>();
+    DisplayNameDraft->Synchronize(Online.Get());
     TimeZone=Args._TimeZone;TimeZoneName=Args._TimeZoneName.IsEmpty()?TEXT("local"):Args._TimeZoneName;
     bWasSignedIn=Online.IsValid()&&Online->HasSession();
     // The account this panel starts with is not a change: otherwise the first Rebuild would reset bLoadedCarry and
@@ -112,7 +137,7 @@ void SOpenGolfAccountPanel::Construct(const FArguments& Args)
     Root->AddSlot().AutoHeight()[SNew(STextBlock).Font(Style.GetFont(Style.SmallSize)).ColorAndOpacity(Style.LabelColor).AutoWrapText(true)
         .Text_Lambda([this]{return FText::FromString(Online.IsValid()?Online->GetStorageWarning():FString());})
         .Visibility_Lambda([this]{return Online.IsValid()&&!Online->GetStorageWarning().IsEmpty()?EVisibility::Visible:EVisibility::Collapsed;})];
-    if(PageType==EOpenGolfAccountPage::Account)Root->AddSlot().AutoHeight()[SAssignNew(PageContent,SBox).MinDesiredHeight(230)];
+    if(PageType==EOpenGolfAccountPage::Account)Root->AddSlot().AutoHeight()[SAssignNew(PageContent,SBox).MinDesiredHeight(AccountMinHeight)];
     else Root->AddSlot().FillHeight(1)[SAssignNew(PageContent,SBox)];
     ChildSlot[SAssignNew(Content,SBox)[Root]]; Rebuild();
 }
@@ -124,9 +149,10 @@ void SOpenGolfAccountPanel::LoadCarryIfReady()
 void SOpenGolfAccountPanel::Tick(const FGeometry& G,double T,float D)
 {
     SCompoundWidget::Tick(G,T,D);
+    DisplayNameDraft->Synchronize(Online.Get());
     if(Online.IsValid()&&Online->HasSession()!=bWasSignedIn)
     {
-        bWasSignedIn=Online->HasSession();bHistory=false;bLoadedCarry=false;ConfirmDeleteId.Empty();NameDraft.Empty();
+        bWasSignedIn=Online->HasSession();bHistory=false;bLoadedCarry=false;ConfirmDeleteId.Empty();
         bRebuild=true;
     }
     LoadCarryIfReady();
@@ -134,10 +160,10 @@ void SOpenGolfAccountPanel::Tick(const FGeometry& G,double T,float D)
     const bool Ready=Online->HasSession() && Online->GetProfile().IsValid();
     const auto State=Online->GetAccountState();
     const bool Loading=State==EOpenGolfAccountState::Restoring || (Online->HasSession()&&!Ready);
-    const int32 Shape=Ready?4:Loading?3:Online->IsSigningIn()?(!Online->GetQrUrl().IsEmpty()?2:1):0;
-    const bool Changed=SeenShape!=Shape || SeenQr!=Online->GetQrUrl() || LastAccountKey!=Online->GetAccountKey();
+    const int32 Shape=Ready?3:Loading?2:Online->IsSigningIn()?1:0;
+    const bool Changed=SeenShape!=Shape || LastAccountKey!=Online->GetAccountKey();
     if(bRebuild || Changed || (PageType==EOpenGolfAccountPage::Shots && SeenHistoryRevision!=Online->GetHistoryRevision()))
-    {bRebuild=false;SeenShape=Shape;SeenQr=Online->GetQrUrl();SeenHistoryRevision=Online->GetHistoryRevision();Rebuild();}
+    {bRebuild=false;SeenShape=Shape;SeenHistoryRevision=Online->GetHistoryRevision();Rebuild();}
 }
 FText SOpenGolfAccountPanel::GetTitle() const
 {
@@ -160,7 +186,8 @@ void SOpenGolfAccountPanel::Rebuild()
     auto& Service=*Online.Get();
     const bool HadFocus=PageContent->HasFocusedDescendants();
     const float Offset=Scroll.IsValid()?Scroll->GetScrollOffset():0;
-    if(LastAccountKey!=Service.GetAccountKey()){NameDraft.Empty();LastAccountKey=Service.GetAccountKey();bLoadedCarry=false;ConfirmDeleteId.Empty();}
+    DisplayNameDraft->Synchronize(&Service);
+    if(LastAccountKey!=Service.GetAccountKey()){LastAccountKey=Service.GetAccountKey();bLoadedCarry=false;ConfirmDeleteId.Empty();}
     auto Page=SNew(SVerticalBox);
     const bool Ready=Service.HasSession() && Service.GetProfile().IsValid();
     if(PageType==EOpenGolfAccountPage::Account)
@@ -204,32 +231,25 @@ TSharedRef<SWidget> SOpenGolfAccountPanel::BuildHeading(UOpenGolfOnlineSubsystem
         [SNew(STextBlock).Font(Style.GetFont(Style.TitleSize)).ColorAndOpacity(Style.TextColor).Text_Lambda([this]{return GetTitle();})]
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
         [SNew(SOpenGolfAccountButton).Online(&Service).SignOut(true).Style(Style)
-            .OnClicked_Lambda([this]{if(Online.IsValid())Online->SignOut();bHistory=false;ConfirmDeleteId.Empty();NameDraft.Empty();bRebuild=true;})];
+            .OnClicked_Lambda([this]{if(Online.IsValid())Online->SignOut();DisplayNameDraft->Synchronize(Online.Get());bHistory=false;ConfirmDeleteId.Empty();bRebuild=true;})];
 }
 void SOpenGolfAccountPanel::BuildSignedOut(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
 {
     auto* S=&Service;
     const TSharedRef<SVerticalBox> Rows=AddSection(Page,TEXT("ACCOUNT"));
+    // A sign-in in progress (the browser is open, or an approved one is completing) offers only its cancel; the
+    // status line above says what it is waiting for.
     if(Service.IsSigningIn())
     {
-        const bool bQr=!Service.GetQrUrl().IsEmpty();
-        if(bQr)
-        {
-            Rows->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,8)[SNew(SBox).WidthOverride(QrSize).HeightOverride(QrSize)[SNew(SSignInQr).Url(Service.GetQrUrl())]];
-            Rows->AddSlot().AutoHeight().Padding(0,0,0,12)[Text(Service.GetVerificationUrl()+TEXT("   Code: ")+Service.GetUserCode())];
-        }
-        auto Actions=SNew(SHorizontalBox);
-        if(bQr)Actions->AddSlot().AutoWidth().Padding(0,0,ButtonGap,0)[Button(TEXT("Open verification page"),[S]{S->OpenVerificationPage();})];
-        Actions->AddSlot().AutoWidth()[Button(TEXT("Cancel sign-in"),[S]{S->CancelSignIn();})];
-        Rows->AddSlot().AutoHeight().HAlign(HAlign_Left)[Actions];
+        Rows->AddSlot().AutoHeight().HAlign(HAlign_Left)[Button(TEXT("Cancel sign-in"),[S]{S->CancelSignIn();})];
         return;
     }
+    // Both open the login page in this computer's browser. The QR code is a separate widget, SOpenGolfQrSignIn.
     const bool bConfigured=Service.IsConfigured();
     Rows->AddSlot().AutoHeight().Padding(0,0,0,16)[Text(TEXT("Keep your range shots and club history together."))];
     Rows->AddSlot().AutoHeight().HAlign(HAlign_Left)[SNew(SHorizontalBox)
-        +SHorizontalBox::Slot().AutoWidth().Padding(0,0,ButtonGap,0)[Button(TEXT("Sign in with QR"),[S]{S->SignInWithQr();},bConfigured,true)]
-        +SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Sign in on this computer"),[S]{S->SignInWithBrowser();},bConfigured)]];
-    Rows->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,ButtonGap,0,0)[Button(TEXT("Create account"),[S]{S->SignInWithBrowser(true);},bConfigured)];
+        +SHorizontalBox::Slot().AutoWidth().Padding(0,0,ButtonGap,0)[Button(TEXT("Sign In"),[S]{S->SignInWithBrowser();},bConfigured,true)]
+        +SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Create Account"),[S]{S->SignInWithBrowser(true);},bConfigured)]];
 }
 void SOpenGolfAccountPanel::BuildProfile(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
 {
@@ -237,15 +257,25 @@ void SOpenGolfAccountPanel::BuildProfile(const TSharedRef<SVerticalBox>& Page,UO
     auto Profile=AddSection(Page,TEXT("PROFILE"));
     Profile->AddSlot().AutoHeight()[SNew(STextBlock).Font(Style.GetFont(Style.BodySize)).ColorAndOpacity(Style.TextColor)
         .Text_Lambda([this,S]{return FText::FromString(TEXT("Member since ")+ShotDate(OpenGolfOnline::Text(S->GetProfile(),TEXT("created_at")),TimeZone));})];
-    if(NameDraft.IsEmpty())NameDraft=OpenGolfOnline::Text(Service.GetProfile(),TEXT("display_name"));
+    Profile->AddSlot().AutoHeight().Padding(0,6,0,0)[SNew(STextBlock).Tag(TEXT("AccountAdmin"))
+        .Font(Style.GetFont(Style.SmallSize)).ColorAndOpacity(Style.AccentColor).Text(FText::FromString(TEXT("admin")))
+        .Visibility_Lambda([S]{return S->HasPermission(TEXT("ogolf:admin"))?EVisibility::Visible:EVisibility::Collapsed;})];
     Profile->AddSlot().AutoHeight().Padding(0,12,0,6)[Text(TEXT("Display name"),Style.SmallSize,true)];
     Profile->AddSlot().AutoHeight().HAlign(HAlign_Left)[SNew(SHorizontalBox)
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(NameFieldWidth)
-            [SNew(SEditableTextBox).Style(Style.TextField.IsSet()?&Style.TextField.GetValue():&FCoreStyle::Get().GetWidgetStyle<FEditableTextBoxStyle>("NormalEditableTextBox"))
-                .Font(Style.GetFont(Style.BodySize)).Text(FText::FromString(NameDraft))
-                .OnTextChanged_Lambda([this](const FText& Value){NameDraft=Value.ToString();})]]
+            [SAssignNew(NameField,SEditableTextBox).Tag(TEXT("DisplayNameField"))
+                .Style(Style.TextField.IsSet()?&Style.TextField.GetValue():&FCoreStyle::Get().GetWidgetStyle<FEditableTextBoxStyle>("NormalEditableTextBox"))
+                .Font(Style.GetFont(Style.BodySize)).Text_Lambda([this]{return FText::FromString(DisplayNameDraft->Name);})
+                .IsReadOnly_Lambda([this]{return !DisplayNameDraft->bEditing || DisplayNameDraft->bSaving;})
+                .OnTextChanged_Lambda([this](const FText& Value){if(DisplayNameDraft->bEditing&&!DisplayNameDraft->bSaving){DisplayNameDraft->Name=Value.ToString();DisplayNameDraft->Error.Empty();}})]]
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(ButtonGap,0,0,0)
-            [Button(TEXT("Save display name"),[this,S]{S->UpdateDisplayName(NameDraft);},true)]];
+            [SNew(SOpenGolfIconButton).Style(Style).Icon(EOpenGolfAccountIcon::Edit).Tag(TEXT("EditDisplayName"))
+                .Label(FText::FromString(TEXT("Edit display name")))
+                .IsEnabled_Lambda([this,S]{return !DisplayNameDraft->bEditing&&!DisplayNameDraft->bSaving&&!S->IsBusy();})
+                .OnClicked_Lambda([this]{DisplayNameDraft->bEditing=true;DisplayNameDraft->Error.Empty();if(NameField.IsValid())FSlateApplication::Get().SetKeyboardFocus(NameField,EFocusCause::SetDirectly);})]];
+    Profile->AddSlot().AutoHeight()[SNew(STextBlock).Font(Style.GetFont(Style.SmallSize)).ColorAndOpacity(Style.LabelColor).AutoWrapText(true)
+        .Text_Lambda([this]{return FText::FromString(DisplayNameDraft->Error);})
+        .Visibility_Lambda([this]{return DisplayNameDraft->Error.IsEmpty()?EVisibility::Collapsed:EVisibility::Visible;})];
 }
 void SOpenGolfAccountPanel::BuildClubs(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
 {

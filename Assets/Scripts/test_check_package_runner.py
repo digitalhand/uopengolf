@@ -174,10 +174,16 @@ class PackageRunnerTests(unittest.TestCase):
         netfx = self.root / "NETFX"
         registry.side_effect = lambda key, value: sdk if value == "KitsRoot10" else netfx
         self.write("System32/tar.exe")
-        with patch.dict(os.environ, {"ProgramFiles(x86)": str(program_files), "SystemRoot": str(self.root)}):
+        environment = {"ProgramFiles(x86)": str(program_files), "ProgramFiles": str(program_files),
+                       "LOCALAPPDATA": str(self.root / "Local"), "SystemRoot": str(self.root)}
+        with patch.dict(os.environ, environment), \
+                patch("Assets.Scripts.check_package_runner.shutil.which", return_value=None):
             with self.assertRaisesRegex(ValueError, ".NET Framework"):
                 check_windows_tools()
             self.write("Include/um/mscoree.h", root=netfx)
+            with self.assertRaisesRegex(ValueError, "Inno Setup"):
+                check_windows_tools()
+            self.write("Local/Programs/Inno Setup 6/ISCC.exe")
             check_windows_tools()
             (sdk / "Include/10.0.26100.0/cppwinrt/winrt/base.h").unlink()
             with self.assertRaisesRegex(ValueError, r"C\+\+/WinRT"):

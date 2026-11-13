@@ -1,4 +1,9 @@
 // SPDX-License-Identifier: MIT
 #include "Modules/ModuleManager.h"
 
-IMPLEMENT_PRIMARY_GAME_MODULE(FDefaultGameModuleImpl, UOpenGolf, "UOpenGolf");
+#include "OpenGolfSettings.h"
+class FOpenGolfModule : public FDefaultGameModuleImpl
+{
+    virtual void ShutdownModule() override { GolfSettings::ShutdownDiagnostics(); }
+};
+IMPLEMENT_PRIMARY_GAME_MODULE(FOpenGolfModule, UOpenGolf, "UOpenGolf");

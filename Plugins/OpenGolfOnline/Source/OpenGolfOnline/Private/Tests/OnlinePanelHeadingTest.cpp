@@ -86,7 +86,7 @@ bool FOpenGolfPanelHeadingTest::RunTest(const FString&)
     };
 
     // Sign in as OpenGolf.Online.Session does.
-    Session->SignInWithQr();
+    Session->KeepQrSignInReady();
     Respond(TEXT("oauth/device/code"), TEXT("{\"device_code\":\"private-code\",\"user_code\":\"USER-CODE\",\"verification_uri\":\"https://login.example.test/activate\",\"verification_uri_complete\":\"https://login.example.test/activate?user_code=USER-CODE\",\"expires_in\":600,\"interval\":5}"));
     Session->PollAt = 0; Session->Tick(0);
     Respond(TEXT("oauth/token"), TEXT("{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"token_type\":\"Bearer\",\"expires_in\":3600}"));

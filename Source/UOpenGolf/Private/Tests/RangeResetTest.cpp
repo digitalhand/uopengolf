@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -45,6 +46,7 @@ public:
         if (Stage == 0)
         {
             Controller->SelectReplayShot(0);
+            FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
             Controller->InjectReplayShot();
             ++Stage;
             return false;
@@ -57,6 +59,7 @@ public:
             }
             // Hit again while the first shot's reset is pending.
             const int32 FirstShotNumber = Result.ShotNumber;
+            FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
             Controller->InjectReplayShot();
             Ball->GetShotResult(Result);
             Test->TestTrue(TEXT("Next shot replaces the result"), Result.ShotNumber == FirstShotNumber + 1 && !Result.bAtRest);

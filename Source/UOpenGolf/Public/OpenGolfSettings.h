@@ -9,6 +9,8 @@ namespace GolfSettings
     /** Player preferences; Game Defaults are copied into a session, never read mid-shot. */
     struct UOPENGOLF_API FPreferences
     {
+        FString DiagnosticDirectory, RecordingDirectory;
+        int32 DiagnosticLevel = 3, RecordingDetail = 1;
         int32 MotionBlur = 0, DepthOfField = 0;
         int32 LeftHanded = 0, DistanceUnits = 0, PuttingUnits = 0, SpeedUnits = 0;
         int32 AutoTee = 3, FixedCamera = 0, CupZoom = 1, Tracer = 1, ShotData = 2;
@@ -24,6 +26,10 @@ namespace GolfSettings
         bool operator==(const FPreferences& Other) const;
         bool operator!=(const FPreferences& Other) const { return !(*this == Other); }
     };
+    UOPENGOLF_API FString DiagnosticPath(const FPreferences& P);
+    UOPENGOLF_API FString RecordingPath(const FPreferences& P);
+    UOPENGOLF_API FString ValidateDataDirectories(const FPreferences& P);
+    void ShutdownDiagnostics();
     /** A time zone the player can choose: its menu label, IANA ID (empty is this computer's zone) and short name. */
     struct FTimeZoneChoice
     {

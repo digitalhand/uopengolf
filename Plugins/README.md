@@ -9,6 +9,8 @@
   a marked golf ball and turf grass, with editable Blender sources.
 
 - [`OpenGolfSavanna/`](OpenGolfSavanna/README.md): open-licence trees, ground textures and understory.
+- [`OpenGameUpdate/`](OpenGameUpdate/README.md): in-game updates from GitHub Releases (check, verified
+  download, installer start). No UI or game code; the game draws the update screen.
 
 Each plugin README links to its usage, technical reference and limitations. See
 [architecture](../Docs/Architecture.md) for how they fit together.

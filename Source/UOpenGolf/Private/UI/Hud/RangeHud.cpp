@@ -337,7 +337,9 @@ TSharedRef<SWidget> SRangeHud::MakeTile(int32 Index)
 {
     const bool bLaunch = Tiles[Index].Group == ShotDisplay::ETileGroup::Launch;
     // clang-format off
-    return SNew(SBox).WidthOverride(HudTileWidth).HeightOverride(Index<3?56.f:HudTileHeight).Tag(TEXT("ShotTile"))
+    // Total, Carry and Roll (the first three) stand out by color and outline only: every tile has the same size and
+    // value font, so each label fits under its value.
+    return SNew(SBox).WidthOverride(HudTileWidth).HeightOverride(HudTileHeight).Tag(TEXT("ShotTile"))
     .Visibility_Lambda([Index]{ const int32 Detail = GolfSettings::Get().ShotData; return Detail == 2 || Index < 3 || (Detail == 1 && (Index < 5 || Index == 12)) ? EVisibility::Visible : EVisibility::Collapsed; })
     [
         SNew(SBorder).BorderImage(Index<3 ? &ResultBrush : bLaunch ? &LaunchBrush : &TileBrush).Padding(FMargin(6, 2)).VAlign(VAlign_Center)
@@ -348,7 +350,7 @@ TSharedRef<SWidget> SRangeHud::MakeTile(int32 Index)
                 // Long text such as "Soft Fairway" shrinks to fit the tile.
                 SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
                 [
-                    SNew(STextBlock).Font(HudStyle::Font("Bold", Index<3?22:16)).ColorAndOpacity(Index<3?HudStyle::AccentColor():HudStyle::TextColor())
+                    SNew(STextBlock).Font(HudStyle::Font("Bold", 16)).ColorAndOpacity(Index<3?HudStyle::AccentColor():HudStyle::TextColor())
                     .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
                     .Text_Lambda([this, Index] { return TileValues.IsValidIndex(Index) ? TileValues[Index] : FText::GetEmpty(); })
                 ]

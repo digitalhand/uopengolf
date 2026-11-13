@@ -110,6 +110,19 @@ def check_windows_tools() -> None:
     if not any(root and (root / "Include/um/mscoree.h").is_file() for root in netfx_roots):
         raise ValueError(".NET Framework SDK not found. Install the 4.8 SDK/developer tools through Visual Studio Installer.")
     require_files([Path(os.environ["SystemRoot"]) / "System32/tar.exe"], "Install Windows' tar archive tool.")
+    if not find_iscc():
+        raise ValueError("Inno Setup 6 not found; it builds the installer. Install it with: winget install JRSoftware.InnoSetup")
+
+
+def find_iscc() -> Path | None:
+    """Inno Setup's compiler, in the places Assets/Installer/build_installer.ps1 looks."""
+    roots = [os.environ.get(name) for name in ("ProgramFiles(x86)", "ProgramFiles")]
+    candidates = [Path(root) / "Inno Setup 6/ISCC.exe" for root in roots if root]
+    if os.environ.get("LOCALAPPDATA"):
+        candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Programs/Inno Setup 6/ISCC.exe")
+    found = next((path for path in candidates if path.is_file()), None)
+    on_path = shutil.which("ISCC.exe")
+    return found or (Path(on_path) if on_path else None)
 
 
 def check_tools(engine: Path, system: str) -> None:

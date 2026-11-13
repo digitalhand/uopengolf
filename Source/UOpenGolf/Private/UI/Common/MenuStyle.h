@@ -23,8 +23,15 @@ namespace MenuStyle
     constexpr float MenuButtonWidth = 320.0f;
     constexpr float SearchWidth = 300.0f;
     constexpr float NavWidth = 230.0f;
+    /** The QR sign-in under the Settings categories: its square's side, 70% of the categories' width, and the gap above it. */
+    constexpr float QrSize = NavWidth * 0.7f;
+    constexpr float QrGap = 16.0f;
     /** Width of a settings row's control column. */
     constexpr float ControlWidth = 225.0f;
+    /** Control column for a button whose label changes, such as Check for updates. */
+    constexpr float ActionControlWidth = 300.0f;
+    /** Control column for a folder path field, so most of the path is visible. */
+    constexpr float PathControlWidth = 460.0f;
 
     /** Buttons, icons, sections and fonts from HudStyle. Fonts follow the Text size preference when a page is built. */
     FOpenGolfAccountStyle Make();

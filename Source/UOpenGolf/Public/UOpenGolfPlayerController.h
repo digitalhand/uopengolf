@@ -38,6 +38,7 @@ public:
     void OpenMainMenu();
     /** Opens the menu at Settings › Simulator: the HUD's launch-monitor status does this when clicked. */
     void OpenLaunchMonitorSettings();
+    bool CanUseManualShots() const;
     /**
      * Ends the training session and shows the main menu: reloads the map, so the ball, round and session
      * defaults start fresh and any recording is finalized. The launch monitor (game-instance) stays connected.

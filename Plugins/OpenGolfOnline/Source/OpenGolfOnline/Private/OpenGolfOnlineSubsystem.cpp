@@ -4,6 +4,7 @@
 #include "OnlineAtomicFile.h"
 #include "TokenStore.h"
 #include "BrowserLogin.h"
+#include "Misc/Base64.h"
 #include "Async/Async.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/FileManager.h"
@@ -117,7 +118,7 @@ void UOpenGolfOnlineSubsystem::Deinitialize()
     FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
     OnBeforeReadProfile.Broadcast();
     if (Config.IsValid()) SaveLocal();
-    AccessToken.Empty(); RefreshToken.Empty();
+    Permissions.Reset(); AccessToken.Empty(); RefreshToken.Empty();
     Super::Deinitialize();
 }
 void UOpenGolfOnlineSubsystem::Send(const FString& Url, const FString& Verb, const FString& Body,
@@ -179,7 +180,7 @@ void UOpenGolfOnlineSubsystem::CancelSignIn()
     ++AuthAttempt;
     for (auto& R : AuthRequests) R->Cancel();
     Requests.Append(AuthRequests); AuthRequests.Empty(); CloseBrowser();
-    bSigningIn = false; DeviceCode.Empty(); UserCode.Empty(); VerificationUrl.Empty(); QrUrl.Empty();
+    bSigningIn = false;
     Status = HasSession() ? TEXT("Signed in.") : TEXT("Signed out.");
     Touch();
 }
@@ -187,61 +188,89 @@ void UOpenGolfOnlineSubsystem::FinishSignInFailure(const FString& Message)
 {
     CancelSignIn(); Status = Message; Touch();
 }
-void UOpenGolfOnlineSubsystem::SignInWithQr()
+void UOpenGolfOnlineSubsystem::DropQr()
+{
+    ++QrAttempt; bQrRequesting = false; QrExpiresAt = 0;
+    DeviceCode.Empty(); UserCode.Empty(); QrUrl.Empty();
+}
+void UOpenGolfOnlineSubsystem::KeepQrSignInReady()
 {
     if (!Config.IsValid()) return;
-    CancelSignIn();
-    bSigningIn = true; Status = TEXT("Getting a QR code..."); AuthDeadline = FPlatformTime::Seconds() + 30; Touch();
-    const uint64 Attempt = AuthAttempt;
+    QrWantedUntil = FPlatformTime::Seconds() + QrLeaseSeconds;
+    MaintainQr();
+}
+void UOpenGolfOnlineSubsystem::MaintainQr()
+{
+    const double Now = FPlatformTime::Seconds();
+    // An approved sign-in that is being completed (no browser open) makes a code pointless until it succeeds or fails.
+    if (bStopped || bQrRequesting || Now >= QrWantedUntil || (bSigningIn && !Browser)) return;
+    if (DeviceCode.IsEmpty() || Now >= QrExpiresAt) { if (Now >= QrRetryAt) RequestQr(); }
+    else if (Now >= PollAt) PollDevice();
+}
+void UOpenGolfOnlineSubsystem::RequestQr()
+{
+    DropQr(); bQrRequesting = true; Touch();
+    const uint64 Attempt = QrAttempt;
     const FString Payload = Form({{TEXT("client_id"),Config.ClientId},{TEXT("audience"),Config.Audience},{TEXT("scope"),TEXT("openid profile offline_access")}});
+    // QR requests are not sign-in requests: cancelling a browser sign-in leaves them running.
     Send(Config.Authority + TEXT("oauth/device/code"), TEXT("POST"), Payload, {}, [this, Attempt](FReply Reply)
     {
-        if (Attempt != AuthAttempt) return;
+        if (Attempt != QrAttempt) return;
+        bQrRequesting = false;
         const auto Data = Object(Reply.Body);
-        if (!Success(Reply) || !Data) { FinishSignInFailure(TEXT("Could not start QR sign-in. Try again or use this computer's browser.")); return; }
-        DeviceCode = Text(Data,TEXT("device_code")); UserCode = Text(Data,TEXT("user_code"));
-        VerificationUrl = Text(Data,TEXT("verification_uri")); QrUrl = Text(Data,TEXT("verification_uri_complete"));
+        const FString Device = Text(Data,TEXT("device_code")), User = Text(Data,TEXT("user_code"));
+        const FString Page = Text(Data,TEXT("verification_uri")), Complete = Text(Data,TEXT("verification_uri_complete"));
         const double Seconds = Number(Data,TEXT("expires_in"));
         const double Interval = Number(Data,TEXT("interval"), 5);
-        if (DeviceCode.IsEmpty() || DeviceCode.Len() > 4096 || UserCode.IsEmpty() || UserCode.Len() > 64
-            || !VerificationUrl.StartsWith(Config.Authority, ESearchCase::CaseSensitive)
-            || !QrUrl.StartsWith(Config.Authority, ESearchCase::CaseSensitive) || QrUrl.Len() > 2048
+        const double Now = FPlatformTime::Seconds();
+        if (!Success(Reply) || !Data || Device.IsEmpty() || Device.Len() > 4096 || User.IsEmpty() || User.Len() > 64
+            || !Page.StartsWith(Config.Authority, ESearchCase::CaseSensitive)
+            || !Complete.StartsWith(Config.Authority, ESearchCase::CaseSensitive) || Complete.Len() > 2048
             || Seconds <= 0 || Seconds > 3600 || Interval < 1 || Interval > 300)
-        { FinishSignInFailure(TEXT("The login service returned an invalid response.")); return; }
-        PollInterval = FMath::CeilToInt(Interval); PollAt = FPlatformTime::Seconds() + PollInterval;
-        AuthDeadline = FPlatformTime::Seconds() + Seconds;
-        Status = TEXT("Scan the QR code and approve sign-in on your phone."); Touch();
-    }, true, true);
+        { bQrFailed = true; QrRetryAt = Now + 30; Touch(); return; }
+        DeviceCode = Device; UserCode = User; QrUrl = Complete;
+        bQrFailed = false; QrRetryAt = 0;
+        PollInterval = FMath::CeilToInt(Interval); PollAt = Now + PollInterval; QrExpiresAt = Now + Seconds;
+        Touch();
+    }, true);
 }
 void UOpenGolfOnlineSubsystem::SignInWithBrowser(bool bCreateAccount)
 {
     if (!Config.IsValid()) return;
     CancelSignIn();
     Browser = MakeShared<FOpenGolfBrowserLogin>();
-    if (!Browser->Start(Config, bCreateAccount)) { FinishSignInFailure(TEXT("Could not open browser sign-in. Try QR sign-in instead.")); return; }
+    if (!Browser->Start(Config, bCreateAccount)) { FinishSignInFailure(TEXT("Could not open browser sign-in. Scan the QR code instead.")); return; }
     bSigningIn = true; AuthDeadline = FPlatformTime::Seconds() + 180;
     Status = TEXT("Complete sign-in in your browser."); Touch();
 }
-void UOpenGolfOnlineSubsystem::OpenVerificationPage() const
-{
-    if (!QrUrl.IsEmpty() && QrUrl.StartsWith(Config.Authority, ESearchCase::CaseSensitive)) FPlatformProcess::LaunchURL(*QrUrl, nullptr, nullptr);
-}
 void UOpenGolfOnlineSubsystem::PollDevice()
 {
-    const uint64 Attempt = AuthAttempt;
+    const uint64 Attempt = QrAttempt;
     PollAt = TNumericLimits<double>::Max();
     const FString Payload = Form({{TEXT("grant_type"),TEXT("urn:ietf:params:oauth:grant-type:device_code")},
         {TEXT("client_id"),Config.ClientId},{TEXT("device_code"),DeviceCode}});
     Send(Config.Authority + TEXT("oauth/token"), TEXT("POST"), Payload, {}, [this, Attempt](FReply Reply)
     {
-        if (Attempt != AuthAttempt) return;
+        if (Attempt != QrAttempt) return;
+        const double Now = FPlatformTime::Seconds();
+        if (Success(Reply))
+        {
+            // The code is spent. Finish as a sign-in, ending any browser sign-in, so a failure is reported and a new
+            // code follows.
+            DropQr(); CancelSignIn();
+            bSigningIn = true; AuthDeadline = Now + 30; Status = TEXT("Completing sign-in..."); Touch();
+            AcceptTokens(Reply, AuthAttempt, false);
+            return;
+        }
         const FString Error = Text(Object(Reply.Body), TEXT("error"));
-        if (Success(Reply)) { AcceptTokens(Reply, Attempt, false); return; }
         if (Error == TEXT("slow_down")) PollInterval += 5;
         else if (Error != TEXT("authorization_pending") && Reply.bConnected && Reply.Status != 429 && Reply.Status < 500)
-        { FinishSignInFailure(TEXT("QR sign-in was declined or expired. Try again.")); return; }
-        PollAt = FPlatformTime::Seconds() + PollInterval;
-    }, true, true);
+        {
+            // Declined or expired: a new code replaces it shortly.
+            DropQr(); QrRetryAt = Now + 5; Touch(); return;
+        }
+        PollAt = Now + PollInterval;
+    }, true);
 }
 void UOpenGolfOnlineSubsystem::AcceptTokens(const FReply& Reply, uint64 Attempt, bool bRefresh)
 {
@@ -275,7 +304,7 @@ void UOpenGolfOnlineSubsystem::AcceptTokens(const FReply& Reply, uint64 Attempt,
             if (bRefresh)
             {
                 // Preserve the newly rotated token even if /userinfo is temporarily unavailable.
-                RefreshToken = RefreshValue; AccessToken.Empty(); TokenExpiresAt = 0;
+                RefreshToken = RefreshValue; Permissions.Reset(); AccessToken.Empty(); TokenExpiresAt = 0;
                 SaveCredentials(RefreshValue, [this](bool)
                 {
                     bRefreshing = false; Status = TEXT("Offline. Your session is kept for retry."); RetryAt = FPlatformTime::Seconds() + 10; Touch();
@@ -303,8 +332,26 @@ void UOpenGolfOnlineSubsystem::AcceptTokens(const FReply& Reply, uint64 Attempt,
         if (OutboxOwner != Key) { Outbox.Empty(); OutboxOwner = Key; }
         if (AccountKey != Key) { Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); }
         DisplayNameHint = Text(User,TEXT("name")).Left(40);
+        Permissions.Reset();
+        TArray<FString> Parts; Access.ParseIntoArray(Parts, TEXT("."), false);
+        if (Parts.Num() == 3)
+        {
+            FString Payload = Parts[1].Replace(TEXT("-"), TEXT("+")).Replace(TEXT("_"), TEXT("/"));
+            while (Payload.Len() % 4) Payload += TEXT("=");
+            FString Decoded;
+            if (FBase64::Decode(Payload, Decoded))
+            {
+                const auto Claims = Object(Decoded);
+                const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+                if (Claims && Claims->TryGetArrayField(TEXT("permissions"), Values))
+                    for (const auto& Value : *Values)
+                    { FString Permission; if (Value && Value->TryGetString(Permission)) Permissions.Add(Permission); }
+            }
+        }
         AccountKey = Key; AccessToken = Access; RefreshToken = RefreshValue; TokenExpiresAt = Expires;
-        if (!bRefresh) CancelSignIn();
+        bLastAdminPermission = HasPermission(TEXT("ogolf:admin"));
+        OnPermissionsChanged.Broadcast();
+        if (!bRefresh) { CancelSignIn(); DropQr(); }
         SaveLocal();
         SaveCredentials(RefreshValue, [this, bRefresh](bool bSaved)
         {
@@ -399,7 +446,7 @@ void UOpenGolfOnlineSubsystem::InvalidateSession(bool bDiscardShots)
 {
     if (bDiscardShots) OnAccountChanged.Broadcast();
     ++Epoch; if (CredentialWork) ++CredentialWork->Epoch;
-    AccessToken.Empty(); RefreshToken.Empty(); DisplayNameHint.Empty();
+    Permissions.Reset(); AccessToken.Empty(); RefreshToken.Empty(); DisplayNameHint.Empty();
     if (bDiscardShots) { AccountKey.Empty(); OutboxOwner.Empty(); Outbox.Empty(); }
     bRestoring = false;
     Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty();
@@ -424,7 +471,8 @@ void UOpenGolfOnlineSubsystem::SignOut()
         for (int32 I=0; I<FMath::Min(100,Outbox.Num()); ++I) Rows.Add(Outbox[I]);
         auto Body = MakeShared<FJsonObject>(); Body->SetArrayField(TEXT("shots"),Rows); FinalBatch=Json(Body);
     }
-    CancelSignIn();
+    // The next QR code is a new one.
+    CancelSignIn(); DropQr();
     for (auto& R : Requests) R->Cancel();
     auto Waiters = MoveTemp(RefreshWaiters); bRefreshing = false;
     InvalidateSession(true); bSigningOut = false; Status = TEXT("Signed out."); Touch();
@@ -435,6 +483,9 @@ void UOpenGolfOnlineSubsystem::SignOut()
 }
 bool UOpenGolfOnlineSubsystem::Tick(float)
 {
+    const bool bAdmin = HasPermission(TEXT("ogolf:admin"));
+    if (bLastAdminPermission != bAdmin) { bLastAdminPermission = bAdmin; OnPermissionsChanged.Broadcast(); }
+
     if (bStopped) return false;
     const double Now = FPlatformTime::Seconds();
     Requests.RemoveAll([](const auto& R){return R->Finished.load();});
@@ -459,8 +510,8 @@ bool UOpenGolfOnlineSubsystem::Tick(float)
                 }
             }
         }
-        else if (!DeviceCode.IsEmpty() && Now >= PollAt) PollDevice();
     }
+    MaintainQr();
     if (HasSession() && !bSigningIn && !bRefreshing && !bLoading && RetryAt > 0 && Now >= RetryAt) { RetryAt = 0; SyncProfile(); }
     if (HasSession() && !bUploading && !bDeleting && UploadAt > 0 && Now >= UploadAt) { UploadAt = 0; Flush(); }
     ProcessPlayerRequests();
@@ -476,3 +527,9 @@ void UOpenGolfOnlineSubsystem::SetupForTests(const FConfig& TestConfig, FTestSen
     CredentialWork=MakeShared<FOpenGolfCredentialWork,ESPMode::ThreadSafe>();
 }
 #endif
+
+bool UOpenGolfOnlineSubsystem::HasPermission(const FString& Permission) const
+{
+    return !AccessToken.IsEmpty() && FPlatformTime::Seconds() < TokenExpiresAt &&
+        Permissions.ContainsByPredicate([&Permission](const FString& Value){return Value.Equals(Permission, ESearchCase::CaseSensitive);});
+}

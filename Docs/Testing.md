@@ -34,6 +34,7 @@ matching completed tests; an empty or failed run is not a pass.
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
+| In-game updates | `OpenGameUpdate` (run with `-Filter OpenGameUpdate`); the installer by hand, see [In-game updates](Releases.md#in-game-updates) |
 
 Install the script-test dependencies into your Python environment, then discover each
 suite from the repository root (`python` can replace `python3` on Windows):

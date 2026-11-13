@@ -159,6 +159,7 @@ Gameplay remains native C++. Python is used only by developer utilities.
 | Unreal physics wrapper | Scheduling, collision/contact queries, native core adaptation, Blueprint controls/events | Monitor-specific packets |
 | Course/surface layer | Geometry, collision, lies, contact surface resolution and green configuration | Duplicate impact/rollout formulas |
 | Presentation/content | Ball visuals, HUD, camera and optional content packs | Authoritative simulation calculations |
+| Game updates | The OpenGameUpdate plugin: release check, verified installer download and start | Menus and screens, which the game draws from its state |
 
 These are architectural responsibilities, not frozen APIs. The launch-monitor
 adapter, OpenFairway core and Unreal physics wrapper now exist as the two plugins

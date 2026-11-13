@@ -7,13 +7,27 @@ class FJsonObject;
 class SBox;
 class SVerticalBox;
 class SScrollBox;
+class SEditableTextBox;
 template<typename ItemType> class SListView;
+
+/** Settings owns this draft so changing categories or rebuilding a page preserves an unsaved name. */
+struct OPENGOLFONLINE_API FOpenGolfDisplayNameDraft : public TSharedFromThis<FOpenGolfDisplayNameDraft>
+{
+    FString Name, AccountKey, Error;
+    bool bEditing = false, bSaving = false;
+    void Synchronize(const UOpenGolfOnlineSubsystem* Online);
+    bool IsDirty(const UOpenGolfOnlineSubsystem* Online) const;
+    FString ValidationError(const UOpenGolfOnlineSubsystem* Online) const;
+    void Discard(const UOpenGolfOnlineSubsystem* Online);
+    void Apply(UOpenGolfOnlineSubsystem* Online);
+};
 
 /** Which part of the account an SOpenGolfAccountPanel shows. */
 enum class EOpenGolfAccountPage : uint8
 {
     /**
-     * Sign-in choices while signed out; the profile (member since, display name) while signed in. Laid out at its
+     * Sign In and Create Account while signed out (the QR code is SOpenGolfQrSignIn, placed by the host); the profile
+     * (member since, display name) while signed in. Laid out at its
      * content height, without a scroll box of its own, so a host can place it among its own rows.
      */
     Account,
@@ -38,6 +52,8 @@ public:
     SLATE_ARGUMENT(FString, TimeZone)
     /** Short name of TimeZone for the time column's caption, such as "PT"; empty reads "local". */
     SLATE_ARGUMENT(FString, TimeZoneName)
+    /** Shared with the host's Apply/Discard controls. A standalone panel owns its own draft. */
+    SLATE_ARGUMENT(TSharedPtr<FOpenGolfDisplayNameDraft>, DisplayNameDraft)
     SLATE_END_ARGS()
     void Construct(const FArguments& Args);
     virtual void Tick(const FGeometry&, double, float) override;
@@ -67,12 +83,13 @@ private:
     TSharedPtr<SBox> Content;
     TSharedPtr<SBox> PageContent;
     TSharedPtr<SScrollBox> Scroll;
+    TSharedPtr<FOpenGolfDisplayNameDraft> DisplayNameDraft;
+    TSharedPtr<SEditableTextBox> NameField;
     TSharedPtr<SListView<TSharedPtr<FJsonObject>>> HistoryList;
     TArray<TSharedPtr<FJsonObject>> HistoryRows;
     int32 SeenShape = -1;
     uint64 SeenHistoryRevision = MAX_uint64;
-    FString SeenQr;
-    FString NameDraft, ConfirmDeleteId, LastAccountKey, TimeZone, TimeZoneName;
+    FString ConfirmDeleteId, LastAccountKey, TimeZone, TimeZoneName;
     EOpenGolfAccountPage PageType = EOpenGolfAccountPage::Account;
     bool bShowHeading = true, bLoadedCarry = false, bWasSignedIn = false, bHistory = false, bRebuild = false;
 };

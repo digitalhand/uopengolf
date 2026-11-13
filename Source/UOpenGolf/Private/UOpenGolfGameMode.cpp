@@ -364,6 +364,13 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
         Reject(TEXT("UOpenGolf menu is open; shot ignored"));
         return;
     }
+    const auto* OnlinePermission = GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>();
+    if (!(OnlinePermission && OnlinePermission->HasPermission(TEXT("ogolf:admin"))) &&
+        !(LaunchMonitor && ShotRecording::IsRecordable(Shot, LaunchMonitor->GetConnectionState())))
+    {
+        Reject(TEXT("Connect a launch monitor to hit shots"));
+        return;
+    }
     FOpenFairwayLaunch CheckedLaunch;
     if (!Ball || !ToLaunch(Shot, CheckedLaunch))
     {
@@ -386,6 +393,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     if (Recorder && LaunchMonitor && PlayMode == EOpenGolfPlayMode::Range)
     {
         // The club selected now is the club this shot was hit with.
+        Recorder->Configure(GolfSettings::RecordingPath(GolfSettings::Get()), GolfSettings::Get().RecordingDetail != 0);
         Recorder->OnShot(Shot, LaunchMonitor->GetConnectionState(), LaunchMonitor->GetClub(), LaunchMonitor->IsLeftHanded(), LaunchMonitor->GetFirmware());
     }
 

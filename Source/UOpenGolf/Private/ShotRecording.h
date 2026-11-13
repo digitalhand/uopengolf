@@ -28,6 +28,7 @@ namespace ShotRecording
 
     struct FRecordedShot
     {
+        bool bFullDetail = true;
         FLaunchMonitorShot Shot;
         TOptional<FLaunchMonitorClubData> ClubData;
         ELaunchMonitorClub SelectedClub = ELaunchMonitorClub::Driver;
@@ -63,6 +64,7 @@ namespace ShotRecording
     public:
         using FWriter = TFunction<bool(const FString&, const FString&, FString&)>;
         explicit FShotRecorder(FString InRootDir = FString(), TFunction<double()> InClock = {}, FWriter InWriter = {});
+        void Configure(const FString& Directory, bool bFullDetail);
         void SetEnabled(bool bNewEnabled);
         bool IsEnabled() const { return bEnabled; }
         int32 GetShotCount() const { return CurrentSession ? CurrentSession->Saved : 0; }
@@ -104,6 +106,6 @@ namespace ShotRecording
         TFunction<double()> Clock;
         FWriter Writer;
         double NextRetry = 0;
-        bool bEnabled = false;
+        bool bEnabled = false, bFullDetail = true;
     };
 } // namespace ShotRecording

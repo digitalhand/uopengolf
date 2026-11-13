@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Misc/AutomationTest.h"
@@ -72,6 +73,7 @@ public:
             Test->TestEqual(TEXT("Aim is limited"), Controller->GetAimYaw(), AUOpenGolfPlayerController::MaxAimYawDeg);
             Controller->SetAimYaw(0.0f);
             Controller->SelectReplayShot(0);
+            FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
             Controller->InjectReplayShot();
             break;
         case 2:
@@ -84,6 +86,7 @@ public:
             break;
         case 3:
             Test->TestTrue(TEXT("Aim turns after the re-tee"), Controller->SetAimYaw(20.0f));
+            FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
             Controller->InjectReplayShot();
             break;
         case 4:

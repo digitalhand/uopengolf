@@ -1,5 +1,65 @@
 # Phase status
 
+## Sign-in: standing QR code, two buttons, switching users — 2026-11-13 (Windows)
+
+Signed out, every Settings page shows a QR code under the last category, captioned
+**Sign-In** with the short code to compare on the phone. It needs no button and is removed
+at sign-in. Settings › Player now offers only **Sign In** and **Create Account**, side by
+side; both use this computer's browser. **Sign in with QR**, **Sign in on this computer**
+and **Open verification page** are gone.
+
+- Plugin: `SignInWithQr()` became `KeepQrSignInReady()`, a lease the new `SOpenGolfQrSignIn`
+  widget renews each tick. The service requests a device code, polls it, and replaces one
+  that expired or was declined, only while the widget is on screen. Holding a code no longer
+  counts as signing in, and cancelling a browser sign-in keeps the code.
+- Switching users: browser sign-in always sends `prompt=login`. Before, a browser still
+  logged in to Auth0 approved the sign-in silently for its last user, so a player who signed
+  out was signed back in as the same account.
+- The QR square is 70% of the category column's width. The code fills it inside a
+  two-module white border, with module edges on whole screen pixels. The account block's
+  reserved height dropped from 230 to 170 now that it holds no QR code.
+- Settings: **Camera & HUD** is now **Camera**, and **HUD scale** moved to **Accessibility**,
+  under **Text size**.
+
+Validation: Unreal Engine 5.8.4, Windows x64, Development editor built. `OpenGolf.Online`
+passed 6 of 6 (`Saved/Automation/20261113-001010-5bde5762`), with new checks for the lease,
+expiry, decline, cancel and sign-out. The rendered `UOpenGolf.Visual.Online` passed
+(`Saved/Automation/20261113-000914-b40664d5`); its screenshots
+(`Saved/Screenshots/Online/7252EA43436F82B7D741E687BD69DDAF/`) show the QR code under
+**Data & system** while signed out and no QR code while signed in. The full `UOpenGolf` run
+passed 102 of 103 (`Saved/Automation/20261113-001023-b5e875e7`); the failure,
+`UOpenGolf.Physics.ShotLibrary`, is the working tree's deletion of `Data/ShotLibrary`. That
+run also compiled and covered the Data & system edits of 2026-11-12 (Browse under the path
+field, no duplicate path, **Updates** without help text).
+
+Not verified: a real Auth0 sign-in, by browser or by phone, including that `prompt=login`
+lets a second account sign in; the QR code scanned from a real screen.
+
+## Windows installer and in-game updates — 2026-11-12 (Windows)
+
+New `OpenGameUpdate` plugin: checks the latest published GitHub release, downloads its Setup
+with progress, verifies its SHA-256 and starts it silently on the game's folder; the game then
+quits and Setup restarts it. The plugin has no UI or game code. Its network side is the
+`IGameUpdateSource` interface (GitHub built in), so tests and other hosts can swap it. The game
+adds an update screen with a progress bar, an **Update to v…** button on the home and pause
+pages, a version notice, and **Settings › Data & system › Updates**. The Package Windows
+workflow now also builds `UOpenGolf-<version>-Windows-x64-Setup.exe` (Inno Setup 6,
+`Assets/Installer/`) with its `.sha256`. The same page gained **Browse** for both folders
+(Windows) and a shorter Shot recording note.
+
+Validation: Unreal Engine 5.8.4, Windows x64. Development editor and game targets built.
+`OpenGameUpdate` passed 6 of 6 (`Saved/Automation/20261112-231907-20a2c046`); `UOpenGolf.Menu`
+passed 9 of 9. `OpenGameUpdate.Live` read the real v0.0.7 release through GitHub's download
+redirect, and its parsed checksum matched the published `.sha256`. The full `UOpenGolf` run
+passed 87 of 88 (`Saved/Automation/20261112-231516-a4be4317`); the failure,
+`UOpenGolf.Physics.ShotLibrary`, is the working tree's deletion of `Data/ShotLibrary`, not this
+change. Release-script tests passed (34). With a stand-in package, Setup installed silently,
+waited for a locked game executable during an upgrade, replaced content, kept `Saved\`, and
+uninstalled cleanly.
+
+Not yet verified: a full in-game update, which needs the first published release with a Setup
+asset; the workflow's installer step on the runner; and the folder picker by hand.
+
 ## Repository cleanup — 2026-11-12 (Windows)
 
 Fixed the savanna scripts' imports after the move to `Assets/Scripts`, and made

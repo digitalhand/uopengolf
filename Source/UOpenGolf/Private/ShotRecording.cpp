@@ -213,7 +213,7 @@ namespace ShotRecording
         Root->SetStringField(TEXT("APIVersion"), TEXT("1"));
         Root->SetObjectField(TEXT("BallData"), MakeRecordingBallData(Recorded.Shot));
 
-        const bool bHasClubData = Recorded.ClubData.IsSet() && Recorded.ClubData->HasReading();
+        const bool bHasClubData = Recorded.bFullDetail && Recorded.ClubData.IsSet() && Recorded.ClubData->HasReading();
         if (bHasClubData)
         {
             Root->SetObjectField(TEXT("ClubData"), MakeRecordingClubData(*Recorded.ClubData));
@@ -234,7 +234,7 @@ namespace ShotRecording
         {
             Game->SetStringField(TEXT("Firmware"), Recorded.Firmware);
         }
-        if (Recorded.Engine.IsSet())
+        if (Recorded.bFullDetail && Recorded.Engine.IsSet())
         {
             Game->SetObjectField(TEXT("Engine"), MakeRecordingEngineResult(*Recorded.Engine));
         }
@@ -305,6 +305,13 @@ namespace ShotRecording
         }
     }
 
+    void FShotRecorder::Configure(const FString& Directory, bool bFull)
+    {
+        if (RootDir == Directory && bFullDetail == bFull) return;
+        RootDir = Directory; bFullDetail = bFull;
+        if (bEnabled) { CurrentSession = MakeShared<FSession>(); SessionDir.Reset(); }
+    }
+
     void FShotRecorder::SetEnabled(bool bNewEnabled)
     {
         if (bNewEnabled == bEnabled)
@@ -338,6 +345,7 @@ namespace ShotRecording
         Item.Session = CurrentSession;
         Item.Index = ++CurrentSession->NextIndex;
         Item.ClubDeadline = Clock() + 3.0;
+        Item.Record.bFullDetail = bFullDetail;
         Item.Record.Shot = Shot;
         Item.Record.SelectedClub = Club;
         Item.Record.bLeftHanded = bLeftHanded;

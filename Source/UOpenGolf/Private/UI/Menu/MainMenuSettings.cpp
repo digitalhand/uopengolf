@@ -5,8 +5,12 @@
 #include "UI/Common/HudStyle.h"
 #include "UI/Common/MenuStyle.h"
 #include "UI/Common/PageHeader.h"
+#include "UI/Common/FolderPicker.h"
+#include "UI/Menu/SUpdatePanel.h"
+#include "GameUpdateSubsystem.h"
 #include "OpenGolfOnlineSubsystem.h"
 #include "SOpenGolfAccountPanel.h"
+#include "SOpenGolfQrSignIn.h"
 #include "UOpenGolfPlayerController.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "Framework/Application/SlateApplication.h"
@@ -30,11 +34,16 @@ bool SMainMenu::Matches(const FString& Label,const FString& Help) const
 {
     return Search.IsEmpty() || (Label+Help).Contains(Search,ESearchCase::IgnoreCase);
 }
-TSharedRef<SWidget> SMainMenu::AddRow(TSharedRef<SVerticalBox> Rows,const FString& Label,const FString& Help,TSharedRef<SWidget> Control,bool Enabled)
+TSharedRef<SWidget> SMainMenu::AddRow(TSharedRef<SVerticalBox> Rows,const FString& Label,const FString& Help,TSharedRef<SWidget> Control,bool Enabled,float ControlWidth)
 {
+    // The control column grows with the Text size preference, as its fonts do, so larger labels are never clipped.
+    const float Scale=GolfSettings::Get().TextPercent/100.f;
+    // A row without help shows its label alone, centered beside the control.
+    const TSharedRef<SVerticalBox> Labels=SNew(SVerticalBox)+SVerticalBox::Slot().AutoHeight()[Text(Label,MenuStyle::BodySize,!Enabled)];
+    if(!Help.IsEmpty())Labels->AddSlot().AutoHeight()[Text(Help,MenuStyle::HelpSize,true)];
     TSharedRef<SWidget> Row=SNew(SBorder).BorderImage(&Style.Section).Padding(MenuStyle::RowPadding)
-        [SNew(SHorizontalBox)+SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[SNew(SVerticalBox)+SVerticalBox::Slot().AutoHeight()[Text(Label,MenuStyle::BodySize,!Enabled)]+SVerticalBox::Slot().AutoHeight()[Text(Help,MenuStyle::HelpSize,true)]]
-        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(20,0)[SNew(SBox).WidthOverride(MenuStyle::ControlWidth)[Control]]];
+        [SNew(SHorizontalBox)+SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Labels]
+        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(20,0)[SNew(SBox).WidthOverride(ControlWidth*Scale)[Control]]];
     Rows->AddSlot().AutoHeight().Padding(0,0,0,MenuStyle::RowGap)[Row];
     return Row;
 }
@@ -63,6 +72,10 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
     Body->AddSlot().AutoHeight().Padding(0,0,0,16)[PageHeader::Make(Style,FText::FromString(TEXT("Settings")),FSimpleDelegate::CreateSP(this,&SMainMenu::Back),SearchBox)];
     TSharedRef<SVerticalBox> Nav=SNew(SVerticalBox),Rows=SNew(SVerticalBox);
     for(int32 C=0;C<CategoryCount;++C) Nav->AddSlot().AutoHeight().Padding(0,0,0,4)[NavButton(Categories[C],[this,C]{Category=C;Search.Empty();Rebuild();},C==Category)];
+    // Under the last category: the QR sign-in, on every Settings page. It shows only while signed out and collapses
+    // itself on sign-in, so the page needs no rebuild.
+    if(UOpenGolfOnlineSubsystem* Online=OnlineService())
+        Nav->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,MenuStyle::QrGap,0,0)[SNew(SOpenGolfQrSignIn).Tag(TEXT("SignInQr")).Online(Online).Style(Style).Size(MenuStyle::QrSize)];
     for(int32 C=0;C<CategoryCount;++C)
     {
         if(Search.IsEmpty() && Category!=C)continue;
@@ -114,12 +127,12 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
             AddPreference(Rows,TEXT("Cup zoom"),TEXT("Close in when the ball approaches the cup."),&P::CupZoom,{TEXT("Off"),TEXT("On")},{0,1});
             AddPreference(Rows,TEXT("Ball tracer"),TEXT("Includes current and previous shot ribbons."),&P::Tracer,{TEXT("Off"),TEXT("Subtle"),TEXT("Full")},{0,1,2});
             Disabled(Rows,TEXT("Green contours"),TEXT("The playable slope overlay is not implemented yet."));
-            AddPreference(Rows,TEXT("Shot data"),TEXT("Choose the amount of shot feedback."),&P::ShotData,{TEXT("Minimal"),TEXT("Essential"),TEXT("Detailed")},{0,1,2});
-            AddPreference(Rows,TEXT("HUD scale"),TEXT("Increase panel size on distant screens."),&P::HudPercent,{TEXT("100%"),TEXT("125%"),TEXT("150%")},{100,125,150});break;
+            AddPreference(Rows,TEXT("Shot data"),TEXT("Choose the amount of shot feedback."),&P::ShotData,{TEXT("Minimal"),TEXT("Essential"),TEXT("Detailed")},{0,1,2});break;
         case 1:
             BuildSimulator(Rows);break;
         case 5:
             AddPreference(Rows,TEXT("Text size"),TEXT("Increase labels and values throughout the interface."),&P::TextPercent,{TEXT("Standard"),TEXT("Large"),TEXT("Extra large")},{100,125,150});
+            AddPreference(Rows,TEXT("HUD scale"),TEXT("Increase panel size on distant screens."),&P::HudPercent,{TEXT("100%"),TEXT("125%"),TEXT("150%")},{100,125,150});
             AddPreference(Rows,TEXT("High contrast"),TEXT("Opaque panel backgrounds for stronger separation."),&P::HighContrast,{TEXT("Off"),TEXT("On")},{0,1});
             AddPreference(Rows,TEXT("Reduced motion"),TEXT("Use a fixed shot camera and instant return to address."),&P::ReducedMotion,{TEXT("Off"),TEXT("On")},{0,1});
             Disabled(Rows,TEXT("Color palette"),TEXT("Color-vision palettes are not implemented yet."));Disabled(Rows,TEXT("Subtitles"),TEXT("Spoken content and subtitles are not implemented yet."));break;
@@ -129,33 +142,39 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
             AddPreference(Rows,TEXT("Wind"),TEXT("Starting speed for a new session or hole; direction comes from the course."),&P::WindMph,{TEXT("Course default"),TEXT("Calm"),TEXT("Light (5 mph)"),TEXT("Moderate (10 mph)"),TEXT("Strong (20 mph)")},{-1,0,5,10,20});
             for(const TCHAR* Label:{TEXT("Mulligans"),TEXT("Fairway firmness"),TEXT("Time of day")})Disabled(Rows,Label,TEXT("This gameplay setting is not implemented yet."));break;
         case 7:
-            Rows->AddSlot().AutoHeight().Padding(12)[Text(TEXT("Shot recording\nOn the range (Training), press F9 or click the record icon in the bottom-right status box to start or stop recording. While you are signed in, recorded shots are also saved to your online profile. Shots on the hole are never recorded. Settings never changes recording state."),18)];
-            Disabled(Rows,TEXT("Diagnostic logging"),TEXT("User-controlled logging is not implemented yet."));
+            BuildUpdates(Rows);
+            Rows->AddSlot().AutoHeight().Padding(12)[Text(TEXT("Shot recording\nOn the range, press F9 or click the record icon to start or stop. Signed in, shots also save to your online profile."),18)];
+            AddFolderRow(Rows, TEXT("Diagnostic log directory"), &P::DiagnosticDirectory, true);
+            AddPreference(Rows,TEXT("Diagnostic log level"),TEXT("Application diagnostics; Debug includes verbose detail."),&P::DiagnosticLevel,
+                {TEXT("Off"),TEXT("Errors"),TEXT("Warnings"),TEXT("Info"),TEXT("Debug")},{0,1,2,3,4});
+            AddFolderRow(Rows, TEXT("Shot recording directory"), &P::RecordingDirectory, false);
+            AddPreference(Rows,TEXT("Shot recording detail"),TEXT("Basic: ball data and metadata. Full: also club data and simulation results. Applies to new shots."),&P::RecordingDetail,
+                {TEXT("Basic"),TEXT("Full")},{0,1});
             Disabled(Rows,TEXT("Recording retention"),TEXT("Automatic retention is not implemented. Recordings are kept."));break;
         }
     }
     Body->AddSlot().FillHeight(1)[SNew(SHorizontalBox)+SHorizontalBox::Slot().AutoWidth().Padding(0,0,24,0)[SNew(SBox).WidthOverride(MenuStyle::NavWidth)[SNew(SScrollBox)+SScrollBox::Slot()[Nav]]]
         +SHorizontalBox::Slot().FillWidth(1)[SNew(SScrollBox)+SScrollBox::Slot()[Rows]]];
     Body->AddSlot().AutoHeight().Padding(0,18,0,0)[SNew(SHorizontalBox)
-        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[SNew(STextBlock).Font(HudStyle::Font("Regular",MenuStyle::SmallSize)).ColorAndOpacity(Style.LabelColor).Text_Lambda([this]{return FText::FromString(!SaveError.IsEmpty()?SaveError:Dirty()?TEXT("Unsaved changes"):TEXT("All changes saved"));})]
+        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[SNew(STextBlock).Font(HudStyle::Font("Regular",MenuStyle::SmallSize)).ColorAndOpacity(Style.LabelColor).Text_Lambda([this]{return FText::FromString(!SaveError.IsEmpty()?SaveError:DisplayNameDraft->bSaving?TEXT("Saving display name..."):!DisplayNameDraft->Error.IsEmpty()?DisplayNameDraft->Error:Dirty()?TEXT("Unsaved changes"):TEXT("All changes saved"));})]
         +SHorizontalBox::Slot().AutoWidth().Padding(MenuStyle::ButtonGap,0,0,0)[Button(TEXT("Reset All"),[this]{
             // The launch-monitor connection is changed live, never by Reset All.
             // Nor is the time zone, which also applies at once.
             Draft={};Draft.Provider=Saved.Provider;Draft.OpenConnectPort=Saved.OpenConnectPort;Draft.OpenConnectLan=Saved.OpenConnectLan;Draft.TimeZone=Saved.TimeZone;
             Video.VSync=0;Video.FPS=60;Video.Scale=100;for(int32& Q:Video.Quality)Q=2;
             Video.Mode=DisplayOptions::ShownMode(DisplayOptions::Borderless,BorderlessIsFullscreen);Video.Resolution=EngineSettings()->GetDesktopResolution();RefreshSettings();})]
-        +SHorizontalBox::Slot().AutoWidth().Padding(MenuStyle::ButtonGap,0,0,0)[Button(TEXT("Discard"),[this]{Draft=Saved;Video=SavedVideo;RefreshSettings();})]
+        +SHorizontalBox::Slot().AutoWidth().Padding(MenuStyle::ButtonGap,0,0,0)[Button(TEXT("Discard"),[this]{Draft=Saved;Video=SavedVideo;DisplayNameDraft->Discard(OnlineService());SaveError.Empty();RefreshSettings();})]
         +SHorizontalBox::Slot().AutoWidth().Padding(MenuStyle::ButtonGap,0,0,0)[Button(TEXT("Apply"),[this]{Apply();},true)]];
 }
 void SMainMenu::BuildPlayer(TSharedRef<SVerticalBox> Rows)
 {
     using P=GolfSettings::FPreferences;
-    // The account acts at once, like the connection choices: sign in, or the profile's display name. Signed out, the
+    // Sign-in acts at once; display-name edits share Settings' Apply/Discard draft. Signed out, the
     // profile and Shot history are not shown. Neither needs a page rebuild when the session changes: the account panel
     // rebuilds itself and the Shot history row's visibility follows HasProfile.
     UOpenGolfOnlineSubsystem* Online=OnlineService();
     if(Online&&Matches(TEXT("Account"),TEXT("Sign in, create account, profile, display name")))
-        Rows->AddSlot().AutoHeight()[SNew(SOpenGolfAccountPanel).Online(Online).Style(Style).ShowHeading(false)
+        Rows->AddSlot().AutoHeight()[SNew(SOpenGolfAccountPanel).Tag(TEXT("PlayerAccountPanel")).Online(Online).Style(Style).ShowHeading(false).DisplayNameDraft(DisplayNameDraft)
             .Page(EOpenGolfAccountPage::Account).TimeZone(GolfSettings::ChosenTimeZone().Id)];
     const FString ShotsHelp=TEXT("Club averages and saved shots from the last 90 days.");
     if(Matches(TEXT("Shot history"),ShotsHelp))
@@ -175,6 +194,46 @@ void SMainMenu::BuildPlayer(TSharedRef<SVerticalBox> Rows)
     AddPreference(Rows,TEXT("Speed units"),TEXT("Ball speed and wind."),&P::SpeedUnits,{TEXT("MPH"),TEXT("KM/H"),TEXT("M/S")},{0,1,2});
     Disabled(Rows,TEXT("Club suggestion"),TEXT("Automatic club recommendations are not implemented yet."));
     AddPreference(Rows,TEXT("Auto tee delay"),TEXT("After the next shot stops. Manual uses R to reset."),&P::AutoTee,{TEXT("3 seconds"),TEXT("5 seconds"),TEXT("8 seconds"),TEXT("Manual")},{3,5,8,0});
+}
+void SMainMenu::AddFolderRow(TSharedRef<SVerticalBox> Rows,const TCHAR* Label,FString GolfSettings::FPreferences::*Member,bool bDiagnostic)
+{
+    const FString Help=FolderPicker::Supported()?TEXT("Folder for new files. Browse or type a path; clear it for the default.")
+        :TEXT("Directory for new files. Clear to restore the default.");
+    if(!Matches(Label,Help))return;
+    auto Resolved=[this,bDiagnostic]{return bDiagnostic?GolfSettings::DiagnosticPath(Draft):GolfSettings::RecordingPath(Draft);};
+    // An empty field uses the default folder, shown as the field's hint.
+    const TSharedRef<SEditableTextBox> Field=SNew(SEditableTextBox).Style(&Style.TextField.GetValue())
+        .Text(FText::FromString(Draft.*Member)).HintText_Lambda([bDiagnostic]
+        {
+            const GolfSettings::FPreferences Defaults;
+            return FText::FromString(bDiagnostic?GolfSettings::DiagnosticPath(Defaults):GolfSettings::RecordingPath(Defaults));
+        })
+        .OnTextChanged_Lambda([this,Member](const FText& Value){Draft.*Member=Value.ToString().TrimStartAndEnd();});
+    const TSharedRef<SVerticalBox> Control=SNew(SVerticalBox)+SVerticalBox::Slot().AutoHeight()[Field];
+    if(FolderPicker::Supported())
+        Control->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,MenuStyle::ButtonGap,0,0)[Button(TEXT("Browse"),[this,Label,Member,Resolved,WeakField=TWeakPtr<SEditableTextBox>(Field)]
+        {
+            // Picking only edits the draft; Apply still checks the folder can be written.
+            FString Picked;
+            if(!FolderPicker::Pick(Label,Resolved(),Picked))return;
+            Draft.*Member=Picked;
+            if(const TSharedPtr<SEditableTextBox> Pinned=WeakField.Pin())Pinned->SetText(FText::FromString(Picked));
+        },false,MenuStyle::NavSize)];
+    AddRow(Rows,Label,Help,Control,true,MenuStyle::PathControlWidth);
+}
+void SMainMenu::BuildUpdates(TSharedRef<SVerticalBox> Rows)
+{
+    if(!Matches(TEXT("Updates"),TEXT("Check for updates version")))return;
+    // Checks in place; once an update is found, the same button opens the update screen.
+    AddRow(Rows,TEXT("Updates"),FString(),SNew(SVerticalBox)
+        +SVerticalBox::Slot().AutoHeight()[SNew(SButton).ButtonStyle(&Style.Button).Tag(TEXT("SettingsCheckUpdates"))
+            .IsEnabled_Lambda([this]{const UGameUpdateSubsystem* U=Updater();return U&&(U->IsUpdateAvailable()||!U->IsBusy());})
+            .OnClicked_Lambda([this]{if(UGameUpdateSubsystem* U=Updater()){if(U->IsUpdateAvailable())OpenUpdate();else U->Check();}return FReply::Handled();})
+            [SNew(STextBlock).Font(HudStyle::Font("Regular",MenuStyle::NavSize)).ColorAndOpacity(Style.TextColor)
+                .Text_Lambda([this]{return FText::FromString(UpdateText::ButtonLabel(Updater()));})]]
+        +SVerticalBox::Slot().AutoHeight().Padding(0,4,0,0)[SNew(STextBlock).AutoWrapText(true).Font(HudStyle::Font("Regular",12)).ColorAndOpacity(Style.LabelColor)
+            .Text_Lambda([this]{return FText::FromString(UpdateText::Status(Updater()));})],
+        true,MenuStyle::ActionControlWidth);
 }
 FString SMainMenu::LiveStatus() const
 {

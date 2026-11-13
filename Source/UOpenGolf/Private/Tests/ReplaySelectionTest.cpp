@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -29,11 +30,19 @@ bool FVerifyReplaySelection::Update()
         return false;
     }
     auto* Monitor = World->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>();
+    Controller->SetReplayPanelOpen(true);
+    Test->TestFalse(TEXT("Non-admin cannot open manual shots"),Controller->IsReplayPanelOpen());
+    const int32 Before = Mode->GetBall()->GetShotNumber();
+    Controller->InjectReplayShot();
+    Test->TestEqual(TEXT("Non-admin shortcut cannot hit"),Mode->GetBall()->GetShotNumber(),Before);
+    Monitor->InjectReplayShotAt(0);
+    Test->TestEqual(TEXT("Direct injection cannot bypass permission"),Mode->GetBall()->GetShotNumber(),Before);
+    FOpenGolfPermissionTestAccess::Set(World);
     FLaunchMonitorShot Shot;
     Test->TestEqual(TEXT("Default selects screenshot wood"), Controller->GetSelectedReplayShot(), 0);
     Controller->SetReplayPanelOpen(true);
     Test->TestTrue(TEXT("Earlier screenshot selectable"), Controller->SelectReplayShot(3));
-    Test->TestFalse(TEXT("Selection does not hit ball"), Monitor->GetLastShot(Shot));
+    Test->TestEqual(TEXT("Selection does not hit ball"),Mode->GetBall()->GetShotNumber(),Before);
     Controller->InjectReplayShot();
     Test->TestFalse(TEXT("Hit closes selector"), Controller->IsReplayPanelOpen());
     Test->TestTrue(TEXT("Selected shot delivered to range"), Monitor->GetLastShot(Shot) && Mode->GetBall()->IsMoving());
@@ -49,6 +58,10 @@ bool FVerifyReplaySelection::Update()
     Controller->InjectReplayShot();
     Monitor->GetLastShot(Shot);
     Test->TestEqual(TEXT("New preset takes effect"), Shot.GetBallSpeedMph(), 114.46f, 0.01f);
+    FOpenGolfPermissionTestAccess::Set(World,false);
+    const int32 After = Mode->GetBall()->GetShotNumber();
+    Controller->InjectReplayShot();
+    Test->TestEqual(TEXT("Revoked permission prevents hits"),Mode->GetBall()->GetShotNumber(),After);
     return true;
 }
 
