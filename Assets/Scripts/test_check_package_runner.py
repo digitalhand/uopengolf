@@ -141,14 +141,16 @@ class PackageRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Install Git LFS"):
             check_tools(self.engine, "Linux")
 
+    @patch("Assets.Scripts.check_package_runner.os.access")
     @patch("Assets.Scripts.check_package_runner.run")
     @patch("Assets.Scripts.check_package_runner.shutil.which", return_value="tool")
-    def test_checks_linux_toolchain_and_permissions(self, which, command):
+    def test_checks_linux_toolchain_and_permissions(self, which, command, access):
         self.make_engine()
         command.side_effect = lambda args: "GNU tar" if args[0] == "tar" else "clang version 20.1.8"
+        access.return_value = False
         with self.assertRaisesRegex(ValueError, "not executable"):
             check_tools(self.engine, "Linux")
-        (self.engine / "Engine/Binaries/Linux/UnrealEditor").chmod(0o755)
+        access.return_value = True
         with patch.dict(os.environ, {"LINUX_MULTIARCH_ROOT": ""}):
             with self.assertRaisesRegex(ValueError, "Clang 20.1.8"):
                 check_tools(self.engine, "Linux")
@@ -172,10 +174,16 @@ class PackageRunnerTests(unittest.TestCase):
         netfx = self.root / "NETFX"
         registry.side_effect = lambda key, value: sdk if value == "KitsRoot10" else netfx
         self.write("System32/tar.exe")
-        with patch.dict(os.environ, {"ProgramFiles(x86)": str(program_files), "SystemRoot": str(self.root)}):
+        environment = {"ProgramFiles(x86)": str(program_files), "ProgramFiles": str(program_files),
+                       "LOCALAPPDATA": str(self.root / "Local"), "SystemRoot": str(self.root)}
+        with patch.dict(os.environ, environment), \
+                patch("Assets.Scripts.check_package_runner.shutil.which", return_value=None):
             with self.assertRaisesRegex(ValueError, ".NET Framework"):
                 check_windows_tools()
             self.write("Include/um/mscoree.h", root=netfx)
+            with self.assertRaisesRegex(ValueError, "Inno Setup"):
+                check_windows_tools()
+            self.write("Local/Programs/Inno Setup 6/ISCC.exe")
             check_windows_tools()
             (sdk / "Include/10.0.26100.0/cppwinrt/winrt/base.h").unlink()
             with self.assertRaisesRegex(ValueError, r"C\+\+/WinRT"):

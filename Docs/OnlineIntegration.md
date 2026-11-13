@@ -29,12 +29,24 @@ completed Range-mode shots. Local F9 replay recording remains independent.
 The home and pause menus share a header: **UOPEN GOLF**, the launch-monitor status,
 an account icon and a cog. While signed out the account icon is a login symbol that
 opens **Settings › Player**; while signed in it is the logout icon. The cog is the only
-way into Settings. Settings › Player holds the account: while signed out, the QR
-sign-in, browser sign-in and account-creation choices and no profile options; while
-signed in, the member-since date, display-name editing and **Shot history › View**,
-with no sign-in, account-creation or "Try again" controls. While a saved session is
-being restored or the profile is loading, the account block reads "Loading your
-account…". Auth0's hosted page retains the existing OGolf application name.
+way into Settings. Settings › Player holds the account: while signed out, **Sign In**
+and **Create Account** side by side and no profile options; while signed in, the
+member-since date, display-name editing and **Shot history › View**, with no sign-in,
+account-creation or "Try again" controls. While a saved session is being restored or
+the profile is loading, the account block reads "Loading your account…". Auth0's
+hosted page retains the existing OGolf application name.
+
+While signed out, every Settings page also shows a QR code under the last category
+(**Data & system**), captioned **Sign-In** with the short code the phone asks the
+player to compare. It needs no button: the code is requested when Settings shows it,
+polled while it is on screen, replaced when it expires or is declined, and removed at
+sign-in. Offline, the square reads "QR code unavailable. Retrying…".
+
+**Sign In** and **Create Account** open the login page in this computer's browser. The
+request always carries `prompt=login`, so the page asks for credentials even when the
+browser is still logged in to Auth0; that is what lets a player sign out and sign in as
+someone else. A QR sign-in uses the account the phone's browser is logged in to, which
+the game cannot change.
 
 Shot history shows club averages, with clubs abbreviated (**DR**, **7i**, **PW**), then
 one club's shots, with confirmed deletion and pipe-delimited CSV export. Shot times
@@ -104,3 +116,26 @@ Only Unreal build-rule C# files changed. The requested
 `OpenFairway.sln --exclude addons && dotnet format OpenFairway.sln --verify-no-changes --exclude addons`
 command cannot run in this checkout: `OpenFairway.sln` is absent. UnrealBuildTool
 is used for these build rules; missing solution checks are not counted as passed.
+
+## Manual-shot permission
+
+Manual/replay shots require the exact Auth0 API permission `ogolf:admin`.
+Create it on the configured API, enable RBAC and **Add Permissions in the Access Token**,
+and assign it only to intended administrators (directly or via a role).
+QR and browser sign-in use the same permission check after identity acceptance.
+Renew the token or sign in again after changing assignments. Cached profiles do not
+grant this permission, and expired tokens disable manual shots. Non-admins and
+signed-out players can enter play but must connect a launch monitor to hit shots.
+
+Data settings provide separate application diagnostic and local shot recording
+directories. Clearing a directory restores its default. Diagnostic levels are Off,
+Errors, Warnings, Info (default), and Debug. Engine startup/crash logs remain managed
+by Unreal. Basic recordings contain ball data and metadata; Full (default) also
+includes club readings and simulation results. These settings do not change online
+shot uploads or move existing files.
+
+In Settings > Player, the pencil unlocks the display-name field. Apply saves the
+name to the online profile; Discard restores the saved name. Drafts survive category
+navigation and are cleared when the account changes. A failed save keeps the draft
+available for retry. The profile shows `admin` only while the current access token
+has the exact `ogolf:admin` permission.

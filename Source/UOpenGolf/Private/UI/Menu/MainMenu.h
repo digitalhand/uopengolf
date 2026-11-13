@@ -3,11 +3,14 @@
 #include "Widgets/SCompoundWidget.h"
 #include "OpenGolfSettings.h"
 #include "UI/Menu/DisplayOptions.h"
+#include "UI/Common/MenuStyle.h"
 #include "Styling/SlateTypes.h"
 #include "OpenGolfAccountStyle.h"
 class AUOpenGolfPlayerController;
 class SOpenGolfAccountPanel;
+struct FOpenGolfDisplayNameDraft;
 class UOpenGolfOnlineSubsystem;
+class UGameUpdateSubsystem;
 class SVerticalBox;
 class SBox;
 class SOverlay;
@@ -68,14 +71,19 @@ private:
     void AddPreference(TSharedRef<SVerticalBox> Rows, const TCHAR* Label, const TCHAR* Help,
         int32 GolfSettings::FPreferences::*Member, TArray<FString> Labels, TArray<int32> Values);
     void Disabled(TSharedRef<SVerticalBox> Rows, const TCHAR* Label, const TCHAR* Reason);
-    /** Adds a settings row (label and help on the left, Control on the right) and returns it. */
-    TSharedRef<SWidget> AddRow(TSharedRef<SVerticalBox> Rows, const FString& Label, const FString& Help, TSharedRef<SWidget> Control, bool Enabled = true);
+    /** Adds a settings row (label and help on the left, Control on the right, ControlWidth wide) and returns it. */
+    TSharedRef<SWidget> AddRow(TSharedRef<SVerticalBox> Rows, const FString& Label, const FString& Help, TSharedRef<SWidget> Control, bool Enabled = true,
+        float ControlWidth = MenuStyle::ControlWidth);
+    /** A folder row: a wide path field, with Browse (where supported) and the folder actually used below it. */
+    void AddFolderRow(TSharedRef<SVerticalBox> Rows, const TCHAR* Label, FString GolfSettings::FPreferences::*Member, bool bDiagnostic);
     /** Whether a row is shown under the current search. */
     bool Matches(const FString& Label, const FString& Help) const;
     /** Settings → Player: the account (sign in, or the profile and Shot history), Time zone and player preferences. */
     void BuildPlayer(TSharedRef<SVerticalBox> Rows);
     /** Settings → Simulator: the live connection, the provider choice and the Open Connect connector. */
     void BuildSimulator(TSharedRef<SVerticalBox> Rows);
+    /** Settings → Data & system: Check for updates, and the update's status. */
+    void BuildUpdates(TSharedRef<SVerticalBox> Rows);
     FString LiveStatus() const;
     /** Saves and applies one change at once (no Apply), keeping other pending edits; Error shows if it cannot be saved. */
     void CommitNow(TFunction<void(GolfSettings::FPreferences&)> Change, const TCHAR* Error);
@@ -95,6 +103,14 @@ private:
     /** The sign-in icon: Settings › Player, where the sign-in choices are, keeping pending edits. */
     void OnSignInIcon();
     class UOpenLaunchMonitorSubsystem* Monitor() const;
+    /** The game instance's updater; null without a controller. */
+    UGameUpdateSubsystem* Updater() const;
+    /** The update screen, over the current page. */
+    void OpenUpdate();
+    /** The update's installer has started: quit so it can replace the game's files. */
+    void QuitForUpdate();
+    static const TCHAR* const UpdateDialog;
+    FDelegateHandle RestartHandle;
     FString ConnectionSummary() const;
     static constexpr int32 PlayerCategory = 0;
     static constexpr int32 SimulatorCategory = 1;
@@ -127,6 +143,7 @@ private:
     TWeakObjectPtr<UOpenGolfOnlineSubsystem> OnlineOverride;
     /** The Shot history panel while that page is shown; it handles Back inside one club's shots. */
     TSharedPtr<SOpenGolfAccountPanel> ShotsPanel;
+    TSharedPtr<FOpenGolfDisplayNameDraft> DisplayNameDraft;
     GolfSettings::FPreferences Draft, Saved;
     FVideo Video, SavedVideo;
     /**

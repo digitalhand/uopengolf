@@ -5,6 +5,8 @@
 #include "SOpenGolfAccountButton.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Menu/MainMenuInternal.h"
+#include "UI/Menu/SUpdatePanel.h"
+#include "GameUpdateSubsystem.h"
 #include "UI/Common/MenuStyle.h"
 #include "UI/Common/PageHeader.h"
 #include "UI/Hud/ShotDisplay.h"
@@ -37,6 +39,7 @@ namespace
     const TCHAR* MainMenuDialog = TEXT("Return to the main menu?");
     const TCHAR* ExitDialog = TEXT("Exit to desktop?");
 }
+const TCHAR* const SMainMenu::UpdateDialog = TEXT("Update");
 bool SMainMenu::FVideo::operator==(const FVideo& Other) const
 {
     if (Resolution != Other.Resolution || Mode != Other.Mode || VSync != Other.VSync || FPS != Other.FPS || Scale != Other.Scale) return false;
@@ -81,6 +84,8 @@ void SMainMenu::Construct(const FArguments& Args)
 {
     Controller=Args._Controller;
     OnlineOverride=Args._Online;
+    DisplayNameDraft=MakeShared<FOpenGolfDisplayNameDraft>();
+    DisplayNameDraft->Synchronize(OnlineService());
     Style=MenuStyle::Make();
     NavStyle=MenuStyle::NavButton();
     SetVisibility(EVisibility::Collapsed);
@@ -93,13 +98,42 @@ void SMainMenu::Construct(const FArguments& Args)
                 +SVerticalBox::Slot().FillHeight(1)[SAssignNew(Content,SBox).Tag(TEXT("MenuPageHost"))
                     .IsEnabled_Lambda([this]{return !bConfirmDisplay && Dialog.IsEmpty();})]
                 +SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0,8,0,0)
-                    [Text(ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion()),MenuStyle::HelpSize,true)]]
+                    [SNew(STextBlock).Font_Lambda([]{return HudStyle::Font("Regular",MenuStyle::HelpSize);}).ColorAndOpacity(HudStyle::LabelColor())
+                        .Text_Lambda([this]{
+                            FString Label=ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion());
+                            if(const UGameUpdateSubsystem* U=Updater(); U&&U->IsUpdateAvailable())Label+=FString::Printf(TEXT("  ·  v%s available"),*U->GetLatest().Version);
+                            return FText::FromString(Label);})]]
             +SOverlay::Slot()[SAssignNew(ModalContent,SBox)
                 .Visibility_Lambda([this]{return bConfirmDisplay || !Dialog.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;})]]];
     const UOpenGolfOnlineSubsystem* Online=OnlineService();
     bWasSignedIn=Online&&Online->HasSession();
+    if(UGameUpdateSubsystem* U=Updater())
+    {
+        // The installer is running and replaces the game's files once it has closed.
+        RestartHandle=U->OnReadyToRestart.AddSP(this,&SMainMenu::QuitForUpdate);
+        // Packaged games look for an update once per run; the editor and automation never do.
+        if(!GIsEditor && !GolfSettings::BypassStartupMenu() && U->GetState()==EGameUpdateState::Idle)U->Check();
+    }
 }
-SMainMenu::~SMainMenu() { RevertDisplay(); }
+SMainMenu::~SMainMenu()
+{
+    RevertDisplay();
+    if(UGameUpdateSubsystem* U=Updater())U->OnReadyToRestart.Remove(RestartHandle);
+}
+UGameUpdateSubsystem* SMainMenu::Updater() const
+{
+    const UGameInstance* Instance=Controller.IsValid()?Controller->GetGameInstance():nullptr;
+    return Instance?Instance->GetSubsystem<UGameUpdateSubsystem>():nullptr;
+}
+void SMainMenu::OpenUpdate()
+{
+    if(bConfirmDisplay||!Dialog.IsEmpty())return;
+    Dialog=UpdateDialog;Rebuild();
+}
+void SMainMenu::QuitForUpdate()
+{
+    if(Controller.IsValid())Controller->QuitGame();
+}
 TSharedRef<SWidget> SMainMenu::Text(const FString& Value,int32 Size,bool Muted)
 {
     return SNew(STextBlock).Text(FText::FromString(Value)).Font_Lambda([Size]{return HudStyle::Font("Regular",Size);})
@@ -158,7 +192,7 @@ FString SMainMenu::ConnectionSummary() const
 void SMainMenu::OpenSettings(int32 InCategory,bool bDeferRebuild)
 {
     if(bConfirmDisplay || !Dialog.IsEmpty()) return;
-    if(!InSettings()) { Saved=Draft=GolfSettings::Get(); SavedVideo=Video=ReadVideo(); Pages.Empty(); }
+    if(!InSettings()) { Saved=Draft=GolfSettings::Get(); SavedVideo=Video=ReadVideo(); DisplayNameDraft->Discard(OnlineService()); Pages.Empty(); }
     Route=ERoute::Settings;Category=InCategory;Search.Empty();Dialog.Empty();
     if(bDeferRebuild)bRebuildPending=true;else Rebuild();
 }
@@ -180,10 +214,17 @@ void SMainMenu::Resume()
     RevertDisplay(); bOpen=false; bStarted=true; SetVisibility(EVisibility::Collapsed);
     if(Controller.IsValid()) Controller->SetMainMenuOpen(false);
 }
-bool SMainMenu::Dirty() const { return Draft!=Saved || Video!=SavedVideo; }
+bool SMainMenu::Dirty() const { return Draft!=Saved || Video!=SavedVideo || DisplayNameDraft->IsDirty(OnlineService()); }
 void SMainMenu::Back()
 {
     if(bConfirmDisplay){RevertDisplay();Rebuild();return;}
+    if(Dialog==UpdateDialog)
+    {
+        // Leaving the update screen stops a download, so the game never quits for an update the player isn't watching.
+        UGameUpdateSubsystem* U=Updater();
+        if(U&&U->GetState()==EGameUpdateState::Installing)return;
+        if(U&&U->IsBusy())U->Cancel();
+    }
     if(!Dialog.IsEmpty()){Dialog.Empty();Rebuild();return;}
     // Shot history's back leaves one club's shots first, then returns to Settings › Player.
     if(InShots()){if(ShotsPanel.IsValid()&&ShotsPanel->HandleBack())return;Route=ERoute::Settings;Rebuild();return;}
@@ -204,6 +245,7 @@ FReply SMainMenu::OnPreviewKeyDown(const FGeometry&,const FKeyEvent& Event)
 void SMainMenu::Tick(const FGeometry& G,double T,float D)
 {
     SCompoundWidget::Tick(G,T,D);
+    DisplayNameDraft->Synchronize(OnlineService());
     // Account widgets update locally; only leaving private history changes the route.
     const UOpenGolfOnlineSubsystem* Online=OnlineService();
     const bool bSignedIn=Online&&Online->HasSession();
@@ -297,6 +339,13 @@ TSharedRef<SWidget> SMainMenu::BuildTopBar()
 }
 void SMainMenu::BuildDialog(TSharedRef<SVerticalBox> Body)
 {
+    if(Dialog==UpdateDialog)
+    {
+        Body->AddSlot().AutoHeight().Padding(0,90,0,0)[SNew(SUpdatePanel).Updater(Updater()).Style(&Style)
+            .OnClose_Lambda([this]{Dialog.Empty();bRebuildPending=true;})];
+        Body->AddSlot().FillHeight(1);
+        return;
+    }
     const FString Title=bConfirmDisplay?TEXT("Keep these display settings?"):Dialog;
     Body->AddSlot().AutoHeight().Padding(0,90,0,20)[Text(Title,MenuStyle::TitleSize)];
     if(bConfirmDisplay)
@@ -309,7 +358,7 @@ void SMainMenu::BuildDialog(TSharedRef<SVerticalBox> Body)
     else if(Dialog==TEXT("Unsaved changes"))
     {
         AddMenuButton(Body,TEXT("Apply"),[this]{Dialog.Empty();Apply();},true);
-        AddMenuButton(Body,TEXT("Discard and go back"),[this]{Draft=Saved;Video=SavedVideo;Dialog.Empty();Pages.Empty();if(bReturnToTraining){Resume();return;}Route=bStarted?ERoute::Pause:ERoute::Home;Rebuild();});
+        AddMenuButton(Body,TEXT("Discard and go back"),[this]{Draft=Saved;Video=SavedVideo;DisplayNameDraft->Discard(OnlineService());Dialog.Empty();Pages.Empty();if(bReturnToTraining){Resume();return;}Route=bStarted?ERoute::Pause:ERoute::Home;Rebuild();});
         AddMenuButton(Body,TEXT("Stay in Settings"),[this]{Dialog.Empty();Rebuild();});
     }
     else if(Dialog==MainMenuDialog)
@@ -355,11 +404,27 @@ void SMainMenu::BuildHome(TSharedRef<SVerticalBox> Body)
         AddMenuButton(Body,TEXT("Training"),[this]{Resume();},true);
         AddMenuButton(Body,TEXT("Exit"),[this]{Dialog=ExitDialog;Rebuild();});
     }
+    // Shown once a check finds a newer version; the page is cached, so it follows the updater.
+    Body->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,MenuStyle::ButtonGap,0,MenuStyle::ButtonGap)
+        [SNew(SBox).WidthOverride(MenuStyle::MenuButtonWidth).Tag(TEXT("MenuUpdate"))
+            .Visibility_Lambda([this]{const UGameUpdateSubsystem* U=Updater();return U&&U->IsUpdateAvailable()?EVisibility::Visible:EVisibility::Collapsed;})
+            [SNew(SButton).ButtonStyle(&Style.Button).OnClicked_Lambda([this]{OpenUpdate();return FReply::Handled();})
+                [SNew(STextBlock).Font(HudStyle::Font("Regular",18)).ColorAndOpacity(HudStyle::AccentColor())
+                    .Text_Lambda([this]{const UGameUpdateSubsystem* U=Updater();return FText::FromString(U?UpdateText::Title(*U):FString());})]]];
     Body->AddSlot().FillHeight(1);
 }
 void SMainMenu::Apply()
 {
+    if(DisplayNameDraft->bSaving)return;
+    DisplayNameDraft->Synchronize(OnlineService());
     if(!Dirty())return;
+    SaveError.Empty();
+    DisplayNameDraft->Error=DisplayNameDraft->ValidationError(OnlineService());
+    if(!DisplayNameDraft->Error.IsEmpty()){Rebuild();return;}
+    if(DisplayNameDraft->IsDirty(OnlineService()) && OnlineService()->IsBusy())
+    {DisplayNameDraft->Error=TEXT("Account is busy. Try Apply again when it finishes.");Rebuild();return;}
+    // A profile-only Apply needs no display change or local preferences write.
+    if(Draft==Saved && Video==SavedVideo){SaveError.Empty();DisplayNameDraft->Apply(OnlineService());return;}
     auto* S=EngineSettings();if(!S)return;
     // Only a different window needs the Keep/Revert countdown; a render size inside the same window applies at once.
     const DisplayOptions::FFacts F=Facts();
@@ -384,6 +449,8 @@ void SMainMenu::RevertDisplay()
 }
 void SMainMenu::Commit()
 {
+    SaveError = GolfSettings::ValidateDataDirectories(Draft);
+    if (!SaveError.IsEmpty()) { Rebuild(); return; }
     auto* S=EngineSettings();if(!S)return;
     // In a desktop-sized mode the chosen resolution is the render size, from which the engine derives the render scale.
     auto* R=RenderSettings();
@@ -396,6 +463,7 @@ void SMainMenu::Commit()
     if (!GolfSettings::Commit(Draft,Controller.IsValid()?Controller->GetWorld():nullptr))
     { SaveError=TEXT("Video saved; could not save player preferences. Check storage and retry."); Rebuild(); return; }
     SaveError.Empty(); Saved=Draft=GolfSettings::Get();
+    DisplayNameDraft->Apply(OnlineService());
     Style=MenuStyle::Make();NavStyle=MenuStyle::NavButton();
     if(Controller.IsValid())if(auto* Hud=Cast<AUOpenGolfHUD>(Controller->GetHUD()))Hud->RefreshTheme();
     RefreshSettings();

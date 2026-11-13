@@ -379,4 +379,30 @@ bool FShotRecordingFinalizeTest::RunTest(const FString&)
     Files.DeleteDirectory(*Root, false, true);
     return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRecordingDetailTest, "UOpenGolf.Range.RecordingDetail",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRecordingDetailTest::RunTest(const FString&)
+{
+    using namespace ShotRecording;
+    FRecordedShot Record;
+    Record.Shot = RecordingTestShot(1, TEXT("Square Home"));
+    Record.Engine = FOpenFairwayShotResult();
+    TestTrue(TEXT("Full preserves engine"), BuildShotJson(Record,1).Contains(TEXT("\"Engine\"")));
+    Record.bFullDetail = false;
+    TestFalse(TEXT("Basic omits engine"), BuildShotJson(Record,1).Contains(TEXT("\"Engine\"")));
+    TestTrue(TEXT("Basic retains ball"), BuildShotJson(Record,1).Contains(TEXT("\"BallData\"")));
+    TMap<FString,FString> Writes;
+    FShotRecorder Recorder(TEXT("Old"), {}, [&](const FString& Path,const FString& Json,FString&) { Writes.Add(Path,Json); return true; });
+    Recorder.SetEnabled(true);
+    Recorder.OnShot(Record.Shot, ELaunchMonitorConnectionState::Ready, ELaunchMonitorClub::Driver,false,TEXT(""));
+    Recorder.Configure(TEXT("New"),false);
+    Recorder.OnShot(RecordingTestShot(2,TEXT("Square Home")), ELaunchMonitorConnectionState::Ready, ELaunchMonitorClub::Driver,false,TEXT(""));
+    Recorder.Flush();
+    bool Old=false,New=false;
+    for(const auto& Pair:Writes) { Old |= Pair.Key.StartsWith(TEXT("Old")); New |= Pair.Key.StartsWith(TEXT("New")); }
+    TestTrue(TEXT("Pending shot keeps old directory"),Old);
+    TestTrue(TEXT("New shot uses new directory"),New);
+    return true;
+}
 #endif

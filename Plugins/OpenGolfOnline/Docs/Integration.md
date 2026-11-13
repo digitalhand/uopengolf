@@ -36,8 +36,22 @@ The plugin does not change tenant policy.
 
 Get `UOpenGolfOnlineSubsystem` from the game instance. It resumes a securely stored
 session, exposes account/profile state, and provides QR sign-in, browser sign-in,
-account creation, cancellation and logout. `SOpenGolfAccountPanel` is an optional
-Slate view; hosts can build their own UI from the same state:
+account creation, cancellation and logout. `SOpenGolfAccountPanel` and
+`SOpenGolfQrSignIn` are optional Slate views; hosts can build their own UI from the
+same state:
+
+- **Browser sign-in.** `SignInWithBrowser()` opens the login page in the system browser,
+  and `SignInWithBrowser(true)` its sign-up form. Both send `prompt=login`, so the page
+  always asks for credentials and a player can switch accounts. `CancelSignIn()` cancels
+  it and leaves a QR code in place.
+- **QR sign-in.** There is no "start": call `KeepQrSignInReady()` at least every
+  `QrLeaseSeconds` (2 s) while a code should be available, as `SOpenGolfQrSignIn` does
+  each tick. The service then requests a device code, polls for approval and replaces a
+  code that expired or was declined. `GetQrUrl()` is the address to encode,
+  `GetUserCode()` the short code to show beside it, and `IsQrSignInFailing()` is true
+  while requests fail (they are retried after 30 s). When the calls stop, polling stops;
+  a code that is still valid is reused. Holding a code is not `SigningIn`: the account
+  state stays `SignedOut` until the phone approves.
 
 - **Account state.** `GetAccountState()` returns `EOpenGolfAccountState`: `Restoring`,
   `SignedOut`, `SigningIn`, `LoadingProfile`, `Ready`, `Reconnecting` or `SigningOut`.
@@ -59,18 +73,30 @@ names them for screen readers; no plugin widget shows a tooltip.
 
 `SOpenGolfAccountPanel` shows one part of the account, chosen with `.Page(...)`:
 
-- `EOpenGolfAccountPage::Account` (default): login choices while signed out, the
-  profile (member since, display name) while signed in. It is laid out at its content
-  height without a scroll box of its own, so a host can place it among its own rows.
+- `EOpenGolfAccountPage::Account` (default): **Sign In** and **Create Account** while
+  signed out, the profile (member since, display name) while signed in. It is laid out
+  at its content height without a scroll box of its own, so a host can place it among
+  its own rows.
 - `EOpenGolfAccountPage::Shots`: club averages, with clubs abbreviated (`7I` shows
   as **7i**), then one club's shot history; a sign-in hint while signed out.
+
+`SOpenGolfQrSignIn` is the QR code on its own: a square (`.Size(...)`, 200 by default),
+**Sign-In** under it, then the short code. Place it anywhere:
+
+```cpp
+SNew(SOpenGolfQrSignIn).Online(Online).Style(Style)
+```
+
+It shows only while signed out, collapses itself otherwise, and keeps the code ready
+from its own tick, so a host adds no other wiring. The account panel does not draw a
+QR code.
 
 `.TimeZone(...)` takes an IANA zone ID such as `America/Los_Angeles` for shot times and
 the member-since date (empty is the computer's zone; ICU applies daylight saving), and
 `.TimeZoneName(...)` the short name in the time column's caption, such as `PT`. CSV
 export keeps the API's UTC times.
 
-Both widgets take an optional `FOpenGolfAccountStyle` (`.Style(...)`): a font
+These widgets take an optional `FOpenGolfAccountStyle` (`.Style(...)`): a font
 factory, text, label, accent and icon colors, text sizes, button styles and the
 section background. The default is the plugin's own look; pass the host's values
 so the account page matches its menus. `SOpenGolfIconButton` draws the same line

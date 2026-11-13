@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 import unittest
+from pathlib import Path
 
 from grass_rules import (CELL_M, EDGE_RAMP, EDGE_WEIGHTS, MEDIUM, TILE_M, TILES, content_folders, grass_maps, grid,
                          medium_tuft, medium_tuft_kind, tile_points, underlay_maps)
@@ -102,14 +103,14 @@ class GrassRuleTests(unittest.TestCase):
 
     def test_grass_maps_include_the_dry_colour_and_alpha(self):
         medium = grass_maps(MEDIUM, "/art/PolyHaven/grass_medium_01/maps")
-        self.assertEqual(medium["albedo_dry"], "/art/PolyHaven/grass_medium_01/textures/grass_medium_01_dry_diff_2k.png")
-        self.assertEqual(medium["opacity"], "/art/PolyHaven/grass_medium_01/textures/grass_medium_01_alpha_2k.png")
+        self.assertEqual(Path(medium["albedo_dry"]), Path("/art/PolyHaven/grass_medium_01/textures/grass_medium_01_dry_diff_2k.png"))
+        self.assertEqual(Path(medium["opacity"]), Path("/art/PolyHaven/grass_medium_01/textures/grass_medium_01_alpha_2k.png"))
         self.assertEqual(set(medium), {"albedo", "albedo_dry", "normal", "roughness", "ao", "opacity"})
 
 
     def test_underlay_has_colour_normal_and_roughness(self):
         maps = underlay_maps("/art/PolyHaven/leafy_grass/maps")
-        self.assertEqual(maps["albedo"], "/art/PolyHaven/leafy_grass/maps/leafy_grass_diff_2k.png")
+        self.assertEqual(Path(maps["albedo"]), Path("/art/PolyHaven/leafy_grass/maps/leafy_grass_diff_2k.png"))
         self.assertEqual(set(maps), {"albedo", "normal", "roughness"})
 
 

@@ -31,7 +31,7 @@ projects keep their own licenses and are recorded here if imported.
 
 | Project | Intended use | Status |
 | --- | --- | --- |
-| [open-lm-connector](https://github.com/digitalhand/open-lm-connector) | Launch-monitor integration, initially Square Home | Square protocol, session and Windows Bluetooth rewritten in C++ (see [launch-monitor integration](Docs/LaunchMonitorIntegration.md)) |
+| [open-lm-connector](https://github.com/digitalhand/open-lm-connector) | Launch-monitor integration, initially Square Home | Square protocol, session and Windows Bluetooth rewritten in C++ (see [launch-monitor reference](Plugins/OpenLaunchMonitor/Docs/Reference.md)) |
 | [ogolf-physics](https://github.com/digitalhand/ogolf-physics) | Golf ball physics | Core equations, surfaces, ball profile and headless shot loop rewritten in C++ (see [OpenFairway Physics](Plugins/OpenFairwayPhysics/README.md)) |
 | [OpenFairway](https://github.com/digitalhand/openfairway) | Earlier C# physics | Superseded by ogolf-physics; not ported |
 | [ogolf](https://github.com/digitalhand/ogolf) | Reference for greens, lies, and surface integration | Not yet ported |

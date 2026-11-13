@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Blueprint/UserWidget.h"
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
@@ -61,6 +62,7 @@ namespace
                 FSlateAttributeMetaData::UpdateAllAttributes(*Hud, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidation);
                 Test->TestEqual(TEXT("showhud hides indicator with HUD"), Hud->GetVisibility(), EVisibility::Collapsed);
                 Controller->GetHUD()->bShowHUD = true;
+                FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
                 Controller->SetReplayPanelOpen(true);
                 FSlateAttributeMetaData::UpdateAllAttributes(*Hud, FSlateAttributeMetaData::EInvalidationPermission::AllowInvalidation);
                 Test->TestEqual(TEXT("Test-shot panel hides indicator with HUD"), Hud->GetVisibility(), EVisibility::Collapsed);

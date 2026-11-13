@@ -57,8 +57,11 @@ bool FOpenGolfBrowserLogin::Start(const OpenGolfOnline::FConfig& Config, bool bC
     const FString Challenge = FBase64::Encode(Hash, sizeof(Hash)).Replace(TEXT("+"), TEXT("-")).Replace(TEXT("/"), TEXT("_")).Replace(TEXT("="), TEXT(""));
     TArray<TPair<FString,FString>> Args = {{TEXT("response_type"),TEXT("code")}, {TEXT("client_id"),Config.ClientId},
         {TEXT("audience"),Config.Audience}, {TEXT("redirect_uri"),Redirect}, {TEXT("scope"),TEXT("openid profile offline_access")},
-        {TEXT("state"),State}, {TEXT("code_challenge"),Challenge}, {TEXT("code_challenge_method"),TEXT("S256")}};
-    if (bCreateAccount) { Args.Add({TEXT("screen_hint"),TEXT("signup")}); Args.Add({TEXT("prompt"),TEXT("login")}); }
+        {TEXT("state"),State}, {TEXT("code_challenge"),Challenge}, {TEXT("code_challenge_method"),TEXT("S256")},
+        // Always show the login page. Without this, a browser still logged in to the login service approves the
+        // sign-in silently for its last user, and a player who signed out could never switch accounts.
+        {TEXT("prompt"),TEXT("login")}};
+    if (bCreateAccount) Args.Add({TEXT("screen_hint"),TEXT("signup")});
     const FString Url = Config.Authority + TEXT("authorize?") + OpenGolfOnline::Form(Args);
     FString Error;
     FPlatformProcess::LaunchURL(*Url, nullptr, &Error);

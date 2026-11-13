@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Framework/Application/SlateApplication.h"
@@ -38,6 +39,7 @@ public:
         if (Stage == 0)
         {
             Controller->SelectReplayShot(3);
+            FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
             Controller->SetReplayPanelOpen(true);
             ReadyAt = GetCurrentRunTime() + 2.0;
             ++Stage;
@@ -81,6 +83,7 @@ public:
             if (ShotList.IsValid())
                 ShotList->SetIsOpen(false);
             Controller->SelectReplayShot(0);
+            FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
             Controller->InjectReplayShot();
         }
         if (Stage == 6)

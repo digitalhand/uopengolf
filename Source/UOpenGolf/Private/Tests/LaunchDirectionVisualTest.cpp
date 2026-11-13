@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -36,6 +37,7 @@ public:
         if (Stage == 0 || Stage == 3)
         {
             UOpenLaunchMonitorSubsystem* Monitor = World->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>();
+            FOpenGolfPermissionTestAccess::Set(World);
             // Synthetic frames: 75.7 mph, VLA +20.78 / -0.26, HLA -0.97 / +0.97.
             const FString Frame = Stage == 0 ? TEXT("110237380D1E089FFF6F11F2F700800080") : TEXT("110237380DE6FF61006F11F2F700800080");
             if (!Test->TestTrue(TEXT("Visual replay injected"), Monitor && Monitor->InjectReplayFrames(Frame, TEXT(""))))

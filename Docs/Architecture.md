@@ -111,7 +111,7 @@ Both transports run every Bluetooth call on one worker thread and bound waits to
 seconds per operation and thirty seconds for device opening/service discovery, checking
 cancellation at most every 25 ms while waiting. Disconnect invalidates queued work and
 old callbacks, and doesn't wait for the device to answer; shutdown cooperatively stops
-the worker. Synchronous OS/driver cleanup is outside those wait limits. See [launch-monitor integration](LaunchMonitorIntegration.md) for contracts
+the worker. Synchronous OS/driver cleanup is outside those wait limits. See the [launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md) for contracts
 and remaining hardware verification.
 
 The `OpenFairwayPhysics` runtime plugin is the physics core and its Unreal wrapper:
@@ -128,8 +128,8 @@ shots to launches. The `OpenGolfCourse` plugin (course kit) depends only on the 
 The ball actor retains a 120 Hz fixed step and a twelve-step frame cap. Long stalls
 discard excess catch-up time, so sustained frame rates below about 10 FPS slow
 simulation relative to wall time. The game tests cover frame-rate/hitch equivalence;
-rendered CPU measurements and their limits are recorded in
-[phase status](PhasesStatus.md#reference-measurements).
+rendered CPU timing instructions and their limits are in
+[Range assets](RangeAssets.md).
 
 The game's Slate UI lives in feature folders under `Source/UOpenGolf/Private/UI/`, included
 by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
@@ -159,6 +159,7 @@ Gameplay remains native C++. Python is used only by developer utilities.
 | Unreal physics wrapper | Scheduling, collision/contact queries, native core adaptation, Blueprint controls/events | Monitor-specific packets |
 | Course/surface layer | Geometry, collision, lies, contact surface resolution and green configuration | Duplicate impact/rollout formulas |
 | Presentation/content | Ball visuals, HUD, camera and optional content packs | Authoritative simulation calculations |
+| Game updates | The OpenGameUpdate plugin: release check, verified installer download and start | Menus and screens, which the game draws from its state |
 
 These are architectural responsibilities, not frozen APIs. The launch-monitor
 adapter, OpenFairway core and Unreal physics wrapper now exist as the two plugins
@@ -200,15 +201,15 @@ Current physics defaults add speed-dependent flight spin decay and continuous
 interpolation of calibration scales and landing responses. The explicit
 `HistoricalReference()` profile preserves the pinned C# behavior for golden tests;
 parity with that profile is not independent physical validation. See the
-[FlightScope analysis](FlightScopeAnalysis.md) for the changes and measurements.
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flightscope-comparisons-and-replay-shots) for the changes and measurements.
 
 The sibling repositories are not required, modified, or linked by the build. The
-connector port is described in [launch-monitor integration](LaunchMonitorIntegration.md);
+connector port is described in the [launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md);
 the physics port in the [OpenFairway Physics README](../Plugins/OpenFairwayPhysics/README.md).
 
 ## Data and simulation contracts
 
-[Launch-monitor integration](LaunchMonitorIntegration.md) defines device units, optional
+[The launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md#shot-and-club-data) defines device units, optional
 measurements, signs, threading and shot association. The [physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#units-and-coordinate-frames)
 defines coordinate conversion and fixed-step ownership. Preserve measured input separately
 from game-side lie adjustments. Historical fixtures check the port; they do not establish

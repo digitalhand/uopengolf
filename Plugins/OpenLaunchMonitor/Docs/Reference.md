@@ -27,7 +27,8 @@ Firmware and battery are logged on connect (`Square Home firmware <x>.`, `Batter
 on both platforms.
 
 Ported from open-lm-connector revision `92eb021abe28d8eb1abe43f87767d3eb73e5939e`. Design
-notes: [launch-monitor integration](../../../Docs/LaunchMonitorIntegration.md).
+notes are in [Architecture](../../../Docs/Architecture.md); device contracts and
+threading are documented below.
 
 ## Features
 

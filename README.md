@@ -45,8 +45,8 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 - [CI and releases](Docs/Releases.md)
 - [Architecture](Docs/Architecture.md) and [plugins](Plugins/README.md)
 - [Range assets](Docs/RangeAssets.md) and [Blender turf workflow](Docs/TurfWorkflow.md)
-- [Physics comparisons](Docs/FlightScopeAnalysis.md)
-- [Roadmap](Docs/Roadmap.md), [current status and evidence](Docs/PhasesStatus.md), and [asset licence roadmap](Docs/AssetLicenseRoadmap.md)
+- [Physics comparisons](Plugins/OpenFairwayPhysics/Docs/Reference.md#flightscope-comparisons-and-replay-shots)
+- [Current status and remaining acceptance](Docs/PhasesStatus.md) and [asset licence roadmap](Docs/AssetLicenseRoadmap.md)
 
 ## Contributing
 

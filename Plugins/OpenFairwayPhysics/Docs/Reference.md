@@ -181,7 +181,7 @@ fixed-step outcomes, not real-time playback at every render rate.
 
 The game's ribbon tracer is separate from this actor's debug tracer. Its buffer/mesh
 optimizations do not change the timestep, equations or collision queries. See the
-[game validation notes](../../../Docs/PhasesStatus.md#reference-measurements)
+[game timing workflow](../../../Docs/RangeAssets.md)
 for CPU measurements and frame-time limitations.
 
 ## Surfaces
@@ -289,8 +289,8 @@ rolling friction is solved with the drag, but they differ at other speeds:
   stimp 10 with 0.0009 on the current profile).
 
 `FBallPhysicsProfile::HistoricalReference()` keeps the ported 0.011, and every green
-golden value uses it. See
-[green and fairway by rolling speed](../../../Docs/FlightScopeAnalysis.md#green-and-fairway-by-rolling-speed).
+golden value uses it. The rolling-speed comparison above describes the tradeoff;
+see [Does the regime limit rollout?](#does-the-regime-limit-rollout) for a controlled surface comparison.
 
 ### Landing on a green (spin-back and check)
 
@@ -426,7 +426,7 @@ override values between speed/launch/spin anchors, preserving the most-specific
 lookup and neutral fallback at each anchor. Landing responses are interpolated
 over launch/spin too. The regime and landing bucket are descriptive categories;
 logs identify the resolved override as `interpolated`. Changes apply from the next
-launch. See [the calibration analysis](../../../Docs/FlightScopeAnalysis.md) for anchors.
+launch. See [Lookup and continuous calibration](#lookup-and-continuous-calibration) for anchors.
 
 Flight spin uses `exp(-SpinDecayCoefficient * speed / radius * dt)` with SI units
 and a default coefficient of `2e-5`. Both flight-step overloads use the decay rate
@@ -561,8 +561,8 @@ decay (+4.96 yd with hard lookups), and the low-launch boost (+6.58 yd with the
 corrected spin model). The mid-spin boost had no effect on this shot. No regime
 rows, boundaries or global drag/lift multipliers were changed to fit the reference.
 This is a targeted calibration correction, not proof that all low-launch shots
-now match measured flight. Full inputs, limitations, rollout differences and experiments:
-[FlightScope analysis](../../../Docs/FlightScopeAnalysis.md).
+now match measured flight. See [Does the regime limit rollout?](#does-the-regime-limit-rollout)
+for rollout differences and the controlled surface experiment.
 
 ### Does the regime limit rollout?
 
@@ -590,8 +590,7 @@ range loses about 5.77 yd versus all fairway; this is a surface-response effect,
 confirmed with identical actor and geometry. FlightScope's
 Medium setting gives **38.7 / 158.5 yd**, with a shorter carry of 119.8 yd. Compare
 equivalent surfaces before changing regime calibration to compensate for the
-range layout. See the controlled surface experiment in the
-[analysis](../../../Docs/FlightScopeAnalysis.md#rollout-surface-isolation).
+range layout. The distances above are from that controlled surface experiment.
 
 The test range assigns **Fairway to its 34 m fairway strip**, including the former
 green/fringe area, through the `MI_Fairway` physical material; the side strips beyond
@@ -886,7 +885,8 @@ Checked against ogolf-physics `e6d793a` (2026-10-29):
 - Packaged builds are only start-checked headless; ball flight in a rendered packaged game
   has not been reviewed on either platform.
 - Against the FlightScope shot library the current profile carries long (bias +2.4 yd) and
-  rolls short (bias -2.9 yd); see the [baseline](../../../Docs/FlightScopeAnalysis.md#shot-library-baseline-2026-10-16-linux).
+  rolls short (bias -2.9 yd) in the historical Linux baseline (2026-10-16). See
+  [FlightScope shot library](#flightscope-shot-library) to rerun comparisons with the current profile.
 - Green gaps: see [Green port status and gaps](#green-port-status-and-gaps).
 
 ## Plugin structure

@@ -7,7 +7,7 @@
 
 namespace MainMenuDetail
 {
-    inline const TCHAR* const Categories[] = {TEXT("Player"), TEXT("Simulator"), TEXT("Video"), TEXT("Audio"), TEXT("Camera & HUD"), TEXT("Accessibility"), TEXT("Game Defaults"), TEXT("Data & system")};
+    inline const TCHAR* const Categories[] = {TEXT("Player"), TEXT("Simulator"), TEXT("Video"), TEXT("Audio"), TEXT("Camera"), TEXT("Accessibility"), TEXT("Game Defaults"), TEXT("Data & system")};
     constexpr int32 CategoryCount = UE_ARRAY_COUNT(Categories);
     inline UGameUserSettings* EngineSettings() { return GEngine ? GEngine->GetGameUserSettings() : nullptr; }
     // SDL gives Borderless and Fullscreen the same desktop-fullscreen window (FLinuxWindow::SetWindowMode).

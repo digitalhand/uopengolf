@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfPlayerController.h"
 #include "OpenGolfSettings.h"
+#include "OpenGolfOnlineSubsystem.h"
 #include "GameFramework/PlayerInput.h"
 #include "UI/Menu/MainMenu.h"
 #include "UI/Hud/HudNavigation.h"
@@ -310,6 +311,7 @@ void AUOpenGolfPlayerController::PlayerTick(float DeltaTime)
 {
     // Input runs first (Super), so TurnInput is this frame's A/D.
     Super::PlayerTick(DeltaTime);
+    if (bReplayPanelOpen && !CanUseManualShots()) SetReplayPanelOpen(false);
     AimHeldSeconds = TurnInput != 0.0f ? AimHeldSeconds + DeltaTime : 0.0f;
     if (TurnInput != 0.0f)
     {
@@ -429,8 +431,15 @@ void AUOpenGolfPlayerController::DisconnectLaunchMonitor()
     }
 }
 
+bool AUOpenGolfPlayerController::CanUseManualShots() const
+{
+    const auto* Online = GetGameInstance() ? GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>() : nullptr;
+    return Online && Online->HasPermission(TEXT("ogolf:admin"));
+}
+
 void AUOpenGolfPlayerController::InjectReplayShot()
 {
+    if (!CanUseManualShots()) return;
     if (bMainMenuOpen) return;
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetLaunchMonitor(*this))
     {
@@ -456,6 +465,7 @@ void AUOpenGolfPlayerController::ToggleReplayPanel()
 
 void AUOpenGolfPlayerController::SetReplayPanelOpen(bool bOpen)
 {
+    bOpen = bOpen && CanUseManualShots();
     bReplayPanelOpen = bOpen;
     if (!bOpen && FSlateApplication::IsInitialized())
     {

@@ -106,8 +106,12 @@ jobs:
               & $tar -a -c -f (Join-Path $dist "$name-symbols.zip") -C $root -T $list
               if ($LASTEXITCODE -ne 0) { throw "Creating $name-symbols.zip failed (exit $LASTEXITCODE)." }
           }
-          # Same "<hash>  <name>" format as sha256sum, so `sha256sum -c` also works.
-          Get-ChildItem -LiteralPath $dist -Filter '*.zip' | ForEach-Object {
+          # The installer: first installs, upgrades, and the in-game updater's download.
+          powershell -NoProfile -ExecutionPolicy Bypass -File Assets\Installer\build_installer.ps1 -PackageDir (Join-Path $root $name) -Version $env:VERSION -OutputDir $dist
+          if ($LASTEXITCODE -ne 0) { throw "Building the installer failed (exit $LASTEXITCODE)." }
+          # Same "<hash>  <name>" format as sha256sum, so `sha256sum -c` also works. The in-game updater reads the
+          # Setup's .sha256 to verify its download.
+          Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Extension -in '.zip', '.exe' } | ForEach-Object {
               $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
               [IO.File]::WriteAllText("$($_.FullName).sha256", "$hash  $($_.Name)`n")
           }

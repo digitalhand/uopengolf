@@ -59,6 +59,10 @@
 		{
 			"Name": "OpenGolfOnline",
 			"Enabled": true
+		},
+		{
+			"Name": "OpenGameUpdate",
+			"Enabled": true
 		}
 	],
 	"TargetPlatforms": [

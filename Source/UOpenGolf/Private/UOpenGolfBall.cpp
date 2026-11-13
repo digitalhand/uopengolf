@@ -9,8 +9,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "Camera/PlayerCameraManager.h"
 #include "RangePerformance.h"
-#include "Misc/CommandLine.h"
-#include "Misc/Parse.h"
 #include "OpenGolfCourse.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
 
@@ -203,15 +201,6 @@ void AUOpenGolfBall::Tick(float DeltaSeconds)
 
 void AUOpenGolfBall::UpdateTrailGeometry(FUOpenGolfTrailRibbon& Ribbon)
 {
-#if WITH_DEV_AUTOMATION_TESTS
-    // Same rendered workload can measure the previous allocation/recreation path.
-    static const bool bLegacy = FParse::Param(FCommandLine::Get(), TEXT("RangeLegacyTrail"));
-    if (bLegacy)
-    {
-        UpdateTrailGeometryLegacy(Ribbon);
-        return;
-    }
-#endif
     const TArray<FVector>& TrailPoints = Ribbon.Points;
     const auto* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
     if (!Camera || TrailPoints.Num() < 2)
@@ -260,39 +249,3 @@ void AUOpenGolfBall::UpdateTrailGeometry(FUOpenGolfTrailRibbon& Ribbon)
         Ribbon.Mesh->UpdateMeshSection_LinearColor(0, Ribbon.Vertices, {}, Ribbon.UVs, {}, {});
     Ribbon.MeshPointCount = TrailPoints.Num();
 }
-
-#if WITH_DEV_AUTOMATION_TESTS
-void AUOpenGolfBall::UpdateTrailGeometryLegacy(FUOpenGolfTrailRibbon& Ribbon)
-{
-    const TArray<FVector>& TrailPoints = Ribbon.Points;
-    const auto* Camera = UGameplayStatics::GetPlayerCameraManager(this, 0);
-    if (!Camera || TrailPoints.Num() < 2)
-        return;
-    TArray<FVector> Vertices;
-    TArray<int32> Indices;
-    TArray<FVector2D> UVs;
-    const FVector Eye = Camera->GetCameraLocation();
-    FVector PreviousSide = FVector::ZeroVector;
-    for (int32 I = 0; I < TrailPoints.Num(); ++I)
-    {
-        const FVector Tangent = (TrailPoints[FMath::Min(I + 1, TrailPoints.Num() - 1)] - TrailPoints[FMath::Max(0, I - 1)]).GetSafeNormal();
-        FVector Side = FVector::CrossProduct(Tangent, Eye - TrailPoints[I]).GetSafeNormal();
-        if (Side.IsNearlyZero())
-            Side = PreviousSide.IsNearlyZero() ? FVector::RightVector : PreviousSide;
-        if (!PreviousSide.IsNearlyZero() && FVector::DotProduct(Side, PreviousSide) < 0)
-            Side *= -1;
-        PreviousSide = Side;
-        Vertices.Add(TrailPoints[I] - Side * TrailWidthCm * 0.5f);
-        Vertices.Add(TrailPoints[I] + Side * TrailWidthCm * 0.5f);
-        UVs.Add(FVector2D(0, 0));
-        UVs.Add(FVector2D(1, 0));
-        if (I > 0)
-        {
-            const int32 V = I * 2;
-            Indices.Append({V - 2, V - 1, V, V - 1, V + 1, V});
-        }
-    }
-    Ribbon.Mesh->CreateMeshSection_LinearColor(0, Vertices, Indices, {}, UVs, {}, {}, false);
-}
-
-#endif

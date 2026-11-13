@@ -27,7 +27,7 @@ import unreal as ue
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parents[2]
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(PROJECT / "Scripts"))
+sys.path.insert(0, str(PROJECT / "Assets/Scripts"))
 sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
 import ApplyCourseGrass as course
 import ApplyCutTurf as apply_turf

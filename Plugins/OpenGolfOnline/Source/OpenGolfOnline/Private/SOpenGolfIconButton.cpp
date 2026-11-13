@@ -73,6 +73,11 @@ namespace OpenGolfIconButtonDetail
                 Line({{6, 6}, {18, 18}});
                 Line({{18, 6}, {6, 18}});
                 break;
+            case EOpenGolfAccountIcon::Edit:
+                Line({{4, 20}, {6, 14}, {17, 3}, {21, 7}, {10, 18}, {4, 20}});
+                Line({{14, 6}, {18, 10}});
+                Line({{6, 14}, {10, 18}});
+                break;
             default:
                 Circle(FVector2f(8, 7), 3.5f);
                 Line({{2, 21}, {2, 19}, {3, 16}, {6, 14}, {10, 14}, {12, 15}});

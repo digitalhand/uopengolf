@@ -16,7 +16,7 @@ each action on the same ref; a dual-boot machine can do this at different times.
 | --- | --- | --- |
 | Version | GitHub-hosted Ubuntu | Runs the release-script unit tests and works out the version from the ref; an invalid tag fails here |
 | Linux package | Self-hosted, labels `self-hosted, Linux, X64, ue-5.8` | Stamps the version, runs `Assets/Scripts/ue.sh package` (build, cook, stage, 60 s start check) and archives the result |
-| Windows package | Self-hosted, labels `self-hosted, Windows, X64, ue-5.8` | The same with `Assets/Scripts/ue.ps1 Package` |
+| Windows package | Self-hosted, labels `self-hosted, Windows, X64, ue-5.8` | The same with `Assets/Scripts/ue.ps1 Package`, plus the installer from `Assets/Installer/build_installer.ps1` |
 | Draft release (Linux, Windows) | GitHub-hosted Ubuntu | Tags only, one per platform, as soon as that platform's package succeeds: creates the tag's draft release if needed and uploads that platform's archives with `Assets/Scripts/draft_release.sh` |
 
 Each platform allows one package job at a time, without cancelling an active build.
@@ -48,11 +48,11 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 | | Linux | Windows |
 | --- | --- | --- |
 | Engine | Unreal Engine 5.8.4, installed or source build | Unreal Engine 5.8.4 |
-| Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, and Visual Studio 2022 with the SDKs under [Prerequisites](Development.md#windows) |
+| Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, Visual Studio 2022 with the SDKs under [Prerequisites](Development.md#windows), and Inno Setup 6 (`winget install JRSoftware.InnoSetup`) |
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
 Before packaging, `Assets/Scripts/check_package_runner.py` checks the engine version, build
-tools, Git LFS assets and absence of local `Config/User*.ini` files.
+tools (including Inno Setup on Windows), Git LFS assets and absence of local `Config/User*.ini` files.
 It also checks for Development, DebugGame and command-line Unreal editors anywhere on
 the machine. Close the editor before starting a build and leave it closed until the
 job finishes. A running editor stops the job; the workflow never closes it for you.
@@ -141,7 +141,8 @@ download those artifacts too.
 | --- | --- |
 | `UOpenGolf-<version>-Linux-x64.tar.gz` | The Linux package in a folder of the same name; run `UOpenGolf.sh` |
 | `UOpenGolf-<version>-Linux-x64-symbols.tar.gz` | `.debug` files for gdb, in the same folder layout |
-| `UOpenGolf-<version>-Windows-x64.zip` | The Windows package in a folder of the same name; run `UOpenGolf.exe` |
+| `UOpenGolf-<version>-Windows-x64-Setup.exe` | The Windows installer: installs, upgrades an existing install, and is what the game downloads for an [in-game update](#in-game-updates) |
+| `UOpenGolf-<version>-Windows-x64.zip` | The same Windows package as a portable folder of the same name; run `UOpenGolf.exe` |
 | `UOpenGolf-<version>-Windows-x64-symbols.zip` | `.pdb` files, in the same folder layout |
 | `*.sha256` | The SHA-256 of each archive; check with `sha256sum -c FILE.sha256` |
 
@@ -153,6 +154,38 @@ download those artifacts too.
   engine's `NOTICES.txt`.
 - **Content:** builds reject local config files before cooking. Use a clean runner checkout.
 
+### In-game updates
+
+Packaged games check this repository's latest **published** release once per run, through the
+[OpenGameUpdate](../Plugins/OpenGameUpdate/README.md) plugin. Drafts and prereleases are never
+offered. When the release's version is newer than the game's `ProjectVersion`, the menu shows
+**Update to v…**. On Windows the game then downloads the release's Setup, checks it against its
+`.sha256`, starts it silently on the game's own folder and quits; Setup waits for the game to
+close, replaces its files, keeps `Saved\` (settings, sign-in, logs) and starts the new version.
+
+The installer (`Assets/Installer/UOpenGolf.iss`, Inno Setup 6) installs per user, without an
+administrator prompt, to `%LOCALAPPDATA%\Programs\UOpenGolf`, with a Start menu entry and an
+uninstaller in **Apps**. Its `AppId` must never change: it is how a newer Setup finds an
+existing install. To build one locally after `ue.ps1 Package`:
+
+```powershell
+powershell -File Assets\Installer\build_installer.ps1 -PackageDir Packaged\Windows -Version 0.0.8 -OutputDir Packaged\dist
+```
+
+The updater relies on these release details, so keep them stable:
+
+- The asset name `UOpenGolf-<version>-Windows-x64-Setup.exe`, set in `[OpenGameUpdate]` in
+  `Config/DefaultGame.ini`, and its `.sha256` in `sha256sum` format.
+- The tag `v<version>`, matching the stamped `ProjectVersion`.
+- Silent install flags in the same config. Setup must accept `/DIR=` for the game's folder.
+
+A zip install updates the same way: Setup installs over the zip's folder and from then on it is
+a normal installed copy. A folder the game can't write to, such as one under Program Files,
+gets the release page instead. Linux shows the notice and opens the release page.
+
+Releases from before this feature can't update themselves; players install the first release
+that has a Setup by hand.
+
 ### Limitations and troubleshooting
 
 - If a platform's runner is offline, its job waits in the queue, and GitHub cancels it
@@ -163,7 +196,10 @@ download those artifacts too.
   other artifacts it is public, and it contains the runner's local paths and machine name.
 - The start check writes a `Saved/` folder inside the package. The workflow deletes it
   before archiving, so releases don't carry the runner's log or settings.
-- Shipping builds and code signing are not set up. Windows archives are unsigned, so
-  SmartScreen may warn on first launch.
+- Shipping builds and code signing are not set up. Windows archives and the installer are
+  unsigned, so SmartScreen may warn when one is downloaded in a browser. In-game updates
+  are not affected.
 - Not yet verified: full runs of the separate workflows on GitHub, and `ue.ps1 Package`
-  itself.
+  itself. The installer's install, locked-game upgrade and uninstall were checked with a
+  stand-in package (2026-11-12); a full in-game update needs the first release that has a
+  Setup asset.

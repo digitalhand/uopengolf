@@ -132,8 +132,8 @@ public:
             Test->AddInfo(FString::Printf(TEXT("Frame budget shot=%d resolution=%dx%d p95_ms=%.3f target_ms=16.667"), Shot, RenderWidth, RenderHeight, P95));
             const auto MeanUs = [](const RangePerformance::FSample& S)
             { return S.Count ? S.Seconds * 1e6 / S.Count : 0; };
-            Test->AddInfo(FString::Printf(TEXT("Performance shot=%d legacy=%d frames=%d frame_ms=%.3f physics_us=%.3f trail_us=%.3f hud_us=%.3f physics_max_us=%.3f trail_max_us=%.3f"),
-                Shot, FParse::Param(FCommandLine::Get(), TEXT("RangeLegacyTrail")), FrameCount,
+            Test->AddInfo(FString::Printf(TEXT("Performance shot=%d frames=%d frame_ms=%.3f physics_us=%.3f trail_us=%.3f hud_us=%.3f physics_max_us=%.3f trail_max_us=%.3f"),
+                Shot, FrameCount,
                 FrameSeconds * 1000 / FMath::Max(FrameCount, 1), MeanUs(RangePerformance::Physics), MeanUs(RangePerformance::Trail), MeanUs(RangePerformance::Hud),
                 RangePerformance::Physics.MaxSeconds * 1e6, RangePerformance::Trail.MaxSeconds * 1e6));
         }

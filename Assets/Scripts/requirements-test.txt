@@ -1,0 +1,3 @@
+# Engine-free image and turf helper tests.
+Pillow>=10
+numpy>=1.26

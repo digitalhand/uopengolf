@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Delete listed assets that nothing uses, after backing them up.
 
-    py "<project>/Scripts/prune_unreferenced_assets.py" --manifest <file.json> [--apply]
+    py "<project>/Assets/Scripts/prune_unreferenced_assets.py" --manifest <file.json> [--apply]
 
 The manifest is a JSON list of content paths: an asset (/Game/Folder/Asset) or a whole folder
 (/Game/Folder/, ending in a slash). A listed asset is deleted only if:
@@ -15,7 +15,7 @@ Run in the editor with Play stopped and every level saved. Completion: OPEN_GOLF
 from pathlib import Path
 import re
 
-SOURCE_DIRS = ("Source", "Plugins/*/Source", "Scripts", "Plugins/*/Scripts")
+SOURCE_DIRS = ("Source", "Plugins/*/Source", "Assets/Scripts", "Plugins/*/Scripts")
 SOURCE_SUFFIXES = (".cpp", ".h", ".py", ".cs")
 PACKAGE_SUFFIXES = (".uasset", ".umap")
 # This tool and its tests mention asset paths only as examples.

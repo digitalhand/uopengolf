@@ -7,6 +7,7 @@
 #include "Misc/AutomationTest.h"
 #include "SOpenGolfAccountButton.h"
 #include "SOpenGolfAccountPanel.h"
+#include "SOpenGolfQrSignIn.h"
 #include "UI/Club/ClubPicker.h"
 #include "UI/Menu/MainMenu.h"
 
@@ -55,6 +56,11 @@ bool FSlateArgumentDefaultsTest::RunTest(const FString&)
         TestNull(TEXT("Account panel service defaults to null"), Args._Online);
         TestTrue(TEXT("Account panel draws its heading by default"), Args._ShowHeading);
         TestTrue(TEXT("Account panel defaults to the account page"), Args._Page == EOpenGolfAccountPage::Account);
+    });
+    WithPatternedArguments<SOpenGolfQrSignIn::FArguments>([this](const SOpenGolfQrSignIn::FArguments& Args)
+    {
+        TestNull(TEXT("QR sign-in service defaults to null"), Args._Online);
+        TestEqual(TEXT("QR sign-in has a default size"), Args._Size, 200.0f);
     });
     return true;
 }

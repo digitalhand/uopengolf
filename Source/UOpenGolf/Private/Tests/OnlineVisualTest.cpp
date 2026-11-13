@@ -80,12 +80,15 @@ public:
             SettingsPage=RenderedPlay::WithTag(Root,TEXT("MenuPageHost"))->GetChildren()->GetChildAt(0);
             TimeZoneControl=RenderedPlay::FindButton(Root,GolfSettings::ChosenTimeZone().Label);
             Test->TestTrue(TEXT("The sign-in icon opens Settings"), RenderedPlay::HasText(Root, TEXT("Settings")));
-            Test->TestTrue(TEXT("Player offers sign-in"), RenderedPlay::HasText(Root, TEXT("Sign in with QR")));
+            ExpectSignInChoices(TEXT("signed out"));
             Test->TestFalse(TEXT("Signed out, Player has no display name"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestFalse(TEXT("Signed out, Player has no shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
             Test->TestTrue(TEXT("Player offers the time zone"), RenderedPlay::HasText(Root, TEXT("Time zone")));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::FindButton(Root, TEXT("Sign in with QR")), TEXT("Sign in with QR")));
+            return Next(true);
         case 2:
+            // The QR code needs no button: it is requested once Settings shows it. The stubbed service approves it at
+            // the first poll, five seconds later.
+            Test->TestTrue(TEXT("The QR code's short code shows"), RenderedPlay::HasText(Root, TEXT("Code TEST-CODE")));
             Capture(Window, TEXT("qr"));
             return false;
         case 3:
@@ -99,8 +102,9 @@ public:
             Test->TestTrue(TEXT("Player shows the display name"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestTrue(TEXT("Player shows shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
             Test->TestFalse(TEXT("No range-shot counts"), RenderedPlay::HasText(Root, TEXT("Pending"), true));
-            for (const TCHAR* Label : {TEXT("Sign in with QR"), TEXT("Sign in on this computer"), TEXT("Create account"), TEXT("Try again")})
-                Test->TestFalse(FString(TEXT("Signed in, Player excludes ")) + Label, RenderedPlay::HasText(Root, Label));
+            for (const TCHAR* Label : {TEXT("Sign In"), TEXT("Create Account"), TEXT("Sign-In"), TEXT("Try again")})
+                Test->TestFalse(FString(TEXT("Signed in, Settings excludes ")) + Label, RenderedPlay::HasText(Root, Label));
+            Test->TestFalse(TEXT("Signed in, the QR sign-in hides"), IsShownWidget(RenderedPlay::WithTag(Root, TEXT("SignInQr"))));
             Capture(Window, TEXT("player-signed-in"));
             return false;
         case 5:
@@ -159,7 +163,7 @@ public:
         case 17:
             Test->TestFalse(TEXT("The logout icon ends the session"), Service->HasSession());
             ExpectTopBar(TEXT("AccountSignIn"), TEXT("AccountSignOut"), TEXT("after logout"));
-            Test->TestTrue(TEXT("Sign-in choices return"), RenderedPlay::HasText(Root, TEXT("Sign in with QR")));
+            ExpectSignInChoices(TEXT("after logout"));
             Test->TestFalse(TEXT("Signed out, no display name"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestFalse(TEXT("Signed out, no shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
             Capture(Window, TEXT("signed-out"));
@@ -236,6 +240,29 @@ private:
         if (IsShownWidget(Shown) && IsShownWidget(Monitor) && IsShownWidget(Cog))
             Test->TestTrue(TEXT("Launch monitor, account icon, cog, in that order, ") + Where,
                 RenderedPlay::PointOn(*Monitor).X < RenderedPlay::PointOn(*Shown).X && RenderedPlay::PointOn(*Shown).X < RenderedPlay::PointOn(*Cog).X);
+    }
+
+    /**
+     * Signed out: Sign In and Create Account side by side on Player, and the QR sign-in in the Settings categories
+     * column, below the last category.
+     */
+    void ExpectSignInChoices(const FString& Where)
+    {
+        using namespace OnlineVisualTestDetail;
+        const TSharedRef<SWidget> Root = Menu.ToSharedRef();
+        const TSharedPtr<SWidget> SignIn = RenderedPlay::FindButton(Root, TEXT("Sign In")), Create = RenderedPlay::FindButton(Root, TEXT("Create Account"));
+        const TSharedPtr<SWidget> Qr = RenderedPlay::WithTag(Root, TEXT("SignInQr")), LastCategory = RenderedPlay::FindButton(Root, TEXT("Data & system"));
+        Test->TestTrue(TEXT("Sign In and Create Account show ") + Where, SignIn.IsValid() && Create.IsValid());
+        for (const TCHAR* Label : {TEXT("Sign in with QR"), TEXT("Sign in on this computer")})
+            Test->TestFalse(FString(Label) + TEXT(" is gone ") + Where, RenderedPlay::HasText(Root, Label));
+        if (SignIn.IsValid() && Create.IsValid())
+            Test->TestTrue(TEXT("Sign In, then Create Account, on one row ") + Where,
+                RenderedPlay::PointOn(*SignIn).X < RenderedPlay::PointOn(*Create).X
+                && FMath::IsNearlyEqual(RenderedPlay::PointOn(*SignIn).Y, RenderedPlay::PointOn(*Create).Y, 1.0));
+        Test->TestTrue(TEXT("The QR sign-in shows ") + Where, IsShownWidget(Qr) && RenderedPlay::HasText(Root, TEXT("Sign-In")));
+        if (IsShownWidget(Qr) && LastCategory.IsValid() && SignIn.IsValid())
+            Test->TestTrue(TEXT("The QR sign-in is under the last category, left of the page, ") + Where,
+                RenderedPlay::PointOn(*Qr).Y > RenderedPlay::PointOn(*LastCategory).Y && RenderedPlay::PointOn(*Qr).X < RenderedPlay::PointOn(*SignIn).X);
     }
 
     void Capture(const TSharedRef<SWindow>& Window, const FString& Name)

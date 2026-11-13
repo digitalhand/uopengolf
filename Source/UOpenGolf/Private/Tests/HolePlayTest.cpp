@@ -3,6 +3,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "Tests/PermissionTestAccess.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Hole/OpenGolfCupComponent.h"
@@ -168,7 +169,8 @@ public:
                 const float Turned = OpenGolfPlay::BearingDeg(Ball->GetActorLocation(), Cup) + 20.0f;
                 Test->TestTrue(TEXT("Aim turns at the practice spot"), Controller->SetAimYaw(Turned));
                 Test->TestEqual(TEXT("The aim reads off the line to the cup"), Controller->GetAimOffsetDeg(), 20.0f, 0.01f);
-                Controller->InjectReplayShot();
+                FOpenGolfPermissionTestAccess::Set(Controller->GetWorld());
+            Controller->InjectReplayShot();
                 Test->TestTrue(TEXT("The practice shot is hit"), Ball->IsMoving());
                 Test->TestEqual(TEXT("The practice shot keeps the turned aim"), Ball->AimYawDeg, Turned, 0.01f);
                 // The mode only switches with the ball still.

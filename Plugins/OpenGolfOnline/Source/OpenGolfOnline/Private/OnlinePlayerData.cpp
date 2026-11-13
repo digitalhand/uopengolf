@@ -140,19 +140,22 @@ void UOpenGolfOnlineSubsystem::LoadHistory(const FString& Club)
     HistoryClub = Club; ++HistoryRequest; bHistoryRequested = true; Touch();
     Flush();
 }
-void UOpenGolfOnlineSubsystem::UpdateDisplayName(const FString& Name)
+void UOpenGolfOnlineSubsystem::UpdateDisplayName(const FString& Name, TFunction<void(bool)> Completion)
 {
-    if (bLoading || Name.TrimStartAndEnd().IsEmpty() || Name.Len()>40) return;
-    for (TCHAR C : Name) if (C < 32 || C == 127) return;
+    if (!HasSession() || bLoading || Name.TrimStartAndEnd().IsEmpty() || Name.Len()>40)
+    { if (Completion) Completion(false); return; }
+    for (TCHAR C : Name) if (C < 32 || C == 127) { if (Completion) Completion(false); return; }
     auto Body = MakeShared<FJsonObject>(); Body->SetStringField(TEXT("display_name"),Name.TrimStartAndEnd());
     bLoading = true; Touch();
-    Api({},TEXT("PATCH"),Json(Body),[this](FReply Reply)
+    Api({},TEXT("PATCH"),Json(Body),[this, Completion=MoveTemp(Completion)](FReply Reply)
     {
         bLoading = false;
         auto Data = Object(Reply.Body);
-        if (SuccessReply(Reply) && Data) { Profile = Data; SaveLocal(); Status = TEXT("Profile saved."); }
+        const bool bSaved = SuccessReply(Reply) && Data.IsValid();
+        if (bSaved) { Profile = Data; SaveLocal(); Status = TEXT("Profile saved."); }
         else Status = TEXT("Could not save the profile. Try again.");
         Touch();
+        if (Completion) Completion(bSaved);
     });
 }
 void UOpenGolfOnlineSubsystem::DeleteShot(const FString& Id)

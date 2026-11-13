@@ -1,0 +1,10 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0.0",
+  "FriendlyName": "Open Game Update",
+  "Description": "Checks a GitHub repository for a newer release, downloads and verifies its installer, and starts it. The host project draws its own UI.",
+  "Category": "Networking",
+  "CanContainContent": false,
+  "Modules": [{"Name": "OpenGameUpdate", "Type": "Runtime", "LoadingPhase": "Default"}]
+}

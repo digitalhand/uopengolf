@@ -4,6 +4,20 @@ Choose Training from the main menu to enter the driving range. Every shot, from 
 from the tee until you switch to [playing the hole](#playing-the-hole). Click in the viewport once so it has keyboard focus; the keys below do
 nothing until it does.
 
+### Installing and updating
+
+On Windows, download `UOpenGolf-<version>-Windows-x64-Setup.exe` from the
+[latest release](https://github.com/digitalhand/uopengolf/releases/latest) and run it. It installs for your account
+only (no administrator prompt) and adds UOpenGolf to the Start menu; uninstall it from **Apps**. The `.zip` is the same
+game as a portable folder.
+
+The game checks for a newer release each time it starts. When one exists, the home and pause pages show
+**Update to v…**, and the version in the corner says it is available. **Settings › Data & system › Updates** checks on
+demand. The update screen shows what's new and the download size; **Download and install** shows a progress bar, then the
+game closes, installs the update and starts again. Your settings, sign-in and recordings are kept. Leaving the update
+screen cancels a download. Where the game can't update its own folder, and on Linux, the button opens the release page
+instead.
+
 ### Controls
 
 | Key | Action |
@@ -75,7 +89,7 @@ checked.
   beside the icons while retrying; see [Recording errors and retries](#recording-errors-and-retries).
   A launch-monitor error shows there too.
 - **Play buttons** (top left): round icon buttons in the tile style. The flag button
-  (**Play hole [G]**) switches to the hole; while playing it is ringed and reads **Range [G]**,
+  (**Game Mode [G]**) switches to the hole; while playing it is ringed and reads **Range [G]**,
   and a ball button (**Place ball [B]**) appears beside it. Under them the hole tiles show
   **Hole 1 · Par 4 · 400 yd**, the stroke being played, the distance **To Pin** (feet on the
   green, yards elsewhere) and **Putts**. While you place a ball, and for the rest of a hole
@@ -98,7 +112,7 @@ checked.
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
   from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
-  currently **v0.0.7**. Change the version there; packaged builds use the same value.
+  currently **v0.0.8**. Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](Releases.md#versioning)).
 
 On the range, a stopped ball stays put for 3 seconds with its result shown, then goes back to
@@ -228,8 +242,13 @@ logout icon.
 
 **Settings › Player** holds the account:
 
-- Signed out: the sign-in choices (QR code, this computer, create account) and no profile
-  options.
+- Signed out: **Sign In** and **Create Account**, and no profile options. Both open the login
+  page in this computer's browser. **Sign In** always shows the login page, even if the
+  browser is still logged in, so after signing out you can sign in as a different player.
+- Signed out, every Settings page also shows a QR code under the categories on the left,
+  captioned **Sign-In**. Scan it with a phone, check that the phone shows the same code as the
+  screen, and approve. It signs in the account your phone's browser is logged in to. The QR
+  code disappears once you are signed in.
 - Signed in: the member-since date, the **Display name** (**Save display name** saves it at
   once) and **Shot history**. Its **View** opens the club averages of the last 90 days, with
   clubs abbreviated (**DR**, **7i**, **PW**); select a club for its shots. Back returns to
@@ -248,7 +267,7 @@ remain between Play sessions in the same editor process.
 | --- | --- | --- |
 | Club | Driver | **Tab** |
 | Record shots | Off | **F9** or the record icon |
-| Recording folder | `Documents/UOpenGolf/Saved/ShotRecordings` | Fixed |
+| Recording folder | `Documents/UOpenGolf/Saved/ShotRecordings` | **Settings › Data & system**: type a folder, or **Browse** on Windows |
 | Selected test shot | First preset (low wood) | **P**, then pick one |
 | 3D grass and ground cover | On | Console: `uopengolf.Grass3D 0` (off) or `1` (on); see [Range assets](RangeAssets.md) |
 | Wind speed | 0 mph (calm) | In Play: click the wind indicator (up to 30 mph). Saved with the map: select **Range settings → Details → UOpenGolf → Wind → Wind Speed (mph)** |

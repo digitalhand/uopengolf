@@ -79,9 +79,6 @@ private:
     void ApplyRibbonLook(FUOpenGolfTrailRibbon& Ribbon, const FLinearColor& Color, float Opacity);
     void PromoteCurrentToHistory();
     void UpdateTrailGeometry(FUOpenGolfTrailRibbon& Ribbon);
-#if WITH_DEV_AUTOMATION_TESTS
-    void UpdateTrailGeometryLegacy(FUOpenGolfTrailRibbon& Ribbon);
-#endif
     // One current ribbon plus MaxHistoryTrails; UHT needs a literal size.
     UPROPERTY()
     FUOpenGolfTrailRibbon Ribbons[3];
