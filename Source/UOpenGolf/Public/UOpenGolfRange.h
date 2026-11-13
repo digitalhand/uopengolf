@@ -52,9 +52,6 @@ public:
     /** Visible 3D grass and ground-cover instances on the terrain; zero while the grass switch is off. */
     int32 GetGrassInstanceCount() const;
 
-    /** Number of baked trees on the terrain. The grass switch does not hide them. */
-    int32 GetTreeInstanceCount() const;
-
     /** Where the ball is teed up. */
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Range")
     FVector GetTeeLocation() const;

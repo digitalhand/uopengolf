@@ -92,13 +92,13 @@ public:
             Test->TestEqual(TEXT("The range's play bar only takes clicks on the flag button"),
                 ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SHudIconButton")));
             const TSharedRef<SWindControl> Control = SNew(SWindControl).Controller(Controller);
-            Test->TestEqual(TEXT("Closed, the wind controls only take clicks on the indicator"), ClickTargets(Control), FString(TEXT("SBorder")));
+            Test->TestEqual(TEXT("Closed, the wind controls only take clicks on the indicator"), ClickTargets(Control), FString(TEXT("SButton")));
 
             Controller->ToggleWindPanel();
             Test->TestTrue(TEXT("The indicator's click (or W) opens the wind controls"), Controller->IsWindPanelOpen());
             Control->Tick(FGeometry(), 0.0, SWindControl::SlideSeconds);
             Test->TestEqual(TEXT("The panel slides all the way out"), Control->GetOpenness(), 1.0f);
-            Test->TestEqual(TEXT("Open, the panel takes its own clicks too"), ClickTargets(Control), FString(TEXT("SBorder, SBorder")));
+            Test->TestEqual(TEXT("Open, the panel takes its own clicks too"), ClickTargets(Control), FString(TEXT("SButton, SBorder")));
 
             const bool bMapCalm = !Wind.bOn;
             Controller->SetWindOn(true);

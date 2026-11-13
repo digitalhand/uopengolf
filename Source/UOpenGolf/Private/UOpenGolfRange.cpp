@@ -311,23 +311,6 @@ int32 AUOpenGolfRange::GetGrassInstanceCount() const
     return Count;
 }
 
-int32 AUOpenGolfRange::GetTreeInstanceCount() const
-{
-    int32 Count = 0;
-    if (!IsValid(Terrain))
-        return Count;
-    for (AActor* Actor : Terrain->GeneratedActors)
-    {
-        if (!IsValid(Actor) || !Actor->ActorHasTag(AOpenGolfTerrainArea::TreesTag))
-            continue;
-        TArray<UInstancedStaticMeshComponent*> Components;
-        Actor->GetComponents(Components);
-        for (auto* Component : Components)
-            Count += Component->GetInstanceCount();
-    }
-    return Count;
-}
-
 void AUOpenGolfRange::UpdateGrass()
 {
     if (!IsValid(Terrain))

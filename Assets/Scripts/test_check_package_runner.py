@@ -141,14 +141,16 @@ class PackageRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Install Git LFS"):
             check_tools(self.engine, "Linux")
 
+    @patch("Assets.Scripts.check_package_runner.os.access")
     @patch("Assets.Scripts.check_package_runner.run")
     @patch("Assets.Scripts.check_package_runner.shutil.which", return_value="tool")
-    def test_checks_linux_toolchain_and_permissions(self, which, command):
+    def test_checks_linux_toolchain_and_permissions(self, which, command, access):
         self.make_engine()
         command.side_effect = lambda args: "GNU tar" if args[0] == "tar" else "clang version 20.1.8"
+        access.return_value = False
         with self.assertRaisesRegex(ValueError, "not executable"):
             check_tools(self.engine, "Linux")
-        (self.engine / "Engine/Binaries/Linux/UnrealEditor").chmod(0o755)
+        access.return_value = True
         with patch.dict(os.environ, {"LINUX_MULTIARCH_ROOT": ""}):
             with self.assertRaisesRegex(ValueError, "Clang 20.1.8"):
                 check_tools(self.engine, "Linux")

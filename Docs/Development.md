@@ -187,8 +187,7 @@ is a separate build prerequisite problem; skipping conversion does not fix it.
 ### Visual Studio Code setup
 
 Install Microsoft's **C/C++** extension (`ms-vscode.cpptools`) and open the actual
-`uopengolf` repository folder in VS Code. A generated conversion copy such as
-`uopengolf 5.8 - 2` has separate source and configuration files.
+`uopengolf` repository folder in VS Code.
 
 Generate the native Unreal VS Code workspace and IntelliSense configuration:
 
@@ -205,33 +204,20 @@ data with paths for the machine generating them. Regenerate after changing sourc
 files, engine/toolchain installations, or platforms. Build the editor target to
 produce UnrealHeaderTool's generated headers needed by IntelliSense.
 
-A local Windows starter configuration has also been created in this checkout:
-
-- `.vscode/c_cpp_properties.json`: installed MSVC path and fallback Unreal/project include paths.
-- `.vscode/tasks.json`: **Ctrl+Shift+B** builds the editor; **Tasks: Run Task** offers
-  smoke testing and native VS Code project generation.
-- `.vscode/launch.json`: **F5** builds and starts Unreal Editor under the Windows debugger.
-- `.vscode/extensions.json`: recommends the Microsoft C/C++ extension.
-
-The local C/C++ configuration now points to a real UnrealBuildTool-generated
-`.vscode/compileCommands_UOpenGolf.json`. It contains compiler invocations for the
-project's translation units, including generated ones (regenerate after adding files). Each command references Unreal-generated
-response files containing target-specific include paths, definitions and options.
-The recursive project include paths remain as a fallback for files without an entry.
-Do not copy `MyProject` or compiler paths from tutorial screenshots.
-
 To refresh just the compilation database after building:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 CompileCommands
 ```
 
-The local VS Code task **uopengolf: refresh compile commands** runs the same command.
 On Linux, use `bash Assets/Scripts/ue.sh compilecommands`. Run it again after
 `projectfiles`, which replaces the database with a smaller one.
 This uses UnrealBuildTool's `GenerateClangDatabase` mode with the Windows MSVC
 toolchain explicitly selected; installing Clang is not necessary for this Windows
 workflow. The generator disables unity builds/PCHs to produce per-file entries.
+The generated `.vscode/compileCommands_UOpenGolf.json` contains per-file compiler
+invocations and references response files with target-specific includes, definitions
+and options. Configure the C/C++ extension's `compileCommands` setting to use it.
 Generated headers must already exist from a successful editor build because this
 command skips executing code-generation actions. It does not compile the game.
 
@@ -244,14 +230,14 @@ refresh, run **C/C++: Reset IntelliSense Database**, then reopen a project C++ f
 compiler/engine paths. They are not distributed with a fresh clone; generate them
 with the commands above. Do not force-add them to the repository.
 
-Agent-side native generation was attempted but blocked when Unreal tried to write
-`Engine/Intermediate/ProjectFiles/PrimaryProjectPath.txt` inside its protected
-installation. Generating just the compilation database succeeded separately and
-its source/compiler/response-file paths were checked. Full native workspace
-generation and interactive VS Code IntelliSense/debugging remain unverified here.
+If an existing VS Code task reports that `Scripts/ue.ps1` does not exist, update
+its script argument in `.vscode/tasks.json` to `${workspaceFolder}/Assets/Scripts/ue.ps1`.
+Check the build, smoke, project-generation and compilation-database tasks; older
+local configurations may still use the path from before the scripts moved.
 
-On Linux (2026-10-16), `projectfiles` and `compilecommands` both succeed when the engine
-directory is writable. The generated workspace has `cppdbg` launch entries that use gdb;
+The engine directory must be writable for project generation. Historical platform
+evidence is recorded in [phase status](PhasesStatus.md#historical-vs-code-setup-evidence).
+On Linux, the generated workspace has `cppdbg` launch entries that use gdb;
 the **DebugGame** editor keeps project modules unoptimized for stepping. To display
 `FString`, `TArray` and `FName` readably, add a gdb setup command that runs
 `python import sys, gdb.printing; sys.path.insert(0, '<UE_ROOT>/Engine/Extras/GDBPrinters'); from UEPrinters import register_ue_printers; register_ue_printers(None)`

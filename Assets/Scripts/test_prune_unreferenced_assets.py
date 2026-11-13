@@ -2,9 +2,10 @@
 # Fixture paths are made up: the tool skips this file when it scans sources, but real paths here would
 # still mislead a reader searching for an asset's users.
 import unittest
+from tempfile import TemporaryDirectory
 from pathlib import Path
 
-from Assets.Scripts.prune_unreferenced_assets import decide, expand, named_in_sources, package_file
+from Assets.Scripts.prune_unreferenced_assets import decide, expand, named_in_sources, package_file, read_sources
 
 ART = "/Game/Fixture/Art"
 MAP = "/Game/Fixture/Maps/Range"
@@ -39,6 +40,22 @@ class NamedInSourcesTests(unittest.TestCase):
     def test_names_match_whole_words_only(self):
         sources = {"flag.py": "FOLDER = '/Kit/Flagstick'\nmaterial('M_FlagCloth')"}
         self.assertEqual(named_in_sources({"/Kit/Flagstick/M_Flag"}, sources), {})
+
+
+class SourceDiscoveryTests(unittest.TestCase):
+    def test_project_and_plugin_sources_protect_assets(self):
+        with TemporaryDirectory() as directory:
+            project = Path(directory)
+            paths = ("Source/Game/Ball.cpp", "Assets/Scripts/Presentation.py",
+                     "Plugins/Kit/Source/Kit/Flag.h", "Plugins/Kit/Scripts/Build.py")
+            packages = {f"{ART}/Asset{i}" for i in range(len(paths))}
+            for i, relative in enumerate(paths):
+                path = project / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f'"{ART}/Asset{i}"', encoding="utf-8")
+            named = named_in_sources(packages, read_sources(project))
+            self.assertEqual(set(named), packages)
+            self.assertEqual(decide(packages, {}, named)[0], [])
 
 
 class DecideTests(unittest.TestCase):

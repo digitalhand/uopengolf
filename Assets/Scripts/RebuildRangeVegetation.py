@@ -5,7 +5,7 @@ Then generated folders (Build_ and Vegetation_) under --generated that nothing o
 deleted, unless --keep-generated is given. Save any other open levels first, and review the log: deleted
 folders are not backed up, but they stay in Git history.
 
-    py "<project>/Scripts/RebuildRangeVegetation.py" [--keep-generated] [--map PATH --generated PATH]
+    py "<project>/Assets/Scripts/RebuildRangeVegetation.py" [--keep-generated] [--map PATH --generated PATH]
 
 --map and --generated select another range map (for example a private copy in a plugin) and the
 content folder its generated vegetation is written to.

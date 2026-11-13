@@ -8,7 +8,7 @@ just to inspect it. All grass in this workflow is original project artwork.
 
 The first pass was rejected as sparse and regular. The second, denser pass then showed a colour
 disc around the camera, jagged mowing edges and a square tee inside a round grass clearance
-(causes in [Phase status](PhasesStatus.md#maintained-turf-shared-field-smooth-edges-and-square-tee--2026-10-27)).
+(the shared-field and outline fixes are described below).
 The current revision fixes those and is applied to the public range:
 
 - **One turf field for everything.** Ground, rough and blades evaluate the same world-space shader
@@ -30,11 +30,9 @@ Nominal mowing heights remain 15 mm fairway, 30 mm first cut and 20 mm collar. T
 
 ## Agent entry points
 
-`CLAUDE.md`, `CODEX.md` and `AGENTS.md` point to this handoff. This checkout ignores `CLAUDE.md`
-and `AGENTS.md`, as well as `CLAUDE.local.md`; their local edits do not appear in normal Git
-status. `CODEX.md` and this workflow document are not ignored and can carry the handoff in Git.
-The ignore policy has not been changed. A new checkout must not assume those local instruction
-files or the external Blender source are present. Restore Git LFS assets before opening Unreal.
+This tracked workflow is the turf handoff. Machine-local agent instruction files and the
+external Blender source may be absent in a fresh checkout. Restore Git LFS assets before
+opening Unreal, and use the shared [testing guide](Testing.md) for validation.
 
 ## Find the existing work
 
@@ -257,17 +255,15 @@ ground within a couple of sRGB levels. Analyze with `Assets/Scripts/grass_stabil
 and compare second differences in the View 9 pan for motion flicker. Blender previews are not
 Unreal shimmer or performance evidence.
 
-Results for the current revision, with its limits, are in
-[Phase status](PhasesStatus.md#maintained-turf-shared-field-smooth-edges-and-square-tee--2026-10-27).
-The captures are `AfterTurfField-20261028-042858`, compared against `BeforeEdgeRepair-20261028-032124`,
-under `Saved/Automation/CoastalReview`. Rendering cost is not yet measured: the earlier frame
-probe was frame-capped. `UOpenGolf.Range.RolloutSurfaces` fails because its flat-range
-assumptions send the fixed shot into the saved coastal bunker; do not alter physics to make that
-layout match the flat fixture.
+Historical turf captures (2026-10-28) are `AfterTurfField-20261028-042858`, compared against `BeforeEdgeRepair-20261028-032124`,
+under `Saved/Automation/CoastalReview`. That run did not establish rendering cost because
+its frame probe was capped. Its `UOpenGolf.Range.RolloutSurfaces` failure came from flat-range
+assumptions that sent the fixed shot into the saved coastal bunker; it was not evidence
+for changing the physics to match that layout.
 
 Record final results and limits in `Docs/PhasesStatus.md`, and update the asset roadmap when
 the status changes. Owner review is required before claiming visual
-acceptance. See [AGENTS.md](../AGENTS.md) for the shared rules.
+acceptance. See the [testing guide](Testing.md) for the shared validation workflow.
 
 ## Maintained turf relief and quieter palette — 2026-10-27
 

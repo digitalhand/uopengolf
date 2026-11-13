@@ -33,7 +33,7 @@ import unreal as ue
 PROJECT = Path(ue.Paths.project_dir()).resolve()
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(PROJECT / "Scripts"))
+sys.path.insert(0, str(PROJECT / "Assets/Scripts"))
 sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
 import BuildSavannaGround as ground
 import course_hole

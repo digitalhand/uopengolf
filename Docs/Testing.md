@@ -35,10 +35,12 @@ matching completed tests; an empty or failed run is not a pass.
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
 
-Run script tests in their own directory so imports resolve:
+Install the script-test dependencies into your Python environment, then discover each
+suite from the repository root (`python` can replace `python3` on Windows):
 
 ```bash
-python3 -m unittest discover -s Scripts -p 'test_*.py'
+python3 -m pip install -r Assets/Scripts/requirements-test.txt
+python3 -m unittest discover -s Assets/Scripts -p 'test_*.py'
 python3 -m unittest discover -s Plugins/OpenGolfCourse/Scripts -p 'test_*.py'
 python3 -m unittest discover -s Plugins/OpenGolfSavanna/Scripts -p 'test_*.py'
 python3 -m unittest discover -s Plugins/OpenGolfSavanna/Scripts/blender -p 'test_*.py'
@@ -72,4 +74,5 @@ Record the engine version, OS, selected tests, report location and any limits in
 from before a change as proof of that change.
 
 This checkout uses UnrealBuildTool, including for `.Build.cs` and `.Target.cs` files.
-It has no `OpenFairway.sln`; the requested solution-based C# validation cannot run here.
+The optional C# reference harness is described in the
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#regenerating-fixtures).

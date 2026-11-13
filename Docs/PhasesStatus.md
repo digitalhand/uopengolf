@@ -1,5 +1,64 @@
 # Phase status
 
+## Repository cleanup — 2026-11-12 (Windows)
+
+Fixed the savanna scripts' imports after the move to `Assets/Scripts`, and made
+asset pruning scan that directory. A regression test protects assets named in
+project and plugin sources. Public game-module dependencies now match the types
+included by its public headers. Removed the unused native tree-count method and
+the retired tracer benchmark implementation and switch.
+
+Unreal's Asset Registry confirmed three unreferenced vegetation runs: 72 packages
+under `Terrain/Generated/Vegetation_DC91AC…`, one under
+`Terrain/Savanna/CutTurf/Vegetation_C8FD58…`, and 32 under
+`Terrain/Savanna/CutTurf/Vegetation_C93E30…`. Removed all 105 packages (15,235,415 bytes,
+14.53 MiB) after backing them up to
+`Saved/AssetBackups/20261113-053216-generated-cleanup/`. The five ground meshes in
+`Build_F1319D…` are referenced by the saved map and were retained. The map was not
+resaved. This reduces checkout content; existing Git LFS history remains.
+
+Audit evidence: `Saved/Cleanup/generated-assets-audit.json` and
+`Saved/Cleanup/PruneGeneratedAssets.log`. Unreal deleted 71 packages, then reported
+that the first directory could not be removed. With the editor stopped, the remaining
+34 audited files were checked byte-for-byte against their backups and removed.
+
+Validation: Unreal Engine 5.8.4, changelist 58902052, Windows x64. Development editor
+build passed (`Saved/Logs/BuildEditor.log`). All 245 engine-free Python tests passed
+with Python 3.14, Pillow 13.0.0 and NumPy 2.5.4 (82 project utilities, 58 course,
+61 savanna and 44 Blender helpers). Fixed three Windows portability failures in
+the existing tests. All tracked Markdown links to local files and heading anchors
+resolve; missing references now point to maintained plugin documentation.
+
+After content removal, `Saved/Automation/20261112-213323-af5729ef/index.json`
+recorded 31 of 32 range tests passing, including saved layout, presentation, rollout
+surfaces, frame-rate/hitch equivalence and shot-trail history. `WindControls` had two
+stale widget-type expectations: the indicator is now a focusable `SButton`, rather
+than its earlier `SBorder`. Corrected those assertions. The startup smoke test passed
+in `Saved/Automation/20261112-213637-ee7ca364/index.json`.
+After a successful editor rebuild, the focused `WindControls` rerun passed in
+`Saved/Automation/20261112-213753-e014f6e0/index.json`, completing coverage of all
+32 range checks across the full run and focused rerun. Linux, rendered gameplay
+and packaged builds were not revalidated in this cleanup.
+
+Follow-up build check: the ignored local `.vscode/tasks.json` still invoked
+`Scripts/ue.ps1` in four tasks. Updated those paths to `Assets/Scripts/ue.ps1` and
+executed the default VS Code editor-build task successfully. The standalone
+Windows Development game target also built successfully (`Saved/Logs/BuildGame.log`).
+The development guide now explains how to repair older local task configurations.
+
+## Historical VS Code setup evidence
+
+Linux, 2026-10-16: `projectfiles` and `compilecommands` succeeded with a writable
+engine directory. The generated workspace supplied `cppdbg`/gdb launch entries.
+
+An earlier Windows setup attempt (date not recorded) could not write
+`Engine/Intermediate/ProjectFiles/PrimaryProjectPath.txt` in the protected engine
+installation. Compilation database generation succeeded separately, and its
+source/compiler/response-file paths were checked. Interactive VS Code IntelliSense,
+debugging and full workspace generation were not verified in that attempt.
+Machine-specific starter tasks and launch settings from that checkout were ignored
+local files and are not supplied by a fresh clone.
+
 ## Shared online accounts — 2026-11-11
 
 Implementation is available in the reusable `OpenGolfOnline` plugin, with a

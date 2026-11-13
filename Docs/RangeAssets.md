@@ -195,32 +195,31 @@ For terrain and vegetation shimmer, use `UOpenGolf.Visual.CoastalTerrain` in Pla
 and `Assets/Scripts/grass_stability.py --profile coastal`. The older RangeAssets views above
 remain useful for the ball and flag; they are not the coastal shimmer baseline.
 Compare equal-sized sequences at fixed cameras and AA settings, including grass on/off
-and slow camera motion. See [phase status](PhasesStatus.md#tree-canopy-shimmer--2026-10-27)
-for the baseline, canopy measurements and remaining checks.
+and slow camera motion. See [phase status](PhasesStatus.md#rendered-stability)
+for later stability measurements and remaining checks.
 
 `UOpenGolf.Range.ShotTrail`
 checks path creation, monotonic rollout fade, disappearance at rest and reset for
 driver, iron and slow shots. Use `check_range_render.py --map <map>
 --shot-trail` for matching moving captures under `Saved/Screenshots/ShotTrail/`.
-For a CPU comparison without screenshot encoding, set `UE_ROOT`, build the editor,
-and run these sequentially on an otherwise idle machine:
+For CPU measurements without screenshot encoding, set `UE_ROOT`, build the editor,
+and run on an otherwise idle machine:
 
 ```powershell
-python Assets/Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing --legacy-trail
 python Assets/Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing
 ```
 
-`--legacy-trail` selects the previous geometry implementation in development automation
-builds; it requires `--trail-timing`. Timing mode sets and checks a 1280x720 render
+Timing mode sets and checks a 1280x720 render
 target, disables VSync, caps at 120 FPS and waits ten seconds after shaders finish.
 The report's `Editor.log` includes mean/max tracer and ball CPU times, mean HUD CPU
 time, and whole-frame intervals for each shot. These means cover actor/widget ticks,
 not individual 120 Hz physics substeps. The game also exposes CPU trace scopes
 `UOpenGolf_BallPhysics`, `UOpenGolf_ShotTrail` and `UOpenGolf_HudRefresh`.
 
-Measured tracer CPU work decreased, but whole-frame intervals did not establish an
-FPS gain. Detailed measurements, a non-reproducing slow run, and remaining platform
-gaps are recorded in [phase status](PhasesStatus.md#reference-measurements).
+Historical tracer comparisons reported decreased CPU work without establishing an
+FPS gain. The retired implementation is available in Git history for reproducing
+those comparisons. Record new measurements and platform limits in
+[phase status](PhasesStatus.md).
 
 ## Targeted green and flag repair
 
