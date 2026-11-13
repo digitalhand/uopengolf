@@ -112,7 +112,7 @@ checked.
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
   from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
-  currently **v0.0.7**. Change the version there; packaged builds use the same value.
+  currently **v0.0.8**. Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](Releases.md#versioning)).
 
 On the range, a stopped ball stays put for 3 seconds with its result shown, then goes back to

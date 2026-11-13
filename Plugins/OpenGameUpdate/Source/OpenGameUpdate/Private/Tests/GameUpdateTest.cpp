@@ -27,8 +27,8 @@ namespace
         C.Repository = TEXT("owner/game");
         C.InstallerAsset = TEXT("Game-{version}-Windows-x64-Setup.exe");
         C.InstallerArguments = TEXT("/SILENT /DIR=\"{installdir}\"");
-        C.CurrentVersion = TEXT("0.0.7");
-        C.UserAgent = TEXT("Game/0.0.7");
+        C.CurrentVersion = TEXT("0.0.8");
+        C.UserAgent = TEXT("Game/0.0.8");
         return C;
     }
 

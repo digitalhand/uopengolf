@@ -37,9 +37,9 @@ namespace UpdateText
 {
     /** "Update to v0.0.8". */
     FString Title(const UGameUpdateSubsystem& Updater);
-    /** Settings' button: Check for updates, Checking..., or Update to v0.0.8. */
+    /** Settings' button: Check for updates, Checking..., or Update to v0.0.X. */
     FString ButtonLabel(const UGameUpdateSubsystem* Updater);
-    /** Settings' status line, such as "Up to date (v0.0.7)." */
+    /** Settings' status line, such as "Up to date (v0.0.X)." */
     FString Status(const UGameUpdateSubsystem* Updater);
     /** GitHub's Markdown release notes as plain lines: headings without #, bullets as •. */
     FString PlainNotes(const FString& Markdown);
