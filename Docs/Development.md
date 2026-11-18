@@ -93,9 +93,18 @@ requiring a Zen cache service; normal interactive editor sessions use engine def
 Default timeout is 600 seconds; use `-TimeoutSeconds` or `--timeout` (up to 3600) to change it.
 Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
 
-The report validator and the FlightScope comparison script also have engine-free checks:
-`python3 -m unittest Assets.Scripts.test_automation_report` and `python3 -m unittest Assets.Scripts.test_flightscope_compare` from the repository root
-(Windows), or the same with `python3` (Linux).
+The report validator, the Square shot comparison and the Square and recorded-shot importers also
+have engine-free checks: `python -m unittest Assets.Scripts.test_automation_report Assets.Scripts.test_shot_compare
+Assets.Scripts.test_square_import Assets.Scripts.test_recording_import` from the repository root (Windows), or the
+same with `python3` (Linux).
+`python Assets/Scripts/shot_compare.py` replays the shot library in the editor and reports the physics
+against the Square Home's results; see the
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#square-shot-library).
+`Assets/Scripts/ue.ps1 Test -Filter UOpenGolf.Calibration.Rollout` (opt-in, about two minutes) fits the
+turf landing loss and ground resistance, then the struck-along-the-ground drag of topped shots,
+against the same shots and writes every candidate to
+`Saved/ShotLibrary/calibration.csv`; it never changes the catalog. See
+[Turf rollout and Square calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-and-square-calibration).
 
 The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
 committed with its terrain, vegetation and range actors.

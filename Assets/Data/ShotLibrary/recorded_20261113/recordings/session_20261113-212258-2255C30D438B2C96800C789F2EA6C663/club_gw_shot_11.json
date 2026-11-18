@@ -1,0 +1,43 @@
+{
+	"DeviceID": "Square Home",
+	"Units": "Yards",
+	"ShotNumber": 11,
+	"APIVersion": "1",
+	"BallData":
+	{
+		"Speed": 81.51,
+		"VLA": 28.12,
+		"HLA": -1.61,
+		"TotalSpin": 6801,
+		"SpinAxis": 18.62,
+		"BackSpin": 6444,
+		"SideSpin": 2171,
+		"CarryDistance": 0
+	},
+	"ShotDataOptions":
+	{
+		"ContainsBallData": true,
+		"ContainsClubData": false
+	},
+	"UOpenGolf":
+	{
+		"Club": "gw",
+		"ClubName": "GapWedge",
+		"LeftHanded": false,
+		"DeviceShotNumber": 59,
+		"RecordedLocal": "2026-11-13T21:28:31",
+		"Firmware": "1.10.29",
+		"Engine":
+		{
+			"CarryYd": 96.76,
+			"TotalYd": 96.76,
+			"RollYd": -0.01,
+			"LateralYd": 5.02,
+			"ApexFt": 60.28,
+			"HangTimeS": 4.38,
+			"LandingAngleDeg": 48.42,
+			"AtRest": true,
+			"TerminationReason": "Rest"
+		}
+	}
+}

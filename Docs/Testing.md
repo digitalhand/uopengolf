@@ -31,6 +31,7 @@ matching completed tests; an empty or failed run is not a pass.
 | --- | --- |
 | Startup | `UOpenGolf.Smoke` |
 | Flight, bounce, roll, stimp or contact | `UOpenGolf.Physics` and the affected range integration tests |
+| Turf roll or accuracy against Square Home | `python Assets/Scripts/shot_compare.py --build --check-baseline Assets/Data/ShotLibraryBaselines/pre_contact_20261116.csv`; for a refit, `UOpenGolf.Calibration.Rollout` (opt-in, not under `UOpenGolf.Physics`) |
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |

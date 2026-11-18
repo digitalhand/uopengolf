@@ -75,7 +75,8 @@ bool FFlightCorrectionsTest::RunTest(const FString& Parameters)
         }
     }
 
-    // Both corrections beat or matched the shot library (Docs/FlightScopeAnalysis.md), so gameplay uses them.
+    // Both corrections remove a defect in the inherited fits (see Docs/Reference.md, Flight corrections), so
+    // gameplay uses them.
     TestTrue(TEXT("Default drag has no 200k step"), FMath::Abs(FlightAerodynamics::GetCd(199999.0f, Flight) - FlightAerodynamics::GetCd(200001.0f, Flight)) < 0.001f);
     TestTrue(TEXT("Default lift bridges the low-Re dead band"), FlightAerodynamics::GetCl(62000.0f, 0.15f, Flight) > 0.09f);
 

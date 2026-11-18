@@ -6,6 +6,8 @@
 #include "OpenLaunchMonitorSubsystem.h"
 #include "UObject/Package.h"
 
+#include <limits>
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorReplayTest, "UOpenGolf.LaunchMonitor.Replay",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -64,7 +66,7 @@ bool FLaunchMonitorReplayTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Error recorded"), Subsystem->GetLastError().Contains(TEXT("not a plausible")));
 
     const TArray<FString> Names = Subsystem->GetReplayShotNames();
-    TestEqual(TEXT("Replay catalog includes both screenshots and varied shots"), Names.Num(), 10);
+    TestEqual(TEXT("Replay catalog has ten presets"), Names.Num(), 10);
     TestFalse(TEXT("Negative preset rejected"), Subsystem->InjectReplayShotAt(-1));
     TestFalse(TEXT("Past-end preset rejected"), Subsystem->InjectReplayShotAt(Names.Num()));
     TestEqual(TEXT("Browsing and invalid selection do not fire shots"), Shots.Num(), 3);
@@ -79,7 +81,7 @@ bool FLaunchMonitorReplayTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Straight putt horizontal launch"), Shots.Last().HorizontalLaunchDeg, 0.0f);
     TestEqual(TEXT("Straight putt vertical launch"), Shots.Last().VerticalLaunchDeg, 0.0f);
     TestEqual(TEXT("Straight putt spin"), Shots.Last().TotalSpinRpm, 0);
-    TestTrue(TEXT("Earlier screenshot selected"), Subsystem->InjectReplayShotAt(3));
+    TestTrue(TEXT("Mid iron preset selected"), Subsystem->InjectReplayShotAt(3));
     const FLaunchMonitorShot Previous = Shots.Last();
     TestEqual(TEXT("Earlier speed"), Previous.GetBallSpeedMph(), 75.7f, 0.02f);
     TestEqual(TEXT("Earlier HLA remains left"), Previous.HorizontalLaunchDeg, -0.97f, 0.001f);
@@ -90,6 +92,68 @@ bool FLaunchMonitorReplayTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Preset can repeat"), Subsystem->InjectReplayShotAt(3));
     TestEqual(TEXT("Repeat keeps input"), Shots.Last().BallSpeedMps, Previous.BallSpeedMps);
     TestEqual(TEXT("Repeat gets new shot number"), Shots.Last().ShotNumber, Previous.ShotNumber + 1);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchMonitorCustomShotTest, "UOpenGolf.LaunchMonitor.CustomShot",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FLaunchMonitorCustomShotTest::RunTest(const FString& Parameters)
+{
+    UGameInstance* GameInstance = NewObject<UGameInstance>(GetTransientPackage());
+    UOpenLaunchMonitorSubsystem* Subsystem = NewObject<UOpenLaunchMonitorSubsystem>(GameInstance);
+    TArray<FLaunchMonitorShot> Shots;
+    Subsystem->OnShotReceivedNative.AddLambda([&Shots](const FLaunchMonitorShot& Shot) { Shots.Add(Shot); });
+
+    // Typed values arrive exactly, not at Square packet precision.
+    TestTrue(TEXT("Straight custom shot delivered"), Subsystem->InjectCustomShot(44.704f, 16.0f, 0.0f, 5000, 0.0f));
+    if (TestEqual(TEXT("One custom shot"), Shots.Num(), 1))
+    {
+        const FLaunchMonitorShot& Shot = Shots[0];
+        TestEqual(TEXT("Custom source"), Shot.Source, FString(LaunchMonitorCustomSource));
+        TestTrue(TEXT("Custom shot type unknown"), Shot.ShotType == ELaunchMonitorShotType::Unknown);
+        TestEqual(TEXT("Exact speed"), Shot.BallSpeedMps, 44.704f);
+        TestEqual(TEXT("100 mph"), Shot.GetBallSpeedMph(), 100.0f, 0.001f);
+        TestEqual(TEXT("Exact VLA"), Shot.VerticalLaunchDeg, 16.0f);
+        TestEqual(TEXT("Exact HLA"), Shot.HorizontalLaunchDeg, 0.0f);
+        TestEqual(TEXT("Exact spin"), Shot.TotalSpinRpm, 5000);
+        TestTrue(TEXT("Typed values measured"), Shot.BallSpeedSource == ELaunchMonitorValueSource::Measured &&
+            Shot.VerticalLaunchSource == ELaunchMonitorValueSource::Measured && Shot.HorizontalLaunchSource == ELaunchMonitorValueSource::Measured &&
+            Shot.TotalSpinSource == ELaunchMonitorValueSource::Measured && Shot.SpinAxisSource == ELaunchMonitorValueSource::Measured);
+        TestEqual(TEXT("Straight shot is all back spin"), Shot.BackSpinRpm, 5000);
+        TestEqual(TEXT("Straight shot has no side spin"), Shot.SideSpinRpm, 0);
+        TestTrue(TEXT("Spin components derived"), Shot.BackSpinSource == ELaunchMonitorValueSource::Derived &&
+            Shot.SideSpinSource == ELaunchMonitorValueSource::Derived);
+    }
+
+    // A tilted axis splits the spin: 6000 rpm at -30 degrees is 5196 back and 3000 to the left.
+    TestTrue(TEXT("Curving custom shot delivered"), Subsystem->InjectCustomShot(60.0f, 12.5f, -2.0f, 6000, -30.0f));
+    if (TestEqual(TEXT("Two custom shots"), Shots.Num(), 2))
+    {
+        TestEqual(TEXT("Tilted back spin"), Shots[1].BackSpinRpm, 5196);
+        TestEqual(TEXT("Tilted side spin"), Shots[1].SideSpinRpm, -3000);
+        TestEqual(TEXT("Left HLA kept"), Shots[1].HorizontalLaunchDeg, -2.0f);
+        TestEqual(TEXT("Numbered after the first"), Shots[1].ShotNumber, Shots[0].ShotNumber + 1);
+    }
+    FLaunchMonitorShot Last;
+    TestTrue(TEXT("Custom shot is the last shot"), Subsystem->GetLastShot(Last) && Last.ShotNumber == Shots.Last().ShotNumber);
+
+    // Values the decoders would drop are reported, never delivered.
+    struct FBad { const TCHAR* Name; float Speed, Vla, Hla; int32 Spin; float Axis; };
+    const FBad Bad[] = {
+        {TEXT("Zero speed"), 0.0f, 10.0f, 0.0f, 3000, 0.0f},
+        {TEXT("Speed at limit"), 250.0f, 10.0f, 0.0f, 3000, 0.0f},
+        {TEXT("Vertical quarter turn"), 40.0f, 90.0f, 0.0f, 3000, 0.0f},
+        {TEXT("Horizontal quarter turn"), 40.0f, 10.0f, -90.0f, 3000, 0.0f},
+        {TEXT("Negative spin"), 40.0f, 10.0f, 0.0f, -1, 0.0f},
+        {TEXT("Spin at limit"), 40.0f, 10.0f, 0.0f, 30000, 0.0f},
+        {TEXT("Axis past half turn"), 40.0f, 10.0f, 0.0f, 3000, 180.5f},
+        {TEXT("Not a number"), 40.0f, std::numeric_limits<float>::quiet_NaN(), 0.0f, 3000, 0.0f},
+    };
+    for (const FBad& Case : Bad)
+        TestFalse(Case.Name, Subsystem->InjectCustomShot(Case.Speed, Case.Vla, Case.Hla, Case.Spin, Case.Axis));
+    TestEqual(TEXT("Rejected custom shots deliver nothing"), Shots.Num(), 2);
+    TestTrue(TEXT("Rejection reported"), Subsystem->GetLastError().Contains(TEXT("Custom shot")));
     return true;
 }
 

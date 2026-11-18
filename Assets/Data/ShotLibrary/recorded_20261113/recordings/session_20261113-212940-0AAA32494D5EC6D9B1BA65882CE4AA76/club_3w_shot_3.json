@@ -1,0 +1,43 @@
+{
+	"DeviceID": "Square Home",
+	"Units": "Yards",
+	"ShotNumber": 3,
+	"APIVersion": "1",
+	"BallData":
+	{
+		"Speed": 105.61,
+		"VLA": 2.91,
+		"HLA": -12.69,
+		"TotalSpin": 3384,
+		"SpinAxis": 4.20,
+		"BackSpin": 3375,
+		"SideSpin": 248,
+		"CarryDistance": 0
+	},
+	"ShotDataOptions":
+	{
+		"ContainsBallData": true,
+		"ContainsClubData": false
+	},
+	"UOpenGolf":
+	{
+		"Club": "3w",
+		"ClubName": "Wood3",
+		"LeftHanded": false,
+		"DeviceShotNumber": 62,
+		"RecordedLocal": "2026-11-13T21:30:39",
+		"Firmware": "1.10.29",
+		"Engine":
+		{
+			"CarryYd": 69.04,
+			"TotalYd": 96.85,
+			"RollYd": 27.81,
+			"LateralYd": -20.05,
+			"ApexFt": 3.29,
+			"HangTimeS": 1.53,
+			"LandingAngleDeg": 4.26,
+			"AtRest": true,
+			"TerminationReason": "Rest"
+		}
+	}
+}

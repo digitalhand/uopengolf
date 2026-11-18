@@ -36,10 +36,9 @@ projects keep their own licenses and are recorded here if imported.
 | [OpenFairway](https://github.com/digitalhand/openfairway) | Earlier C# physics | Superseded by ogolf-physics; not ported |
 | [ogolf](https://github.com/digitalhand/ogolf) | Reference for greens, lies, and surface integration | Not yet ported |
 
-`Data/ShotLibrary/` stores results from the
-[FlightScope Trajectory Optimizer](https://trajectory.flightscope.com/) for the
-maintainer's recorded launch-monitor shots, as comparison data for the physics (see its
-[README](Data/ShotLibrary/README.md#provenance)). No FlightScope code or assets are included.
+`Assets/Data/ShotLibrary/` stores the maintainer's own Square Home shot exports: launch data
+and the Square app's carry, total, apex and landing results, as comparison data for the physics
+(see its [README](Assets/Data/README.md#provenance)). No Square code or assets are included.
 
 Unreal Engine must be obtained separately and is governed by the
 [Unreal Engine EULA](https://www.unrealengine.com/eula/unreal), not this repository's MIT license.

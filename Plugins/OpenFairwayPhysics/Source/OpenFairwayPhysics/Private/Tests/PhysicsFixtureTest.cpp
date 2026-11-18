@@ -69,7 +69,7 @@ bool FOpenFairwayPhysicsFixtureTest::RunTest(const FString& Parameters)
         Launch.TotalSpinRpm = Fixture.TotalSpin;
         Launch.SpinAxisDeg = Fixture.SpinAxis;
 
-        const FShotSimulationResult Result = ShotSimulator::Simulate(Launch, Fixture.Surface, FBallPhysicsProfile::HistoricalReference());
+        const FShotSimulationResult Result = ShotSimulator::Simulate(Launch, Fixture.Surface, FBallPhysicsProfile::HistoricalReference(), {}, 30.0f);
         const FString Label = FString::Printf(TEXT("%s on %s"), Fixture.Name, SurfaceCatalog::GetName(Fixture.Surface));
         AddInfo(FString::Printf(TEXT("%s: carry %.4f (golden %.4f), total %.4f (golden %.4f), apex %.4f ft, hang %.4f s, offline %.4f yd"), *Label,
             Result.CarryM * YardsPerMeter, Fixture.CarryYd, Result.TotalM * YardsPerMeter, Fixture.TotalYd, Result.ApexM * FeetPerMeter, Result.HangTimeS,

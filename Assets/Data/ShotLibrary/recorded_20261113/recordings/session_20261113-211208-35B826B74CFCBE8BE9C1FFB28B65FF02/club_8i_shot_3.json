@@ -1,0 +1,50 @@
+{
+	"DeviceID": "Square Home",
+	"Units": "Yards",
+	"ShotNumber": 3,
+	"APIVersion": "1",
+	"BallData":
+	{
+		"Speed": 80.26,
+		"VLA": 3.74,
+		"HLA": 7.84,
+		"TotalSpin": 5441,
+		"SpinAxis": 57.70,
+		"BackSpin": 2906,
+		"SideSpin": 4599,
+		"CarryDistance": 0
+	},
+	"ClubData":
+	{
+		"Path": -10.14,
+		"FaceToTarget": 12.33,
+		"AngleOfAttack": -1.15,
+		"Loft": 5.66
+	},
+	"ShotDataOptions":
+	{
+		"ContainsBallData": true,
+		"ContainsClubData": true
+	},
+	"UOpenGolf":
+	{
+		"Club": "8i",
+		"ClubName": "Iron8",
+		"LeftHanded": false,
+		"DeviceShotNumber": 36,
+		"RecordedLocal": "2026-11-13T21:13:59",
+		"Firmware": "1.10.29",
+		"Engine":
+		{
+			"CarryYd": 23.26,
+			"TotalYd": 32.34,
+			"RollYd": 9.08,
+			"LateralYd": 5.80,
+			"ApexFt": 1.20,
+			"HangTimeS": 0.63,
+			"LandingAngleDeg": 4.06,
+			"AtRest": true,
+			"TerminationReason": "Rest"
+		}
+	}
+}

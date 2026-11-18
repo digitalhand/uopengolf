@@ -6,6 +6,8 @@ import sys
 
 STARTUP_MAP = "/Game/UOpenGolf/Maps/UOpenGolf"
 CRASH_MARKERS = ("Fatal error", "Assertion failed", "Unhandled Exception", "appError called")
+# Content the game loads only by a C++ path, which the cook silently drops (AUOpenGolfHUD::RefreshTheme logs this).
+MISSING_CONTENT_MARKERS = ("Wind indicator widget",)
 
 
 def validate_start_log(path, map_path=STARTUP_MAP):
@@ -20,6 +22,9 @@ def validate_start_log(path, map_path=STARTUP_MAP):
     for marker in CRASH_MARKERS:
         if marker in text:
             raise ValueError(f"Start log contains '{marker}': {log}")
+    for marker in MISSING_CONTENT_MARKERS:
+        if marker in text:
+            raise ValueError(f"Start log shows uncooked content ('{marker}'): {log}")
     if not re.search(r"Took [0-9.]+ seconds to LoadMap\(" + re.escape(map_path) + r"\)", text):
         raise ValueError(f"Start log never reached LoadMap({map_path}): {log}")
 

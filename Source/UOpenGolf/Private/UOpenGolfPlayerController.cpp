@@ -26,6 +26,7 @@
 #include "Hole/OpenGolfCupComponent.h"
 #include "OpenGolfTerrain.h"
 #include "Play/OpenGolfPlayRules.h"
+#include "LaunchMonitorLimits.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
@@ -443,7 +444,11 @@ void AUOpenGolfPlayerController::InjectReplayShot()
     if (bMainMenuOpen) return;
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetLaunchMonitor(*this))
     {
-        LaunchMonitor->InjectReplayShotAt(SelectedReplayIndex);
+        if (bCustomShotSelected)
+            LaunchMonitor->InjectCustomShot(CustomShot.BallSpeedMps, CustomShot.VerticalLaunchDeg, CustomShot.HorizontalLaunchDeg,
+                CustomShot.TotalSpinRpm, CustomShot.SpinAxisDeg);
+        else
+            LaunchMonitor->InjectReplayShotAt(SelectedReplayIndex);
         SetReplayPanelOpen(false);
     }
 }
@@ -455,7 +460,23 @@ bool AUOpenGolfPlayerController::SelectReplayShot(int32 Index)
         return false;
     }
     SelectedReplayIndex = Index;
+    bCustomShotSelected = false;
     return true;
+}
+
+FOpenGolfCustomShot FOpenGolfCustomShot::Clamped() const
+{
+    using namespace LaunchMonitorLimits;
+    // The subsystem rejects the limits themselves, so stay a step inside them; a non-finite value takes the default.
+    const FOpenGolfCustomShot Default;
+    auto Limit = [](float Value, float Fallback, float Min, float Max) { return FMath::IsFinite(Value) ? FMath::Clamp(Value, Min, Max) : Fallback; };
+    FOpenGolfCustomShot Out;
+    Out.BallSpeedMps = Limit(BallSpeedMps, Default.BallSpeedMps, 0.1f, MaxBallSpeedMps - 0.1f);
+    Out.VerticalLaunchDeg = Limit(VerticalLaunchDeg, Default.VerticalLaunchDeg, -(MaxAbsVerticalAngleDeg - 0.1f), MaxAbsVerticalAngleDeg - 0.1f);
+    Out.HorizontalLaunchDeg = Limit(HorizontalLaunchDeg, Default.HorizontalLaunchDeg, -(MaxAbsHorizontalAngleDeg - 0.1f), MaxAbsHorizontalAngleDeg - 0.1f);
+    Out.TotalSpinRpm = FMath::Clamp(TotalSpinRpm, 0, MaxSpinRpm - 1);
+    Out.SpinAxisDeg = Limit(SpinAxisDeg, Default.SpinAxisDeg, -MaxAbsSpinAxisDeg, MaxAbsSpinAxisDeg);
+    return Out;
 }
 
 void AUOpenGolfPlayerController::ToggleReplayPanel()

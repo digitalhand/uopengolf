@@ -30,6 +30,8 @@ namespace OpenFairway
         float DragScale = 1.0f;
         float LiftScale = 1.0f;
         float InitialLaunchAngleDeg = 0.0f;
+        /** The ball's own drag scale, without the launch regime's multiplier: air drag on the ground reads only this. */
+        float BallDragScale = 1.0f;
         /** Air velocity (m/s, OpenFairway frame). Drag and lift act on the ball's speed through the air. */
         FVector3f Wind = FVector3f::ZeroVector;
         /** Height (m) at which Wind is measured; 0 keeps the wind uniform with height. See WindProfile. */
@@ -42,7 +44,7 @@ namespace OpenFairway
     struct FFlightProfile
     {
         // Smits/Smith spin-down: d(omega)/dt = -coefficient * speed/radius * omega (SI).
-        // See Docs/FlightScopeAnalysis.md for the source and applicability limits.
+        // See Docs/Reference.md (References: Nathan; Smits and Smith) for the source and applicability limits.
         float SpinDecayCoefficient = 2.0e-5f;
         // Nonzero only for historical reference comparisons (the old 5-second decay).
         float ConstantSpinDecayRatePerSecond = 0.0f;
@@ -139,6 +141,13 @@ namespace OpenFairway
     /** Coefficient of restitution and tangential retention for impacts. */
     struct FBounceProfile
     {
+        /**
+         * Impacts read the backspin across the ball's travel instead of the total spin. Sidespin and
+         * spin about the contact normal cannot check a ball, so a tilted spin axis no longer stops it
+         * as if all its spin were backspin. HistoricalReference turns this off.
+         */
+        bool bAxisAwareSpin = true;
+
         // COR curve.
         float CorBaseA = 0.45f;
         float CorBaseB = -0.01f;
@@ -181,6 +190,15 @@ namespace OpenFairway
     /** Ground friction constants for roll-out. */
     struct FRolloutProfile
     {
+        /** Solve resistance and contact together. False preserves the historical split-step solver. */
+        bool bCoupledContact = true;
+        /**
+         * Ground contact reads only the spin in the contact plane: spin about the normal pivots the
+         * ball without rolling it, so it neither adds friction nor keeps a stopped ball moving.
+         * HistoricalReference turns this off.
+         */
+        bool bAxisAwareSpin = true;
+
         float ChipSpeedThreshold = 20.0f;
         float PitchSpeedThreshold = 35.0f;
         float ChipVelocityScaleMin = 0.60f;
@@ -237,10 +255,25 @@ namespace OpenFairway
         float SpinbackSpeedStartMps = 0.0f;
         float SpinbackSpeedEndMps = 0.0f;
         float RollingSpinScale = 1.0f;
+        /** Share of the impact-spin friction multiplier that reaches sliding friction. */
+        float SlidingSpinScale = 1.0f;
         float RestitutionScale = 1.0f;
         float ImpactRetentionScale = 1.0f;
         /** Forward speed removed per m/s of incoming normal speed at an impact (a sand crater); 0 elsewhere. */
         float ImpactPlowRatio = 0.0f;
+        /**
+         * Turf landing loss read from the impact state (see FSurfacePhysicsSettings::LandingAngleLoss): the
+         * impact keeps exp(-LandingAngleLoss * vn / vt) * max(0, 1 - min(LandingSpinLoss * R * backspin, grip) / vt)
+         * of its tangential velocity, grip being the contact's Coulomb bound per unit mass. Either set replaces the
+         * bounce profile's retention and the landing bite.
+         */
+        float LandingAngleLoss = 0.0f;
+        float LandingSpinLoss = 0.0f;
+        /** Speed-squared grass drag on a ball moving along the ground: deceleration GrassFormDrag * v^2 (1/m). */
+        float GrassFormDrag = 0.0f;
+        /** Grass drag scales for a full shot struck into or along the ground (see FSurfacePhysicsSettings). */
+        float StruckViscosityScale = 1.0f;
+        float StruckFormDragScale = 1.0f;
         TOptional<FSurfaceBounceSettings> SurfaceBounce;
     };
 } // namespace OpenFairway

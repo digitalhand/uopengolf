@@ -13,6 +13,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GameMapsSettings.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/PackageName.h"
 #include "Tests/AutomationEditorCommon.h"
 
 DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyUOpenGolfStartup, FAutomationTestBase*, Test);
@@ -67,6 +69,14 @@ bool FUOpenGolfStartupTest::RunTest(const FString& Parameters)
         return false;
     }
     TestEqual(TEXT("Configured editor startup map"), GetDefault<UGameMapsSettings>()->EditorStartupMap.GetLongPackageName(), StartupMap);
+    // The wind Widget Blueprint is loaded only by a C++ path, which the cook does not follow.
+    {
+        const FString WindFolder = FPackageName::GetLongPackagePath(FSoftObjectPath(AUOpenGolfHUD::WindWidgetPath).GetLongPackageName());
+        TArray<FString> AlwaysCook;
+        GConfig->GetArray(TEXT("/Script/UnrealEd.ProjectPackagingSettings"), TEXT("DirectoriesToAlwaysCook"), AlwaysCook, GGameIni);
+        TestTrue(FString::Printf(TEXT("Packaging always cooks %s"), *WindFolder),
+            AlwaysCook.ContainsByPredicate([&WindFolder](const FString& Entry) { return Entry.Contains(FString::Printf(TEXT("\"%s\""), *WindFolder)); }));
+    }
     if (!FEditorFileUtils::LoadMap(StartupMap, false, true))
     {
         AddError(TEXT("Could not load the committed UOpenGolf map."));

@@ -180,4 +180,62 @@ bool FRolloutSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Rough rolls much shorter than fairway"), RoughRollYd < 0.8f * FairwayRollYd);
     return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRecordedContactParityTest, "UOpenGolf.Range.RecordedContactParity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FRecordedContactParityTest::RunTest(const FString& Parameters)
+{
+    using namespace RolloutSurfaceTestDetail;
+    FTestWorldWrapper Wrapper;
+    if (!Wrapper.CreateTestWorld(EWorldType::EditorPreview)) return false;
+    UWorld& World = *Wrapper.GetTestWorld();
+    auto* Near = AddGround(World, FVector2D(-10, -100), FVector2D(40, 100));
+    auto* Far = AddGround(World, FVector2D(40, -100), FVector2D(600, 100));
+    Wrapper.TickTestWorld(1.0f / 60.0f);
+    auto* Ball = World.SpawnActor<AOpenFairwayBall>();
+    struct FCase { float Speed, Angle, Direction, Back, Side; };
+    const FCase Cases[] = {{67.47f, -0.14f, 16.22f, 1406, 4599}, {100.17f, 0.78f, -6.69f, 2368, -1011},
+        {107.82f, 8.36f, -10.65f, -401, 4581}, {113.9f, 0.6f, -3.8f, 2068, 0}, {91.4f, 1.4f, 9.7f, 1948, 0}};
+    auto MakeLaunch = [](const FCase& C)
+    {
+        FOpenFairwayLaunch L;
+        L.BallSpeedMph = C.Speed; L.VerticalLaunchDeg = C.Angle; L.HorizontalLaunchDeg = C.Direction;
+        L.BackSpinRpm = C.Back; L.SideSpinRpm = C.Side; L.bHasBackSpin = true; L.bHasSideSpin = true;
+        return L;
+    };
+    for (int32 Index = 0; Index < static_cast<int32>(OpenFairway::ESurface::Count); ++Index)
+    {
+        const auto Surface = static_cast<EOpenFairwaySurface>(Index);
+        TagSurface(*Near, Surface); TagSurface(*Far, Surface);
+        for (const auto& C : Cases)
+        {
+            const auto Launch = MakeLaunch(C);
+            FOpenFairwayShotResult Live;
+            if (!Play(*Ball, Launch, Live, *this)) continue;
+            const auto Predicted = Ball->PredictShot(Launch, Surface);
+            const FString Label = FString::Printf(TEXT("Surface %d, %.2f mph / %.2f deg"), Index, C.Speed, C.Angle);
+            TestEqual(Label + TEXT(" carry parity (yd)"), Yards(Live.CarryM), Yards(Predicted.CarryM), 0.25f);
+            TestEqual(Label + TEXT(" total parity (yd)"), Yards(Live.TotalM), Yards(Predicted.TotalM), 0.25f);
+        }
+    }
+    TagSurface(*Near, EOpenFairwaySurface::Fairway);
+    for (const auto Destination : {EOpenFairwaySurface::Rough, EOpenFairwaySurface::Green, EOpenFairwaySurface::Sand})
+    {
+        TagSurface(*Far, Destination);
+        bool bSawFairway = false, bSawDestination = false;
+        Ball->DiagnosticTrace = [&](const OpenFairway::FPhysicsTraceSample& S)
+        {
+            bSawFairway |= S.Surface == OpenFairway::ESurface::Fairway;
+            bSawDestination |= S.Surface == static_cast<OpenFairway::ESurface>(Destination);
+        };
+        FOpenFairwayShotResult Live;
+        Play(*Ball, MakeLaunch(Cases[0]), Live, *this);
+        Ball->DiagnosticTrace = nullptr;
+        TestTrue(TEXT("Ground trace observes both sides of the boundary"), bSawFairway && bSawDestination);
+        TestEqual(TEXT("Final surface matches the ground under the ball"), Live.Surface, Destination);
+    }
+    Wrapper.DestroyTestWorld(false);
+    return true;
+}
+
 #endif
