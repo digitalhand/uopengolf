@@ -15,7 +15,7 @@ each action on the same ref; a dual-boot machine can do this at different times.
 | Job | Runs on | What it does |
 | --- | --- | --- |
 | Version | GitHub-hosted Ubuntu | Runs the release-script unit tests and works out the version from the ref; an invalid tag fails here |
-| Linux package | Self-hosted, labels `self-hosted, Linux, X64, ue-5.8` | Stamps the version, runs `Assets/Scripts/ue.sh package` (build, cook, stage, 60 s start check) and archives the result |
+| Linux package | Self-hosted, labels `self-hosted, Linux, X64, ue-5.8` | Stamps the version, runs `Assets/Scripts/ue.sh package` (build, cook, stage, 60 s start check), builds the `.deb` with `Assets/Installer/build_deb.py` and archives the result |
 | Windows package | Self-hosted, labels `self-hosted, Windows, X64, ue-5.8` | The same with `Assets/Scripts/ue.ps1 Package`, plus the installer from `Assets/Installer/build_installer.ps1` |
 | Draft release (Linux, Windows) | GitHub-hosted Ubuntu | Tags only, one per platform, as soon as that platform's package succeeds: creates the tag's draft release if needed and uploads that platform's archives with `Assets/Scripts/draft_release.sh` |
 
@@ -48,7 +48,7 @@ self-hosted runner**. Follow GitHub's download and `config` steps, then:
 | | Linux | Windows |
 | --- | --- | --- |
 | Engine | Unreal Engine 5.8.4, installed or source build | Unreal Engine 5.8.4 |
-| Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar and GNU coreutils | Git for Windows (includes Git LFS), Windows PowerShell 5.1, Visual Studio 2022 with the SDKs under [Prerequisites](Development.md#windows), and Inno Setup 6 (`winget install JRSoftware.InnoSetup`) |
+| Tools | Engine's Clang 20.1.8 toolchain, Git with Git LFS, Bash, Python 3.10 or later, GNU tar, GNU coreutils and `dpkg-deb` (Ubuntu's `dpkg` package) | Git for Windows (includes Git LFS), Windows PowerShell 5.1, Visual Studio 2022 with the SDKs under [Prerequisites](Development.md#windows), and Inno Setup 6 (`winget install JRSoftware.InnoSetup`) |
 | Work folder | Default | Short, for example `--work C:\gh` during `config`; Unreal paths can exceed Windows path limits |
 
 Before packaging, `Assets/Scripts/check_package_runner.py` checks the engine version, build
@@ -139,12 +139,13 @@ download those artifacts too.
 
 | File | Contents |
 | --- | --- |
+| `UOpenGolf-<version>-Linux-amd64.deb` | Ubuntu installer: application-menu entry, package-manager upgrades and removal; administrator authorization required to install |
 | `UOpenGolf-<version>-Linux-x64.tar.gz` | The Linux package in a folder of the same name; run `UOpenGolf.sh` |
 | `UOpenGolf-<version>-Linux-x64-symbols.tar.gz` | `.debug` files for gdb, in the same folder layout |
 | `UOpenGolf-<version>-Windows-x64-Setup.exe` | The Windows installer: installs, upgrades an existing install, and is what the game downloads for an [in-game update](#in-game-updates) |
 | `UOpenGolf-<version>-Windows-x64.zip` | The same Windows package as a portable folder of the same name; run `UOpenGolf.exe` |
 | `UOpenGolf-<version>-Windows-x64-symbols.zip` | `.pdb` files, in the same folder layout |
-| `*.sha256` | The SHA-256 of each archive; check with `sha256sum -c FILE.sha256` |
+| `*.sha256` | The SHA-256 of each archive and installer; check with `sha256sum -c FILE.sha256` |
 
 - **Build type:** packages are **Development** builds, with the console and logs, like the
   local `Package` action.
@@ -153,6 +154,36 @@ download those artifacts too.
 - **Licenses:** each package includes `LICENSE` and `THIRD_PARTY_NOTICES.md`, as well as the
   engine's `NOTICES.txt`.
 - **Content:** builds reject local config files before cooking. Use a clean runner checkout.
+
+### Ubuntu installer
+
+The `.deb` targets Ubuntu 24.04 amd64. Open it with a graphical package installer;
+the available handler depends on your Ubuntu desktop installation. It asks for administrator
+authorization, without requiring `chmod`. Alternatively, from the download folder:
+
+```bash
+sudo apt install ./UOpenGolf-0.1.0-Linux-amd64.deb
+```
+
+Launch **UOpenGolf** from the application menu, or run `uopengolf`. Install a newer `.deb`
+the same way to upgrade. Close the game first. Remove it through your package manager or
+`sudo apt remove uopengolf`. The package owns `/opt/uopengolf`, `/usr/bin/uopengolf` and
+the application-menu entry. Settings and logs use `~/.config/Epic/UOpenGolf/Saved`;
+recordings keep their configured location. Removal and purge preserve those user files.
+Portable installations are not migrated automatically. The Vulkan/GPU requirements in
+[Development](Development.md) still apply; the package does not install graphics drivers.
+
+Build the installer without root, after `bash Assets/Scripts/ue.sh package`:
+
+```bash
+python3 -B Assets/Installer/build_deb.py --package-dir Packaged/Linux --version 0.1.0 --output-dir Packaged/dist
+```
+
+Use the version stamped into the cooked build. The builder does not cook or update game
+content. It includes project and third-party notices, keeps runtime `.sym` files, excludes
+`.debug` files and `Saved` folders, and writes a `.sha256` beside the `.deb`. Debian metadata
+maps prereleases such as `0.1.0-rc.1` to `0.1.0~rc.1`, so the final release sorts after them.
+The workflow produces this installer alongside the portable archive and symbols archive.
 
 ### In-game updates
 

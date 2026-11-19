@@ -1,5 +1,36 @@
 # Phase status
 
+## Ubuntu Debian installer — 2026-11-19 (Linux)
+
+The Linux release workflow now produces `UOpenGolf-<version>-Linux-amd64.deb` and its
+SHA-256 alongside the portable and symbols archives. `Assets/Installer/build_deb.py`
+builds without root. Installation uses Ubuntu's normal administrator authorization,
+adds an application-menu entry, and keeps the game under `/opt/uopengolf`. The launcher
+uses `-SaveToUserDir`, keeping settings outside package-owned files. Linux's update
+button still opens the release page. See [Ubuntu installer](Releases.md#ubuntu-installer).
+
+- Built the current 0.1.0 game with Unreal Engine **5.8.4-58902052**, Linux Development,
+  on Ubuntu 26.04 amd64. Used a separate source copy under `Saved/DebPackageBuild`,
+  excluding machine-specific `Config/User*.ini`. The build, cook and existing 60-second
+  package startup check passed. An older cooked 0.0.7 build was discarded from the
+  release output after its log exposed a version mismatch and missing wind UI.
+- **48 script tests passed**, including real fixture `.deb` construction, root ownership,
+  permissions, SHA-256, prerelease ordering, excluded settings/debug files, launcher
+  arguments and missing-tool checks. The builder reached **99.1% line coverage** with
+  Python's trace tool. ShellCheck, desktop-entry validation and workflow YAML parsing passed.
+- In a disposable **Ubuntu 24.04 amd64** container, package installation, upgrade,
+  obsolete-file removal, uninstall and purge passed. Sample user settings survived.
+  Every shipped ELF dependency resolved. The real installed game ran as an ordinary user
+  for 60 seconds, loaded the public map, passed the startup check, and reported the same
+  **0.1.0** version as the package. The final checksum was verified.
+- Reports: `Saved/Automation/DebianPackage/ScriptTests.log`, `Install.log`, and `Game.log`;
+  build reports are under `Saved/DebPackageBuild/Saved/`. The local installer is under
+  `Packaged/dist/`. No host package installation or release publication was performed.
+- **Limits:** graphical package installation and application-menu launch on an Ubuntu
+  desktop remain pending. NullRHI startup does not validate graphics, audio, Bluetooth,
+  sign-in or FPS. The current game's existing non-fatal `GameFeatureData` class-loading
+  ensure remains in the startup log; packaging did not change that configuration.
+
 ## Physics cleanup: legacy code removed, files split, docs rewritten — 2026-11-18 (Windows)
 
 The gameplay physics is unchanged. Everything it no longer used is removed, the physics code is split by

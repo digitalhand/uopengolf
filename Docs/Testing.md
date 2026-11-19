@@ -36,6 +36,16 @@ matching completed tests; an empty or failed run is not a pass.
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
 | In-game updates | `OpenGameUpdate` (run with `-Filter OpenGameUpdate`); the installer by hand, see [In-game updates](Releases.md#in-game-updates) |
+| Ubuntu packaging | `python3 -B -m unittest Assets.Scripts.test_build_deb Assets.Scripts.test_check_package_runner`; requires `dpkg-deb` |
+
+For Ubuntu package installation checks, run `Assets/Scripts/check_deb_install.sh` only inside
+a disposable Ubuntu 24.04 Docker container. Mount this checkout read-only at `/src`, the
+directory containing the `.deb` read-only at `/packages`, and a report directory at `/reports`.
+Run `bash /src/Assets/Scripts/check_deb_install.sh /packages/UOpenGolf-<version>-Linux-amd64.deb`.
+The check installs dependencies inside the container, tests upgrades and removal with small
+fixtures, then installs the real game and starts it as an ordinary user for 60 seconds with
+NullRHI. It checks all shipped ELF dependencies and preserves sample user settings through
+removal and purge. Graphical installation and menu launch require a separate desktop check.
 
 Install the script-test dependencies into your Python environment, then discover each
 suite from the repository root (`python` can replace `python3` on Windows):

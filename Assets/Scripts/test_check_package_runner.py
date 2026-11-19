@@ -135,6 +135,12 @@ class PackageRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Missing git"):
             check_tools(self.engine, "Linux")
 
+    @patch("Assets.Scripts.check_package_runner.shutil.which")
+    def test_rejects_missing_debian_package_builder(self, which):
+        which.side_effect = lambda name: None if name == "dpkg-deb" else "tool"
+        with self.assertRaisesRegex(ValueError, "Missing dpkg-deb"):
+            check_tools(self.engine, "Linux")
+
     @patch("Assets.Scripts.check_package_runner.run", side_effect=ValueError("git failed"))
     @patch("Assets.Scripts.check_package_runner.shutil.which", return_value="tool")
     def test_explains_missing_git_lfs(self, which, command):

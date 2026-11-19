@@ -127,7 +127,7 @@ def find_iscc() -> Path | None:
 
 def check_tools(engine: Path, system: str) -> None:
     commands = ["git", "tasklist.exe", "powershell", "taskkill.exe"] if system == "Windows" else [
-        "git", "python3", "bash", "timeout", "tar", "sha256sum", "find", "ps",
+        "git", "python3", "bash", "timeout", "tar", "sha256sum", "find", "ps", "dpkg-deb",
     ]
     for command in commands:
         if not shutil.which(command):

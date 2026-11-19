@@ -11,6 +11,15 @@ On Windows, download `UOpenGolf-<version>-Windows-x64-Setup.exe` from the
 only (no administrator prompt) and adds UOpenGolf to the Start menu; uninstall it from **Apps**. The `.zip` is the same
 game as a portable folder.
 
+On Ubuntu amd64, download `UOpenGolf-<version>-Linux-amd64.deb` and open it with your
+graphical package installer. Installation asks for administrator authorization; no `chmod`
+is needed. Launch **UOpenGolf** from the application menu. If your desktop does not offer a
+package installer, run `sudo apt install ./UOpenGolf-<version>-Linux-amd64.deb` from the
+download folder, replacing `<version>` with the downloaded version. Install a newer `.deb`
+the same way after closing the game. Remove it through your package manager or
+`sudo apt remove uopengolf`; your settings and recordings are kept. The `.tar.gz` remains
+available for portable use without administrator access. See [Ubuntu installer](Releases.md#ubuntu-installer).
+
 The game checks for a newer release each time it starts. When one exists, the home and pause pages show
 **Update to v…**, and the version in the corner says it is available. **Settings › Data & system › Updates** checks on
 demand. The update screen shows what's new and the download size; **Download and install** shows a progress bar, then the
