@@ -5,7 +5,7 @@
 // source (see GreenSpeed::GrassViscosity); FBallPhysicsProfile::HistoricalReference keeps the ported value.
 // Sand landings also plow (FBallPhysicsProfile::SandPlowRatio), which the reference profile leaves off, and sand
 // rolls at FBallPhysicsProfile::SandRollingFriction; the reference keeps the catalog's ported 0.30.
-// The turf surfaces also have a recalibrated catalog fitted to Square Home rollout (FBallPhysicsProfile::bRecalibratedTurf).
+// The turf surfaces also have a recalibrated catalog fitted to launch-monitor rollout (FBallPhysicsProfile::bRecalibratedTurf).
 #pragma once
 
 #include "OpenFairway/Profiles.h"
@@ -76,7 +76,7 @@ namespace OpenFairway
         /**
          * Single source of truth for surface tuning (the default green is 10 ft on the stimpmeter).
          * The ported ogolf-physics values by default; bRecalibratedTurf gives the turf surfaces (fairway,
-         * soft fairway, rough, firm, fringe) fitted to Square Home rollout. Green and sand are the same in both.
+         * soft fairway, rough, firm, fringe) fitted to launch-monitor rollout. Green and sand are the same in both.
          */
         OPENFAIRWAYPHYSICS_API const FSurfacePhysicsSettings& Get(ESurface Surface, bool bRecalibratedTurf = false);
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Flight diagnostics for two replay launches: the 75.7 mph, 20.78 degree mid iron and the 114.5 mph low wood.
+// Legacy-calibrated flight diagnostics for two replay launches: the 75.7 mph, 20.78 degree mid iron and the 114.5 mph low wood.
 // The pinned carries are this engine's own regression values, not external reference data.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
@@ -61,9 +61,9 @@ bool FOpenFairwayFlightDiagnosticsTest::RunTest(const FString& Parameters)
     Launch.HorizontalLaunchDeg = -0.97f; // Launched left; the mirrored heading is checked below.
     Launch.TotalSpinRpm = 4463.0f;
     Launch.SpinAxisDeg = 20.62f;
-    FBallPhysicsProfile Profile;
+    FBallPhysicsProfile Profile = FBallPhysicsProfile::LegacyCalibrated();
     FAirConditions Air;
-    const FShotSimulationResult Baseline = ShotSimulator::Simulate(Launch);
+    const FShotSimulationResult Baseline = ShotSimulator::Simulate(Launch, ESurface::Fairway, FBallPhysicsProfile::LegacyCalibrated());
     TestTrue(TEXT("Mid iron completes"), Baseline.bValid && Baseline.bAtRest);
     TestEqual(TEXT("Mid iron descriptive regime"), Baseline.RegimeKey, FString(TEXT("I-S1b-V2-P2")));
     TestEqual(TEXT("Current scales are interpolated"), Baseline.MatchedRegimeKey, FString(TEXT("interpolated")));
@@ -82,7 +82,7 @@ bool FOpenFairwayFlightDiagnosticsTest::RunTest(const FString& Parameters)
     const FFlightObservation Historical = ObserveFlight(Launch, FBallPhysicsProfile::HistoricalReference(), Air, GolfPhysics::SimulationDt);
     TestEqual(TEXT("Historical mid iron reproduced"), Historical.CarryYd, 82.6934f, 0.01f);
     LogFlight(TEXT("Historical model"), Historical);
-    FBallPhysicsProfile DecayOnly;
+    FBallPhysicsProfile DecayOnly = FBallPhysicsProfile::LegacyCalibrated();
     DecayOnly.bInterpolateCalibration = false;
     // The isolated decay experiment predates the drag-cap blend and low-Re lift bridge.
     DecayOnly.Flight.HighReCdBlendStart = 200000.0f;
@@ -97,12 +97,12 @@ bool FOpenFairwayFlightDiagnosticsTest::RunTest(const FString& Parameters)
     Air.TemperatureF = 75.0f;
     Profile.DragScaleMultiplier *= 0.9f;
     LogFlight(TEXT("10 percent less drag only"), ObserveFlight(Launch, Profile, Air, GolfPhysics::SimulationDt));
-    Profile = FBallPhysicsProfile();
+    Profile = FBallPhysicsProfile::LegacyCalibrated();
     Profile.LiftScaleMultiplier *= 1.1f;
     LogFlight(TEXT("10 percent more lift only"), ObserveFlight(Launch, Profile, Air, GolfPhysics::SimulationDt));
-    Profile = FBallPhysicsProfile();
+    Profile = FBallPhysicsProfile::LegacyCalibrated();
     Launch.HorizontalLaunchDeg = 0.97f;
-    const FShotSimulationResult RightLaunch = ShotSimulator::Simulate(Launch);
+    const FShotSimulationResult RightLaunch = ShotSimulator::Simulate(Launch, ESurface::Fairway, FBallPhysicsProfile::LegacyCalibrated());
     TestEqual(TEXT("Heading rotation preserves carry on level ground"), RightLaunch.CarryM, Baseline.CarryM, 0.001f);
     AddInfo(FString::Printf(TEXT("Mirrored heading (+0.97): carry %.4f yd, offline at rest %.4f yd"),
         RightLaunch.CarryM * YardsPerMeter, RightLaunch.LateralM * YardsPerMeter));
@@ -128,7 +128,7 @@ bool FOpenFairwayFlightDiagnosticsTest::RunTest(const FString& Parameters)
     Launch.SpinAxisDeg = -1.42f;
     Launch.BackSpinRpm = 1932.0f;
     Launch.SideSpinRpm = -48.0f;
-    FBallPhysicsProfile BeforeLiftCorrection;
+    FBallPhysicsProfile BeforeLiftCorrection = FBallPhysicsProfile::LegacyCalibrated();
     BeforeLiftCorrection.Flight.LowLaunchLiftRecoveryMax = 1.08f;
     Profile = BeforeLiftCorrection;
     DecayOnly.Flight.LowLaunchLiftRecoveryMax = 1.08f;
@@ -161,8 +161,8 @@ bool FOpenFairwayFlightDiagnosticsTest::RunTest(const FString& Parameters)
     LogFlight(TEXT("Wood 10 percent more drag"), ObserveFlight(Launch, Profile, Air, GolfPhysics::SimulationDt));
     Profile = BeforeLiftCorrection;
     LogFlight(TEXT("Wood 960 Hz"), ObserveFlight(Launch, Profile, Air, 1.0f / 960.0f));
-    const auto CorrectedWood = ShotSimulator::Simulate(Launch);
-    LogFlight(TEXT("Wood gameplay after lift correction"), ObserveFlight(Launch, FBallPhysicsProfile(), Air, GolfPhysics::SimulationDt));
+    const auto CorrectedWood = ShotSimulator::Simulate(Launch, ESurface::Fairway, FBallPhysicsProfile::LegacyCalibrated());
+    LogFlight(TEXT("Wood gameplay after lift correction"), ObserveFlight(Launch, FBallPhysicsProfile::LegacyCalibrated(), Air, GolfPhysics::SimulationDt));
     TestTrue(TEXT("Corrected wood completes"), CorrectedWood.bValid && CorrectedWood.bAtRest);
     TestEqual(TEXT("Corrected production wood carry regression"), CorrectedWood.CarryM * YardsPerMeter, 121.5451f, 0.01f);
     AddInfo(FString::Printf(TEXT("Corrected wood flat fairway: carry %.4f, roll %.4f, total %.4f yd"),

@@ -24,7 +24,7 @@ class ShotCompareTests(unittest.TestCase):
         self.library = self.root / "ShotLibrary"
         self.results = self.root / "results.csv"
         self.history = self.root / "history"
-        self.write(self.library / "square_20261113" / "shots.csv", LIBRARY_HEADER
+        self.write(self.library / "export_20261113" / "shots.csv", LIBRARY_HEADER
                    + "7iron_01,7 Iron,118.00,17.80,-0.20,5436,1.00,5435,94,172.20,176.20,4.00,95.80,45.70,1.00\n"
                    # A ball hit along the ground carries 0 and is still compared.
                    + "6iron_15,6 Iron,70.80,-1.80,6.90,1273,0.00,1273,0,0.00,90.10,90.10,0.00,0.00,0.00\n"
@@ -40,9 +40,9 @@ class ShotCompareTests(unittest.TestCase):
     def write_results(self, current, ground, historical=(170.2, 180.2, 94.8)):
         rows = [RESULTS_HEADER]
         for profile, (carry, total, apex) in (("current", current), ("historical", historical)):
-            rows.append(f"square_20261113,7iron_01,{profile},{carry},{total},{total - carry:.4f},{apex},5.0,1.5,true,44.7,4800.0\n")
-            rows.append(f"square_20261113,6iron_15,{profile},{ground[0]},{ground[1]},{ground[1] - ground[0]:.4f},0.2,0.0,8.0,true,0.4,1200.0\n")
-            rows.append(f"square_20261113,6iron_99,{profile},50.0,60.0,10.0,20.0,3.0,0.0,true,30.0,2500.0\n")
+            rows.append(f"export_20261113,7iron_01,{profile},{carry},{total},{total - carry:.4f},{apex},5.0,1.5,true,44.7,4800.0\n")
+            rows.append(f"export_20261113,6iron_15,{profile},{ground[0]},{ground[1]},{ground[1] - ground[0]:.4f},0.2,0.0,8.0,true,0.4,1200.0\n")
+            rows.append(f"export_20261113,6iron_99,{profile},50.0,60.0,10.0,20.0,3.0,0.0,true,30.0,2500.0\n")
         self.write(self.results, "".join(rows))
 
     def run_main(self, *extra):
@@ -55,7 +55,7 @@ class ShotCompareTests(unittest.TestCase):
     def test_library_sessions_and_references(self):
         shots = {shot["shot"]: shot for shot in compare_script.load_library(self.library)}
         self.assertEqual(set(shots), {"7iron_01", "6iron_15", "6iron_99"})
-        self.assertEqual(shots["7iron_01"]["session"], "square_20261113")
+        self.assertEqual(shots["7iron_01"]["session"], "export_20261113")
         self.assertAlmostEqual(shots["7iron_01"]["speed"], 118.0)
         self.assertAlmostEqual(shots["7iron_01"]["ref"]["roll"], 4.0)
         self.assertAlmostEqual(shots["7iron_01"]["ref"]["landing"], 45.7)
@@ -70,7 +70,7 @@ class ShotCompareTests(unittest.TestCase):
         self.assertNotIn("7 Iron", output)
         self.assertNotIn("6 Iron", output)
         # Relabelling every shot changes nothing in the report.
-        relabelled = self.library / "square_20261113" / "shots.csv"
+        relabelled = self.library / "export_20261113" / "shots.csv"
         relabelled.write_text(relabelled.read_text(encoding="utf-8").replace("7 Iron", "Driver").replace("6 Iron", "Putter"), encoding="utf-8")
         _, again = self.run_main()
         self.assertEqual(output.split("Engine results:")[0], again.split("Engine results:")[0])
@@ -95,7 +95,7 @@ class ShotCompareTests(unittest.TestCase):
     def test_missing_engine_result_is_reported(self):
         shots = compare_script.load_library(self.library)
         results = compare_script.load_results(self.results)
-        del results[("square_20261113", "6iron_15", "current")]
+        del results[("export_20261113", "6iron_15", "current")]
         rows, missing = compare_script.compare(shots, results, "current")
         self.assertEqual([shot["shot"] for shot in missing], ["6iron_15"])
         self.assertEqual(len(rows), 1)
@@ -191,7 +191,7 @@ class ShotCompareTests(unittest.TestCase):
         shots = compare_script.load_library(self.library)
         baseline = compare_script.load_results(self.results)
         results = compare_script.load_results(self.results)
-        key = ("square_20261113", "6iron_99", "current")  # No reference, but still must terminate.
+        key = ("export_20261113", "6iron_99", "current")  # No reference, but still must terminate.
         results[key]["at_rest"] = False
         self.assertTrue(any("Nonfinite or non-resting" in error for error in compare_script.validate_accuracy(shots, results, baseline)))
         results[key]["at_rest"] = True

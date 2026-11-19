@@ -179,10 +179,21 @@ namespace OpenFairway
                     Params.Environment.AirViscosity, Params.Environment.DragScale, Params.Environment.LiftScale, Params.Environment.InitialLaunchAngleDeg,
                     Params.Flight);
                 const FVector3f Previous = Position;
-                const FBallState Next = GolfPhysics::StepFlight(FBallState{Position, Velocity, Omega}, Params.Environment, Sample, Dt);
+                if (bFlight)
+                {
+                    Result.MinFlightRe = FMath::Min(Result.MinFlightRe, Sample.Reynolds);
+                    Result.MaxFlightRe = FMath::Max(Result.MaxFlightRe, Sample.Reynolds);
+                    Result.MinFlightSpinRatio = FMath::Min(Result.MinFlightSpinRatio, Sample.SpinRatio);
+                    Result.MaxFlightSpinRatio = FMath::Max(Result.MaxFlightSpinRatio, Sample.SpinRatio);
+                    if (Sample.bOutsideMeasuredCoverage) Result.OutsideMeasuredCoverageS += Dt;
+                }
+                const FBallState PreviousState{Position, Velocity, Omega};
+                const FBallState Next = Params.Flight.bUseRungeKutta4
+                    ? GolfPhysics::StepFlightRK4({Position, Velocity, Omega}, Params.Environment, Params.Flight, Dt, Normal)
+                    : GolfPhysics::StepFlight(FBallState{Position, Velocity, Omega}, Params.Environment, Sample, Dt);
                 Velocity = Next.Velocity;
                 Omega = Next.Spin;
-                Position += Velocity * Dt;
+                Position = Next.Position;
                 Result.ApexM = FMath::Max(Result.ApexM, Position.Y);
 
                 const float ContactDistance = FVector3f::DotProduct(Position, Normal) - Radius;
@@ -190,9 +201,20 @@ namespace OpenFairway
                 {
                     // Back up to the moment of contact, bounce, then use the rest of the step.
                     const float PreviousDistance = FVector3f::DotProduct(Previous, Normal) - Radius;
-                    const float ImpactFraction =
+                    float ImpactFraction =
                         PreviousDistance > 0.0f ? FMath::Clamp(PreviousDistance / (PreviousDistance - ContactDistance), 0.0f, 1.0f) : 0.0f;
-                    Position = Previous + (Position - Previous) * ImpactFraction;
+                    if (Params.Flight.bUseRungeKutta4)
+                    {
+                        // A very low launch can complete its entire flight inside one step.
+                        // The chord starts on the ground, so linear interpolation would invent zero carry.
+                        const float High = GolfPhysics::FlightContactTime(PreviousState, Params.Environment, Params.Flight, Dt, Normal, Radius);
+                        ImpactFraction = High / Dt;
+                        const auto Contact = GolfPhysics::StepFlightRK4(PreviousState, Params.Environment, Params.Flight, High, Normal);
+                        Position = Contact.Position;
+                        Velocity = Contact.Velocity;
+                        Omega = Contact.Spin;
+                    }
+                    else Position = Previous + (Position - Previous) * ImpactFraction;
                     Position += Normal * (Radius - FVector3f::DotProduct(Position, Normal));
                     const float PreImpactSpeed = Velocity.Size();
                     const float PreImpactNormalSpeed = FMath::Abs(FVector3f::DotProduct(Velocity, Normal));

@@ -173,6 +173,9 @@ namespace OpenFairway
 
     FBallPhysicsProfile::FBallPhysicsProfile()
     {
+        // Lift and drag from the spin ratio alone, with no launch-regime corrections. See Docs/CarryAudit.md.
+        Flight.Model = EFlightModel::SpinRatioV1;
+        Flight.bUseRungeKutta4 = true;
         // First-impact bite per landing bucket. Run is neutral so drivers, woods and low-spin irons
         // keep the calibrated bounce. Bites fade in from 8 to 20 m/s impact speed.
         LandingResponses[static_cast<int32>(ELandingBucket::Run)] = FLandingResponse();
@@ -182,6 +185,7 @@ namespace OpenFairway
 
         // Calibrated regime overrides, inherited from ogolf-physics: they correct systematic carry
         // bias per launch regime (chips under-carry at low Reynolds, drivers over-carry at high).
+        // Only the legacy flight model reads them; the measured models ignore them.
         // Chip shots (speed < 60 mph).
         RegimeScaleOverrides.Add(TEXT("C-S0"), Scale(0.70f, 1.20f));
         RegimeScaleOverrides.Add(TEXT("C-S0-V1-P0"), Scale(0.55f, 1.15f));
@@ -226,7 +230,7 @@ namespace OpenFairway
 
     FBallPhysicsProfile FBallPhysicsProfile::HistoricalReference()
     {
-        FBallPhysicsProfile Profile;
+        FBallPhysicsProfile Profile = LegacyCalibrated();
         Profile.bInterpolateCalibration = false;
         Profile.Flight.SpinDecayCoefficient = 0.0f;
         Profile.Flight.ConstantSpinDecayRatePerSecond = 0.2f;
@@ -240,6 +244,22 @@ namespace OpenFairway
         Profile.Bounce.bAxisAwareSpin = false;
         Profile.Rollout.bAxisAwareSpin = false;
         Profile.Rollout.bCoupledContact = false;
+        return Profile;
+    }
+
+    FBallPhysicsProfile FBallPhysicsProfile::LegacyCalibrated()
+    {
+        FBallPhysicsProfile Profile;
+        Profile.Flight.Model = EFlightModel::LegacyCalibrated;
+        Profile.Flight.bUseRungeKutta4 = false;
+        return Profile;
+    }
+
+    FBallPhysicsProfile FBallPhysicsProfile::ProV1Reference()
+    {
+        FBallPhysicsProfile Profile;
+        Profile.Flight.Model = EFlightModel::ProV1ResearchV1;
+        Profile.Flight.bUseRungeKutta4 = true;
         return Profile;
     }
 

@@ -8,9 +8,9 @@ from pathlib import Path
 import shutil
 
 try:
-    from .square_import import SHOTS_FIELDS
+    from .monitor_import import SHOTS_FIELDS
 except ImportError:
-    from square_import import SHOTS_FIELDS
+    from monitor_import import SHOTS_FIELDS
 
 
 def import_recordings(source, destination, session_prefix="session_20261113"):

@@ -125,7 +125,7 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
     }
 
     // Resistance must finish at no-slip rolling, without creating energy. Include surfaces
-    // outside the Square reference and both signs of spin rather than selected club names.
+    // outside the launch-monitor reference and both signs of spin rather than selected club names.
     for (int32 Index = 0; Index < static_cast<int32>(ESurface::Count); ++Index)
     {
         const auto Surface = Shot.ResolveSurface(static_cast<ESurface>(Index), Current);
@@ -302,7 +302,7 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
         const FShotSimulationResult Slow = ShotSimulator::Simulate(MakeLaunch(67.47f, -0.14f, 16.22f, 1406.0f, 4599.0f), ESurface::Fairway, Current);
         const FShotSimulationResult Fast = ShotSimulator::Simulate(MakeLaunch(100.17f, 0.78f, -6.69f, 2368.0f, -1011.0f), ESurface::Fairway, Current);
         AddInfo(FString::Printf(TEXT("Ground-launched totals: 67.5 mph %.1f yd, 100.2 mph %.1f yd"), Yards(Slow.TotalM), Yards(Fast.TotalM)));
-        // No matching Square distance exists for these recordings. Validate the solver, not an invented target.
+        // No reference distance exists for these recordings. Validate the solver, not an invented target.
         TestTrue(TEXT("Ground-launched 67.5 mph shot has finite positive travel"), FMath::IsFinite(Slow.TotalM) && Slow.TotalM > 0.0f);
         TestEqual(TEXT("Supported negative launch has no invented carry"), Slow.CarryM, 0.0f);
         TestEqual(TEXT("Supported negative launch contacts at time zero"), Slow.HangTimeS, 0.0f);
@@ -311,7 +311,7 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
     }
 
     // A full shot struck into or along the ground (launch at or below 0 deg) rolls with the turf's struck grass drag,
-    // as Square's six rows launched below 0 deg do; one that leaves the ground at all does not. So the total steps up
+    // as the launch-monitor export's six rows launched below 0 deg do; one that leaves the ground at all does not. So the total steps up
     // at 0 deg at full speed, and only there: each side keeps its own continuity, and a putt-speed launch has none.
     for (const float Speed : {60.0f, 80.0f, 100.0f})
     {

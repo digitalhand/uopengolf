@@ -1,21 +1,22 @@
 # SPDX-License-Identifier: MIT
-"""Import a Square Home shot export into the shot library as a new session.
+"""Import a launch-monitor app's shot export into the local shot library as a new session.
 
-The Square app exports one CSV per range session: a "Dates" line, a header and one row per shot,
-grouped by club with "Average" and "Deviation" rows after each club. Directions carry an L or R
-prefix (L is negative, left), and the column labelled "Apex(yd)" holds feet.
+The export is one CSV per range session: a "Dates" line, a header and one row per shot, grouped by
+club with "Average" and "Deviation" rows after each club. Directions carry an L or R prefix (L is
+negative, left), and the column labelled "Apex(yd)" holds feet.
 
-The Club column is the club selected in the app, not a measurement (Square Home exports ClubSpeed
-and SmashFactor as 0), and it is often wrong. It is kept as reported_club and in the shot names,
-which index the rows within each label; nothing compares or groups shots by it.
+The Club column is the club selected in the app, not a measurement (the export has ClubSpeed and
+SmashFactor as 0), and it is often wrong. It is kept as reported_club and in the shot names, which
+index the rows within each label; nothing compares or groups shots by it.
 
 Usage, from the repository root:
 
-    python Assets/Scripts/square_import.py <export.csv> [--session NAME]
+    python Assets/Scripts/monitor_import.py <export.csv> [--session NAME]
 
-This copies the export unchanged into Assets/Data/ShotLibrary/<session>/square_export.csv and writes
-the normalized shots.csv that UOpenGolf.Physics.ShotLibrary replays. The session name defaults to
-square_<yyyymmdd> from the export's date line.
+This copies the export unchanged into <local data>/shot_library/<session>/export.csv and writes the
+normalized shots.csv that UOpenGolf.Physics.ShotLibrary replays. The local data folder is outside the
+repository (data_paths.py, Assets/Data/README.md). The session name defaults to export_<yyyymmdd>
+from the export's date line.
 """
 import argparse
 import csv
@@ -25,13 +26,14 @@ import re
 import shutil
 import sys
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-LIBRARY_DIR = ROOT / "Assets" / "Data" / "ShotLibrary"
-EXPORT_NAME = "square_export.csv"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_paths import local_library_dir  # noqa: E402  (run as a script or imported as Assets.Scripts.monitor_import)
+
+EXPORT_NAME = "export.csv"
 SHOTS_NAME = "shots.csv"
 SHOTS_FIELDS = ["shot_name", "reported_club", "speed_mph", "vla_deg", "hla_deg", "total_spin_rpm", "spin_axis_deg", "backspin_rpm",
                 "sidespin_rpm", "carry_yd", "total_yd", "rollout_yd", "apex_ft", "landing_angle_deg", "offline_yd"]
-# Square column -> (shots.csv column, signed). Signed columns carry an L or R prefix.
+# Export column -> (shots.csv column, signed). Signed columns carry an L or R prefix.
 COLUMNS = {
     "Ball Speed(mph)": ("speed_mph", False), "Launch Direction": ("hla_deg", True), "Launch Angle": ("vla_deg", False),
     "Spin Rate": ("total_spin_rpm", False), "Spin Axis": ("spin_axis_deg", True), "Back Spin": ("backspin_rpm", False),
@@ -66,7 +68,7 @@ def session_date(lines):
 
 
 def parse_export(text):
-    """Shot rows of a Square export as shots.csv dictionaries, in export order."""
+    """Shot rows of an export as shots.csv dictionaries, in export order."""
     lines = text.splitlines()
     header_index = next((index for index, line in enumerate(lines) if line.startswith("Club,Index,")), None)
     if header_index is None:
@@ -114,17 +116,17 @@ def write_shots(shots, path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("export", type=Path, help="Square Home CSV export")
-    parser.add_argument("--session", help="session folder name (default square_<yyyymmdd> from the export)")
-    parser.add_argument("--library", type=Path, default=LIBRARY_DIR, help=argparse.SUPPRESS)
+    parser.add_argument("export", type=Path, help="the launch-monitor app's CSV export")
+    parser.add_argument("--session", help="session folder name (default export_<yyyymmdd> from the export)")
+    parser.add_argument("--library", type=Path, default=None, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     text = args.export.read_text(encoding="utf-8-sig")
     shots = parse_export(text)
     date = session_date(text.splitlines())
-    session = args.session or (f"square_{date}" if date else None)
+    session = args.session or (f"export_{date}" if date else None)
     if not session:
         parser.error("the export has no date line; pass --session")
-    folder = args.library / session
+    folder = (args.library or local_library_dir()) / session
     folder.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(args.export, folder / EXPORT_NAME)
     write_shots(shots, folder / SHOTS_NAME)

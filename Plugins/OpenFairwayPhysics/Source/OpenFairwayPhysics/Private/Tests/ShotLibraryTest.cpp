@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
-// Replays the recorded launch-monitor shots in Assets/Data/ShotLibrary through the headless simulator
-// and writes the engine's results for Assets/Scripts/shot_compare.py, which reports them against the
-// launch monitor's own results stored with each shot. Differences are reported, not asserted.
+// Replays the shot library through the headless simulator and writes the engine's results for
+// Assets/Scripts/shot_compare.py, which reports them against the reference results stored with each shot.
+// Sessions come from uopengolf's own recordings in Assets/Data/ShotLibrary and, when present, from the local
+// reference data folder (see Assets/Data/README.md). Differences are reported, not asserted.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "HAL/FileManager.h"
+#include "HAL/PlatformMisc.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -19,9 +21,37 @@ namespace
         FString Session;
         FString ShotName;
         FLaunchData Launch;
+        /** The reference's air; 75 F, dry, sea level unless the session gives temperature_f, humidity or pressure_psi. */
+        FAirConditions Air;
         float ReferenceCarryYd = -1.0f;
         float ReferenceTotalYd = -1.0f;
     };
+
+    /** Third-party reference data lives outside the repository: UOPENGOLF_DATA, by default ~/data/uopengolf. */
+    FString LocalDataDir()
+    {
+        FString Dir = FPlatformMisc::GetEnvironmentVariable(TEXT("UOPENGOLF_DATA"));
+        if (Dir.IsEmpty())
+        {
+            FString Home = FPlatformMisc::GetEnvironmentVariable(TEXT("USERPROFILE"));
+            if (Home.IsEmpty())
+            {
+                Home = FPlatformMisc::GetEnvironmentVariable(TEXT("HOME"));
+            }
+            Dir = Home / TEXT("data/uopengolf");
+        }
+        return FPaths::ConvertRelativePathToFull(Dir);
+    }
+
+    FString RepoShotLibraryDir()
+    {
+        return FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Assets/Data/ShotLibrary"));
+    }
+
+    FString LocalShotLibraryDir()
+    {
+        return LocalDataDir() / TEXT("shot_library");
+    }
 
     struct FShotLibraryProfile
     {
@@ -111,20 +141,71 @@ namespace
                 Shot.ReferenceCarryYd = FCString::Atof(*Cells[CarryColumn]);
             if (Cells.IsValidIndex(TotalColumn) && !Cells[TotalColumn].IsEmpty())
                 Shot.ReferenceTotalYd = FCString::Atof(*Cells[TotalColumn]);
+            // Optional air the reference was computed in.
+            auto Optional = [&](const TCHAR* Name, float& Out, float Scale)
+            {
+                const int32 Column = Header.IndexOfByKey(FString(Name));
+                if (Cells.IsValidIndex(Column) && !Cells[Column].IsEmpty() && FCString::IsNumeric(*Cells[Column]))
+                    Out = FCString::Atof(*Cells[Column]) * Scale;
+            };
+            Optional(TEXT("temperature_f"), Shot.Air.TemperatureF, 1.0f);
+            Optional(TEXT("humidity"), Shot.Air.RelativeHumidity, 1.0f);
+            Optional(TEXT("pressure_psi"), Shot.Air.PressurePa, 6894.757f);
         }
         return true;
     }
 
+    /** Every <session>/shots.csv under Root; a session is named after its path relative to Root. */
+    int32 LoadShotLibrary(const FString& Root, TArray<FShotLibraryShot>& OutShots, TArray<FString>& OutErrors)
+    {
+        TArray<FString> Files;
+        IFileManager::Get().FindFilesRecursive(Files, *Root, TEXT("shots.csv"), true, false);
+        Files.Sort();
+        for (const FString& File : Files)
+        {
+            FString Relative = File;
+            FPaths::MakePathRelativeTo(Relative, *(Root + TEXT("/")));
+            FString Session = FPaths::GetPath(Relative);
+            if (Session.IsEmpty())
+            {
+                Session = TEXT(".");
+            }
+            FString Error;
+            if (!ParseShotLibraryCsv(File, Session, OutShots, Error))
+            {
+                OutErrors.Add(FString::Printf(TEXT("%s: %s"), *File, *Error));
+            }
+        }
+        return Files.Num();
+    }
+
     /**
      * Profiles replayed for every shot: current and historical (the pinned ogolf-physics port, before the
-     * flight, green, sand and turf changes) first, then candidate changes under evaluation.
+     * flight, green, sand and turf changes) first, then comparisons and candidate changes under evaluation.
+     * legacy_calibrated is the gameplay flight before the measured aerodynamics; prov1_research uses Pro V1
+     * drag measured near 2250 rpm only. See Docs/CarryAudit.md.
      */
     TArray<FShotLibraryProfile> MakeShotLibraryProfiles()
     {
         TArray<FShotLibraryProfile> Profiles;
         Profiles.Add({TEXT("current"), FBallPhysicsProfile()});
         Profiles.Add({TEXT("historical"), FBallPhysicsProfile::HistoricalReference()});
+        Profiles.Add({TEXT("legacy_calibrated"), FBallPhysicsProfile::LegacyCalibrated()});
+        Profiles.Add({TEXT("prov1_research"), FBallPhysicsProfile::ProV1Reference()});
         return Profiles;
+    }
+
+    const TCHAR* FlightModelName(EFlightModel Model)
+    {
+        switch (Model)
+        {
+        case EFlightModel::ProV1ResearchV1:
+            return TEXT("prov1_research_v1");
+        case EFlightModel::SpinRatioV1:
+            return TEXT("spin_ratio_v1");
+        default:
+            return TEXT("legacy");
+        }
     }
 } // namespace
 
@@ -133,31 +214,25 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOpenFairwayShotLibraryTest, "UOpenGolf.Physics
 
 bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
 {
-    // Each subdirectory with a shots.csv is a session named after its relative path.
-    const FString LibraryDir = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("Assets/Data/ShotLibrary"));
-    TArray<FString> Files;
-    IFileManager::Get().FindFilesRecursive(Files, *LibraryDir, TEXT("shots.csv"), true, false);
-    Files.Sort();
-    if (!TestTrue(FString::Printf(TEXT("Shot library files found in %s"), *LibraryDir), Files.Num() > 0))
+    // Each subdirectory with a shots.csv is a session named after its path relative to its library.
+    TArray<FShotLibraryShot> Shots;
+    TArray<FString> Errors;
+    int32 FileCount = LoadShotLibrary(RepoShotLibraryDir(), Shots, Errors);
+    if (!TestTrue(FString::Printf(TEXT("Shot library files found in %s"), *RepoShotLibraryDir()), FileCount > 0))
     {
         return false;
     }
-
-    TArray<FShotLibraryShot> Shots;
-    for (const FString& File : Files)
+    if (IFileManager::Get().DirectoryExists(*LocalShotLibraryDir()))
     {
-        FString Relative = File;
-        FPaths::MakePathRelativeTo(Relative, *(LibraryDir + TEXT("/")));
-        FString Session = FPaths::GetPath(Relative);
-        if (Session.IsEmpty())
-        {
-            Session = TEXT(".");
-        }
-        FString Error;
-        if (!ParseShotLibraryCsv(File, Session, Shots, Error))
-        {
-            AddError(FString::Printf(TEXT("%s: %s"), *File, *Error));
-        }
+        FileCount += LoadShotLibrary(LocalShotLibraryDir(), Shots, Errors);
+    }
+    else
+    {
+        AddInfo(FString::Printf(TEXT("No local reference data in %s; replaying the repository's recordings only."), *LocalShotLibraryDir()));
+    }
+    for (const FString& Error : Errors)
+    {
+        AddError(Error);
     }
     TSet<FString> Keys;
     for (const FShotLibraryShot& Shot : Shots)
@@ -167,9 +242,9 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
         TestFalse(FString::Printf(TEXT("%s/%s is unique"), *Shot.Session, *Shot.ShotName), bDuplicate);
     }
 
-    // Default air (75 F, sea level) and fairway, as in the game.
+    // Fairway, in each shot's reference air (the game's default 75 F, dry, sea level unless the session says otherwise).
     const TArray<FShotLibraryProfile> Profiles = MakeShotLibraryProfiles();
-    FString Csv = TEXT("session,shot_name,profile,carry_yd,total_yd,rollout_yd,apex_ft,hang_s,lateral_yd,at_rest,landing_angle_deg,landing_spin_rpm,impact_in_mps,impact_out_mps,bounce_count,ground_distance_m,termination\n");
+    FString Csv = TEXT("session,shot_name,profile,carry_yd,total_yd,rollout_yd,apex_ft,hang_s,lateral_yd,at_rest,landing_angle_deg,landing_spin_rpm,impact_in_mps,impact_out_mps,bounce_count,ground_distance_m,termination,flight_model,temperature_f,altitude_ft,humidity,wind_mph,air_density,landing_speed_mps,outside_coverage_s,min_re,max_re,min_spin_ratio,max_spin_ratio\n");
     int32 ResultCount = 0;
     for (const FShotLibraryShot& Shot : Shots)
     {
@@ -188,7 +263,7 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
                         S.Normal.X, S.Normal.Y, S.Normal.Z, S.SlipMps, S.EnergyJ);
                 };
             }
-            const FShotSimulationResult Result = ShotSimulator::Simulate(Shot.Launch, ESurface::Fairway, Entry.Profile, {},
+            const FShotSimulationResult Result = ShotSimulator::Simulate(Shot.Launch, ESurface::Fairway, Entry.Profile, Shot.Air,
                 &Entry == &Profiles[0] ? ShotSimulator::DefaultMaxTimeSeconds : 30.0f, FVector3f(0, 1, 0), Options);
             if (Options.Trace)
             {
@@ -202,6 +277,16 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
             {
                 continue;
             }
+            if (Entry.Profile.Flight.bUseRungeKutta4)
+            {
+                FShotSimulationOptions Fine;
+                Fine.Dt = 1.0f / 960.0f;
+                const auto Reference = ShotSimulator::Simulate(Shot.Launch, ESurface::Fairway, Entry.Profile, Shot.Air,
+                    ShotSimulator::DefaultMaxTimeSeconds, FVector3f(0, 1, 0), Fine);
+                TestTrue(Label + TEXT(" RK4 rests"), Result.bAtRest);
+                TestEqual(Label + TEXT(" carry converges within 0.1 yd"), Result.CarryM * YardsPerMeter,
+                    Reference.CarryM * YardsPerMeter, 0.1f);
+            }
             // Only the gameplay profile must stop in time: the historical turf runs a ball struck along the
             // ground for hundreds of yards, which at_rest=false in the results reports.
             if (&Entry == &Profiles[0])
@@ -214,11 +299,15 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
             }
             TestTrue(Label + TEXT(" finite"), FMath::IsFinite(Result.CarryM) && FMath::IsFinite(Result.TotalM) && FMath::IsFinite(Result.ApexM) &&
                                                   FMath::IsFinite(Result.HangTimeS) && FMath::IsFinite(Result.LateralM));
-            Csv += FString::Printf(TEXT("%s,%s,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s,%.4f,%.1f,%.4f,%.4f,%d,%.4f,%s\n"), *Shot.Session, *Shot.ShotName, Entry.Name,
+            Csv += FString::Printf(TEXT("%s,%s,%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s,%.4f,%.1f,%.4f,%.4f,%d,%.4f,%s,%s,%.1f,%.0f,%.2f,%.1f,%.6f,%.4f,%.4f,%.1f,%.1f,%.5f,%.5f\n"), *Shot.Session, *Shot.ShotName, Entry.Name,
                 Result.CarryM * YardsPerMeter, Result.TotalM * YardsPerMeter, (Result.TotalM - Result.CarryM) * YardsPerMeter,
                 Result.ApexM * FeetPerMeter, Result.HangTimeS, Result.LateralM * YardsPerMeter, Result.bAtRest ? TEXT("true") : TEXT("false"),
                 Result.LandingAngleDeg, Result.LandingSpinRpm, Result.FirstImpactTangentInMps, Result.FirstImpactTangentOutMps,
-                Result.BounceCount, Result.GroundDistanceM, Result.bAtRest ? TEXT("Rest") : TEXT("TimeLimit"));
+                Result.BounceCount, Result.GroundDistanceM, Result.bAtRest ? TEXT("Rest") : TEXT("TimeLimit"),
+                FlightModelName(Entry.Profile.Flight.Model), Shot.Air.TemperatureF, Shot.Air.AltitudeFt, Shot.Air.RelativeHumidity, Shot.Air.WindSpeedMph,
+                Shot.Air.Density(), Result.LandingSpeedMps, FMath::Min(Result.OutsideMeasuredCoverageS, Result.HangTimeS),
+                Result.MinFlightRe == MAX_flt ? 0 : Result.MinFlightRe, Result.MaxFlightRe,
+                Result.MinFlightSpinRatio == MAX_flt ? 0 : Result.MinFlightSpinRatio, Result.MaxFlightSpinRatio);
             ++ResultCount;
         }
     }
@@ -226,7 +315,34 @@ bool FOpenFairwayShotLibraryTest::RunTest(const FString& Parameters)
     const FString ResultsPath = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("ShotLibrary/results.csv"));
     TestTrue(TEXT("Results written"), FFileHelper::SaveStringToFile(Csv, *ResultsPath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM));
     AddInfo(FString::Printf(TEXT("Replayed %d shots from %d files (%d results) into %s. Compare with: python Assets/Scripts/shot_compare.py --skip-run"),
-        Shots.Num(), Files.Num(), ResultCount, *ResultsPath));
+        Shots.Num(), FileCount, ResultCount, *ResultsPath));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShotLabelIndependenceTest, "UOpenGolf.Physics.ClubLabelIndependence",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// The reported club is an unverified label: the same launch under another club name must play identically.
+bool FShotLabelIndependenceTest::RunTest(const FString& Parameters)
+{
+    const FString Path = FPaths::ProjectSavedDir() / TEXT("ShotLibrary/metadata_test.csv");
+    const FString Header = TEXT("shot_name,reported_club,speed_mph,vla_deg,hla_deg,backspin_rpm,sidespin_rpm,total_spin_rpm,spin_axis_deg\n");
+    TArray<FShotLibraryShot> Hybrid;
+    TArray<FShotLibraryShot> Wedge;
+    FString Error;
+    FFileHelper::SaveStringToFile(Header + TEXT("example,3 Hybrid,109.3,16.7,-3.3,5072,0,5072,0\n"), *Path);
+    TestTrue(TEXT("Parse original metadata"), ParseShotLibraryCsv(Path, TEXT("metadata"), Hybrid, Error));
+    FFileHelper::SaveStringToFile(Header + TEXT("example,Pitching Wedge,109.3,16.7,-3.3,5072,0,5072,0\n"), *Path);
+    TestTrue(TEXT("Parse changed metadata"), ParseShotLibraryCsv(Path, TEXT("metadata"), Wedge, Error));
+    if (!TestTrue(TEXT("One shot each"), Hybrid.Num() == 1 && Wedge.Num() == 1))
+    {
+        return false;
+    }
+    const FShotSimulationResult First = ShotSimulator::Simulate(Hybrid[0].Launch);
+    const FShotSimulationResult Second = ShotSimulator::Simulate(Wedge[0].Launch);
+    TestEqual(TEXT("Club labels cannot change carry"), First.CarryM, Second.CarryM);
+    TestEqual(TEXT("Club labels cannot change total"), First.TotalM, Second.TotalM);
+    TestEqual(TEXT("Club labels cannot change apex"), First.ApexM, Second.ApexM);
     return true;
 }
 
@@ -266,7 +382,7 @@ namespace RolloutCalibrationDetail
         return Vla < 2.5f ? 0 : Vla < 9.0f ? 1 : Vla >= 20.0f ? 4 : ShotSetup::ParseSpin(Launch).TotalSpinRpm < 4000.0f ? 2 : 3;
     }
 
-    /** Launched into or along flat ground: the shot contacts at t = 0 and never flies (Square's carry-0 rows). */
+    /** Launched into or along flat ground: the shot contacts at t = 0 and never flies (the export's carry-0 rows). */
     bool IsStruck(const FLaunchData& Launch)
     {
         return Launch.VerticalLaunchDeg <= 0.0f;
@@ -571,9 +687,10 @@ namespace RolloutCalibrationDetail
 } // namespace RolloutCalibrationDetail
 
 // Explicit opt-in fit, outside the ordinary Physics test prefix, writing every candidate to Saved/ShotLibrary/calibration.csv.
-// Stage 1 searches the fairway's landing loss and ground resistance against the Square export's roll on the shots that
-// leave the ground; stage 2 fits the struck-along-the-ground grass drag scales to the shots launched into the ground.
-// Shots are grouped by launch values only; the reported club is never read. Nothing here changes the catalog.
+// Stage 1 searches the fairway's landing loss and ground resistance against the reference roll of the local launch-monitor
+// shots that leave the ground; stage 2 fits the struck-along-the-ground grass drag scales to the shots launched into the
+// ground. It uses every local shot with a reference total. Shots are grouped by launch values only; the reported club is
+// never read. Nothing here changes the catalog.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRolloutCalibrationTest, "UOpenGolf.Calibration.Rollout",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
@@ -581,11 +698,17 @@ bool FRolloutCalibrationTest::RunTest(const FString& Parameters)
 {
     using namespace RolloutCalibrationDetail;
     TArray<FShotLibraryShot> Shots;
-    FString Error;
-    if (!ParseShotLibraryCsv(FPaths::ProjectDir() / TEXT("Assets/Data/ShotLibrary/square_20261113/shots.csv"), TEXT("square"), Shots, Error))
+    TArray<FString> Errors;
+    LoadShotLibrary(LocalShotLibraryDir(), Shots, Errors);
+    for (const FString& Error : Errors)
     {
         AddError(Error);
-        return false;
+    }
+    Shots.RemoveAll([](const FShotLibraryShot& Shot) { return Shot.ReferenceTotalYd < 0.0f; });
+    if (Shots.IsEmpty())
+    {
+        AddWarning(FString::Printf(TEXT("No local shots with a reference total in %s; nothing to calibrate."), *LocalShotLibraryDir()));
+        return true;
     }
     const FBallPhysicsProfile Profile;
     const FResolvedShotParams Neutral;

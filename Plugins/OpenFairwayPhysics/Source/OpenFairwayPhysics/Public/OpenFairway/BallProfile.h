@@ -83,7 +83,7 @@ namespace OpenFairway
         float SandRollingFriction = 0.45f;
         /**
          * Play the turf surfaces (fairway, soft fairway, rough, firm, fringe) with the catalog recalibrated
-         * to Square Home rollout instead of the ported values (SurfaceCatalog::Get). HistoricalReference keeps the ported turf.
+         * to launch-monitor rollout instead of the ported values (SurfaceCatalog::Get). HistoricalReference keeps the ported turf.
          */
         bool bRecalibratedTurf = true;
 
@@ -97,11 +97,15 @@ namespace OpenFairway
         FBounceProfile Bounce;
         FRolloutProfile Rollout;
 
-        /** Current defaults, with continuous calibration and speed-dependent spin decay. */
+        /** Gameplay defaults: SpinRatioV1 flight with RK4, recalibrated turf and landing responses. */
         FBallPhysicsProfile();
 
         /** Pinned C# behavior for reference verification; not the gameplay default. */
         static FBallPhysicsProfile HistoricalReference();
+        /** The previous gameplay flight: calibrated legacy aerodynamics and the Euler step. Turf unchanged. */
+        static FBallPhysicsProfile LegacyCalibrated();
+        /** Pro V1-only aerodynamics with RK4, kept for comparison. */
+        static FBallPhysicsProfile ProV1Reference();
 
         /** Matched key is "interpolated" for continuous calibration; regime key remains descriptive. */
         FRegimeScaleOverride ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm, FString& OutRegimeKey,

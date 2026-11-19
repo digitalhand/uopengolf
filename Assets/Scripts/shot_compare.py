@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MIT
-"""Show how far the uopengolf physics are from the launch monitor for every shot in the library.
+"""Show how far the uopengolf physics are from the reference results for every shot in the library.
 
 Unless --skip-run is given, this runs the UOpenGolf.Physics.ShotLibrary automation test, which
-replays each shot in Assets/Data/ShotLibrary/*/shots.csv through the headless simulator (flat
-fairway, 75 F, sea level) and writes Saved/ShotLibrary/results.csv. It then prints engine minus
+replays each <session>/shots.csv in Assets/Data/ShotLibrary and in the local reference data
+(data_paths.py) through the headless simulator (flat fairway, in each shot's reference air) and
+writes Saved/ShotLibrary/results.csv. It then prints engine minus
 reference per shot (+ means the engine goes longer, higher or steeper), summaries for every
 profile, roll by launch class, errors by ball speed, and the change since the last run whose
 results differed. Shots are grouped only by their launch values: the club a launch monitor or the
@@ -22,9 +23,12 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from data_paths import shot_library_dirs  # noqa: E402  (run as a script or imported as Assets.Scripts.shot_compare)
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS_DIR = ROOT / "Assets" / "Scripts"
-LIBRARY_DIR = ROOT / "Assets" / "Data" / "ShotLibrary"
+LIBRARY_DIRS = shot_library_dirs()
 SHOTS_NAME = "shots.csv"
 RESULTS_PATH = ROOT / "Saved" / "ShotLibrary" / "results.csv"
 HISTORY_DIR = ROOT / "Saved" / "ShotLibrary" / "history"
@@ -67,9 +71,20 @@ def launch_class(vla, spin):
     return label
 
 
-def load_library(library_dir):
-    """Every row of every <session>/shots.csv, in file order."""
-    library_dir = Path(library_dir).resolve()
+def as_dirs(library_dirs):
+    """One library folder or several."""
+    return [Path(library_dirs)] if isinstance(library_dirs, (str, Path)) else [Path(d) for d in library_dirs]
+
+
+def load_library(library_dirs):
+    """Every row of every <session>/shots.csv in each library folder, in file order."""
+    shots = []
+    for library_dir in as_dirs(library_dirs):
+        shots += load_library_dir(library_dir.resolve())
+    return shots
+
+
+def load_library_dir(library_dir):
     shots = []
     for path in sorted(library_dir.rglob(SHOTS_NAME)):
         session = path.parent.relative_to(library_dir).as_posix()
@@ -374,9 +389,9 @@ def change_report(rows, baseline_rows, baseline_name):
     return "\n".join(lines)
 
 
-def fingerprint(library_dir=LIBRARY_DIR):
+def fingerprint(library_dirs=LIBRARY_DIRS):
     """Hash exact source, replay inputs, and binaries, including uncommitted work."""
-    roots = [ROOT / "Plugins/OpenFairwayPhysics/Source", ROOT / "Source", Path(library_dir)]
+    roots = [ROOT / "Plugins/OpenFairwayPhysics/Source", ROOT / "Source"] + as_dirs(library_dirs)
     files = [p for root in roots for p in root.rglob("*") if p.is_file() and p.suffix in (".cpp", ".h", ".csv")]
     files += list((ROOT / "Plugins/OpenFairwayPhysics/Binaries").rglob("*OpenFairwayPhysics*.dll"))
     files += list((ROOT / "Binaries").rglob("*UOpenGolf*.dll"))
@@ -418,7 +433,7 @@ def validate_accuracy(shots, results, baseline_results):
     return errors
 
 
-def validate_provenance(results_path, library_dir):
+def validate_provenance(results_path, library_dirs):
     path = results_path.with_suffix(".manifest.json")
     if not path.exists():
         return ["No verified run manifest; rerun through shot_compare.py"]
@@ -426,7 +441,7 @@ def validate_provenance(results_path, library_dir):
         data = json.loads(path.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return ["Unreadable run manifest; rerun through shot_compare.py"]
-    if data.get("fingerprint") != fingerprint(library_dir) or data.get("results_sha256") != hashlib.sha256(results_path.read_bytes()).hexdigest():
+    if data.get("fingerprint") != fingerprint(library_dirs) or data.get("results_sha256") != hashlib.sha256(results_path.read_bytes()).hexdigest():
         return ["Stale results: source, reference, binary or result fingerprint changed"]
     return []
 
@@ -466,12 +481,12 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--skip-run", action="store_true", help="report on the last results without running Unreal")
     parser.add_argument("--build", action="store_true", help="build the editor before running (after C++ changes)")
-    parser.add_argument("--session", action="append", help="only this session, such as square_20261113 (repeatable)")
+    parser.add_argument("--session", action="append", help="only this session, such as recorded_20261113 (repeatable)")
     parser.add_argument("--sort", choices=[metric for metric, _, _ in METRICS], help="largest |+/-| of this metric first")
     parser.add_argument("--profile", default="current", help="profile for the per-shot table (current, historical or a candidate)")
     parser.add_argument("--baseline", type=Path, help="history snapshot to compare with instead of the last different run")
     parser.add_argument("--check-baseline", type=Path, help="enforce accuracy gates against this baseline results.csv, including provenance")
-    parser.add_argument("--library", type=Path, default=LIBRARY_DIR, help=argparse.SUPPRESS)
+    parser.add_argument("--library", type=Path, action="append", help=argparse.SUPPRESS)
     parser.add_argument("--results", type=Path, default=RESULTS_PATH, help=argparse.SUPPRESS)
     parser.add_argument("--history", type=Path, default=HISTORY_DIR, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -479,6 +494,8 @@ def parse_args(argv):
         parser.error("--build needs a run; drop --skip-run")
     if not args.skip_run and args.results.resolve() != RESULTS_PATH.resolve():
         parser.error("--results is only for --skip-run")
+    if not args.library:
+        args.library = LIBRARY_DIRS
     return args
 
 

@@ -19,7 +19,7 @@ These dates describe earlier builds. See the [current status](../../../Docs/Phas
 | Air | Temperature, altitude, humidity, station pressure, and wind that grows with height; headwinds cost too little carry until recalibration (see [Headwinds](#headwinds)) |
 | Headless simulator (`ShotSimulator`) | Ported from `PhysicsAdapter`; one surface on level or planar sloped ground |
 | Ball actor (`AOpenFairwayBall`) | Working on Windows and Linux; automated range shot within tolerance of the headless result |
-| Surfaces | All seven presets; assigned by physical materials or tags; green speed set by stimp (`GreenStimpFeet`); turf landing loss read from the impact and fitted to Square Home rollout (2026-11-17, see [Turf rollout and Square calibration](#turf-rollout-and-square-calibration)); see [Greens](#greens) |
+| Surfaces | All seven presets; assigned by physical materials or tags; green speed set by stimp (`GreenStimpFeet`); turf landing loss read from the impact and fitted to launch-monitor rollout (2026-11-17, see [Turf rollout calibration](#turf-rollout-calibration)); see [Greens](#greens) |
 | JSON ball profiles, surface zones, Terrain3D height queries | Not ported yet (see [Known gaps](#known-gaps)) |
 | Linux | Editor/game build, the 33 headless `UOpenGolf` tests and a packaged game start pass (Unreal 5.8.3, 2026-10-18). After the later green-drag change, six physics tests pass; the range rollout tests have not rerun |
 | Windows | Editor build and all 78 `UOpenGolf` tests pass (2026-11-09), including `UOpenGolf.Physics.Sand` after the sand rolling-friction change. After the 2026-11-17 turf changes, `UOpenGolf.Physics` passes 21 of 21 and `UOpenGolf.Range` 36 of 36 (`Saved/Automation/20261117-145826-71a0b18f`, `20261117-145843-45790213`) |
@@ -28,11 +28,11 @@ Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
 
 ## Features
 
-- Aerodynamic drag and Magnus lift from inherited polynomial fits, with calibrated
-  spin-drag, high-launch and mid-spin corrections. The legacy low-launch lift boost
-  is neutral in gameplay; the historical profile retains it.
-- Drag eases into its high-Re cap from Re 175k instead of stepping up 7.8% at 200k, and
-  lift bridges the Re 55k-68k band where two inherited fits fall to zero (see
+- Drag and Magnus lift as curves in the spin ratio, plus a measured low-Reynolds drag rise,
+  fitted to reference flights from 36 to 175 mph and integrated with RK4; no club, launch-angle or
+  regime terms (see [Flight model](#flight-model)).
+- `LegacyCalibrated()` keeps the inherited polynomial fits with their calibrated spin-drag,
+  high-launch and mid-spin corrections, the high-Re drag blend and the low-Re lift bridge (see
   [Flight corrections](#flight-corrections)).
 - Air density from temperature, altitude or a measured station pressure, and humidity.
   Wind acts on drag and lift through the ball's velocity relative to the air, at the ball's
@@ -45,7 +45,7 @@ Ported from ogolf-physics revision `e6d793ae9477efaf55dc9078d7260f76bb532a7d`.
   grass drag, air drag, slope drive and slope resistance, and rest detection. A topped full shot,
   struck along the ground, rolls with its own share of the grass drag (see [Topped shots](#topped-shots)).
 - Seven surface presets: fairway, soft fairway, rough, firm, green (set by stimp; see [Greens](#greens)), sand, fringe.
-  The turf presets are fitted to Square Home rollout.
+  The turf presets are fitted to launch-monitor rollout.
 - Launch-regime drag and lift overrides inherited from ogolf-physics.
 - Launch-monitor spin parsing (back/side spin or total spin/axis); a putt with no measured
   spin leaves the face rolling.
@@ -212,7 +212,7 @@ not affect the ball; OpenFairway's surface preset does.
 
 | Surface | Tag | Kinetic friction | Rolling friction (ported) | Grass drag (ported) | Form drag, 1/m | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| Fairway | `OpenFairway.Surface.Fairway` | 0.50 | 0.0469 (0.050) | 0.0242 (0.0017) | 0.0086 | Fitted to Square Home rollout; about 7.4 ft on a stimpmeter |
+| Fairway | `OpenFairway.Surface.Fairway` | 0.50 | 0.0469 (0.050) | 0.0242 (0.0017) | 0.0086 | Fitted to launch-monitor rollout; about 7.4 ft on a stimpmeter |
 | Soft fairway | `OpenFairway.Surface.FairwaySoft` | 0.56 | 0.0657 (0.070) | 0.0342 (0.0024) | 0.0121 | Wet or soft turf |
 | Rough | `OpenFairway.Surface.Rough` | 0.62 | 0.0891 (0.095) | 0.0456 (0.0032) | 0.0162 | Grabs the ball; about 3.9 ft |
 | Firm | `OpenFairway.Surface.Firm` | 0.30 | 0.0281 (0.030) | 0.0142 (0.0010) | 0.0051 | Hard ground, long roll |
@@ -229,7 +229,7 @@ and sand keep the ported landing and have no struck drag.
 `SurfaceCatalog` in `Private/OpenFairway/Surfaces.cpp`. The five turf surfaces play the
 recalibrated catalog (`FBallPhysicsProfile::bRecalibratedTurf`, on by default);
 `SurfaceCatalog::Get(Surface)` without it returns the ported values, which `HistoricalReference()`
-keeps. See [Turf rollout and Square calibration](#turf-rollout-and-square-calibration).
+keeps. See [Turf rollout calibration](#turf-rollout-calibration).
 
 Green speed, grass drag, spin-back and slopes are covered in [Greens](#greens).
 
@@ -243,14 +243,15 @@ A rolling ball meets `FBallPhysicsProfile::SandRollingFriction` (default **0.45*
 the catalog's ported 0.30, so a ball that rolls into a bunker at 4 m/s stops after about 1.7 m
 instead of 2.5 m; `HistoricalReference()` keeps 0.30. `UOpenGolf.Physics.Sand` covers these cases.
 
-### Turf rollout and Square calibration
+### Turf rollout calibration
 
 Recorded range shots (2026-11-13) showed three rollout faults on fairway. Flight was not the
-cause: across a 124-shot Square Home export, the engine's carry, apex and landing angle are biased
-by less than 1.1 yd, 1.9 ft and 0.3° against Square's own results. Per shot, carry is off by 4.1 yd
-on average and trends with ball speed; see [Known gaps](#known-gaps). Shots here are described by their launch
-values. The club labels on the export and the recordings are the club selected, not a measurement
-(Square Home exports club speed and smash factor as 0), and they are often wrong.
+cause: across a 124-shot launch-monitor export (lm), the flight of the time (now
+`LegacyCalibrated()`) had carry, apex and landing angle biased by less than 1.1 yd, 1.9 ft and 0.3°
+against lm's own results, though carry was off by 4.1 yd per shot. The turf below was fitted with
+that flight; the gameplay flight has since changed (see [Flight model](#flight-model)). Shots here
+are described by their launch values. The club labels on the export and the recordings are the club selected, not a measurement
+(the export has club speed and smash factor as 0), and they are often wrong.
 
 - **Ground-launched shots ran away.** A 67.5 mph shot launched at −0.14° rolled 129 yd on the
   range and would have run 220 yd on flat fairway; a 100.2 mph shot at 0.78° ran 263 yd. The
@@ -263,7 +264,7 @@ values. The club labels on the export and the recordings are the club selected, 
 - **Full shots stopped dead.** On top of the friction impulse, the first impact multiplied the
   forward speed by `0.55 × clamp(1 − rpm/8000, 0.4, 1)` and then applied the landing bite: a
   109 mph, 13.8°, 4200 rpm shot landing at 19 m/s along the ground left at 3 m/s and rolled 4.5 yd;
-  Square's mid-launch shots above 4000 rpm roll 10.3 yd on average.
+  lm's mid-launch shots above 4000 rpm roll 10.3 yd on average.
 
 **The turf contact now.** An impact on turf is the standard rigid-body contact plus one fitted loss
 read from the impact itself:
@@ -307,7 +308,7 @@ drag and rolling friction to fairway, and take the same landing loss and struck 
 only fairway has reference shots.
 
 **The fit.** `UOpenGolf.Calibration.Rollout` (an opt-in test, outside `UOpenGolf.Physics`) fits the
-124-shot Square export in [`Assets/Data/ShotLibrary`](../../../Assets/Data/README.md) on flat
+124-shot launch-monitor export (lm) in the [local reference data](../../../Assets/Data/README.md#where-the-data-lives) on flat
 fairway at 75 °F and sea level, in two stages, and writes every candidate to
 `Saved/ShotLibrary/calibration.csv`. It groups shots by launch values only.
 
@@ -331,9 +332,9 @@ fairway at 75 °F and sea level, in two stages, and writes every candidate to
 
 The run of 2026-11-17 is `Saved/Automation/20261117-145705-5a36a301`.
 
-Roll, engine minus Square, in yards (bias / mean absolute error):
+Roll, engine minus lm, in yards (bias / mean absolute error):
 
-| Launch class | Shots | Square roll | Ported | 2026-11-16 | First 2026-11-17 fit | Current |
+| Launch class | Shots | lm roll | Ported | 2026-11-16 | First 2026-11-17 fit | Current |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Ground, launch < 2.5° | 9 | 86.6 | +211.0 / 211.0 | −1.6 / 22.2 | −25.3 / 29.4 | −0.1 / 0.8 |
 | Low, 2.5–9° | 11 | 35.5 | −2.1 / 6.8 | +7.6 / 7.6 | +3.6 / 3.6 | +2.3 / 2.3 |
@@ -346,10 +347,11 @@ Roll, engine minus Square, in yards (bias / mean absolute error):
 
 "Ported" is `HistoricalReference()`, which also has the older flight model. Total error is now
 mostly flight: carry averages 4.1 yd of error (see [Known gaps](#known-gaps)). The three near-ground
-shots that fly (0.6–1.6°) roll within 0.8 yd of Square but carry 6–16 yd short of it, so they total
+shots that fly (0.6–1.6°) roll within 0.8 yd of lm but carry 6–16 yd short of it, so they total
 7–16 yd short. Other limits: the export has no shot faster than 121 mph ball speed and none on rough
-or the other turf surfaces. The standard drive totals 268.3 yd (264.3 yd under the first 2026-11-17
-fit, 273.8 yd under the 2026-11-16 values, 262.5 yd before them).
+or the other turf surfaces. With the legacy flight the standard drive totalled 268.3 yd (264.3 yd
+under the first 2026-11-17 fit, 273.8 yd under the 2026-11-16 values, 262.5 yd before them); with
+the 2026-11-18 flight it carries 244.0 yd and totals 261.6 yd.
 
 `UOpenGolf.Physics.RolloutRegression` pins:
 
@@ -359,17 +361,17 @@ fit, 273.8 yd under the 2026-11-16 values, 262.5 yd before them).
 - the ground step's independence from the launch.
 
 It also requires ground-launched shots to come to rest. It sets no distance target for the recorded
-ones, since Square has no result for those.
+ones, since no reference result exists for those.
 
 ### Topped shots
 
-Square Home reports six of the export's shots with a launch below 0°, no carry and no apex. These are
-topped shots, struck into the ground at full ball speed. Square totals them at about 1.2 yd per mph:
+The launch-monitor export (lm) reports six of its shots with a launch below 0°, no carry and no apex. These are
+topped shots, struck into the ground at full ball speed. lm totals them at about 1.2 yd per mph:
 59.6 mph at −0.8° goes 76.0 yd, and 103.7 mph at −0.2° goes 124.6 yd. A model that reads only the
-ball's own state cannot also match Square's shots that fly first. Square rolls nearly the same ground
+ball's own state cannot also match lm's shots that fly first. lm rolls nearly the same ground
 state much less after a short flight:
 
-| Square shot | Starts along the ground at | Square roll |
+| lm shot | Starts along the ground at | lm roll |
 | --- | --- | ---: |
 | 113.9 mph, +0.6° (flies 37.9 yd) | about 44 m/s, landing at 0.8° | 69.2 yd |
 | 103.7 mph, −0.2° | 46.4 m/s, at 0.2° | 124.6 yd |
@@ -388,10 +390,10 @@ started (`GolfPhysics::StruckAlongGround`).
 - **Putts are exempt.** The share ramps in with launch speed over 12–18 m/s (27–40 mph). The same
   ramp tells a putt from a topped shot when no spin is measured. A putt or a Texas wedge at 0° rolls
   as before, and its total stays continuous across 0°.
-- **Result:** the six topped shots finish within 0.9 yd of Square on average (worst 2.5 yd). Before
+- **Result:** the six topped shots finish within 0.9 yd of lm on average (worst 2.5 yd). Before
   this rule they stopped 32–47 yd short.
 - **Cost:** at full speed, total distance steps at 0°. At 60 mph and 2000 rpm it is 78.2 yd at 0°
-  against 41.5 yd at 0.1°; at 100 mph, 121.9 against 68.3 yd. Square's own results step the same way.
+  against 41.5 yd at 0.1°; at 100 mph, 121.9 against 68.3 yd. lm's own results step the same way.
   On each side of 0°, total still changes by at most 15% per 1° and 3% per 0.1°.
 - Green and sand have no struck drag (scales 1), nor does `HistoricalReference()`.
 
@@ -588,11 +590,57 @@ the green, putt, spin-back and slope regression tests. Remaining:
   `GreenStimpFeet` on the ball or profile.
 - `SurfaceZone` area overrides are not ported; declare greens by material or tag.
 
+## Flight model
+
+Gameplay flight (`FBallPhysicsProfile()`, `EFlightModel::SpinRatioV1`, since 2026-11-18) is Newton's
+law with gravity, drag and Magnus lift on the ball's velocity through the air, and the Smits and
+Smith spin decay, integrated with coupled RK4 (`FFlightProfile::bUseRungeKutta4`) at 120 Hz. The
+coefficients depend only on the air flow, never on the club, the launch angle or a launch regime:
+
+- **Lift** is a curve in the spin ratio W (surface speed over air speed): zero without spin, rising
+  through 0.18 at W 0.10, 0.29 at 0.22 and 0.35 at 0.50.
+- **Drag** is a curve in W, from 0.187 at low spin to 0.361 at high spin (spin-induced drag), plus
+  0.68 of the measured rise of a modern ball's drag below Re 100k (the drag crisis).
+
+The table is in `Private/OpenFairway/SpinRatioData.h`. Both curves were fitted, rising with spin and
+smooth, to the launches of three reference sets in the
+[local reference data](../../../Assets/Data/README.md#where-the-data-lives), weighted tm 2 : lm 1 :
+fs 0.5. Drag is held at or above 0.17, the measured minimum of a modern ball, and lift below the
+launch data follows the measured lift of a modern ball (Lyu et al. 2018). The fit chose the
+drag-crisis share itself, and its lift matches that measured lift at higher spin too.
+`Assets/Scripts/flight_fit.py` refits the table from the local data and prints it. See
+[CarryAudit.md](CarryAudit.md) for the analysis and the rejected alternatives.
+
+Engine minus reference in Unreal (`carry_audit.py`, 2026-11-18), bias / mean absolute error:
+
+| Reference | Shots | Speed | Carry, yd | Apex, ft | Landing, ° | `LegacyCalibrated()` carry |
+| --- | ---: | --- | --- | --- | --- | --- |
+| tm, tour averages | 23 | 86–167 mph | +0.3 / 2.3 | +3.6 / 4.7 | −1.3 / 1.7 | +10.1 / 10.1 |
+| lm, launch-monitor export | 124 | 36–121 mph | −2.2 / 2.2 | −0.1 / 0.6 | +1.3 / 1.4 | −1.0 / 4.1 |
+| fs, trajectory calculator | 13 | 109–175 mph | −3.8 / 3.8 | −0.4 / 1.2 | | +2.9 / 3.4 |
+
+The references disagree with each other by several yards for the same launch: fs carries 8–10 yd
+farther than tm at its average launches, and lm's model 2–3 yd farther than tm's. The fit leans to
+tm. Outside the fitted range (Re 35k–215k, W 0.06–0.8; about 36–175 mph) the curves are held at
+their ends and `FFlightAerodynamicsSample::bOutsideMeasuredCoverage` is set.
+
+`FBallPhysicsProfile::LegacyCalibrated()` keeps the previous gameplay flight: the inherited drag
+polynomial and lift curve with the launch-regime overrides, spin-drag, high-launch and mid-spin
+corrections and the [flight corrections](#flight-corrections), on the ported Euler step. The
+sections from here to [Wind and height](#wind-and-height) describe that model, which
+`HistoricalReference()` and the golden fixtures still use; SpinRatioV1 reads none of it. A bare
+`FFlightProfile()` is also legacy, so the stimpmeter conversion and the air drag on a rolling ball
+are unchanged. `ProV1Reference()` is a comparison only: digitized drag and lift of one modern ball
+(Lyu et al. 2018, 2020, `ProV1Data.h`), whose drag was measured near 2250 rpm; applied to every
+spin it carries fast shots 28 yd too far against lm.
+
 ## Ball profile and launch regimes
 
 `AOpenFairwayBall::Profile` (`OpenFairway::FBallPhysicsProfile`) holds the calibrated
 defaults: drag scale 1.01, green stimp 10 ft (set from Green Stimp Feet at launch), the flight/bounce/rollout constants, the
-landing responses and the launch-regime overrides. Current defaults interpolate
+landing responses and the launch-regime overrides. The regime table's drag and lift scales reach only
+the legacy flight (see [Flight model](#flight-model)); its contact multipliers and the landing
+responses apply to every flight model. Current defaults interpolate
 override values between speed/launch/spin anchors, preserving the most-specific
 lookup and neutral fallback at each anchor. Landing responses are interpolated
 over launch/spin too. The regime and landing bucket are descriptive categories;
@@ -693,7 +741,7 @@ Landing labels use **launch** spin and vertical angle, not the club or decayed
 impact spin. The current profile reads launch backspin (total spin on `HistoricalReference()`),
 so a sidespin-heavy launch is not bucketed as a checking wedge. Only green and sand landings use
 the bucket's bite now: turf reads its landing loss from the impact itself (see
-[Turf rollout and Square calibration](#turf-rollout-and-square-calibration)), so on turf the bucket
+[Turf rollout calibration](#turf-rollout-calibration)), so on turf the bucket
 is a label only. The labels describe a separate first-impact response table:
 
 | Bucket | Classification | Spin bite scale | Maximum spin-back, m/s |
@@ -712,17 +760,18 @@ carry before first contact.
 ### Replay shots and the low-launch lift correction
 
 In the game's **Test shots [P]** dropdown, select a low wood, mid iron, driver, iron,
-wedge, chip, high flop or putt, or a recorded Square Home shot. **Hit selected shot**
+wedge, chip, high flop or putt, or a recorded launch-monitor shot. **Hit selected shot**
 launches it; **H** repeats the selection. The panel shows each preset's inputs. The ten
 presets belong to the game's launch-monitor replay catalog, not to the physics plugin's
 runtime dependencies.
 
-| Replay shot | Current carry |
-| --- | ---: |
-| Mid iron, 75.7 mph / 20.78° / 4463 rpm | 85.94 yd |
-| Low wood, 114.5 mph / 6.95° / 1933 rpm | 121.55 yd |
+| Replay shot | Gameplay carry (SpinRatioV1) | `LegacyCalibrated()` carry |
+| --- | ---: | ---: |
+| Mid iron, 75.7 mph / 20.78° / 4463 rpm | 85.22 yd | 85.94 yd |
+| Low wood, 114.5 mph / 6.95° / 1933 rpm | 121.80 yd | 121.55 yd |
 
-The low wood previously carried **128.13 yd**. Gameplay now sets
+The rest of this section concerns the legacy flight. The low wood previously carried **128.13 yd**.
+That model now sets
 `LowLaunchLiftRecoveryMax = 1.0` instead of 1.08, removing the extra empirical
 boost while retaining ordinary Magnus lift and the corrected spin decay. This
 produces **121.55 yd**, 15.03 ft apex and 2.741 s hang time. The boost only operated
@@ -734,7 +783,7 @@ decay (+4.96 yd with hard lookups), and the low-launch boost (+6.58 yd with the
 corrected spin model). The mid-spin boost had no effect on this shot. No regime
 rows, boundaries or global drag/lift multipliers were changed. This is a targeted
 calibration correction, not proof that all low-launch shots match measured flight;
-the [Square shot library](#square-shot-library) is the reference for that. See
+the [shot library](#shot-library) is the reference for that. See
 [Does the regime limit rollout?](#does-the-regime-limit-rollout) for rollout differences and the
 controlled surface experiment.
 
@@ -758,7 +807,7 @@ that resistance. A 10 ft stimp check validates low-speed roll in this model;
 it does not validate the whole high-speed post-impact response.
 
 The distances in the rest of this section were measured with the ported turf, before the
-[turf recalibration](#turf-rollout-and-square-calibration); on the current flat fairway the
+[turf recalibration](#turf-rollout-calibration); on the current flat fairway the
 low wood rolls **45.0 yd to 166.5 yd total** (2026-11-17).
 
 The corrected shot on a single flat fairway gives **37.69 yd roll / 159.24 yd total**,
@@ -779,8 +828,9 @@ assignments in a disposable test world to preserve that comparison.
 
 ## Flight corrections
 
-Two corrections to the inherited aerodynamic fits are on by default. `HistoricalReference()`
-turns both off, so the golden fixtures are unchanged.
+Two corrections to the inherited aerodynamic fits are on in `LegacyCalibrated()` (the gameplay
+flight before 2026-11-18). `HistoricalReference()` turns both off, so the golden fixtures are
+unchanged. The gameplay flight model does not use the inherited fits.
 
 | Correction | Profile field | Problem | Effect |
 | --- | --- | --- | --- |
@@ -831,6 +881,10 @@ flight uses the neutral log wind profile over open ground:
 
 ### Headwinds
 
+The figures in this section were measured with the legacy flight (`LegacyCalibrated()`, the gameplay
+model until 2026-11-18). The gameplay [flight model](#flight-model) passes the wind tests' direction
+and size checks but has not yet been compared with the published wind sets below.
+
 A headwind does not push the ball back directly. It raises the ball's speed through the air,
 and both aerodynamic forces grow with that speed:
 - **Drag** acts against the airflow and always shortens the shot.
@@ -880,7 +934,7 @@ gained 9 yd rather than 10.
   Bearman and Harvey (1976) give typical measured magnitudes.
 - **Rules of thumb:** for a driver, about 12 yd lost into a 10 mph headwind
   ([USGTF](#references)), and a 300 yd carry falling to 259 yd into 20 mph
-  ([Golf.com, from a Trackman study](#references)).
+  ([Golf.com](#references)).
 
 Low-launch shots are close to wind-neutral even with the published coefficients, so "always
 shorter" is not a law of physics for them. Still, this model:
@@ -896,14 +950,11 @@ The inherited fits pair that low drag with low lift, so calm-air carries matched
 data they were fitted to in ogolf-physics.
 In wind, the extra lift then outweighs the extra drag by more than it should.
 
-**Status: not retuned.** The fix is a recalibration, and it changes every carry. It includes:
-- drag raised to measured levels;
-- lift and the regime overrides refitted against the [Square shot library](#square-shot-library);
-- wind assertions in `UOpenGolf.Physics.Wind`: a driver loses about 25–35% of its carry into 30 mph,
-  as the published sets do, and a low wood stays within ±5 yd of calm.
-
-It belongs with the open flight recalibration in [Known gaps](#known-gaps), where carry also
-trends with ball speed against Square.
+**Status.** The 2026-11-18 [flight model](#flight-model) replaced these fits for gameplay, with drag
+at 0.20–0.24 for a driver's spin and spin-induced drag rising above it. What remains is to compare
+it with the published wind sets and add wind assertions to `UOpenGolf.Physics.Wind`: a driver
+loses about 25–35% of its carry into 30 mph, as the published sets do, and a low wood stays within
+±5 yd of calm.
 
 ## Shot results
 
@@ -969,15 +1020,19 @@ bash Assets/Scripts/ue.sh test --filter UOpenGolf.Physics   # add --engine-root 
 | `UOpenGolf.Physics.SurfaceResolution` | Resolution order: component tag, hit or component physical material, actor tag, default; plain physical materials are ignored |
 | `UOpenGolf.Physics.GreenReference`, `SlopeRollout`, `GreenRollout`, `GreenStimp` | Greens, putting and slopes; see [Green tests](#green-tests) |
 | `UOpenGolf.Physics.VisualRoll` | Roll angle is distance over radius, the top moves with the motion, the per-frame cap, no motion and slopes |
-| `UOpenGolf.Physics.FlightDiagnostics` | The 75.7 mph mid iron and 114.5 mph low wood replay launches: production and diagnostic flight agree; pinned carries for the historical profile, the isolated spin-decay experiment and the corrected wood; regime keys; a mirrored heading keeps carry; historical, decay, interpolation, lift/drag and timestep diagnostics |
+| `UOpenGolf.Physics.FlightModel` | The gameplay flight: lift and drag table values, lift and drag never fall with spin, drag never below 0.17, the low-Reynolds drag rise and its continuity, lift within 0.025 of the measured modern-ball lift at W 0.18 and 0.32, coverage flags, no dependence on launch angle, global scales or the regime table, calm heading invariance; eight reference carries (tour averages, calculator and launch-monitor launches from 102 to 167 mph) within 6 yd; the Pro V1 comparison model against its published figures |
+| `UOpenGolf.Physics.FlightIntegration` | The RK4 flight step: exact vacuum ballistics, spin kept without torque, zero spin stays zero, drag slows the ball, mirrored side spin mirrors the flight |
+| `UOpenGolf.Physics.ClubLabelIndependence` | The same launch under another club name gives the same carry, total and apex |
+| `UOpenGolf.Physics.FlightDiagnostics` | The 75.7 mph mid iron and 114.5 mph low wood replay launches under `LegacyCalibrated()`: production and diagnostic flight agree; pinned carries for the historical profile, the isolated spin-decay experiment and the corrected wood; regime keys; a mirrored heading keeps carry; historical, decay, interpolation, lift/drag and timestep diagnostics |
 | `UOpenGolf.Physics.RolloutRegression` | On every surface, at 0.1–45 m/s with topspin, no spin or backspin, the ground step never adds energy and leaves a rolling ball with no slip; recorded and fixture shots converge within 1% (or 0.25 yd) between 240 and 480 Hz; spin about the normal leaves an impact unchanged and a pivoting ball can rest; air drag still acts on a ball on the ground, the same rolling state above, below or level with the launch point meets the same wind, and environments resolved for different launches give the same ground step; on fairway, two launches that arrive with the same velocity and spin leave the same way, and the landing keeps less at steeper angles and with backspin and nearly all of a skim; without friction backspin takes nothing, and at 2 and 8 m/s with 2000 and 8000 rpm a contact keeps 99.9% of its speed at 0.1 mm/s of normal speed and never more as the normal speed grows to 2 m/s; the tilted-axis 107.8 mph shot rolls at least 2.5× farther than before; ground-launched shots contact at t = 0 and come to rest; at 60, 80 and 100 mph a shot struck along the ground at 0° goes farther than one launched at 0.1°; apart from that pair, no 1° launch step changes total by more than 15% at 60, 80 or 100 mph, nor any 0.1° step near 0° by more than 3%; 5 and 10 m/s launches stay within 3% per 0.1° across 0°; 109 mph / 13.8° / 4242 rpm releases 8–16 yd and 78 mph / 23.5° / 7528 rpm holds within 0.5–5 yd; fairway is slower than the green on a stimpmeter and rough slower again; green and sand keep the ported landing and have no struck drag, and all five turf surfaces use the impact-based one; the struck drag is none below 12 m/s of launch speed and all of it from 18 m/s |
-| `UOpenGolf.Calibration.Rollout` (opt-in) | Not a check: fits the turf landing loss and ground resistance to the Square shots that leave the ground (stage 1), then the struck-along-the-ground drag scales to the topped shots (stage 2). Writes every candidate, with its roll error by launch class, continuity, stimp, slope hold and the acceptance items it misses, to `Saved/ShotLibrary/calibration.csv`. Reports the catalog values and both stages' best; see [Turf rollout and Square calibration](#turf-rollout-and-square-calibration) |
-| `UOpenGolf.Physics.ShotLibrary` | Replays all shots in `Assets/Data/ShotLibrary/` with every profile in `MakeShotLibraryProfiles()` and writes `Saved/ShotLibrary/results.csv`: distances, landing angle and spin, first-impact speeds, bounce count, ground distance and whether the shot rested. Checks that every shot parses and stays finite and that the current profile brings each to rest, not launch-monitor accuracy |
-| `UOpenGolf.Range.Shot` (game module) | A drive hit in the running range lands within 1 yd carry and 0.5 yd offline of the headless prediction, and stops within 2 yd total and 2 yd offline (headless 248.44 / 268.30 yd since the second 2026-11-17 turf fit). The roll-out meets real contours the flat prediction lacks: the back fairway falls to the right there (about 0.8° under the 2026-11-17 roll), which moves the live ball 0.9 yd right over its 20 yd roll, so the test also requires any roll-out difference to point downhill |
-| `UOpenGolf.Range.RecordedShots` (game module) | The four recorded launches that exposed the rollout faults (67.5 mph at −0.14°, 57.7 mph at 0.08°, 100.2 mph at 0.78° and 107.8 mph at 8.4° with an 85° spin axis), hit on the range: each comes to rest with the headless carry; totals are reported (81.3, 41.5, 77.4 and 110.8 yd on 2026-11-17, against 87.1, 41.5, 77.5 and 111.1 yd on flat fairway; the first, a topped shot, ends in rough on the range) |
+| `UOpenGolf.Calibration.Rollout` (opt-in) | Not a check: fits the turf landing loss and ground resistance to the local launch-monitor shots that leave the ground (stage 1), then the struck-along-the-ground drag scales to the topped shots (stage 2). Writes every candidate, with its roll error by launch class, continuity, stimp, slope hold and the acceptance items it misses, to `Saved/ShotLibrary/calibration.csv`. Reports the catalog values and both stages' best; see [Turf rollout calibration](#turf-rollout-calibration) |
+| `UOpenGolf.Physics.ShotLibrary` | Replays every session in `Assets/Data/ShotLibrary/` and in the local reference data (when present), each shot in its session's air, with every profile in `MakeShotLibraryProfiles()`, and writes `Saved/ShotLibrary/results.csv`: distances, landing angle, speed and spin, first-impact speeds, bounce count, ground distance, whether the shot rested, the air, and the flight's Reynolds and spin-ratio range and time outside the fitted range. Checks that every shot parses and stays finite, that the current profile brings each to rest, and that every RK4 carry converges within 0.1 yd of a 960 Hz run; not reference accuracy |
+| `UOpenGolf.Range.Shot` (game module) | A drive hit in the running range lands within 1 yd carry and 0.5 yd offline of the headless prediction, and stops within 2 yd total and 2 yd offline (headless 243.99 / 261.59 yd with the 2026-11-18 flight; range 243.92 / 261.60 yd). The roll-out meets real contours the flat prediction lacks: the back fairway falls to the right there (about 1.2° under the 2026-11-18 roll), which moves the live ball about 1 yd right of the flat roll, so the test also requires any roll-out difference to point downhill |
+| `UOpenGolf.Range.RecordedShots` (game module) | The four recorded launches that exposed the rollout faults (67.5 mph at −0.14°, 57.7 mph at 0.08°, 100.2 mph at 0.78° and 107.8 mph at 8.4° with an 85° spin axis), hit on the range: each comes to rest with the headless carry; totals are reported (81.3, 41.6, 79.7 and 105.5 yd on 2026-11-18, against 87.1, 41.5, 80.0 and 105.6 yd on flat fairway; the first, a topped shot, ends in rough on the range) |
+| `UOpenGolf.Range.FlightParity` (game module) | Six launches from full shots to a topped shot and a sub-step flight: the live ball's carry within 0.25 yd of the headless prediction at 30 and 144 fps, and identical at 60 fps with 0.1 s stalls |
 | `UOpenGolf.Range.RecordedContactParity` (game module) | Five recorded launches on every surface: the live ball's carry and total within 0.25 yd of the headless prediction; a roll across a fairway boundary into rough, green and sand traces both surfaces and ends on the one under the ball |
 | `UOpenGolf.Range.FrameRates` (game module) | Fixed-step outcomes across 30/60/144/5 FPS and 250 ms hitches, including the twelve-step catch-up cap |
-| `UOpenGolf.Range.ReplaySelection` (game module) | Selected/repeated replay reaches the ball; corrected low wood lands at 121.5477 yd versus headless 121.5451 yd |
+| `UOpenGolf.Range.ReplaySelection` (game module) | Selected/repeated replay reaches the ball; the low wood carries within 1 yd of its flat-ground prediction (121.14 yd on the range against 121.80 yd, 2026-11-18) |
 | `UOpenGolf.Range.ObstacleContact` (game module) | A line drive into a tagged trunk rests short of it; a pitch onto a tagged flat-topped block slides off and rests on the ground; a line drive through an overlap-only canopy volume flies on without rebounding and carries at least 5 m less |
 | `UOpenGolf.Range.RolloutSurfaces` (game module) | Default range (fairway strip by physical material, rough sides) and real lies on each, then mixed and fringe-only tags on the same geometry; checks that the green rolls farther than the same path tagged fairway and that regime contact multipliers are neutral |
 
@@ -1000,26 +1055,29 @@ of shot names for the [green cases](#green-tests). A shot can also be `putt=<mph
 `@Surface` can take `:stimp=<ft>`, `:slope=<deg>` (downhill along the target line; negative is
 uphill) and `:neutral` (no landing-bucket bite), e.g. `putt=6@Green:stimp=11:slope=-2`.
 
-### Square shot library
+### Shot library
 
-The golden fixtures prove port parity only. To see how the physics compare with a launch
-monitor's own results, `UOpenGolf.Physics.ShotLibrary` replays the shots in
-[`Assets/Data/ShotLibrary/`](../../../Assets/Data/README.md) through `ShotSimulator::Simulate`
-(fairway, 75 °F, sea level) with the current and historical profiles. The library holds Square
-Home exports only.
-Run the report from the repository root after building:
+The golden fixtures prove port parity only. To see how the physics compare with reference
+flights, `UOpenGolf.Physics.ShotLibrary` replays every session through `ShotSimulator::Simulate` on
+fairway, each shot in its session's air (75 °F, dry, sea level unless the session says otherwise),
+with every profile in `MakeShotLibraryProfiles()`. Sessions come from
+[`Assets/Data/ShotLibrary/`](../../../Assets/Data/README.md) (uopengolf's own recordings) and, when
+present, the local reference data outside the repository: lm, tm and fs (see
+[Flight model](#flight-model)). Run the reports from the repository root after building:
 
 ```powershell
-python Assets/Scripts/shot_compare.py
+python Assets/Scripts/shot_compare.py      # roll and total, with the accuracy gates
+python Assets/Scripts/carry_audit.py       # carry, apex and landing per reference session
 ```
 
-It prints engine minus Square per shot for carry, total, roll, apex and landing angle, then
-summaries per profile, roll by launch class (the table in
-[Turf rollout and Square calibration](#turf-rollout-and-square-calibration)), errors by ball speed,
-and current-profile rollout by spin bin and landing angle. It also shows the change since the last
-run with different results, so rerun it after every physics change. Shots are read at run time,
-so adding a session needs no rebuild: import an export with
-`python Assets/Scripts/square_import.py <export.csv>`. On Linux, use `python3`.
+`shot_compare.py` prints engine minus reference per shot for carry, total, roll, apex and landing
+angle, then summaries per profile, roll by launch class (the table in
+[Turf rollout calibration](#turf-rollout-calibration)), errors by ball speed, and current-profile
+rollout by spin bin and landing angle. It grades only shots with a reference total (lm); tm and fs
+give flight only and are reported by `carry_audit.py`. It also shows the change since the last run
+with different results, so rerun it after every physics change. Shots are read at run time, so
+adding a session needs no rebuild: import a launch-monitor export with
+`python Assets/Scripts/monitor_import.py <export.csv>`. On Linux, use `python3`.
 
 `recorded_20261113` holds the launch inputs of the 36 range shots recorded on 2026-11-13 (copied by
 `Assets/Scripts/recording_import.py`, with the original JSON files). It has no reference results, so
@@ -1031,12 +1089,15 @@ physics and game sources, the library and the physics binaries at the time of th
 results. `--check-baseline <older results.csv>` then fails the run unless the results are fresh
 for that hash; every current-profile shot rests with finite values; roll and total mean absolute
 error do not grow; the worst roll error shrinks by at least 25%; and no launch class's roll error
-grows by more than 0.5 yd. Against `Assets/Data/ShotLibraryBaselines/pre_contact_20261116.csv` the
-current fit passes all of them (2026-11-17): roll error 3.42 → 1.23 yd, total error 6.02 → 3.98 yd,
-worst roll 34.3 → 7.8 yd, and every launch class improves (ground-launched 22.2 → 0.8 yd). The
-first 2026-11-17 fit had failed three, all through the six topped shots (see
-[Topped shots](#topped-shots)). Nothing in the report or the gates reads a club: shots.csv keeps the
-club that was selected as `reported_club`, an unverified label.
+grows by more than 0.5 yd. The baseline, `baselines/pre_contact_20261116.csv` in the local data,
+is lm. With the legacy flight the turf fit passed all of them (2026-11-17): roll error
+3.42 → 1.23 yd, total error 6.02 → 3.98 yd, worst roll 34.3 → 7.8 yd, and every launch class
+improved (ground-launched 22.2 → 0.8 yd). The first 2026-11-17 fit had failed three, all through the
+six topped shots (see [Topped shots](#topped-shots)). With the 2026-11-18 flight one gate fails:
+mid-launch shots above 4000 rpm roll 2.3 yd short of lm (1.1 → 2.3 yd error), since balls now land
+about 1.3° steeper and slower than in lm's model and the turf was fitted to the legacy landings;
+roll error overall is 1.8 yd and total error 3.9 yd. Nothing in the report or the gates reads a
+club: shots.csv keeps the club that was selected as `reported_club`, an unverified label.
 
 To evaluate a physics change before making it the default, put it behind a profile field
 that defaults to today's behaviour and add a named profile to `MakeShotLibraryProfiles()`
@@ -1057,18 +1118,19 @@ in `Private/Tests/ShotLibraryTest.cpp`. The report lists it beside `current` and
 - The ball actor spends the remainder of a landing step moving after impact, with
   another sweep to detect intervening geometry. This now matches the headless loop's
   contact timing closely enough to avoid selecting a different subsequent bounce.
-- Current flight spin decay, neutral low-launch lift recovery, continuous calibration, the
-  high-Re drag blend and the low-Re lift bridge intentionally differ from the pinned C#
-  model; use `HistoricalReference()` when comparing golden fixtures.
+- The gameplay flight is not ogolf-physics' aerodynamic model: it uses the spin-ratio curves of
+  [Flight model](#flight-model) and an RK4 step. `LegacyCalibrated()` keeps the ported model with
+  the current spin decay, neutral low-launch lift recovery, continuous calibration, the high-Re drag
+  blend and the low-Re lift bridge; use `HistoricalReference()` when comparing golden fixtures.
 - Wind, humidity and station pressure are additions; ogolf-physics has calm, dry air.
 - The green's grass drag is 0.0009 instead of the ported 0.011; see
   [Grass drag and the ported value](#grass-drag-and-the-ported-value).
 - Impacts and ground contact read axis-aware spin. The five turf surfaces read their landing loss
   from the impact (in place of the first-impact retention, its ramp, the landing bucket's bite and
   the rollout-bounce retention), carry a speed-squared grass drag ogolf-physics does not have, and
-  are fitted to Square Home rollout. A ball on the ground also feels air drag, a launch along or
+  are fitted to launch-monitor rollout. A ball on the ground also feels air drag, a launch along or
   into the ground contacts it at t = 0, and a full shot struck along the ground rolls with its own
-  grass drag; see [Turf rollout and Square calibration](#turf-rollout-and-square-calibration).
+  grass drag; see [Turf rollout calibration](#turf-rollout-calibration).
 
 ### Port status
 
@@ -1081,8 +1143,8 @@ Checked against ogolf-physics `e6d793a` (2026-10-29):
   headless shot loop (`PhysicsAdapter.SimulateShotInternal`), including sloped ground and the
   first-impact spin-back diagnostics; the ball's contact, landing, wall and ground-probe rules
   and below-ground recovery.
-- **Deliberately different** (`HistoricalReference()` restores the reference): flight spin
-  decay, low-launch lift recovery, continuous calibration, the high-Re drag blend, the low-Re
+- **Deliberately different** (`HistoricalReference()` restores the reference): the gameplay flight
+  model and its RK4 step (2026-11-18), flight spin decay, low-launch lift recovery, continuous calibration, the high-Re drag blend, the low-Re
   lift bridge, the sand plow, the green grass drag, axis-aware contact spin, the coupled ground
   step, contact at t = 0 for a launch into the ground, the turf landing law and fit, and the
   struck-along-the-ground drag (2026-11-17). Wind, humidity, station pressure, air drag on the ground and turf form drag are
@@ -1106,19 +1168,28 @@ Checked against ogolf-physics `e6d793a` (2026-10-29):
 - No shot camera, tracer styling or HUD here (the game module supplies those).
 - Packaged builds are only start-checked headless; ball flight in a rendered packaged game
   has not been reviewed on either platform.
-- Against the 124-shot Square export, shots roll within 1.2 yd of Square on average. Matching the
-  six topped shots takes a rule that reads how the shot started, so at full speed total distance
-  steps by about 45% between a launch at 0° and one at 0.1° (see [Topped shots](#topped-shots)).
-  Square's own results step the same way. The 0.6–1.6° shots that fly carry 6–16 yd short of Square.
-- Carry trends with ball speed against Square: 2–4 yd short below 90 mph, 4 yd long (7 yd average
-  error) above 105 mph. The launch-keyed drag and lift multipliers inherited from ogolf-physics
-  still reduce that error (on the airborne shots, 4.1 yd against 5.7 yd without them, measured
-  in a Python copy of the simulator on 2026-11-16), so the aerodynamics alone do not match Square yet.
+- Flight (see [Flight model](#flight-model)): the reference sets disagree with each other by several
+  yards for the same launch, and the fit leans to the tour averages (tm). Against them carry is off
+  by 2.3 yd per shot and apex runs about 4 ft high (more for the men's driver); against the
+  launch-monitor export (lm) carry is 2.2 yd short on average. The flight table is fitted, not
+  measured: only its low-Reynolds drag rise and its low-spin lift come from a measured modern ball.
+- Roll was fitted to lm with the legacy flight. The gameplay flight lands about 1.3° steeper and
+  slower than lm's model, so roll runs 1.7 yd short of lm (2.3 yd for mid launches above 4000 rpm,
+  past the 0.5 yd gate) until the turf is refitted to the new landings.
+- Live and headless contact differ for a grazing landing: the live sweep finds a contact only once the
+  ball is 0.5 mm into the surface, so a contact the headless loop resolves near the end of a step
+  can land in the next one, and the live ball then moves a whole step before its first ground step.
+  On sand, where a rolling ball loses about 33 m/s², a 113.9 mph / 0.6° launch that touches down
+  twice ends 0.31 yd farther live, and `UOpenGolf.Range.RecordedContactParity` fails that one case
+  (0.25 yd allowed). The fix is a ground step for the rest of an impact step, in both loops.
+- Matching lm's six topped shots takes a rule that reads how the shot started, so at full speed
+  total distance steps by about 45% between a launch at 0° and one at 0.1° (see
+  [Topped shots](#topped-shots)). lm's own results step the same way.
 - Still empirical: the restitution spin cut, the later-impact restitution cutoff and scale (the
   turf grip bound inherits its step), the green and sand landing (retention, ramp and landing-bucket
-  bite), the launch-keyed flight multipliers, and the struck-along-the-ground drag, which reads how
-  the shot started. No reference shot is faster than 121 mph ball speed, and none was hit on rough or the
-  other turf surfaces. See [Square shot library](#square-shot-library).
+  bite), and the struck-along-the-ground drag, which reads how the shot started. No roll reference is
+  faster than 121 mph ball speed, and none was hit on rough or the other turf surfaces. See
+  [shot library](#shot-library).
 - Green gaps: see [Green port status and gaps](#green-port-status-and-gaps).
 
 ## Plugin structure
@@ -1133,11 +1204,12 @@ Source/OpenFairwayPhysics/
   Public/OpenFairwayTypes.h Blueprint types: surfaces, ball state, launch, shot result
   Public/OpenFairwayBall.h  Ball actor (Chaos sweeps and traces)
   Public/OpenFairwayPhysicalMaterial.h  Physical material that declares a surface
-  Private/OpenFairway/      Core implementation, including FlightAerodynamics and WindProfile
+  Private/OpenFairway/      Core implementation, including FlightAerodynamics, WindProfile and the
+                            flight tables (SpinRatioData.h; ProV1Data.h for comparison)
   Private/OpenFairwayBall.cpp  Ball actor
   Private/Tests/            Automation tests: core, golden fixtures, flight corrections, wind,
                             greens and slopes, sand, cup, obstacles and canopy, visual roll,
-                            rollout regression, the Square shot library and its calibration
+                            rollout regression, the shot library and its calibration
 Tools/ReferenceHarness/     Optional .NET harness that regenerates golden values
 ```
 
@@ -1165,7 +1237,18 @@ Tools/ReferenceHarness/     Optional .NET harness that regenerates golden values
   *Science and Golf II: Proceedings of the 1994 World Scientific Congress on Golf*,
   A. J. Cochran and M. R. Farrally (eds.), E & FN Spon, London (1994), 340–347. Cited
   through Nathan's paper above. Source of the spin-decay law and of the spin-dependent drag and
-  lift terms used in the [Headwinds](#headwinds) comparison.
+  lift terms used in the [Headwinds](#headwinds) comparison and the 2026-11-18 flight analysis.
+- J. Lyu, J. Kensrud, L. Smith and others, "Aerodynamics of Golf Balls in Still Air,"
+  *Proceedings* 2(6), 238 (2018), [doi:10.3390/proceedings2060238](https://doi.org/10.3390/proceedings2060238),
+  CC BY 4.0: drag and lift of modern balls; source of the low-spin lift of the
+  [flight model](#flight-model) and of the comparison profile's lift.
+- J. Lyu, J. Kensrud and L. Smith, "The reverse Magnus effect in golf balls," *Sports Engineering*
+  23, 7 (2020), [doi:10.1007/s12283-020-0318-1](https://doi.org/10.1007/s12283-020-0318-1),
+  CC BY 4.0: drag of a modern ball against Reynolds number (the drag crisis used by the flight
+  model) and signed lift at low speed.
+- F. Alam and others, "A study of golf ball aerodynamic drag," *Procedia Engineering* 13 (2011),
+  226–231, and H. Chowdhury and others, "A study of dimple characteristics on golf ball drag,"
+  *Procedia Engineering* 147 (2016), 87–91: drag of non-spinning commercial balls (background).
 - World Meteorological Organization,
   [Guide to Meteorological Instruments and Methods of Observation (WMO-No. 8)](https://www.weather.gov/media/epz/mesonet/CWOP-WMO8.pdf),
   seventh edition (2008; NOAA-hosted copy), Part I, Chapter 5 "Measurement of surface wind":
@@ -1174,7 +1257,7 @@ Tools/ReferenceHarness/     Optional .NET harness that regenerates golden values
     has z0 = 0.03 m;
   - the correction of readings to z = 10 m and z0 = 0.03 m.
 - A. Rice, [How weather conditions affect your golf ball](https://golf.com/instruction/weather-conditions-effect-golf-ball/),
-  Golf.com (24 June 2019): from a year-long study with Trackman, a 300 yd drive carries 259 yd
+  Golf.com (24 June 2019): from a year-long launch-monitor study, a 300 yd drive carries 259 yd
   into a 20 mph headwind.
 - M. Harman, [Editorial – Wind, Temperature and The Open](https://www.usgtf.com/?p=29996),
   USGTF (1 August 2021): a driver loses about 12 yd of carry into a 10 mph headwind and gains

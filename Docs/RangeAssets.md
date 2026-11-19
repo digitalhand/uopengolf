@@ -28,8 +28,8 @@ jacarandas move in the wind (see [Wind on trees and grass](#wind-on-trees-and-gr
 
 The flag is simulated cloth: gravity drops it, and the wind flies and flaps it (see the
 [kit README](../Plugins/OpenGolfCourse/Docs/Reference.md#flagstick)). Its pole is 213.36 cm above ground,
-1.27 cm in diameter, with a 35.56 by 50.8 cm flag. These are conventional flag dimensions, not prescribed
-PGA dimensions. The ball is rendered at 42.67 mm diameter, matching the
+1.27 cm in diameter, with a 35.56 by 50.8 cm flag. These are conventional flag dimensions, not ones
+prescribed by a tour. The ball is rendered at 42.67 mm diameter, matching the
 [USGA minimum](https://www.usga.org/equipment-standards/equipment-rules-2019/equipment-rules/part-4-rule-4.html).
 The pole dimensions meet the [flagstick dimensional constraints](https://www.usga.org/content/usga/home-page/equipment-standards/equipment-rules-2019/equipment-rules/part-8-rule-2.html).
 The ball carries a dark alignment line and a blue dot; it turns as it rolls along the

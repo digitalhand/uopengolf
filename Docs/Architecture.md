@@ -206,10 +206,12 @@ Current physics defaults add:
 - a turf landing loss read from the impact itself;
 - a struck-along-the-ground grass drag for topped shots.
 
-The turf is fitted to Square Home rollout. The explicit `HistoricalReference()` profile preserves
-the pinned C# behavior for golden tests; parity with that profile is not independent physical
-validation. See [Flight corrections](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-corrections)
-and [Turf rollout and Square calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-and-square-calibration)
+The turf is fitted to launch-monitor rollout, and the gameplay flight's drag and lift to reference
+flights (tour averages, a launch-monitor export and a trajectory calculator); the data stays outside
+the repository. The explicit `HistoricalReference()` profile preserves the pinned C# behavior for
+golden tests; parity with that profile is not independent physical validation. See
+[Flight model](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model)
+and [Turf rollout calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration)
 in the physics reference for the changes and measurements.
 
 The sibling repositories are not required, modified, or linked by the build. The

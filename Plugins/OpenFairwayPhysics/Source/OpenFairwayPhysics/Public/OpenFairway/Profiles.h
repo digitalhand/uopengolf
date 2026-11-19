@@ -14,6 +14,21 @@
  */
 namespace OpenFairway
 {
+    /** Where flight drag and lift come from. See Docs/CarryAudit.md for sources and coverage. */
+    enum class EFlightModel : uint8
+    {
+        /** The ogolf-physics drag polynomial and lift curve with launch-regime and spin corrections. */
+        LegacyCalibrated,
+        /** Pro V1 drag and lift digitized from Lyu et al. 2018/2020. Its drag was measured near 2250 rpm only. Comparison only. */
+        ProV1ResearchV1,
+        /**
+         * The gameplay default. Drag and lift as curves in spin ratio, plus the measured drag rise at low Reynolds
+         * number, fitted to published tour averages, launch-monitor shots and trajectory-calculator flights
+         * (Private/OpenFairway/SpinRatioData.h).
+         */
+        SpinRatioV1,
+    };
+
     /** Ball position, velocity and spin (angular velocity). */
     struct FBallState
     {
@@ -43,6 +58,13 @@ namespace OpenFairway
     /** Aerodynamic constants: drag polynomial, lift caps and the calibrated spin/launch corrections. */
     struct FFlightProfile
     {
+        /**
+         * A bare profile keeps the legacy model; FBallPhysicsProfile() selects SpinRatioV1 for gameplay.
+         * SpinRatioV1 and ProV1ResearchV1 read none of the legacy calibration fields, only the spin decay.
+         */
+        EFlightModel Model = EFlightModel::LegacyCalibrated;
+        /** Coupled RK4 flight (position, velocity and spin). Off keeps the ported semi-implicit Euler step. */
+        bool bUseRungeKutta4 = false;
         // Smits/Smith spin-down: d(omega)/dt = -coefficient * speed/radius * omega (SI).
         // See Docs/Reference.md (References: Nathan; Smits and Smith) for the source and applicability limits.
         float SpinDecayCoefficient = 2.0e-5f;

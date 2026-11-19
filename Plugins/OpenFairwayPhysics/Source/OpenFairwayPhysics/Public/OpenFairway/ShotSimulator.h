@@ -120,6 +120,11 @@ namespace OpenFairway
         FString RegimeKey;
         FString MatchedRegimeKey;
         FShotSpin Spin;
+        float OutsideMeasuredCoverageS = 0;
+        float MinFlightRe = MAX_flt;
+        float MaxFlightRe = 0;
+        float MinFlightSpinRatio = MAX_flt;
+        float MaxFlightSpinRatio = 0;
     };
 
     /**

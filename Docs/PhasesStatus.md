@@ -1,5 +1,48 @@
 # Phase status
 
+## Flight model fitted to reference flights; reference data moved out of the repo — 2026-11-18 (Windows)
+
+Full shots carried 5–10 yd long: against tour averages (tm) the flight was 10.1 yd long on average,
+against the launch-monitor export (lm) 4.1 yd off per shot. See
+[CarryAudit.md](../Plugins/OpenFairwayPhysics/Docs/CarryAudit.md) for the analysis.
+
+- **Flight model.** Gameplay flight is `EFlightModel::SpinRatioV1`: drag and lift as curves in the spin
+  ratio, plus 0.68 of a modern ball's measured drag rise below Re 100k, integrated with coupled RK4.
+  No club, launch-angle or regime term reaches it. The table (`SpinRatioData.h`) is fitted by
+  `Assets/Scripts/flight_fit.py` to tm, lm and the trajectory calculator (fs), weighted 2 : 1 : 0.5,
+  with drag never below 0.17 and the low-spin lift of a measured modern ball.
+  - Carry bias / error: tm +0.3 / 2.3 yd (legacy +10.1 / 10.1), lm −2.2 / 2.2 (−1.0 / 4.1), fs −3.8 /
+    3.8. Apex error against lm 0.6 ft (2.7). The men's tour-average driver carries 276.4 yd against 275.
+  - `LegacyCalibrated()` keeps the previous flight, and `ProV1Reference()` the measured-coefficient
+    model of one modern ball (13.3 yd error against lm), for comparison.
+- **Reference data.** Third-party data (lm, tm, fs), the accuracy baseline and the research papers
+  moved to a local folder outside the repository (`UOPENGOLF_DATA`, default `~/data/uopengolf`), and
+  `.gitignore` keeps them out. The replay test and the scripts read both the repository's recordings
+  and the local sessions, each shot in its session's air, and skip the local ones when absent. Code,
+  tests and docs no longer name the sources; comparison docs use the acronyms lm, tm and fs.
+  `monitor_import.py` replaces the export importer; `carry_audit.py` reports flight per session.
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor built.
+- `UOpenGolf` passed 112 of 113 (`Saved/Automation/20261118-115409-8a89cd6b`), with the usual warnings.
+  `UOpenGolf.Range.RecordedContactParity` fails one case: a 113.9 mph / 0.6° launch that touches down
+  twice on sand ends 0.31 yd farther live than headless (0.25 yd allowed). Flight and both impacts
+  agree; the live sweep finds the second, grazing contact a step late.
+- `shot_compare.py --check-baseline` against the moved baseline fails one gate: mid launches above
+  4000 rpm roll 2.3 yd short of lm (1.1 yd before; 0.5 yd allowed). The new flight lands about 1.3°
+  steeper and slower than lm's model, and the turf was fitted to the legacy landings. Roll error
+  overall is 1.8 yd, total error 3.9 yd (4.0 before).
+- Every library shot's RK4 carry converges within 0.1 yd of a 960 Hz run; live and headless carry
+  agree within 0.25 yd at 30, 144 and stalled 60 fps.
+- 82 of 83 Python tests pass; `test_grass_stability` needs PIL, which this Python lacks.
+
+Not verified:
+
+- a turf refit to the new landings, and the ground step for the rest of an impact step;
+- the new flight in headwinds against the published wind sets;
+- flight beyond 36–175 mph;
+- Linux;
+- packaged builds.
+
 ## Review fixes: turf grip bound, ground wind, topped shots — 2026-11-17 (Windows)
 
 A review of the turf landing law found three faults. All three were confirmed in the code and the
@@ -16,15 +59,15 @@ saved replay.
   - The ground step's air drag also stopped reading the launch's regime drag multiplier (0.55–1.11)
     and high-launch drag (up to 1.24×). It uses `FFlightEnvironment::BallDragScale` and the ball's
     own velocity and spin.
-- **Topped shots.** Square's six rows launched below 0° (no carry, no apex) stopped 32–47 yd short
+- **Topped shots.** lm's six rows launched below 0° (no carry, no apex) stopped 32–47 yd short
   and failed three baseline gates. They are scored, not excluded.
-  - No model that reads only the ball's state can fit them together with Square's shots that fly
-    first. Square rolls 113.9 mph at +0.6° 69.2 yd after landing at 0.8°, but 103.7 mph at −0.2°,
+  - No model that reads only the ball's state can fit them together with lm's shots that fly
+    first. lm rolls 113.9 mph at +0.6° 69.2 yd after landing at 0.8°, but 103.7 mph at −0.2°,
     in nearly the same ground state, 124.6 yd.
   - A full shot struck into or along the ground now keeps its own share of the turf's grass drag
     for its whole roll (`StruckViscosityScale` 0.26, `StruckFormDragScale` 0.69).
   - The share ramps in over 12–18 m/s of launch speed, so putts are unaffected.
-  - At full speed, total distance steps by about 45% between 0° and 0.1°, as Square's own results
+  - At full speed, total distance steps by about 45% between 0° and 0.1°, as lm's own results
     do. `RolloutRegression` checks continuity on each side of 0° instead of across it.
 - **Refit.** `UOpenGolf.Calibration.Rollout` now fits in two stages: the turf values on the shots
   that leave the ground, then the struck drag on the topped shots.
@@ -32,11 +75,11 @@ saved replay.
     as `SlopeRollout` requires. An unconstrained run had dropped fairway rolling friction to 0.029.
   - Fairway: k 0.665, c 0.464, rolling friction 0.0469, grass drag 0.0242 plus 0.0086 /m speed
     squared, 7.4 ft on a stimpmeter (no longer on the 6 ft floor).
-- **Against Square** (124 shots): roll error 1.23 yd (3.67 under the first 2026-11-17 fit), total
+- **Against lm** (124 shots): roll error 1.23 yd (3.67 under the first 2026-11-17 fit), total
   error 3.98 yd (5.36). The six topped shots finish within 0.9 yd on average (worst 2.5 yd).
   - The three 0.6–1.6° shots that fly now roll within 0.8 yd, but carry 6–16 yd short, so they
     total 7–16 yd short.
-  - Against `Assets/Data/ShotLibraryBaselines/pre_contact_20261116.csv`, every gate of
+  - Against the baseline `pre_contact_20261116.csv` (now in the local reference data), every gate of
     `shot_compare.py --check-baseline` passes; worst roll is 7.8 yd against a 25.75 yd limit.
 
 Validation: Unreal Engine 5.8, Windows x64, Development editor built.
@@ -102,11 +145,11 @@ Not verified:
 
 ## Turf landing read from the impact; club labels dropped — 2026-11-17 (Windows)
 
-Superseded the same day: the fit values, Square results and baseline gate failures below were
+Superseded the same day: the fit values, lm results and baseline gate failures below were
 replaced by "Review fixes: turf grip bound, ground wind, topped shots" above.
 
-A review of the 2026-11-16 fixes against standard contact physics found the Square fit came mostly
-from an inherited multiplier. On the 115 airborne Square shots, the first impact's loss of forward
+A review of the 2026-11-16 fixes against standard contact physics found the lm fit came mostly
+from an inherited multiplier. On the 115 airborne lm shots, the first impact's loss of forward
 speed was 43% the Coulomb friction impulse, 54% the retention multiplier
 (`0.95 × clamp(1 − rpm/8000, 0.4, 1)`) and 3% the landing bite. The multiplier's ramp only patched
 the ground-launch runaway the multiplier itself caused. The bite was chosen from the launch's spin
@@ -123,15 +166,15 @@ and angle, not from the impact.
   regression limits, and holds the fairway between 6 ft (a judgment) and the green on a stimpmeter.
   Fairway: k 0.84, c 0.14, rolling friction 0.0735, grass drag 0.0229 plus 0.0039 /m speed squared,
   6.0 ft stimp.
-- **Against Square.** Airborne roll error is 1.66 yd (1.96 yd on 2026-11-16) and total error
-  5.4 yd (6.0). The six shots launched below 0° stop 32–47 yd short. Square totals those at about
+- **Against lm.** Airborne roll error is 1.66 yd (1.96 yd on 2026-11-16) and total error
+  5.4 yd (6.0). The six shots launched below 0° stop 32–47 yd short. lm totals those at about
   1.2 yd per mph but its 0.6–1.6° shots at about 0.93 yd per mph, and no model whose total follows
   launch angle can match both. A fit within ±10 yd there would have cost 0.6 yd of airborne error
   and 8.7 yd of extra roll on low launches; the airborne fit was chosen. Against
-  `Assets/Data/ShotLibraryBaselines/pre_contact_20261116.csv`, `shot_compare.py --check-baseline`
+  the baseline `pre_contact_20261116.csv`, `shot_compare.py --check-baseline`
   fails three gates through those rows: roll error 3.42 → 3.67 yd, worst roll 34.3 → 47.1 yd and
   ground class 22.2 → 29.4 yd. Total error and provenance pass. The gates were left as they are.
-- **Club labels.** The Square export's club is the one selected in the app (club speed and smash
+- **Club labels.** The lm export's club is the one selected in the app (club speed and smash
   factor export as 0); those shots were irons. `shots.csv` now names the column `reported_club`,
   and nothing reads it. `shot_compare.py` lost its per-club table and `--club`, and gained errors by
   ball speed. Tests and docs describe shots by launch values.
@@ -161,25 +204,25 @@ Not verified:
 - packaged builds;
 - a real Square Home shot in play.
 
-## Turf rollout recalibrated to Square Home — 2026-11-16 (Windows)
+## Turf rollout recalibrated to launch-monitor shots — 2026-11-16 (Windows)
 
 Recorded range shots showed ground-launched shots running 129–263 yd, a tilted-axis shot (107.8 mph,
 85° spin axis) checked by its sidespin, and full shots stopping dead on fairway. The labels below
 (GW #1, 7i #4 and so on) are the clubs selected when the shots were recorded, which were not reliable. Impacts and ground contact now
-read axis-aware spin, and the five turf surfaces play a catalog fitted to a 124-shot Square Home
-export (`Assets/Data/ShotLibrary/square_20261113`). The fit added a speed-squared grass drag, cut
+read axis-aware spin, and the five turf surfaces play a catalog fitted to a 124-shot launch-monitor
+export (lm, now in the local reference data). The fit added a speed-squared grass drag, cut
 the first-impact loss and landing bite, and took the impact-spin friction multiplier off turf.
-`HistoricalReference()` keeps the ported model. Square roll error fell from 22.9 to 3.4 yd on
+`HistoricalReference()` keeps the ported model. lm roll error fell from 22.9 to 3.4 yd on
 average. The ground step is now coupled (`FRolloutProfile::bCoupledContact`): drag and rolling
 resistance, then a friction impulse that leaves each step rolling, instead of letting a rolling
-ball slip until a threshold. It leaves the Square fit unchanged (3.42 yd either way). The ball
+ball slip until a threshold. It leaves the lm fit unchanged (3.42 yd either way). The ball
 actor and the headless simulator gained an optional diagnostic trace, and the simulator a
 timestep and surface override for experiments. The earlier shot library was not restored;
-`Assets/Scripts/shot_compare.py`, replacing the earlier comparison script, reads Square data, writes a
+`Assets/Scripts/shot_compare.py`, replacing the earlier comparison script, reads the reference data, writes a
 provenance manifest and can gate a run against a baseline (`--check-baseline`). The new
-`square_import.py` adds Square exports, and `recording_import.py` added the 36 recorded launches
+export importer (now `monitor_import.py`) adds launch-monitor exports, and `recording_import.py` added the 36 recorded launches
 (`recorded_20261113`, replayed but not compared). See the
-[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-and-square-calibration).
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration).
 
 `UOpenGolf.Range.Shot` compared a drive's roll-out on the range's real terrain against flat
 headless ground with a 1 yd offline margin, so the longer roll took it to 1.21 yd. Its new trace
@@ -196,7 +239,7 @@ Validation: Unreal Engine 5.8, Windows x64, Development editor built. `UOpenGolf
 stop. `UOpenGolf.Range` passed 34 of 34, four with warnings as in earlier runs, including
 `Range.Shot` after the change above and the new `RecordedShots`
 (`Saved/Automation/20261116-164211-4aae2f48`). `shot_compare.py` replayed all 160 library shots and
-reported the 124 Square shots (`Saved/ShotLibrary/history/20261116-163329.csv`). All 19 Python tests
+reported the 124 lm shots (`Saved/ShotLibrary/history/20261116-163329.csv`). All 19 Python tests
 for the three scripts passed.
 
 The new `UOpenGolf.Range.RecordedShots` hits the recorded problem shots on the range

@@ -42,7 +42,7 @@ namespace OpenFairway
             return Settings;
         }
 
-        // Recalibrated turf, fitted to the Square Home export in Assets/Data/ShotLibrary (124 shots, flat
+        // Recalibrated turf, fitted to a 124-shot launch-monitor export in the local reference data (flat
         // fairway, 75 F, sea level) by UOpenGolf.Calibration.Rollout. An impact keeps the standard restitution
         // and Coulomb-capped friction impulse, then loses tangential speed by its own angle and load-bounded backspin
         // grip (LandingAngleLoss, LandingSpinLoss) instead of the ported retention multiplier, its normal-speed ramp
@@ -56,8 +56,8 @@ namespace OpenFairway
         constexpr float TurfRollingFriction = 0.0469f;
         constexpr float TurfGrassViscosity = 0.0242f;
         constexpr float TurfFormDrag = 0.0086f;
-        // Stage 2: a full shot struck into or along the ground (Square's six rows launched below 0 deg, no flight)
-        // rolls with these shares of the grass drag. Square rolls such a shot about 1.2 yd per mph, far beyond a ball
+        // Stage 2: a full shot struck into or along the ground (the export's six rows launched below 0 deg, no flight)
+        // rolls with these shares of the grass drag. The reference rolls such a shot about 1.2 yd per mph, far beyond a ball
         // that lands from a low flight in the same state, so no rule that reads only the ball's state fits both;
         // see GolfPhysics::StruckAlongGround.
         constexpr float TurfStruckViscosityScale = 0.26f;

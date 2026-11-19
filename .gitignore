@@ -54,6 +54,14 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Third-party reference data (launch-monitor exports, published averages, calculator output, accuracy
+# baselines) and research papers stay outside the repository, in UOPENGOLF_DATA (default ~/data/uopengolf);
+# see Assets/Data/README.md. Only uopengolf's own shot recordings are committed.
+/Assets/Data/ShotLibrary/*
+!/Assets/Data/ShotLibrary/recorded_*/
+/Assets/Data/ShotLibraryBaselines/
+/Docs/papers/
+
 # .NET reference harness output
 /Plugins/OpenFairwayPhysics/Tools/ReferenceHarness/bin/
 /Plugins/OpenFairwayPhysics/Tools/ReferenceHarness/obj/

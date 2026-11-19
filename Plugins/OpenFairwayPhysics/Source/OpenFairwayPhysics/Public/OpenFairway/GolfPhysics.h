@@ -37,6 +37,7 @@ namespace OpenFairway
         float DragCoefficient = 0.0f;
         float LiftCoefficient = 0.0f;
         float SpinDecayRatePerSecond = 0.0f;
+        bool bOutsideMeasuredCoverage = false;
 
         bool HasAerodynamics() const;
     };
@@ -78,6 +79,12 @@ namespace OpenFairway
          * Radius): with a profiled Environment the wind at height 0 is zero.
          */
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt);
+        /** Coupled RK4; resamples height-dependent wind and aerodynamics at every stage. */
+        OPENFAIRWAYPHYSICS_API FBallState StepFlightRK4(const FBallState& State, const FFlightEnvironment& Environment,
+            const FFlightProfile& Profile, float Dt, const FVector3f& GroundNormal = FVector3f(0, 1, 0));
+        /** Locate descending contact with a plane Dot(Position, Normal)=PlaneHeight. */
+        OPENFAIRWAYPHYSICS_API float FlightContactTime(const FBallState& State, const FFlightEnvironment& Environment,
+            const FFlightProfile& Profile, float Dt, const FVector3f& Normal, float PlaneHeight);
         /**
          * Sample must come from the local air-relative velocity, State.Velocity minus
          * WindProfile::At(Environment, State.Position.Y) (the wind at the ball's height).

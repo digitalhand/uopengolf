@@ -564,19 +564,48 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         const FVector End = MoveStart + Delta;
         FCollisionQueryParams Params(SCENE_QUERY_STAT(OpenFairwayBallSweep), false, this);
         Params.bReturnPhysicalMaterial = true;
-        const bool bHit = GetWorld()->SweepSingleByChannel(
-            Hit, MoveStart, End, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SafeMarginCm), Params);
+        // Airborne sweeps must detect the true sphere's first contact. Shrinking it can
+        // postpone a grazing touchdown by a full step, past the RK4 contact solver's interval.
+        // Supported movement retains clearance so tangential sweeps do not stick to turf.
+        const bool bDescending = !bOnGround && FVector3f::DotProduct(Velocity, FloorNormal) < -0.01f;
+        float SweepMarginCm = bDescending ? 0.0f : SafeMarginCm;
+        bool bHit = GetWorld()->SweepSingleByChannel(
+            Hit, MoveStart, End, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SweepMarginCm), Params);
+        if (bHit && Hit.bStartPenetrating && bDescending)
+        {
+            // Terrain/float tolerances can leave a supported sphere barely overlapping.
+            // This is recovery, not a new airborne impact; preserve the usual clearance.
+            SweepMarginCm = SafeMarginCm;
+            Hit = FHitResult();
+            bHit = GetWorld()->SweepSingleByChannel(Hit, MoveStart, End, FQuat::Identity, TraceChannel,
+                FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SweepMarginCm), Params);
+        }
         if (bHit && Hit.bBlockingHit)
         {
             // Rest the true sphere tangent to the contact (the sweep sphere was a margin smaller).
-            SimLocation = Hit.bStartPenetrating ? MoveStart + Hit.Normal * (Hit.PenetrationDepth + SafeMarginCm) : Hit.Location + Hit.ImpactNormal * SafeMarginCm;
+            SimLocation = Hit.bStartPenetrating ? MoveStart + Hit.Normal * (Hit.PenetrationDepth + SafeMarginCm) : Hit.Location + Hit.ImpactNormal * SweepMarginCm;
             return true;
         }
         SimLocation = End;
         return false;
     };
     FHitResult Hit;
-    const bool bHit = MoveWithSweep(ToUnreal(Velocity * Dt) * CmPerM, Hit);
+    const FVector3f Displacement = !bWasOnGround && ShotParams.Flight.bUseRungeKutta4
+        ? Next.Position - State.Position : Velocity * Dt;
+    const bool bHit = MoveWithSweep(ToUnreal(Displacement) * CmPerM, Hit);
+    if (bHit && !bWasOnGround && ShotParams.Flight.bUseRungeKutta4 &&
+        ToCore(Hit.ImpactNormal).Y > 0.7f && !IsObstacle(Hit.GetComponent()))
+    {
+        const FVector3f Normal = ToCore(Hit.ImpactNormal).GetSafeNormal();
+        const FVector3f SurfacePoint = ToCore(Hit.ImpactPoint - ShotStart) / CmPerM + CoreUp * GolfPhysics::Radius;
+        const float PlaneHeight = FVector3f::DotProduct(SurfacePoint, Normal) + GolfPhysics::Radius;
+        const float ContactTime = GolfPhysics::FlightContactTime(State, ShotParams.Environment, ShotParams.Flight, Dt, Normal, PlaneHeight);
+        const auto Contact = GolfPhysics::StepFlightRK4(State, ShotParams.Environment, ShotParams.Flight, ContactTime);
+        Velocity = Contact.Velocity;
+        Omega = Contact.Spin;
+        Hit.Time = ContactTime / Dt;
+        SimLocation = ShotStart + ToUnreal(Contact.Position - CoreUp * GolfPhysics::Radius) * CmPerM;
+    }
     HandleCollision(bHit ? &Hit : nullptr, bWasOnGround, PreviousVelocity);
     if (bHoled)
     {

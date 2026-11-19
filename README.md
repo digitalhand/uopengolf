@@ -45,7 +45,7 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 - [CI and releases](Docs/Releases.md)
 - [Architecture](Docs/Architecture.md) and [plugins](Plugins/README.md)
 - [Range assets](Docs/RangeAssets.md) and [Blender turf workflow](Docs/TurfWorkflow.md)
-- [Physics against Square Home](Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-and-square-calibration) and [replay shots](Plugins/OpenFairwayPhysics/Docs/Reference.md#replay-shots-and-the-low-launch-lift-correction)
+- Physics against reference shots: [flight model](Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model), [turf rollout calibration](Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration) and [replay shots](Plugins/OpenFairwayPhysics/Docs/Reference.md#replay-shots-and-the-low-launch-lift-correction)
 - [Current status and remaining acceptance](Docs/PhasesStatus.md) and [asset licence roadmap](Docs/AssetLicenseRoadmap.md)
 
 ## Contributing

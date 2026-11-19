@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: MIT
-"""Checks for the Square Home export importer."""
+"""Checks for the launch-monitor export importer."""
 import csv
 from pathlib import Path
 import tempfile
 import unittest
 
-import Assets.Scripts.square_import as square_import
+import Assets.Scripts.monitor_import as monitor_import
+from Assets.Scripts.data_paths import local_library_dir
 
 HEADER = ("Club,Index,Ball Speed(mph),Launch Direction,Launch Angle,Spin Rate,Spin Axis,Back Spin,Side Spin,Apex(yd),"
           "Carry(yd),Total(yd),Offline(yd),Landing Angle,Club Path,Face Angle,Attack Angle,Dynamic Loft,ImpactHorizontal,"
@@ -22,58 +23,62 @@ EXPORT = "\n".join([
 ]) + "\n"
 
 
-class SquareImportTests(unittest.TestCase):
+class MonitorImportTests(unittest.TestCase):
     def test_signed_values(self):
-        self.assertEqual(square_import.signed("L7.1"), -7.1)
-        self.assertEqual(square_import.signed("R8.4"), 8.4)
-        self.assertEqual(square_import.signed("0.0"), 0.0)
-        self.assertEqual(square_import.signed("-6.6"), -6.6)
+        self.assertEqual(monitor_import.signed("L7.1"), -7.1)
+        self.assertEqual(monitor_import.signed("R8.4"), 8.4)
+        self.assertEqual(monitor_import.signed("0.0"), 0.0)
+        self.assertEqual(monitor_import.signed("-6.6"), -6.6)
 
     def test_rows_skip_summaries_and_keep_signs(self):
-        shots = square_import.parse_export(EXPORT)
+        shots = monitor_import.parse_export(EXPORT)
         self.assertEqual([shot["shot_name"] for shot in shots], ["3hybrid_00", "3hybrid_14", "6iron_15"])
         fade = shots[1]
         self.assertEqual(fade["reported_club"], "3 Hybrid")
         self.assertEqual((fade["hla_deg"], fade["spin_axis_deg"], fade["sidespin_rpm"], fade["offline_yd"]), (4.0, 7.9, 697.0, 13.4))
         self.assertEqual(shots[0]["hla_deg"], -7.1)
         self.assertEqual(shots[0]["offline_yd"], -17.1)
-        # The column Square labels Apex(yd) holds feet.
+        # The column the export labels Apex(yd) holds feet.
         self.assertEqual(shots[0]["apex_ft"], 46.4)
         self.assertAlmostEqual(shots[0]["rollout_yd"], 15.9)
         ground = shots[2]
         self.assertEqual((ground["vla_deg"], ground["carry_yd"], ground["rollout_yd"]), (-1.8, 0.0, 90.1))
 
     def test_session_date(self):
-        self.assertEqual(square_import.session_date(EXPORT.splitlines()), "20261113")
-        self.assertIsNone(square_import.session_date(["no date here"]))
+        self.assertEqual(monitor_import.session_date(EXPORT.splitlines()), "20261113")
+        self.assertIsNone(monitor_import.session_date(["no date here"]))
 
     def test_rejects_an_export_without_its_columns(self):
         with self.assertRaises(ValueError):
-            square_import.parse_export("Club,Index,Ball Speed(mph)\n3 Hybrid,0,100\n")
+            monitor_import.parse_export("Club,Index,Ball Speed(mph)\n3 Hybrid,0,100\n")
         with self.assertRaises(ValueError):
-            square_import.parse_export("nothing to see\n")
+            monitor_import.parse_export("nothing to see\n")
 
-    def test_library_session_matches_its_export(self):
-        session = Path(__file__).resolve().parent.parent / "Data" / "ShotLibrary" / "square_20261113"
-        with tempfile.TemporaryDirectory() as directory:
-            regenerated = Path(directory) / square_import.SHOTS_NAME
-            shots = square_import.parse_export((session / square_import.EXPORT_NAME).read_text(encoding="utf-8-sig"))
-            square_import.write_shots(shots, regenerated)
-            self.assertEqual(regenerated.read_bytes(), (session / square_import.SHOTS_NAME).read_bytes())
+    def test_local_sessions_match_their_exports(self):
+        """Every local session imported from an export regenerates byte for byte (skipped without local data)."""
+        sessions = sorted(path.parent for path in local_library_dir().glob("*/" + monitor_import.EXPORT_NAME))
+        if not sessions:
+            self.skipTest(f"no imported exports in {local_library_dir()}")
+        for session in sessions:
+            with self.subTest(session=session.name), tempfile.TemporaryDirectory() as directory:
+                regenerated = Path(directory) / monitor_import.SHOTS_NAME
+                shots = monitor_import.parse_export((session / monitor_import.EXPORT_NAME).read_text(encoding="utf-8-sig"))
+                monitor_import.write_shots(shots, regenerated)
+                self.assertEqual(regenerated.read_bytes(), (session / monitor_import.SHOTS_NAME).read_bytes())
 
     def test_import_copies_the_export_and_writes_shots(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            export = root / "export.csv"
+            export = root / "source.csv"
             export.write_text(EXPORT, encoding="utf-8")
             library = root / "ShotLibrary"
-            self.assertEqual(square_import.main([str(export), "--library", str(library)]), 0)
-            session = library / "square_20261113"
-            self.assertEqual((session / square_import.EXPORT_NAME).read_text(encoding="utf-8"), EXPORT)
-            with (session / square_import.SHOTS_NAME).open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(monitor_import.main([str(export), "--library", str(library)]), 0)
+            session = library / "export_20261113"
+            self.assertEqual((session / monitor_import.EXPORT_NAME).read_text(encoding="utf-8"), EXPORT)
+            with (session / monitor_import.SHOTS_NAME).open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual(len(rows), 3)
-            self.assertEqual(list(rows[0]), square_import.SHOTS_FIELDS)
+            self.assertEqual(list(rows[0]), monitor_import.SHOTS_FIELDS)
             self.assertEqual(rows[1]["spin_axis_deg"], "7.90")
             self.assertEqual(rows[1]["backspin_rpm"], "5016")
             self.assertEqual(rows[2]["vla_deg"], "-1.80")

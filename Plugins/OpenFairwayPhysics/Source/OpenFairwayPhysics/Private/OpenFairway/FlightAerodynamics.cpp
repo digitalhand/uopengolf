@@ -4,6 +4,8 @@
 #include "OpenFairway/GolfPhysics.h"
 
 #include "CoreMath.h"
+#include "ProV1Data.h"
+#include "SpinRatioData.h"
 
 namespace OpenFairway
 {
@@ -127,6 +129,23 @@ namespace OpenFairway
 
         Result.SpinRatio = Omega.Size() * GolfPhysics::Radius / Speed;
         Result.Reynolds = AirDensity * Speed * GolfPhysics::Radius * 2.0f / AirViscosity;
+        // The measured models take coefficients from the ball's air speed and spin alone: no launch angle,
+        // launch regime or global scale. See Docs/CarryAudit.md.
+        if (P.Model == EFlightModel::SpinRatioV1)
+        {
+            Result.LiftCoefficient = SpinRatioData::LiftAt(Result.SpinRatio);
+            Result.DragCoefficient = SpinRatioData::DragAt(Result.Reynolds, Result.SpinRatio);
+            Result.bOutsideMeasuredCoverage = SpinRatioData::Outside(Result.Reynolds, Result.SpinRatio);
+            return Result;
+        }
+        if (P.Model == EFlightModel::ProV1ResearchV1)
+        {
+            Result.DragCoefficient = ProV1Data::At(ProV1Data::Drag, Result.Reynolds);
+            Result.LiftCoefficient = ProV1Data::Lift(Result.Reynolds, Result.SpinRatio);
+            Result.bOutsideMeasuredCoverage = ProV1Data::DragOutside(Result.Reynolds, Omega.Size() / GolfPhysics::RadPerRpm) ||
+                                              ProV1Data::LiftOutside(Result.Reynolds, Result.SpinRatio, Speed);
+            return Result;
+        }
         Result.SpinDragMultiplier = GetSpinDragMultiplier(Result.SpinRatio, Result.Reynolds, P);
         Result.LowLaunchLiftScale = GetLowLaunchLiftScale(InitialLaunchAngleDeg, Result.SpinRatio, Result.Reynolds, P);
         const float HighLaunchDragScale = GetHighLaunchDragScale(InitialLaunchAngleDeg, Result.SpinRatio, P);
