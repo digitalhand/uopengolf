@@ -28,7 +28,7 @@ public:
     virtual ~SMainMenu() override;
     void Open();
     void NavigateBack() { Back(); }
-    /** Opens the menu, if closed, at Settings › Simulator, where the launch monitor is chosen and connected. */
+    /** Opens the menu, if closed, at Settings › Launch Monitor, where the launch monitor is chosen and connected. */
     void OpenLaunchMonitorSettings();
     bool IsOpen() const { return bOpen; }
     /** True once Training has been entered: the home screen is then the pause menu. */
@@ -80,8 +80,8 @@ private:
     bool Matches(const FString& Label, const FString& Help) const;
     /** Settings → Player: the account (sign in, or the profile and Shot history), Time zone and player preferences. */
     void BuildPlayer(TSharedRef<SVerticalBox> Rows);
-    /** Settings → Simulator: the live connection, the provider choice and the Open Connect connector. */
-    void BuildSimulator(TSharedRef<SVerticalBox> Rows);
+    /** Settings → Launch Monitor: the live connection, the provider choice and the Open Connect connector. */
+    void BuildLaunchMonitor(TSharedRef<SVerticalBox> Rows);
     /** Settings → Data & system: Check for updates, and the update's status. */
     void BuildUpdates(TSharedRef<SVerticalBox> Rows);
     FString LiveStatus() const;
@@ -96,6 +96,8 @@ private:
     /** Signed in with the profile loaded: the profile and Shot history are shown in Settings › Player. */
     bool HasProfile() const;
     TSharedRef<SWidget> Text(const FString& Value, int32 Size = 18, bool Muted = false);
+    /** One line in the text color with its Accent part in the accent color, such as UOPEN GOLF. */
+    TSharedRef<SWidget> AccentText(const FString& Lead, const FString& Accent, const FString& Tail, int32 Size);
     /** Settings opened at a category, with drafts taken from the saved preferences. From a top-bar click, defer the rebuild. */
     void OpenSettings(int32 InCategory, bool bDeferRebuild = false);
     /** The cog: opens Settings at Player, or leaves Shot history for Player; nothing while Settings is already open. */
@@ -113,7 +115,7 @@ private:
     FDelegateHandle RestartHandle;
     FString ConnectionSummary() const;
     static constexpr int32 PlayerCategory = 0;
-    static constexpr int32 SimulatorCategory = 1;
+    static constexpr int32 LaunchMonitorCategory = 1;
     void Back();
     void Apply();
     void Commit();

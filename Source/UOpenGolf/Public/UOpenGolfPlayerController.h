@@ -51,7 +51,7 @@ public:
     bool IsPauseMenu() const;
     void SetMainMenuOpen(bool bOpen);
     void OpenMainMenu();
-    /** Opens the menu at Settings › Simulator: the HUD's launch-monitor status does this when clicked. */
+    /** Opens the menu at Settings › Launch Monitor: the HUD's launch-monitor status does this when clicked. */
     void OpenLaunchMonitorSettings();
     bool CanUseManualShots() const;
     /**

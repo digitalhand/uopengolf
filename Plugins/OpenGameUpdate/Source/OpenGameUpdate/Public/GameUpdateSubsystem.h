@@ -32,6 +32,8 @@ public:
     void Check();
     /** Whether the latest release can be installed from the game; otherwise offer OpenReleasePage. */
     bool CanInstall() const;
+    /** Why the latest release can't be installed from the game, as one sentence for players; empty when it can. */
+    FString GetInstallBlocker() const;
     /** Downloads, verifies and starts the installer. Requires CanInstall. */
     void DownloadAndInstall();
     /** Stops a check or a download. The update stays available. */
