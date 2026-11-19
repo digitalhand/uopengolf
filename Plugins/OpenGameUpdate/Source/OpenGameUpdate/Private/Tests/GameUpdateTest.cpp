@@ -27,8 +27,9 @@ namespace
         C.Repository = TEXT("owner/game");
         C.InstallerAsset = TEXT("Game-{version}-Windows-x64-Setup.exe");
         C.InstallerArguments = TEXT("/SILENT /DIR=\"{installdir}\"");
-        C.CurrentVersion = TEXT("0.1.0");
-        C.UserAgent = TEXT("Game/0.1.0");
+        // A fixed version, not the project's: the tests offer 0.0.7 as the same release and 0.0.8 as a newer one.
+        C.CurrentVersion = TEXT("0.0.7");
+        C.UserAgent = TEXT("Game/0.0.7");
         return C;
     }
 
@@ -206,12 +207,27 @@ bool FGameUpdateSubsystemTest::RunTest(const FString&)
     FPaths::MakePlatformFilename(InstallDir);
     TestEqual(TEXT("Installer targets this install"), LaunchedArguments, FString::Printf(TEXT("/SILENT /DIR=\"%s\""), *InstallDir));
 
+    // Each missing piece is named, so the dialog and the log say why the release page is offered instead.
+    const FGameUpdateRelease Complete = Source->Release;
+    Updater->Configure(Config, Source);
+    Updater->Check();
+    TestTrue(TEXT("Nothing blocks a complete release"), Updater->GetInstallBlocker().IsEmpty());
+    Source->Release.Sha256.Empty();
+    Updater->Check();
+    TestEqual(TEXT("A missing checksum is named"), Updater->GetInstallBlocker(), FString(TEXT("The installer's checksum couldn't be read.")));
+    TestFalse(TEXT("And blocks the install"), Updater->CanInstall());
+    Source->Release.InstallerUrl.Empty();
+    Updater->Check();
+    TestEqual(TEXT("A missing installer is named"), Updater->GetInstallBlocker(), FString(TEXT("This release has no installer.")));
+    Source->Release = Complete;
+
     // Where the install folder cannot be written, the game offers the release page instead.
     Config.InstallDir.Empty();
     Updater->Configure(Config, Source);
     Updater->Check();
     TestTrue(TEXT("Still reports the update"), Updater->IsUpdateAvailable());
     TestFalse(TEXT("But cannot install it"), Updater->CanInstall());
+    TestEqual(TEXT("An unwritable folder is named"), Updater->GetInstallBlocker(), FString(TEXT("The game's folder can't be written to.")));
     IFileManager::Get().DeleteDirectory(*Root, false, true);
     return true;
 }
@@ -280,6 +296,9 @@ bool FGameUpdateConfigTest::RunTest(const FString&)
     const FGameUpdateConfig Loaded = FGameUpdateConfig::Load();
     TestTrue(TEXT("Editor never installs over the engine"), Loaded.InstallDir.IsEmpty());
     TestFalse(TEXT("Version from project settings"), Loaded.CurrentVersion.IsEmpty());
+    // Unreal's ini reader drops unquoted { and }, which turns {version} into the literal word "version".
+    TestTrue(TEXT("Installer asset keeps {version}"), Loaded.InstallerAsset.Contains(TEXT("{version}")));
+    TestTrue(TEXT("Installer arguments keep {installdir}"), Loaded.InstallerArguments.Contains(TEXT("{installdir}")));
     return true;
 }
 #endif

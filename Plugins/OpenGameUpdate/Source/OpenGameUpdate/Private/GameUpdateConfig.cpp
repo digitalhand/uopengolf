@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "GameUpdateTypes.h"
+#include "GameUpdateLog.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/App.h"
 #include "Misc/ConfigCacheIni.h"
@@ -33,6 +34,11 @@ FGameUpdateConfig FGameUpdateConfig::Load()
     GConfig->GetString(Section, TEXT("Repository"), C.Repository, GGameIni);
     GConfig->GetString(Section, TEXT("InstallerAsset"), C.InstallerAsset, GGameIni);
     GConfig->GetString(Section, TEXT("InstallerArguments"), C.InstallerArguments, GGameIni);
+    // Unreal's ini reader drops unquoted { and }, so an unquoted {version} arrives as the literal word "version".
+    if (!C.InstallerAsset.IsEmpty() && !C.InstallerAsset.Contains(TEXT("{version}")))
+        UE_LOG(LogGameUpdate, Warning, TEXT("InstallerAsset \"%s\" has no {version}. Put the value in quotes in the ini."), *C.InstallerAsset);
+    if (!C.InstallerArguments.IsEmpty() && !C.InstallerArguments.Contains(TEXT("{installdir}")))
+        UE_LOG(LogGameUpdate, Warning, TEXT("InstallerArguments \"%s\" has no {installdir}. Put the value in quotes in the ini."), *C.InstallerArguments);
     GConfig->GetString(TEXT("/Script/EngineSettings.GeneralProjectSettings"), TEXT("ProjectVersion"), C.CurrentVersion, GGameIni);
     C.CurrentVersion.TrimStartAndEndInline();
     const FString Project = FApp::GetProjectName();

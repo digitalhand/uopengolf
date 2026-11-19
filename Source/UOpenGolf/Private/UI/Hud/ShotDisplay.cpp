@@ -166,7 +166,7 @@ FString ShotDisplay::LaunchMonitorTip(ELaunchMonitorConnectionState State, int32
     FString Tip = StaticEnum<ELaunchMonitorConnectionState>()->GetDisplayNameTextByValue(static_cast<int64>(State)).ToString();
     if (BatteryPercent >= 0)
         Tip += FString::Printf(TEXT(" · battery %d%%"), BatteryPercent);
-    // The click opens Settings → Simulator, where Square Home or an Open Connect connector is chosen.
+    // The click opens Settings → Launch Monitor, where Square Home or an Open Connect connector is chosen.
     return Tip + (State == ELaunchMonitorConnectionState::Disconnected ? TEXT(". Click for launch monitor settings. C connects.")
                                                                          : TEXT(". Click for launch monitor settings. T disconnects."));
 }

@@ -7,9 +7,14 @@ All project-specific values are in `[OpenGameUpdate]` in `Config/DefaultGame.ini
 ```ini
 [OpenGameUpdate]
 Repository=owner/name
-InstallerAsset=MyGame-{version}-Windows-x64-Setup.exe
+InstallerAsset="MyGame-{version}-Windows-x64-Setup.exe"
 InstallerArguments=/SILENT /SUPPRESSMSGBOXES /NORESTART /DIR="{installdir}"
 ```
+
+Unreal's ini reader drops unquoted `{` and `}`, so an unquoted `MyGame-{version}-...` reaches the game as
+`MyGame-version-...` and no release ever matches. Put the whole value in quotes, as above. In `InstallerArguments`
+the placeholder is already inside quotes. `FGameUpdateConfig::Load` logs a warning when either placeholder is
+missing.
 
 | Key | Meaning |
 | --- | --- |
@@ -45,6 +50,7 @@ else Updater->OpenReleasePage();
 | `Check()` | Asks the source for the latest release. Ignored while busy |
 | `IsUpdateAvailable()` | A newer release was found; stays true while it downloads or after a failed download |
 | `CanInstall()` | Windows, a writable install folder, and a release with an installer and a checksum |
+| `GetInstallBlocker()` | Why `CanInstall()` is false, as one sentence to show players; empty when it is true |
 | `DownloadAndInstall()` | Downloads, verifies and starts the installer |
 | `Cancel()` | Stops a check or download and deletes the partial file |
 | `OpenReleasePage()` | The release's page in the browser |
@@ -66,6 +72,10 @@ packaged build is typical) and quits on `OnReadyToRestart`.
 4. The installer starts, detached, with `InstallerArguments`. `OnReadyToRestart` fires, and the game quits so the
    installer can replace its files.
 5. The next packaged start deletes the download folder.
+
+`LogGameUpdate` records each check (`Latest release <x>, this build <y>.`). When an update is found but can't be
+installed, it warns with the reason: the asset name it looked for and didn't find, the checksum's HTTP code, or an
+unwritable install folder.
 
 In the editor `InstallDir` is empty, so `CanInstall()` is false and nothing can be installed over the engine.
 

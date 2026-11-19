@@ -114,7 +114,7 @@ bool FOpenGolfPlayerSettingsTest::RunTest(const FString&)
     TypeName(TEXT("Draft Golfer")); Refresh();
     TestEqual(TEXT("Typing sends no requests"), Pending.Num(), 0);
     TestTrue(TEXT("Name participates in Settings unsaved state"), HasText(Menu, TEXT("Unsaved changes")));
-    if (!ClickText(TEXT("Simulator")) || !ClickText(TEXT("Player"))) return false;
+    if (!ClickText(TEXT("Launch Monitor")) || !ClickText(TEXT("Player"))) return false;
     TestEqual(TEXT("Category navigation keeps draft"), Field()->GetText().ToString(), FString(TEXT("Draft Golfer")));
     if (!ClickText(TEXT("Discard"))) return false;
     TestEqual(TEXT("Discard restores saved name"), Field()->GetText().ToString(), FString(TEXT("Golfer")));

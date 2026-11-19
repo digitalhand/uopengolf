@@ -64,7 +64,7 @@ public:
         // Under -NoMainMenu the switch is not written to the player's preferences file.
         struct FStep{const TCHAR* Capture;const TCHAR* Click;};
         static const FStep Steps[]={{TEXT("home"),nullptr},{nullptr,TEXT("#MenuSettings")},{TEXT("player"),nullptr},{nullptr,TEXT("Video")},{TEXT("video"),nullptr},
-            {nullptr,TEXT("Simulator")},{TEXT("simulator"),nullptr},{nullptr,TEXT("Square Home")},{nullptr,TEXT("Open Connect")},{TEXT("open-connect"),nullptr},
+            {nullptr,TEXT("Launch Monitor")},{TEXT("launch-monitor"),nullptr},{nullptr,TEXT("Square Home")},{nullptr,TEXT("Open Connect")},{TEXT("open-connect"),nullptr},
             {nullptr,TEXT("Open Connect")},{nullptr,TEXT("Square Home")},{TEXT("square-home-again"),nullptr},{nullptr,BackStep},{TEXT("gimmie-hud"),nullptr},{nullptr,EscapeStep},{TEXT("pause"),nullptr}};
         if(!File.IsEmpty())
         {

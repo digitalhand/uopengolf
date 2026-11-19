@@ -79,7 +79,7 @@ checked.
   yards, or feet in the short game), then two icons:
   - the **launch monitor**, green when Ready, amber while scanning or connecting and gray
     when disconnected, with its battery level when the device reports one. Its caption reads
-    **Connect [C]** while disconnected. Click it to open Settings › Simulator; **C** connects
+    **Connect [C]** while disconnected. Click it to open Settings › Launch Monitor; **C** connects
     and **T** disconnects.
   - on the range only, the **record** toggle, captioned **Record [F9]**: a red dot with the
     number of shots saved while recording, a gray ring when off. Click it or press **F9**. The
@@ -235,7 +235,7 @@ Play sessions or application restarts**; failed recordings still in memory are l
 ### Menu and account
 
 The home page, and the pause menu that **Escape** opens during Training, share a top bar:
-**UOPEN GOLF**, the launch-monitor status (click it for Settings › Simulator), an account icon
+**UOPEN GOLF**, the launch-monitor status (click it for Settings › Launch Monitor), an account icon
 and a cog. The cog is the only way into **Settings**; the pages have no Settings button. While
 signed out the account icon signs in (it opens Settings › Player); while signed in it is the
 logout icon.

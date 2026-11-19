@@ -184,7 +184,10 @@ a normal installed copy. A folder the game can't write to, such as one under Pro
 gets the release page instead. Linux shows the notice and opens the release page.
 
 Releases from before this feature can't update themselves; players install the first release
-that has a Setup by hand.
+that has a Setup by hand. Releases up to and including v0.1.0 can't either: their config lost the
+braces in `{version}`, so they look for an asset named `UOpenGolf-version-Windows-x64-Setup.exe`
+and fall back to the release page. The value is now quoted, and `OpenGameUpdate.Config` checks that
+it keeps its placeholder.
 
 ### Limitations and troubleshooting
 

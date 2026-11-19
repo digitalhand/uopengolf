@@ -128,7 +128,7 @@ void SUpdatePanel::Construct(const FArguments& Args)
                             return FString::Printf(TEXT("Downloads %s, then the game closes, installs the update and restarts. Your settings, sign-in and recordings are kept."),
                                 *GameUpdate::FormatSize(U.GetLatest().InstallerSize));
                         return PLATFORM_WINDOWS
-                            ? FString::Printf(TEXT("This copy of the game can't update itself. Download %s from its release page."), *Latest)
+                            ? FString::Printf(TEXT("%s Download %s from its release page."), *U.GetInstallBlocker(), *Latest)
                             : FString::Printf(TEXT("Download %s from its release page."), *Latest);
                     case S::Downloading: return TEXT("Downloading the update.");
                     case S::Verifying: return TEXT("Checking the download.");

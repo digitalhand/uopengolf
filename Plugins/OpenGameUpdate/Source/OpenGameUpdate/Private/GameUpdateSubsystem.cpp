@@ -3,6 +3,7 @@
 #include "Async/Async.h"
 #include "GameUpdateFormat.h"
 #include "GameUpdateHash.h"
+#include "GameUpdateLog.h"
 #include "GameUpdateSource.h"
 #include "GameUpdateVersion.h"
 #include "HAL/FileManager.h"
@@ -11,8 +12,6 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
-
-DEFINE_LOG_CATEGORY_STATIC(LogGameUpdate, Log, All);
 
 namespace
 {
@@ -28,7 +27,11 @@ namespace
     {
         if (Dir.IsEmpty()) return false;
         const FString Probe = Dir / (TEXT(".update-probe-") + FGuid::NewGuid().ToString());
-        if (!FFileHelper::SaveStringToFile(TEXT(""), *Probe)) return false;
+        if (!FFileHelper::SaveStringToFile(TEXT(""), *Probe))
+        {
+            UE_LOG(LogGameUpdate, Log, TEXT("Can't write to the install folder %s."), *Dir);
+            return false;
+        }
         IFileManager::Get().Delete(*Probe);
         return true;
     }
@@ -91,13 +94,24 @@ void UGameUpdateSubsystem::Check()
         This->Latest = Release;
         This->bAvailable = GameUpdate::IsNewer(Release.Version, This->Config.CurrentVersion);
         UE_LOG(LogGameUpdate, Log, TEXT("Latest release %s, this build %s."), *Release.Version, *This->Config.CurrentVersion);
+        if (This->bAvailable && !This->GetInstallBlocker().IsEmpty())
+            UE_LOG(LogGameUpdate, Warning, TEXT("Can't install %s from the game: %s"), *Release.Version, *This->GetInstallBlocker());
         This->SetState(This->bAvailable ? EGameUpdateState::Available : EGameUpdateState::UpToDate);
     });
 }
 
+FString UGameUpdateSubsystem::GetInstallBlocker() const
+{
+    if (!PLATFORM_WINDOWS) return TEXT("Updating from the game works on Windows only.");
+    if (!bInstallDirWritable) return TEXT("The game's folder can't be written to.");
+    if (!Latest.HasInstaller()) return TEXT("This release has no installer.");
+    if (Latest.Sha256.IsEmpty()) return TEXT("The installer's checksum couldn't be read.");
+    return {};
+}
+
 bool UGameUpdateSubsystem::CanInstall() const
 {
-    return PLATFORM_WINDOWS && bAvailable && bInstallDirWritable && Latest.HasInstaller() && !Latest.Sha256.IsEmpty();
+    return bAvailable && GetInstallBlocker().IsEmpty();
 }
 
 void UGameUpdateSubsystem::DownloadAndInstall()

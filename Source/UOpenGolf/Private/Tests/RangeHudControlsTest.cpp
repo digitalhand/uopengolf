@@ -66,7 +66,7 @@ namespace RangeHudControlsTestDetail
 
 /**
  * Clicks the range HUD's controls as a player would: the club picker and both status buttons must be reachable,
- * the record button toggles recording and the launch-monitor button opens Settings › Simulator. Also checks that
+ * the record button toggles recording and the launch-monitor button opens Settings › Launch Monitor. Also checks that
  * changing clubs never resizes the shot tiles, that the ball-ready glow shows at address, that placing a ball
  * retitles the hole and hides its tiles, that recording and the glow stay off the hole where they do not apply, and
  * that nothing has a tooltip.
@@ -186,8 +186,8 @@ private:
             return ClickThen(TEXT("LaunchMonitorStatus"), 11);
         case 11:
             Test->TestTrue(TEXT("The launch-monitor button opens the menu"), Player->IsMainMenuOpen());
-            Test->TestTrue(TEXT("The menu shows Settings › Simulator"), ShowsText(Window.ToSharedRef(), TEXT("Launch monitor connection")));
-            RenderedPlay::ExpectNoToolTips(*Test, Window.ToSharedRef(), TEXT("Settings › Simulator"));
+            Test->TestTrue(TEXT("The menu shows Settings › Launch Monitor"), ShowsText(Window.ToSharedRef(), TEXT("Launch monitor connection")));
+            RenderedPlay::ExpectNoToolTips(*Test, Window.ToSharedRef(), TEXT("Settings › Launch Monitor"));
             return Capture(TEXT("lm-settings"));
         case 12:
             // Back to the pause menu, then resume Training, through the menu's own Escape handling.

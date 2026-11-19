@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "GameUpdateSource.h"
+#include "GameUpdateLog.h"
 #include "GameUpdateRelease.h"
 #include "HAL/FileManager.h"
 #include "HttpModule.h"
@@ -29,7 +30,14 @@ namespace GameUpdate
                     FString Error;
                     if (Code != 200) { OnDone(false, Release, Explain(Code, bConnected)); return; }
                     if (!ParseGitHubRelease(Response->GetContentAsString(), Config, Release, Error)) { OnDone(false, Release, Error); return; }
-                    if (!Release.HasInstaller() || Release.ChecksumUrl.IsEmpty()) { OnDone(true, Release, {}); return; }
+                    const FString Installer = Config.AssetName(Release.Version);
+                    if (!Release.HasInstaller() || Release.ChecksumUrl.IsEmpty())
+                    {
+                        UE_LOG(LogGameUpdate, Warning, TEXT("Release %s has no asset named %s%s."), *Release.Version, *Installer,
+                            Release.HasInstaller() ? TEXT(".sha256") : TEXT(""));
+                        OnDone(true, Release, {});
+                        return;
+                    }
                     FetchChecksum(MoveTemp(Release), OnDone);
                 });
             }
@@ -98,8 +106,11 @@ namespace GameUpdate
                 Send(Request, [Release = MoveTemp(Release), OnDone](FHttpResponsePtr Response, bool) mutable
                 {
                     // Without a checksum the release is still reported; it just cannot be installed from the game.
-                    if (Response && Response->GetResponseCode() == 200)
+                    const int32 Code = Response ? Response->GetResponseCode() : 0;
+                    if (Code == 200)
                         Release.Sha256 = ParseChecksum(Response->GetContentAsString(), Release.InstallerName);
+                    if (Release.Sha256.IsEmpty())
+                        UE_LOG(LogGameUpdate, Warning, TEXT("Could not read %s.sha256 (HTTP %d)."), *Release.InstallerName, Code);
                     OnDone(true, Release, {});
                 });
             }

@@ -139,6 +139,17 @@ TSharedRef<SWidget> SMainMenu::Text(const FString& Value,int32 Size,bool Muted)
     return SNew(STextBlock).Text(FText::FromString(Value)).Font_Lambda([Size]{return HudStyle::Font("Regular",Size);})
         .ColorAndOpacity(Muted?HudStyle::LabelColor():HudStyle::TextColor()).AutoWrapText(true);
 }
+TSharedRef<SWidget> SMainMenu::AccentText(const FString& Lead,const FString& Accent,const FString& Tail,int32 Size)
+{
+    auto Run=[Size](const FString& Value,const FLinearColor& Color)
+    {
+        return SNew(STextBlock).Text(FText::FromString(Value)).Font_Lambda([Size]{return HudStyle::Font("Regular",Size);}).ColorAndOpacity(Color);
+    };
+    return SNew(SHorizontalBox)
+        +SHorizontalBox::Slot().AutoWidth()[Run(Lead,HudStyle::TextColor())]
+        +SHorizontalBox::Slot().AutoWidth()[Run(Accent,HudStyle::AccentColor())]
+        +SHorizontalBox::Slot().AutoWidth()[Run(Tail,HudStyle::TextColor())];
+}
 TSharedRef<SWidget> SMainMenu::Button(const FString& Label,TFunction<void()> Action,bool Primary,int32 Size)
 {
     return SNew(SButton).ButtonStyle(Primary?&Style.PrimaryButton:&Style.Button).OnClicked_Lambda([Action]{Action();return FReply::Handled();})
@@ -176,7 +187,7 @@ void SMainMenu::OpenLaunchMonitorSettings()
     const bool bFromTraining=!bOpen;
     if(!bOpen) Open();
     bReturnToTraining=bFromTraining;
-    OpenSettings(SimulatorCategory);
+    OpenSettings(LaunchMonitorCategory);
 }
 UOpenLaunchMonitorSubsystem* SMainMenu::Monitor() const
 {
@@ -323,9 +334,9 @@ TSharedRef<SWidget> SMainMenu::BuildTopBar()
     // The header shows the real launch-monitor state; selecting it opens the connection settings. Right of it, one
     // account icon (each button shows itself only in its own session state), then the cog.
     return SNew(SHorizontalBox)
-        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(TEXT("UOPEN GOLF"),22)]
+        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[AccentText(TEXT("UOPEN"),TEXT(" GOLF"),FString(),22)]
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SButton).ButtonStyle(&Style.Button).Tag(TEXT("MenuLaunchMonitor"))
-            .OnClicked_Lambda([this]{OpenSettings(SimulatorCategory,true);return FReply::Handled();})
+            .OnClicked_Lambda([this]{OpenSettings(LaunchMonitorCategory,true);return FReply::Handled();})
             [SNew(STextBlock).Font(HudStyle::Font("Regular",14))
                 .ColorAndOpacity_Lambda([this]{const UOpenLaunchMonitorSubsystem* M=Monitor();return FSlateColor(M?HudStyle::StateColor(M->GetConnectionState()):HudStyle::LabelColor());})
                 .Text_Lambda([this]{return FText::FromString(ConnectionSummary());})]]
@@ -392,7 +403,7 @@ void SMainMenu::BuildHome(TSharedRef<SVerticalBox> Body)
 {
     // Once Training has started, Escape opens this page as the pause menu.
     Body->AddSlot().AutoHeight().Padding(0,100,0,12)[Text(bStarted?TEXT("Paused"):TEXT("Community golf simulation!"),16,true)];
-    Body->AddSlot().AutoHeight().Padding(0,0,0,32)[Text(bStarted?TEXT("Training"):TEXT("Golf for Everyone."),54)];
+    Body->AddSlot().AutoHeight().Padding(0,0,0,32)[bStarted?Text(TEXT("Training"),54):AccentText(TEXT("Golf for"),TEXT(" Everyone"),TEXT("."),54)];
     if(bStarted)
     {
         AddMenuButton(Body,TEXT("Resume training"),[this]{Resume();},true);

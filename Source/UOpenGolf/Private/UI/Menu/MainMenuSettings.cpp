@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Settings page of SMainMenu: categories, rows and the Simulator connection block.
+// Settings page of SMainMenu: categories, rows and the Launch Monitor connection block.
 #include "UI/Menu/MainMenu.h"
 #include "UI/Menu/MainMenuInternal.h"
 #include "UI/Common/HudStyle.h"
@@ -129,7 +129,7 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
             Disabled(Rows,TEXT("Green contours"),TEXT("The playable slope overlay is not implemented yet."));
             AddPreference(Rows,TEXT("Shot data"),TEXT("Choose the amount of shot feedback."),&P::ShotData,{TEXT("Minimal"),TEXT("Essential"),TEXT("Detailed")},{0,1,2});break;
         case 1:
-            BuildSimulator(Rows);break;
+            BuildLaunchMonitor(Rows);break;
         case 5:
             AddPreference(Rows,TEXT("Text size"),TEXT("Increase labels and values throughout the interface."),&P::TextPercent,{TEXT("Standard"),TEXT("Large"),TEXT("Extra large")},{100,125,150});
             AddPreference(Rows,TEXT("HUD scale"),TEXT("Increase panel size on distant screens."),&P::HudPercent,{TEXT("100%"),TEXT("125%"),TEXT("150%")},{100,125,150});
@@ -263,7 +263,7 @@ FString SMainMenu::LiveStatus() const
     if(!M->GetLastError().IsEmpty())Status+=TEXT("\n")+M->GetLastError();
     return Status;
 }
-void SMainMenu::BuildSimulator(TSharedRef<SVerticalBox> Rows)
+void SMainMenu::BuildLaunchMonitor(TSharedRef<SVerticalBox> Rows)
 {
     using P=GolfSettings::FPreferences;
     const bool bOpenConnect=Draft.Provider==int32(ELaunchMonitorProvider::OpenConnect);
