@@ -61,7 +61,3 @@ Thumbs.db
 !/Assets/Data/ShotLibrary/recorded_*/
 /Assets/Data/ShotLibraryBaselines/
 /Docs/papers/
-
-# .NET reference harness output
-/Plugins/OpenFairwayPhysics/Tools/ReferenceHarness/bin/
-/Plugins/OpenFairwayPhysics/Tools/ReferenceHarness/obj/

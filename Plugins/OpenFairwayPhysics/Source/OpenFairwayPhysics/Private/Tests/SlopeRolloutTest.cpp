@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
-// Slope hold and roll, after ogolf-physics SlopeRollingResistanceTests at
-// e6d793ae9477efaf55dc9078d7260f76bb532a7d. The reference checks BallPhysics.GetSlopeDriveForce, a
-// Godot-side force query; its simulation runs GolfPhysics.StepGround, so these check that instead.
+// Slope hold and roll, after the ogolf-physics slope rolling-resistance tests, checked on GolfPhysics::StepGround.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
 #include "OpenFairway/ShotSimulator.h"
+#include "PhysicsTestUtils.h"
 
 using namespace OpenFairway;
 
@@ -14,14 +13,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOpenFairwaySlopeRolloutTest, "UOpenGolf.Physic
 
 namespace SlopeRolloutTestDetail
 {
+    using namespace OpenFairwayTest;
     constexpr float SettleSeconds = 1.0f;
-
-    /** Ground tilted downhill along +X by SlopeDeg. */
-    FVector3f DownhillNormal(float SlopeDeg)
-    {
-        const float Slope = FMath::DegreesToRadians(SlopeDeg);
-        return FVector3f(FMath::Sin(Slope), FMath::Cos(Slope), 0.0f);
-    }
 
     /** Largest slope the surface holds a resting ball on: atan(rolling friction * slope resistance ratio). */
     float HoldAngleDeg(const FSurfaceSettings& Surface)
@@ -33,7 +26,7 @@ namespace SlopeRolloutTestDetail
     float SpeedAfterSettling(const FSurfaceSettings& Surface, float SlopeDeg)
     {
         const FRolloutProfile Rollout;
-        const FVector3f Normal = DownhillNormal(SlopeDeg);
+        const FVector3f Normal = SlopeNormal(SlopeDeg);
         FBallState State;
         const int32 Steps = static_cast<int32>(SettleSeconds / GolfPhysics::SimulationDt);
         for (int32 Step = 0; Step < Steps; ++Step)
@@ -48,7 +41,7 @@ bool FOpenFairwaySlopeRolloutTest::RunTest(const FString& Parameters)
 {
     using namespace SlopeRolloutTestDetail;
     const FResolvedShotParams Shot;
-    for (const FBallPhysicsProfile& Profile : {FBallPhysicsProfile(), FBallPhysicsProfile::HistoricalReference()})
+    const FBallPhysicsProfile Profile;
     {
         const FSurfaceSettings Fairway = Shot.ResolveSurface(ESurface::Fairway, Profile);
         const FSurfaceSettings Rough = Shot.ResolveSurface(ESurface::Rough, Profile);

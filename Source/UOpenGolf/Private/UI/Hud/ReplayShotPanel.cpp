@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Hud/ReplayShotPanel.h"
+#include "OpenFairway/Units.h"
 #include "UI/Common/MenuStyle.h"
 #include "UI/Common/HudStyle.h"
 
@@ -144,7 +145,7 @@ void SReplayShotPanel::Construct(const FArguments& Args)
                             .Visibility_Lambda([this] { return IsCustom() ? EVisibility::Collapsed : EVisibility::Visible; })
                             .Text_Lambda([this] { FString Description = Controller.IsValid() ? UOpenLaunchMonitorSubsystem::GetReplayShotDescription(Controller->GetSelectedReplayShot()) : FString();
                                 int32 SpeedEnd; if (Description.FindChar(TCHAR('|'), SpeedEnd))
-                                    Description = GolfSettings::Speed(FCString::Atof(*Description) * .44704f) + TEXT("   ") + Description.Mid(SpeedEnd);
+                                    Description = GolfSettings::Speed(FCString::Atof(*Description) * OpenFairway::MpsPerMph) + TEXT("   ") + Description.Mid(SpeedEnd);
                                 return FText::FromString(Description); })
                         ]
                         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 12)

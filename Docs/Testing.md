@@ -2,7 +2,7 @@
 
 Run checks for the behavior you changed. Extend an existing suite when possible;
 add a test only when it protects a distinct failure. Avoid tests that simply repeat
-implementation details. Keep physics fixtures and meaningful regression cases.
+implementation details. Keep the physics pins and meaningful regression cases.
 
 ## Before running Unreal
 
@@ -30,8 +30,8 @@ matching completed tests; an empty or failed run is not a pass.
 | Changed behavior | Existing suite |
 | --- | --- |
 | Startup | `UOpenGolf.Smoke` |
-| Flight, bounce, roll, stimp or contact | `UOpenGolf.Physics` and the affected range integration tests |
-| Turf roll or flight accuracy against reference shots | Needs the local reference data ([Assets/Data](../Assets/Data/README.md#where-the-data-lives)): `python Assets/Scripts/shot_compare.py --build --check-baseline <local data>/baselines/pre_contact_20261116.csv`, then `python Assets/Scripts/carry_audit.py`; for a refit, `UOpenGolf.Calibration.Rollout` (opt-in, not under `UOpenGolf.Physics`) or `python Assets/Scripts/flight_fit.py` |
+| Flight, bounce, roll, stimp or contact | `UOpenGolf.Physics` (its `GameplayPins` must not move unless the physics is meant to change) and the affected range integration tests |
+| Turf roll or flight accuracy against reference shots | Needs the local reference data ([Assets/Data](../Assets/Data/README.md#where-the-data-lives)): `python Assets/Scripts/shot_compare.py --build --check-baseline <local data>/baselines/pre_contact_20261116.csv`, then `python Assets/Scripts/carry_audit.py --before <earlier results.csv>`; see [physics accuracy scripts](Development.md#physics-accuracy-scripts) |
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
@@ -76,5 +76,3 @@ Record the engine version, OS, selected tests, report location and any limits in
 from before a change as proof of that change.
 
 This checkout uses UnrealBuildTool, including for `.Build.cs` and `.Target.cs` files.
-The optional C# reference harness is described in the
-[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#regenerating-fixtures).

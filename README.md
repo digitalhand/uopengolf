@@ -45,15 +45,16 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 - [CI and releases](Docs/Releases.md)
 - [Architecture](Docs/Architecture.md) and [plugins](Plugins/README.md)
 - [Range assets](Docs/RangeAssets.md) and [Blender turf workflow](Docs/TurfWorkflow.md)
-- Physics against reference shots: [flight model](Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model), [turf rollout calibration](Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration) and [replay shots](Plugins/OpenFairwayPhysics/Docs/Reference.md#replay-shots-and-the-low-launch-lift-correction)
+- Physics: [how it works](Plugins/OpenFairwayPhysics/Docs/Reference.md) and [accuracy against reference shots](Plugins/OpenFairwayPhysics/Docs/Accuracy.md)
 - [Current status and remaining acceptance](Docs/PhasesStatus.md) and [asset licence roadmap](Docs/AssetLicenseRoadmap.md)
 
 ## Contributing
 
 Keep changes focused, use plain English, and run checks appropriate to the change.
 Use the repository's `.clang-format` for C++. Update the relevant guide when behavior
-changes, and record validation with its engine version and platform. Preserve the
-physics reference fixtures and existing asset licences.
+changes, and record validation with its engine version and platform. Keep the physics
+pins (`UOpenGolf.Physics.GameplayPins`) unchanged unless the physics is meant to change, and
+preserve existing asset licences.
 
 ## Licence
 

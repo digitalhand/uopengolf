@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Wind/WindControl.h"
+#include "OpenFairway/Units.h"
 #include "Widgets/Input/SButton.h"
 #include "OpenGolfSettings.h"
 #include "UI/Common/HudStyle.h"
@@ -139,7 +140,7 @@ TSharedRef<SWidget> SWindControl::MakePanel()
                 TAttribute<float>::CreateLambda([this] { return Controller.IsValid() ? FMath::Min(Controller->GetWind().SpeedMph, MaxWindSettingMph) : 0.0f; }),
                 FOnFloatValueChanged::CreateLambda([this](float Mph) { if (Controller.IsValid()) Controller->SetWindSpeedMph(Mph); }),
                 TAttribute<FText>::CreateLambda([this]
-                    { return FText::FromString(GolfSettings::Speed(Controller.IsValid() ? Controller->GetWind().SpeedMph * .44704f : 0)); }))
+                    { return FText::FromString(GolfSettings::Speed(Controller.IsValid() ? Controller->GetWind().SpeedMph * OpenFairway::MpsPerMph : 0)); }))
         ]
         + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 0)
         [

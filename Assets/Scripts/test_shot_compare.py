@@ -37,9 +37,9 @@ class ShotCompareTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
 
-    def write_results(self, current, ground, historical=(170.2, 180.2, 94.8)):
+    def write_results(self, current, ground, candidate=(170.2, 180.2, 94.8)):
         rows = [RESULTS_HEADER]
-        for profile, (carry, total, apex) in (("current", current), ("historical", historical)):
+        for profile, (carry, total, apex) in (("current", current), ("candidate", candidate)):
             rows.append(f"export_20261113,7iron_01,{profile},{carry},{total},{total - carry:.4f},{apex},5.0,1.5,true,44.7,4800.0\n")
             rows.append(f"export_20261113,6iron_15,{profile},{ground[0]},{ground[1]},{ground[1] - ground[0]:.4f},0.2,0.0,8.0,true,0.4,1200.0\n")
             rows.append(f"export_20261113,6iron_99,{profile},50.0,60.0,10.0,20.0,3.0,0.0,true,30.0,2500.0\n")

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-// Ported from ogolf-physics addons/openfairway physics/FlightProfile.cs, BounceProfile.cs,
-// RolloutProfile.cs and core/LandingResponse.cs, SurfaceBounceSettings.cs, GolfPhysics.cs
-// at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
+// Bounce and roll-out parameters originally ported from ogolf-physics (BounceProfile.cs, RolloutProfile.cs,
+// LandingResponse.cs and SurfaceBounceSettings.cs); the flight is the fitted spin-ratio model (SpinRatioData.h).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -14,21 +13,6 @@
  */
 namespace OpenFairway
 {
-    /** Where flight drag and lift come from. See Docs/CarryAudit.md for sources and coverage. */
-    enum class EFlightModel : uint8
-    {
-        /** The ogolf-physics drag polynomial and lift curve with launch-regime and spin corrections. */
-        LegacyCalibrated,
-        /** Pro V1 drag and lift digitized from Lyu et al. 2018/2020. Its drag was measured near 2250 rpm only. Comparison only. */
-        ProV1ResearchV1,
-        /**
-         * The gameplay default. Drag and lift as curves in spin ratio, plus the measured drag rise at low Reynolds
-         * number, fitted to published tour averages, launch-monitor shots and trajectory-calculator flights
-         * (Private/OpenFairway/SpinRatioData.h).
-         */
-        SpinRatioV1,
-    };
-
     /** Ball position, velocity and spin (angular velocity). */
     struct FBallState
     {
@@ -37,16 +21,13 @@ namespace OpenFairway
         FVector3f Spin = FVector3f::ZeroVector;
     };
 
-    /** Air and scale inputs for one flight step. */
+    /** The air a shot flies and rolls through, fixed at launch. */
     struct FFlightEnvironment
     {
         float AirDensity = 1.225f;
         float AirViscosity = 1.789e-5f;
-        float DragScale = 1.0f;
-        float LiftScale = 1.0f;
-        float InitialLaunchAngleDeg = 0.0f;
-        /** The ball's own drag scale, without the launch regime's multiplier: air drag on the ground reads only this. */
-        float BallDragScale = 1.0f;
+        /** Scale on the air drag of a ball moving along the ground (FBallPhysicsProfile::GroundDragScale); flight ignores it. */
+        float GroundDragScale = 1.0f;
         /** Air velocity (m/s, OpenFairway frame). Drag and lift act on the ball's speed through the air. */
         FVector3f Wind = FVector3f::ZeroVector;
         /** Height (m) at which Wind is measured; 0 keeps the wind uniform with height. See WindProfile. */
@@ -55,120 +36,19 @@ namespace OpenFairway
         float WindRoughnessM = WindProfile::OpenGrassRoughnessM;
     };
 
-    /** Aerodynamic constants: drag polynomial, lift caps and the calibrated spin/launch corrections. */
+    /** Flight constants. Drag and lift come from the spin ratio alone (FlightAerodynamics::Sample). */
     struct FFlightProfile
     {
-        /**
-         * A bare profile keeps the legacy model; FBallPhysicsProfile() selects SpinRatioV1 for gameplay.
-         * SpinRatioV1 and ProV1ResearchV1 read none of the legacy calibration fields, only the spin decay.
-         */
-        EFlightModel Model = EFlightModel::LegacyCalibrated;
-        /** Coupled RK4 flight (position, velocity and spin). Off keeps the ported semi-implicit Euler step. */
-        bool bUseRungeKutta4 = false;
         // Smits/Smith spin-down: d(omega)/dt = -coefficient * speed/radius * omega (SI).
         // See Docs/Reference.md (References: Nathan; Smits and Smith) for the source and applicability limits.
         float SpinDecayCoefficient = 2.0e-5f;
-        // Nonzero only for historical reference comparisons (the old 5-second decay).
-        float ConstantSpinDecayRatePerSecond = 0.0f;
-
-        // Drag curve (Cd polynomial).
-        float CdPolyA = 1.1948f;
-        float CdPolyB = -0.0000209661f;
-        float CdPolyC = 1.42472e-10f;
-        float CdPolyD = -3.14383e-16f;
-        // Above Re 200k drag is the cap; the cap, not a floor, bounds high-Re drag.
-        float HighReCdCap = 0.2f;
-        // Reynolds number where the polynomial starts blending into the cap at 200k; use
-        // 50k-200k (below 50k the blend would add a step at 50k). At or above 200k the
-        // polynomial steps to the cap at 200k (the ogolf-physics behaviour, kept by
-        // HistoricalReference).
-        float HighReCdBlendStart = 175000.0f;
-        float LowReCdFloor = 0.38f;
-        float LowReBlendStart = 30000.0f;
-        float CdAt50k = 0.4632f;
-
-        // Lift caps.
-        float ClMaxBase = 0.268f;
-        float ClMaxHighSpin = 0.32f;
-        float ClMaxSrTransitionStart = 0.35f;
-        float ClMaxSrTransitionEnd = 0.50f;
-
-        // Spin drag.
-        float SpinDragMultiplierCoeff = 4.0f;
-        float SpinDragMultiplierMax = 1.20f;
-        float SpinDragMultiplierHighSpinMax = 1.03f;
-        float SpinDragMultiplierUltraHighSpinMax = 1.21f;
-        float HighSpinDragSrStart = 0.30f;
-        float HighSpinDragSrEnd = 0.48f;
-        float HighSpinDragReliefReFullMax = 90000.0f;
-        float HighSpinDragReliefReZero = 105000.0f;
-        float UltraHighSpinDragSrStart = 0.57f;
-        float UltraHighSpinDragSrEnd = 0.77f;
-
-        // Low-Re lift: the 60k and 65k fits fall to zero for spin ratios near 0.1-0.2. When set,
-        // Re 50k-70k interpolates the 50k and 70k curves instead of passing through that dip.
-        // HistoricalReference keeps the dip.
-        bool bBridgeLowReLift = true;
-
-        // High-Re lift.
-        float HighReStart = 75000.0f;
-        float HighReMidSpinGain = 16.0f;
-        float HighReSpinGain = 16.0f;
-        float HighReGainReductionStart = 0.10f;
-        float HighReGainReductionEnd = 0.18f;
-        float HighReGainRecoveryStart = 0.26f;
-        float HighReGainRecoveryEnd = 0.40f;
-
-        // High-Re lift attenuation.
-        float HighSpinClAttenuationStart = 0.45f;
-        float HighSpinClAttenuationEnd = 0.55f;
-        float HighSpinClAttenuationMax = 0.09f;
-        float UltraHighSpinClAttenuationStart = 0.58f;
-        float UltraHighSpinClAttenuationEnd = 0.85f;
-        float UltraHighSpinClAttenuationMax = 0.10f;
-
-        // Low-Re lift attenuation.
-        float LowReHighSpinClAttenuationMax = 0.10f;
-        float LowReUltraHighSpinClAttenuationMax = 0.06f;
-
-        // Optional legacy low-launch lift recovery. Neutral by default: retaining
-        // spin longer exposed excess lift in low-launch woods. HistoricalReference
-        // restores the original 1.08 for pinned C# fixture parity.
-        float LowLaunchLiftRecoveryMax = 1.0f;
-        float LowLaunchVlaFullDeg = 6.5f;
-        float LowLaunchVlaZeroDeg = 9.5f;
-        float LowLaunchReStart = 85000.0f;
-        float LowLaunchReEnd = 110000.0f;
-        float LowLaunchSpinRatioFull = 0.18f;
-        float LowLaunchSpinRatioMax = 0.22f;
-
-        // Progressive spin drag cap boost (more form drag at high spin ratio).
-        float SpinDragProgressiveCapSrStart = 0.33f;
-        float SpinDragProgressiveCapSrEnd = 0.50f;
-        float SpinDragProgressiveCapBoostMax = 0.25f;
-
-        // Mid-spin lift boost (bell-shaped recovery for the mid-iron spin ratio regime).
-        float MidSpinClBoostSrStart = 0.17f;
-        float MidSpinClBoostSrEnd = 0.31f;
-        float MidSpinClBoostMax = 0.45f;
-
-        // High-launch drag boost.
-        float HighLaunchDragBoostMax = 1.24f;
-        float HighLaunchDragVlaStartDeg = 24.5f;
-        float HighLaunchDragVlaFullDeg = 31.5f;
-        float HighLaunchDragSrStart = 0.50f;
-        float HighLaunchDragSrEnd = 0.70f;
     };
 
     /** Coefficient of restitution and tangential retention for impacts. */
     struct FBounceProfile
     {
-        /**
-         * Impacts read the backspin across the ball's travel instead of the total spin. Sidespin and
-         * spin about the contact normal cannot check a ball, so a tilted spin axis no longer stops it
-         * as if all its spin were backspin. HistoricalReference turns this off.
-         */
-        bool bAxisAwareSpin = true;
+        // Impacts read the backspin across the ball's travel, not the total spin: sidespin and spin about the
+        // contact normal cannot check a ball.
 
         // COR curve.
         float CorBaseA = 0.45f;
@@ -212,15 +92,11 @@ namespace OpenFairway
     /** Ground friction constants for roll-out. */
     struct FRolloutProfile
     {
-        /** Solve resistance and contact together. False preserves the historical split-step solver. */
-        bool bCoupledContact = true;
-        /**
-         * Ground contact reads only the spin in the contact plane: spin about the normal pivots the
-         * ball without rolling it, so it neither adds friction nor keeps a stopped ball moving.
-         * HistoricalReference turns this off.
-         */
-        bool bAxisAwareSpin = true;
+        // Resistance and contact are solved together each step. Ground contact reads only the spin in the contact
+        // plane: spin about the normal pivots the ball without rolling it, so it neither adds friction nor keeps a
+        // stopped ball moving.
 
+        // Impact-spin friction multiplier (GolfPhysics::SpinFrictionMultiplier), by ground speed and landing spin.
         float ChipSpeedThreshold = 20.0f;
         float PitchSpeedThreshold = 35.0f;
         float ChipVelocityScaleMin = 0.60f;
@@ -231,8 +107,6 @@ namespace OpenFairway
         float MidSpinMultiplierMax = 2.25f;
         float HighSpinMultiplierMax = 2.50f;
         float HighSpinRampRange = 1000.0f;
-        float FrictionBlendSpeed = 15.0f;
-        float TangentVelocityThreshold = 0.05f;
 
         /**
          * Turf resists the down-slope drive up to RollingFriction * SlopeResistanceRatio of the

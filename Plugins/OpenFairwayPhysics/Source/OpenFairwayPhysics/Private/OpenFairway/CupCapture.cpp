@@ -201,8 +201,31 @@ namespace OpenFairway::CupCapture
         return Result;
     }
 
-    ECupCrossing StepOverCup(FBallState& State, const FVector3f& Cup, float Dt)
+    TOptional<float> ApertureEntry(const FVector3f& Start, const FVector3f& Delta)
     {
-        return AdvanceCrossing(State, Cup, FVector3f(0, -GolfPhysics::Gravity, 0), Dt).Outcome;
+        // The first crossing of the horizontal circle of the rim along the move: a quadratic in the move fraction.
+        const float LengthSquared = Delta.X * Delta.X + Delta.Z * Delta.Z;
+        if (LengthSquared < 1e-12f)
+        {
+            return {};
+        }
+        const float Along = Start.X * Delta.X + Start.Z * Delta.Z;
+        const float Outside = Start.X * Start.X + Start.Z * Start.Z - FMath::Square(CupRadiusM);
+        const float Discriminant = Along * Along - LengthSquared * Outside;
+        if (Discriminant < 0)
+        {
+            return {};
+        }
+        const float Fraction = Outside < 0 ? 0 : (-Along - FMath::Sqrt(Discriminant)) / LengthSquared;
+        if (Fraction < 0 || Fraction > 1)
+        {
+            return {};
+        }
+        const FVector3f Entry = Start + Delta * Fraction;
+        if (FMath::Abs(Entry.Y) > MaxCenterHeight)
+        {
+            return {};
+        }
+        return Fraction;
     }
 } // namespace OpenFairway::CupCapture

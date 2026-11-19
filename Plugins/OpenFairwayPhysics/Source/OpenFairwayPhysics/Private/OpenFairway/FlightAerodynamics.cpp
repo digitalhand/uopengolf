@@ -1,113 +1,79 @@
 // SPDX-License-Identifier: MIT
-// Ported from ogolf-physics addons/openfairway physics/FlightAerodynamicsModel.cs
-// at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
+#include "OpenFairway/FlightAerodynamics.h"
 #include "OpenFairway/GolfPhysics.h"
 
 #include "CoreMath.h"
-#include "ProV1Data.h"
 #include "SpinRatioData.h"
 
 namespace OpenFairway
 {
-    namespace
+    namespace GroundDragCurve
     {
-        constexpr int32 ReynoldsSamplePoints[] = {50000, 60000, 65000, 70000, 75000};
+        // The drag polynomial and spin-drag multiplier of the ported flight model (ogolf-physics FlightAerodynamicsModel.cs,
+        // with its high-Re step into the cap smoothed). Flight no longer uses them; roll-out and the stimp solve were
+        // calibrated with them, so the ground keeps them.
+        constexpr float CapReynolds = 200000.0f;
+        constexpr float PolyA = 1.1948f;
+        constexpr float PolyB = -0.0000209661f;
+        constexpr float PolyC = 1.42472e-10f;
+        constexpr float PolyD = -3.14383e-16f;
+        constexpr float HighReCap = 0.2f;
+        constexpr float HighReBlendStart = 175000.0f;
+        constexpr float LowReFloor = 0.38f;
+        constexpr float LowReBlendStart = 30000.0f;
+        constexpr float At50k = 0.4632f;
 
-        float SmoothStep01(float T)
-        {
-            const float Clamped = FMath::Clamp(T, 0.0f, 1.0f);
-            return Clamped * Clamped * (3.0f - 2.0f * Clamped);
-        }
+        constexpr float SpinDragCoefficient = 4.0f;
+        constexpr float SpinDragMax = 1.20f;
+        constexpr float SpinDragHighSpinMax = 1.03f;
+        constexpr float SpinDragUltraHighSpinMax = 1.21f;
+        constexpr float HighSpinSrStart = 0.30f;
+        constexpr float HighSpinSrEnd = 0.48f;
+        constexpr float HighSpinReliefReFullMax = 90000.0f;
+        constexpr float HighSpinReliefReZero = 105000.0f;
+        constexpr float UltraHighSpinSrStart = 0.57f;
+        constexpr float UltraHighSpinSrEnd = 0.77f;
+        constexpr float ProgressiveCapSrStart = 0.33f;
+        constexpr float ProgressiveCapSrEnd = 0.50f;
+        constexpr float ProgressiveCapBoostMax = 0.25f;
 
-        /** Smooth step that returns a step instead of dividing by a degenerate (start == end) range. */
-        float SafeSmoothStep01(float Value, float Start, float End)
+        float Drag(float Reynolds)
         {
-            const float Range = End - Start;
-            if (FMath::Abs(Range) < 1e-6f)
+            if (Reynolds > CapReynolds)
             {
-                return Value >= End ? 1.0f : 0.0f;
+                return HighReCap;
             }
-            return SmoothStep01((Value - Start) / Range);
-        }
-
-        // Lift polynomial curves per Reynolds number; fixed fits, not profile values.
-        float ClRe50k(float S)
-        {
-            return 0.0472121f + 2.84795f * S - 23.4342f * S * S + 45.4849f * S * S * S;
-        }
-        float ClRe60k(float S)
-        {
-            return 0.320524f - 4.7032f * S + 14.0613f * S * S;
-        }
-        float ClRe65k(float S)
-        {
-            return 0.266667f - 4.0f * S + 13.3333f * S * S;
-        }
-        float ClRe70k(float S)
-        {
-            return 0.0496189f + 0.00211396f * S + 2.34201f * S * S;
-        }
-
-        float GetHighReSpinGain(float SpinRatio, const FFlightProfile& P)
-        {
-            if (SpinRatio <= P.HighReGainReductionStart)
+            if (Reynolds >= 50000.0f)
             {
-                return P.HighReSpinGain;
+                const float Polynomial = PolyA + PolyB * Reynolds + PolyC * Reynolds * Reynolds + PolyD * Reynolds * Reynolds * Reynolds;
+                if (Reynolds <= HighReBlendStart)
+                {
+                    return Polynomial;
+                }
+                // Ease into the cap so drag has no step where the polynomial ends.
+                return Lerp(Polynomial, HighReCap, SafeSmoothStep01(Reynolds, HighReBlendStart, CapReynolds));
             }
-            if (SpinRatio < P.HighReGainReductionEnd)
+            if (Reynolds <= LowReBlendStart)
             {
-                return Lerp(P.HighReSpinGain, P.HighReMidSpinGain, SafeSmoothStep01(SpinRatio, P.HighReGainReductionStart, P.HighReGainReductionEnd));
+                return LowReFloor;
             }
-            if (SpinRatio <= P.HighReGainRecoveryStart)
-            {
-                return P.HighReMidSpinGain;
-            }
-            if (SpinRatio < P.HighReGainRecoveryEnd)
-            {
-                return Lerp(P.HighReMidSpinGain, P.HighReSpinGain, SafeSmoothStep01(SpinRatio, P.HighReGainRecoveryStart, P.HighReGainRecoveryEnd));
-            }
-            return P.HighReSpinGain;
+            return Lerp(LowReFloor, At50k, SafeSmoothStep01(Reynolds, LowReBlendStart, 50000.0f));
         }
 
-        float ClHighRe(float SpinRatio, const FFlightProfile& P)
+        float SpinDragMultiplier(float SpinRatio, float Reynolds)
         {
-            const float Gain = GetHighReSpinGain(SpinRatio, P);
-            return FlightAerodynamics::GetClMax(SpinRatio, P) * SpinRatio * Gain / (1.0f + SpinRatio * Gain);
-        }
-
-        float ClAtReynoldsIndex(int32 Index, float SpinRatio, const FFlightProfile& P)
-        {
-            switch (Index)
+            if (SpinRatio <= 0.0f)
             {
-            case 0:
-                return ClRe50k(SpinRatio);
-            case 1:
-                return ClRe60k(SpinRatio);
-            case 2:
-                return ClRe65k(SpinRatio);
-            case 3:
-                return ClRe70k(SpinRatio);
-            default:
-                return ClHighRe(SpinRatio, P);
+                return 1.0f;
             }
+            const float HighSpinWeight = SafeSmoothStep01(SpinRatio, HighSpinSrStart, HighSpinSrEnd);
+            const float ReReliefWeight = 1.0f - SafeSmoothStep01(Reynolds, HighSpinReliefReFullMax, HighSpinReliefReZero);
+            float EffectiveCap = Lerp(SpinDragMax, SpinDragHighSpinMax, HighSpinWeight * ReReliefWeight);
+            EffectiveCap += ProgressiveCapBoostMax * SafeSmoothStep01(SpinRatio, ProgressiveCapSrStart, ProgressiveCapSrEnd);
+            EffectiveCap = Lerp(EffectiveCap, SpinDragUltraHighSpinMax, SafeSmoothStep01(SpinRatio, UltraHighSpinSrStart, UltraHighSpinSrEnd));
+            return FMath::Min(1.0f + SpinDragCoefficient * SpinRatio * SpinRatio, EffectiveCap);
         }
-
-        float ApplyHighSpinLiftAttenuation(float SpinRatio, float Cl, const FFlightProfile& P)
-        {
-            const float Attenuation = 1.0f - P.HighSpinClAttenuationMax * SafeSmoothStep01(SpinRatio, P.HighSpinClAttenuationStart, P.HighSpinClAttenuationEnd);
-            const float UltraAttenuation =
-                1.0f - P.UltraHighSpinClAttenuationMax * SafeSmoothStep01(SpinRatio, P.UltraHighSpinClAttenuationStart, P.UltraHighSpinClAttenuationEnd);
-            return Cl * Attenuation * UltraAttenuation;
-        }
-
-        float ApplyLowReHighSpinLiftAttenuation(float SpinRatio, float Cl, const FFlightProfile& P)
-        {
-            const float Attenuation = 1.0f - P.LowReHighSpinClAttenuationMax * SafeSmoothStep01(SpinRatio, P.HighSpinClAttenuationStart, P.HighSpinClAttenuationEnd);
-            const float UltraAttenuation =
-                1.0f - P.LowReUltraHighSpinClAttenuationMax * SafeSmoothStep01(SpinRatio, P.UltraHighSpinClAttenuationStart, P.UltraHighSpinClAttenuationEnd);
-            return Cl * Attenuation * UltraAttenuation;
-        }
-    } // namespace
+    } // namespace GroundDragCurve
 
     bool FFlightAerodynamicsSample::HasAerodynamics() const
     {
@@ -115,13 +81,12 @@ namespace OpenFairway
     }
 
     FFlightAerodynamicsSample FlightAerodynamics::Sample(const FVector3f& Velocity, const FVector3f& Omega, float AirDensity, float AirViscosity,
-        float DragScale, float LiftScale, float InitialLaunchAngleDeg, const FFlightProfile& P)
+        const FFlightProfile& Profile)
     {
         FFlightAerodynamicsSample Result;
         const float Speed = Velocity.Size();
         Result.Speed = Speed;
-        Result.SpinDecayRatePerSecond = FMath::Max(0.0f, P.ConstantSpinDecayRatePerSecond) +
-                                        FMath::Max(0.0f, P.SpinDecayCoefficient) * Speed / GolfPhysics::Radius;
+        Result.SpinDecayRatePerSecond = FMath::Max(0.0f, Profile.SpinDecayCoefficient) * Speed / GolfPhysics::Radius;
         if (Speed < MinAerodynamicSpeed)
         {
             return Result;
@@ -129,179 +94,14 @@ namespace OpenFairway
 
         Result.SpinRatio = Omega.Size() * GolfPhysics::Radius / Speed;
         Result.Reynolds = AirDensity * Speed * GolfPhysics::Radius * 2.0f / AirViscosity;
-        // The measured models take coefficients from the ball's air speed and spin alone: no launch angle,
-        // launch regime or global scale. See Docs/CarryAudit.md.
-        if (P.Model == EFlightModel::SpinRatioV1)
-        {
-            Result.LiftCoefficient = SpinRatioData::LiftAt(Result.SpinRatio);
-            Result.DragCoefficient = SpinRatioData::DragAt(Result.Reynolds, Result.SpinRatio);
-            Result.bOutsideMeasuredCoverage = SpinRatioData::Outside(Result.Reynolds, Result.SpinRatio);
-            return Result;
-        }
-        if (P.Model == EFlightModel::ProV1ResearchV1)
-        {
-            Result.DragCoefficient = ProV1Data::At(ProV1Data::Drag, Result.Reynolds);
-            Result.LiftCoefficient = ProV1Data::Lift(Result.Reynolds, Result.SpinRatio);
-            Result.bOutsideMeasuredCoverage = ProV1Data::DragOutside(Result.Reynolds, Omega.Size() / GolfPhysics::RadPerRpm) ||
-                                              ProV1Data::LiftOutside(Result.Reynolds, Result.SpinRatio, Speed);
-            return Result;
-        }
-        Result.SpinDragMultiplier = GetSpinDragMultiplier(Result.SpinRatio, Result.Reynolds, P);
-        Result.LowLaunchLiftScale = GetLowLaunchLiftScale(InitialLaunchAngleDeg, Result.SpinRatio, Result.Reynolds, P);
-        const float HighLaunchDragScale = GetHighLaunchDragScale(InitialLaunchAngleDeg, Result.SpinRatio, P);
-        Result.DragCoefficient = GetCd(Result.Reynolds, P) * Result.SpinDragMultiplier * DragScale * HighLaunchDragScale;
-        Result.LiftCoefficient = GetCl(Result.Reynolds, Result.SpinRatio, P) * LiftScale * Result.LowLaunchLiftScale;
-        Result.LiftCoefficient *= GetMidSpinClBoost(Result.SpinRatio, P);
+        Result.LiftCoefficient = SpinRatioData::LiftAt(Result.SpinRatio);
+        Result.DragCoefficient = SpinRatioData::DragAt(Result.Reynolds, Result.SpinRatio);
+        Result.bOutsideMeasuredCoverage = SpinRatioData::Outside(Result.Reynolds, Result.SpinRatio);
         return Result;
     }
 
-    float FlightAerodynamics::GetCd(float Reynolds, const FFlightProfile& P)
+    float FlightAerodynamics::GroundDragCoefficient(float Reynolds, float SpinRatio)
     {
-        constexpr float CapReynolds = 200000.0f;
-        if (Reynolds > CapReynolds)
-        {
-            return P.HighReCdCap;
-        }
-        if (Reynolds >= 50000.0f)
-        {
-            const float Polynomial = P.CdPolyA + P.CdPolyB * Reynolds + P.CdPolyC * Reynolds * Reynolds + P.CdPolyD * Reynolds * Reynolds * Reynolds;
-            if (P.HighReCdBlendStart >= CapReynolds || Reynolds <= P.HighReCdBlendStart)
-            {
-                return Polynomial;
-            }
-            // Ease into the cap so drag has no step where the polynomial ends.
-            return Lerp(Polynomial, P.HighReCdCap, SafeSmoothStep01(Reynolds, P.HighReCdBlendStart, CapReynolds));
-        }
-        if (Reynolds <= P.LowReBlendStart)
-        {
-            return P.LowReCdFloor;
-        }
-        return Lerp(P.LowReCdFloor, P.CdAt50k, SafeSmoothStep01(Reynolds, P.LowReBlendStart, 50000.0f));
-    }
-
-    float FlightAerodynamics::GetCl(float Reynolds, float SpinRatio, const FFlightProfile& P)
-    {
-        const float Spin = FMath::Max(0.0f, SpinRatio);
-        if (Spin <= 0.0f)
-        {
-            return 0.0f;
-        }
-
-        const float DynamicClMax = GetClMax(Spin, P);
-        if (Reynolds < 50000.0f)
-        {
-            if (Reynolds <= 30000.0f)
-            {
-                return 0.0f;
-            }
-            const float LowReT = SmoothStep01((Reynolds - 30000.0f) / 20000.0f);
-            const float ClAt50k = FMath::Clamp(ClRe50k(Spin), 0.0f, DynamicClMax);
-            return ApplyLowReHighSpinLiftAttenuation(Spin, ClAt50k * LowReT, P);
-        }
-
-        if (Reynolds >= P.HighReStart)
-        {
-            return ApplyHighSpinLiftAttenuation(Spin, FMath::Clamp(ClHighRe(Spin, P), 0.0f, DynamicClMax), P);
-        }
-
-        // Indices into ReynoldsSamplePoints. The bridge brackets with the 50k (0), 70k (3) and
-        // 75k (4) curves only, skipping the 60k/65k dip.
-        constexpr int32 AllSamples[] = {0, 1, 2, 3, 4};
-        constexpr int32 BridgedSamples[] = {0, 3, 4};
-        static_assert(UE_ARRAY_COUNT(AllSamples) == UE_ARRAY_COUNT(ReynoldsSamplePoints), "Every Reynolds sample needs an index");
-        const int32* Samples = P.bBridgeLowReLift ? BridgedSamples : AllSamples;
-        const int32 Count = P.bBridgeLowReLift ? UE_ARRAY_COUNT(BridgedSamples) : UE_ARRAY_COUNT(AllSamples);
-        int32 HighSlot = Count - 1;
-        for (int32 Slot = 0; Slot < Count; ++Slot)
-        {
-            if (Reynolds <= ReynoldsSamplePoints[Samples[Slot]])
-            {
-                HighSlot = Slot;
-                break;
-            }
-        }
-        const int32 HighIndex = Samples[HighSlot];
-        const int32 LowIndex = Samples[FMath::Max(HighSlot - 1, 0)];
-
-        const float ClLow = FMath::Max(0.0f, ClAtReynoldsIndex(LowIndex, Spin, P));
-        const float ClHigh = FMath::Max(0.0f, ClAtReynoldsIndex(HighIndex, Spin, P));
-        const float ReLow = static_cast<float>(ReynoldsSamplePoints[LowIndex]);
-        const float ReHigh = static_cast<float>(ReynoldsSamplePoints[HighIndex]);
-        const float Weight = ReHigh != ReLow ? (Reynolds - ReLow) / (ReHigh - ReLow) : 0.0f;
-        const float Clamped = FMath::Clamp(Lerp(ClLow, ClHigh, Weight), 0.0f, DynamicClMax);
-        return ApplyLowReHighSpinLiftAttenuation(Spin, Clamped, P);
-    }
-
-    float FlightAerodynamics::GetSpinDragMultiplier(float SpinRatio, float Reynolds, const FFlightProfile& P)
-    {
-        if (SpinRatio <= 0.0f)
-        {
-            return 1.0f;
-        }
-
-        const float HighSpinWeight = SafeSmoothStep01(SpinRatio, P.HighSpinDragSrStart, P.HighSpinDragSrEnd);
-        const float ReReliefWeight = 1.0f - SafeSmoothStep01(Reynolds, P.HighSpinDragReliefReFullMax, P.HighSpinDragReliefReZero);
-        float EffectiveCap = Lerp(P.SpinDragMultiplierMax, P.SpinDragMultiplierHighSpinMax, HighSpinWeight * ReReliefWeight);
-        EffectiveCap += P.SpinDragProgressiveCapBoostMax * SafeSmoothStep01(SpinRatio, P.SpinDragProgressiveCapSrStart, P.SpinDragProgressiveCapSrEnd);
-        EffectiveCap = Lerp(EffectiveCap, P.SpinDragMultiplierUltraHighSpinMax, SafeSmoothStep01(SpinRatio, P.UltraHighSpinDragSrStart, P.UltraHighSpinDragSrEnd));
-        return FMath::Min(1.0f + P.SpinDragMultiplierCoeff * SpinRatio * SpinRatio, EffectiveCap);
-    }
-
-    float FlightAerodynamics::GetLowLaunchLiftScale(float InitialLaunchAngleDeg, float SpinRatio, float Reynolds, const FFlightProfile& P)
-    {
-        const float LaunchFactor = SafeSmoothStep01(P.LowLaunchVlaZeroDeg - InitialLaunchAngleDeg, 0.0f, P.LowLaunchVlaZeroDeg - P.LowLaunchVlaFullDeg);
-        if (LaunchFactor <= 0.0f)
-        {
-            return 1.0f;
-        }
-        const float ReFactor = SafeSmoothStep01(Reynolds, P.LowLaunchReStart, P.LowLaunchReEnd);
-        if (ReFactor <= 0.0f)
-        {
-            return 1.0f;
-        }
-        const float SpinFactor = 1.0f - SafeSmoothStep01(SpinRatio, P.LowLaunchSpinRatioFull, P.LowLaunchSpinRatioMax);
-        if (SpinFactor <= 0.0f)
-        {
-            return 1.0f;
-        }
-        return Lerp(1.0f, P.LowLaunchLiftRecoveryMax, LaunchFactor * ReFactor * SpinFactor);
-    }
-
-    float FlightAerodynamics::GetHighLaunchDragScale(float InitialLaunchAngleDeg, float SpinRatio, const FFlightProfile& P)
-    {
-        const float LaunchFactor = SafeSmoothStep01(InitialLaunchAngleDeg, P.HighLaunchDragVlaStartDeg, P.HighLaunchDragVlaFullDeg);
-        if (LaunchFactor <= 0.0f)
-        {
-            return 1.0f;
-        }
-        const float SpinFactor = SafeSmoothStep01(SpinRatio, P.HighLaunchDragSrStart, P.HighLaunchDragSrEnd);
-        if (SpinFactor <= 0.0f)
-        {
-            return 1.0f;
-        }
-        return Lerp(1.0f, P.HighLaunchDragBoostMax, LaunchFactor * SpinFactor);
-    }
-
-    float FlightAerodynamics::GetMidSpinClBoost(float SpinRatio, const FFlightProfile& P)
-    {
-        if (P.MidSpinClBoostMax <= 0.0f)
-        {
-            return 1.0f;
-        }
-        const float T = SafeSmoothStep01(SpinRatio, P.MidSpinClBoostSrStart, P.MidSpinClBoostSrEnd);
-        return 1.0f + P.MidSpinClBoostMax * T * (1.0f - T) * 4.0f;
-    }
-
-    float FlightAerodynamics::GetClMax(float SpinRatio, const FFlightProfile& P)
-    {
-        if (SpinRatio <= P.ClMaxSrTransitionStart)
-        {
-            return P.ClMaxBase;
-        }
-        if (SpinRatio >= P.ClMaxSrTransitionEnd)
-        {
-            return P.ClMaxHighSpin;
-        }
-        return Lerp(P.ClMaxBase, P.ClMaxHighSpin, SafeSmoothStep01(SpinRatio, P.ClMaxSrTransitionStart, P.ClMaxSrTransitionEnd));
+        return GroundDragCurve::Drag(Reynolds) * GroundDragCurve::SpinDragMultiplier(SpinRatio, Reynolds);
     }
 } // namespace OpenFairway

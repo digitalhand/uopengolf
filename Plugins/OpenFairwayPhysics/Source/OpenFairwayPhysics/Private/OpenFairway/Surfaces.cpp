@@ -1,34 +1,23 @@
 // SPDX-License-Identifier: MIT
-// Ported from ogolf-physics addons/openfairway physics/SurfacePhysicsCatalog.cs and GreenSpeed.cs
-// at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
+// Base values originally ported from ogolf-physics (SurfacePhysicsCatalog.cs, GreenSpeed.cs).
 #include "OpenFairway/Surfaces.h"
 
 #include "OpenFairway/GolfPhysics.h"
+#include "OpenFairway/Units.h"
 
 namespace OpenFairway
 {
-    namespace
+    namespace SurfacesDetail
     {
-        constexpr float MetersPerFoot = 0.3048f;
         constexpr int32 SolveIterations = 32;
+        // The standard air the stimp solve rolls through (15 C at sea level).
+        constexpr float StandardAirDensity = 1.225f;
+        constexpr float StandardAirViscosity = 1.789e-5f;
 
         /** Deceleration a rolling ball gains per m/s: viscous drag on its center and spin, through the 5/7 of a rolling ball. */
         double SpeedDragPerSecond(float Viscosity)
         {
             return 10.0 * 3.14159265 * GolfPhysics::Radius * Viscosity / GolfPhysics::Mass;
-        }
-
-        /**
-         * Meters a ball rolling at this speed goes while it decelerates at a0 + k*v. Double precision:
-         * with a small k the two terms nearly cancel.
-         */
-        double RollMeters(double Speed, double ConstantDeceleration, double K)
-        {
-            if (K <= 0.0)
-            {
-                return Speed * Speed / (2.0 * ConstantDeceleration);
-            }
-            return Speed / K - ConstantDeceleration / (K * K) * FMath::Loge(1.0 + K * Speed / ConstantDeceleration);
         }
 
         FSurfacePhysicsSettings Make(float KineticFriction, float RollingFriction, float GrassViscosity, float CriticalAngle, float SpinbackResponseScale)
@@ -45,12 +34,12 @@ namespace OpenFairway
         // Recalibrated turf, fitted to a 124-shot launch-monitor export in the local reference data (flat
         // fairway, 75 F, sea level) by UOpenGolf.Calibration.Rollout. An impact keeps the standard restitution
         // and Coulomb-capped friction impulse, then loses tangential speed by its own angle and load-bounded backspin
-        // grip (LandingAngleLoss, LandingSpinLoss) instead of the ported retention multiplier, its normal-speed ramp
-        // and the launch-bucketed bite. On the ground: rolling resistance, linear and speed-squared grass drag,
-        // and impact spin no longer multiplies turf friction. Every other turf surface keeps the ported ratio of
-        // its grass drag and rolling friction to fairway's; the landing loss is the same on all of them, for
-        // want of reference shots on any but fairway.
-        // Stage 1 of the fit (2026-11-17, Saved/Automation/20261117-145705-5a36a301), on the shots that leave the ground.
+        // grip (LandingAngleLoss, LandingSpinLoss) instead of the bounce profile's retention and the landing bucket's
+        // bite. On the ground: rolling resistance, linear and speed-squared grass drag, and impact spin does not
+        // multiply turf friction. Every other turf surface keeps the ported ratio of its grass drag and rolling
+        // friction to fairway's; the landing loss is the same on all of them, for want of reference shots on any but
+        // fairway.
+        // Stage 1 of the fit, on the shots that leave the ground.
         constexpr float TurfLandingAngleLoss = 0.665f;
         constexpr float TurfLandingSpinLoss = 0.464f;
         constexpr float TurfRollingFriction = 0.0469f;
@@ -77,8 +66,9 @@ namespace OpenFairway
             Surface.SlidingSpinScale = 0.0f;
         }
 
-        TArray<FSurfacePhysicsSettings> BuildCatalog(bool bRecalibratedTurf)
+        TArray<FSurfacePhysicsSettings> BuildCatalog()
         {
+            // The ported values first: the turf recalibration keeps their ratios to fairway.
             TArray<FSurfacePhysicsSettings> Catalog;
             Catalog.SetNum(static_cast<int32>(ESurface::Count));
             Catalog[static_cast<int32>(ESurface::Fairway)] = Make(0.50f, 0.050f, 0.0017f, 0.29f, 0.78f);
@@ -106,23 +96,18 @@ namespace OpenFairway
             Sand.ImpactRetentionScale = 0.25f;
             Sand.SurfaceBounce = FSurfaceBounceSettings{0.15f, 0.15f, 0.85f, 0.001f};
 
-            if (bRecalibratedTurf)
+            const FSurfacePhysicsSettings PortedFairway = Catalog[static_cast<int32>(ESurface::Fairway)];
+            for (const ESurface Turf : {ESurface::Fairway, ESurface::FairwaySoft, ESurface::Rough, ESurface::Firm, ESurface::Fringe})
             {
-                const FSurfacePhysicsSettings PortedFairway = Catalog[static_cast<int32>(ESurface::Fairway)];
-                for (const ESurface Turf : {ESurface::Fairway, ESurface::FairwaySoft, ESurface::Rough, ESurface::Firm, ESurface::Fringe})
-                {
-                    RecalibrateTurf(Catalog[static_cast<int32>(Turf)], PortedFairway);
-                }
+                RecalibrateTurf(Catalog[static_cast<int32>(Turf)], PortedFairway);
             }
             return Catalog;
         }
-    } // namespace
+    } // namespace SurfacesDetail
 
-    const FSurfacePhysicsSettings& SurfaceCatalog::Get(ESurface Surface, bool bRecalibratedTurf)
+    const FSurfacePhysicsSettings& SurfaceCatalog::Get(ESurface Surface)
     {
-        static const TArray<FSurfacePhysicsSettings> Ported = BuildCatalog(false);
-        static const TArray<FSurfacePhysicsSettings> Recalibrated = BuildCatalog(true);
-        const TArray<FSurfacePhysicsSettings>& Catalog = bRecalibratedTurf ? Recalibrated : Ported;
+        static const TArray<FSurfacePhysicsSettings> Catalog = SurfacesDetail::BuildCatalog();
         const int32 Index = static_cast<int32>(Surface);
         return Catalog.IsValidIndex(Index) ? Catalog[Index] : Catalog[static_cast<int32>(ESurface::Fairway)];
     }
@@ -153,17 +138,20 @@ namespace OpenFairway
         return FMath::IsFinite(StimpFeet) ? FMath::Clamp(StimpFeet, MinStimpFeet, MaxStimpFeet) : DefaultStimpFeet;
     }
 
-    float GreenSpeed::RollingFriction(float StimpFeet, float Viscosity, bool bAirDrag)
+    float GreenSpeed::RollingFriction(float StimpFeet, float Viscosity)
     {
-        // The stimp fixes the constant deceleration a0 of a rolling ball (a0 + k*v); bisection finds
-        // it because the roll distance has no closed-form inverse. Rolling friction = 7*a0 / (5*g).
+        using namespace SurfacesDetail;
+        // The stimp fixes the constant deceleration a0 of a rolling ball (a0 + k*v + q*v*v); bisection finds it
+        // because the roll distance has no closed-form inverse. Rolling friction = 7*a0 / (5*g).
         const double K = SpeedDragPerSecond(FMath::IsFinite(Viscosity) ? FMath::Max(Viscosity, 0.0f) : GrassViscosity);
         const float Distance = Clamp(StimpFeet) * MetersPerFoot;
+        // A ball rolling without slipping along +X: its spin ratio is 1.
         const FVector3f RollVelocity(StimpmeterSpeedMps, 0, 0);
-        const auto Aero = FlightAerodynamics::Sample(RollVelocity,
-            FVector3f::CrossProduct(FVector3f(0, 1, 0), RollVelocity) / GolfPhysics::Radius,
-            1.225f, 1.789e-5f, 1, 1, 0, FFlightProfile());
-        const double Q = 5.0 / 7.0 * 0.5 * 1.225 * Aero.DragCoefficient * GolfPhysics::CrossSection / GolfPhysics::Mass;
+        const float RollSpeed = RollVelocity.Size();
+        const float SpinRatio = (FVector3f::CrossProduct(FVector3f(0, 1, 0), RollVelocity) / GolfPhysics::Radius).Size() * GolfPhysics::Radius / RollSpeed;
+        const float Reynolds = StandardAirDensity * RollSpeed * GolfPhysics::Radius * 2.0f / StandardAirViscosity;
+        const double Q = 5.0 / 7.0 * 0.5 * 1.225 * FlightAerodynamics::GroundDragCoefficient(Reynolds, SpinRatio) * GolfPhysics::CrossSection /
+                         GolfPhysics::Mass;
         auto DistanceWithAir = [&](double A)
         {
             // Integral v/(a + k*v + q*v*v), using the same low-speed aerodynamic cutoff.
@@ -184,7 +172,7 @@ namespace OpenFairway
         for (int32 Iteration = 0; Iteration < SolveIterations; ++Iteration)
         {
             const float Middle = 0.5f * (Low + High);
-            if ((bAirDrag ? DistanceWithAir(Middle) : RollMeters(StimpmeterSpeedMps, Middle, K)) > Distance)
+            if (DistanceWithAir(Middle) > Distance)
             {
                 Low = Middle;
             }

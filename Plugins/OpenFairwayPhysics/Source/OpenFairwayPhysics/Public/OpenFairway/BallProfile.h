@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-// Ported from ogolf-physics addons/openfairway physics/BallPhysicsProfile.cs, ShotRegimeKey.cs,
-// LandingBucket.cs, RegimeScaleOverride.cs and PhysicsParamsFactory.cs
-// at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
+// The ball profile, landing buckets and shot parameters; the landing buckets were originally ported from
+// ogolf-physics (LandingBucket.cs, PhysicsParamsFactory.cs).
 #pragma once
 
 #include "OpenFairway/Surfaces.h"
@@ -9,20 +8,6 @@
 
 namespace OpenFairway
 {
-    /** Launch-regime classifier shared by runtime physics and calibration: "<family>-<speed>-<launch>-<spin>". */
-    namespace ShotRegimeKey
-    {
-        OPENFAIRWAYPHYSICS_API FString Build(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm);
-
-        /** Most to least specific: full key, without spin, without launch, family only. */
-        OPENFAIRWAYPHYSICS_API TArray<FString> BuildLookupKeys(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm);
-
-        OPENFAIRWAYPHYSICS_API const TCHAR* GetFamily(float SpeedMph, float LaunchAngleDeg);
-        OPENFAIRWAYPHYSICS_API const TCHAR* GetSpeedBin(float SpeedMph);
-        OPENFAIRWAYPHYSICS_API const TCHAR* GetLaunchBin(float LaunchAngleDeg);
-        OPENFAIRWAYPHYSICS_API const TCHAR* GetSpinBin(float TotalSpinRpm);
-    } // namespace ShotRegimeKey
-
     /** How a shot is expected to behave after landing, from full release to spin-back. */
     enum class ELandingBucket : uint8
     {
@@ -35,32 +20,22 @@ namespace OpenFairway
 
     namespace LandingBucket
     {
-        /** Descriptive launch category; the resolved response is interpolated independently. */
+        /**
+         * The bucket of a launch: Run below 4000 rpm of backspin, Release below 5500, Check below 7500, and above
+         * that Check for a launch under 18 degrees, else Spinback. Descriptive: the response a shot gets is
+         * interpolated across launch angle and spin (FBallPhysicsProfile::ResolveLandingResponse).
+         */
         OPENFAIRWAYPHYSICS_API ELandingBucket Classify(float LaunchAngleDeg, float TotalSpinRpm);
 
         OPENFAIRWAYPHYSICS_API const TCHAR* GetName(ELandingBucket Bucket);
     } // namespace LandingBucket
 
-    /** Bounded multipliers and offsets applied for one launch regime. */
-    struct FRegimeScaleOverride
-    {
-        float DragScaleMultiplier = 1.0f;
-        float LiftScaleMultiplier = 1.0f;
-        float KineticFrictionMultiplier = 1.0f;
-        float RollingFrictionMultiplier = 1.0f;
-        float GrassViscosityMultiplier = 1.0f;
-        float CriticalAngleOffsetRadians = 0.0f;
-        float SpinbackThetaBoostMultiplier = 1.0f;
-    };
-
-    /**
-     * Ball-specific modifiers with the calibrated defaults: regime overrides inherited from
-     * ogolf-physics and landing responses per landing bucket.
-     */
+    /** The ball's physics: flight, bounce and roll-out constants, surface multipliers and the landing responses. */
     struct OPENFAIRWAYPHYSICS_API FBallPhysicsProfile
     {
-        float DragScaleMultiplier = 1.01f;
-        float LiftScaleMultiplier = 1.0f;
+        /** Scales the air drag of a ball moving along the ground; flight ignores it. */
+        float GroundDragScale = 1.01f;
+        // Multipliers and offsets on every surface's contact values (FResolvedShotParams::ResolveSurface).
         float KineticFrictionMultiplier = 1.0f;
         float RollingFrictionMultiplier = 1.0f;
         float GrassViscosityMultiplier = 1.0f;
@@ -71,50 +46,29 @@ namespace OpenFairway
         float GreenStimpFeet = GreenSpeed::DefaultStimpFeet;
         /** Speed-dependent grass drag of every green; the stimp's rolling friction is solved with it. */
         float GreenGrassViscosity = GreenSpeed::GrassViscosity;
-        /**
-         * Forward speed a sand impact removes per m/s the ball drives into the sand, so a
-         * shallow full-shot landing stays near its pitch mark. 0 is the ported hard-sand contact.
-         */
+        /** Forward speed a sand impact removes per m/s the ball drives into the sand, so a shallow full-shot landing stays near its pitch mark. */
         float SandPlowRatio = 2.5f;
         /**
-         * Rolling friction in sand, in place of the ported catalog value (0.30), so a ball that rolls into a bunker
-         * at 4 m/s stops within 2 m instead of running on 2.5 m. HistoricalReference keeps the catalog value.
+         * Rolling friction in sand, in place of the catalog value (0.30), so a ball that rolls into a bunker
+         * at 4 m/s stops within 2 m instead of running on 2.5 m.
          */
         float SandRollingFriction = 0.45f;
-        /**
-         * Play the turf surfaces (fairway, soft fairway, rough, firm, fringe) with the catalog recalibrated
-         * to launch-monitor rollout instead of the ported values (SurfaceCatalog::Get). HistoricalReference keeps the ported turf.
-         */
-        bool bRecalibratedTurf = true;
 
-        /** Interpolate calibrated scales and landing responses across launch conditions. */
-        bool bInterpolateCalibration = true;
-
-        TMap<FString, FRegimeScaleOverride> RegimeScaleOverrides;
+        /** First-impact bite per landing bucket, interpolated across launch angle and spin. */
         FLandingResponse LandingResponses[static_cast<int32>(ELandingBucket::Count)];
 
         FFlightProfile Flight;
         FBounceProfile Bounce;
         FRolloutProfile Rollout;
 
-        /** Gameplay defaults: SpinRatioV1 flight with RK4, recalibrated turf and landing responses. */
+        /** The gameplay ball: spin-ratio flight, recalibrated turf and the landing responses. */
         FBallPhysicsProfile();
 
-        /** Pinned C# behavior for reference verification; not the gameplay default. */
-        static FBallPhysicsProfile HistoricalReference();
-        /** The previous gameplay flight: calibrated legacy aerodynamics and the Euler step. Turf unchanged. */
-        static FBallPhysicsProfile LegacyCalibrated();
-        /** Pro V1-only aerodynamics with RK4, kept for comparison. */
-        static FBallPhysicsProfile ProV1Reference();
-
-        /** Matched key is "interpolated" for continuous calibration; regime key remains descriptive. */
-        FRegimeScaleOverride ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm, FString& OutRegimeKey,
-            FString& OutMatchedKey) const;
-
+        /** The first-impact bite of a launch, blended between the buckets of the neighbouring launch angles and spins. */
         FLandingResponse ResolveLandingResponse(float LaunchAngleDeg, float TotalSpinRpm, ELandingBucket& OutBucket) const;
     };
 
-    /** Air conditions; defaults match the ogolf-physics headless simulator (75 F at sea level, dry, calm). */
+    /** Air conditions; the defaults are 75 F at sea level, dry and calm. */
     struct FAirConditions
     {
         float TemperatureF = 75.0f;
@@ -142,9 +96,12 @@ namespace OpenFairway
 
         /** Wind velocity at HeightM above the ground, m/s. */
         OPENFAIRWAYPHYSICS_API FVector3f WindVelocityAt(float HeightM) const;
+
+        /** The air as a flight environment: density, viscosity and wind (ground drag scale 1). */
+        OPENFAIRWAYPHYSICS_API FFlightEnvironment ToEnvironment() const;
     };
 
-    /** Everything about a shot that is fixed at launch: air, scales, profiles and the landing response. */
+    /** Everything about a shot that is fixed at launch: air, profiles and the landing response. */
     struct OPENFAIRWAYPHYSICS_API FResolvedShotParams
     {
         FFlightEnvironment Environment;
@@ -153,18 +110,12 @@ namespace OpenFairway
         FRolloutProfile Rollout;
         FLandingResponse Landing;
         ELandingBucket LandingBucket = ELandingBucket::Run;
-        FRegimeScaleOverride Regime;
-        FString RegimeKey;
-        FString MatchedRegimeKey;
 
-        /**
-         * Resolves a launch (PhysicsParamsFactory.Create without the surface). Flight calibration reads the total
-         * spin; with an axis-aware bounce profile the landing response reads BackSpinRpm when it is given.
-         */
-        static FResolvedShotParams Resolve(const FBallPhysicsProfile& Profile, const FAirConditions& Air, float SpeedMph, float LaunchAngleDeg,
-            float TotalSpinRpm, TOptional<float> BackSpinRpm = {});
+        /** Resolves a launch. The landing response reads BackSpinRpm when it is given (only backspin bites), else the total spin. */
+        static FResolvedShotParams Resolve(const FBallPhysicsProfile& Profile, const FAirConditions& Air, float LaunchAngleDeg, float TotalSpinRpm,
+            TOptional<float> BackSpinRpm = {});
 
-        /** Contact parameters of a surface for this shot, with profile and regime multipliers applied. */
+        /** Contact parameters of a surface for this shot, with the profile's multipliers applied. */
         FSurfaceSettings ResolveSurface(ESurface Surface, const FBallPhysicsProfile& Profile) const;
     };
 } // namespace OpenFairway

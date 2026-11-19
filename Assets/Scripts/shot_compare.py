@@ -24,22 +24,18 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from data_paths import shot_library_dirs  # noqa: E402  (run as a script or imported as Assets.Scripts.shot_compare)
+from data_paths import ROOT, shot_library_dirs  # noqa: E402  (run as a script or imported as Assets.Scripts.shot_compare)
+from shot_library import RESULTS_PATH, as_dirs, load_library, load_results  # noqa: E402,F401  (load_* re-exported)
 
-ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS_DIR = ROOT / "Assets" / "Scripts"
 LIBRARY_DIRS = shot_library_dirs()
-SHOTS_NAME = "shots.csv"
-RESULTS_PATH = ROOT / "Saved" / "ShotLibrary" / "results.csv"
 HISTORY_DIR = ROOT / "Saved" / "ShotLibrary" / "history"
 TEST_NAME = "UOpenGolf.Physics.ShotLibrary"
-# Listed first in reports; any other profile in the results follows in first-seen order.
-LEADING_PROFILES = ("current", "historical")
+# Listed first in reports; any other profile in the results (a candidate under evaluation) follows in first-seen order.
+LEADING_PROFILES = ("current",)
 # (key, label, unit); roll is total minus carry for both the engine and the reference.
 METRICS = (("carry", "Carry", "yd"), ("total", "Total", "yd"), ("roll", "Roll", "yd"), ("apex", "Apex", "ft"),
            ("landing", "Landing", "deg"))
-# Reference columns of shots.csv for each metric other than roll.
-REFERENCE_COLUMNS = (("carry", "carry_yd"), ("total", "total_yd"), ("apex", "apex_ft"), ("landing", "landing_angle_deg"))
 # Launch classes for the roll breakdown: (upper vertical launch, label); mid launches split by spin.
 LAUNCH_CLASSES = ((2.5, "ground (<2.5 deg)"), (9.0, "low (2.5-9 deg)"), (20.0, "mid (9-20 deg)"), (float("inf"), "high (>=20 deg)"))
 MID_SPLIT_RPM = 4000.0
@@ -58,12 +54,6 @@ SNAPSHOT_FIELDS = ["session", "shot_name", "profile", "status"] + [
 SNAPSHOT_NAME = re.compile(r"(\d{8}-\d{6})(?:-(\d+))?")
 
 
-def reference_value(row, column):
-    """Reference value, or None when the column is missing or empty. Zero is a value (a ground shot carries 0)."""
-    text = (row.get(column) or "").strip()
-    return float(text) if text else None
-
-
 def launch_class(vla, spin):
     label = next(label for limit, label in LAUNCH_CLASSES if vla < limit)
     if label.startswith("mid"):
@@ -71,66 +61,8 @@ def launch_class(vla, spin):
     return label
 
 
-def as_dirs(library_dirs):
-    """One library folder or several."""
-    return [Path(library_dirs)] if isinstance(library_dirs, (str, Path)) else [Path(d) for d in library_dirs]
-
-
-def load_library(library_dirs):
-    """Every row of every <session>/shots.csv in each library folder, in file order."""
-    shots = []
-    for library_dir in as_dirs(library_dirs):
-        shots += load_library_dir(library_dir.resolve())
-    return shots
-
-
-def load_library_dir(library_dir):
-    shots = []
-    for path in sorted(library_dir.rglob(SHOTS_NAME)):
-        session = path.parent.relative_to(library_dir).as_posix()
-        with path.open(newline="", encoding="utf-8") as handle:
-            for row in csv.DictReader(handle):
-                name = (row.get("shot_name") or "").strip()
-                if not name:
-                    continue
-                ref = {key: reference_value(row, column) for key, column in REFERENCE_COLUMNS}
-                ref["roll"] = ref["total"] - ref["carry"] if ref["carry"] is not None and ref["total"] is not None else None
-                shots.append({
-                    "session": session, "shot": name,
-                    "speed": float(row["speed_mph"]), "vla": float(row["vla_deg"]),
-                    "spin": float(row["total_spin_rpm"]), "ref": ref,
-                })
-    return shots
-
-
-def optional_float(row, column):
-    """A float, or None when the column is missing or empty (results from older builds)."""
-    text = (row.get(column) or "").strip()
-    return float(text) if text else None
-
-
-def load_results(path):
-    """Engine results keyed by (session, shot_name, profile)."""
-    results = {}
-    with Path(path).open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            key = (row["session"], row["shot_name"], row["profile"])
-            if key in results:
-                raise ValueError(f"Duplicate result: {key}")
-            results[key] = {
-                "carry": float(row["carry_yd"]), "total": float(row["total_yd"]),
-                "roll": float(row["rollout_yd"]), "apex": float(row["apex_ft"]),
-                "landing": optional_float(row, "landing_angle_deg"),
-                "landing_spin": optional_float(row, "landing_spin_rpm"),
-                "at_rest": row.get("at_rest") == "true",
-                "hang": optional_float(row, "hang_s"),
-                "lateral": optional_float(row, "lateral_yd"),
-            }
-    return results
-
-
 def profiles_in(results):
-    """Profiles present in the results: current and historical first, then first-seen order."""
+    """Profiles present in the results: current first, then first-seen order."""
     seen = list(dict.fromkeys(profile for _, _, profile in results))
     return [profile for profile in LEADING_PROFILES if profile in seen] + [
         profile for profile in seen if profile not in LEADING_PROFILES]
@@ -483,7 +415,7 @@ def parse_args(argv):
     parser.add_argument("--build", action="store_true", help="build the editor before running (after C++ changes)")
     parser.add_argument("--session", action="append", help="only this session, such as recorded_20261113 (repeatable)")
     parser.add_argument("--sort", choices=[metric for metric, _, _ in METRICS], help="largest |+/-| of this metric first")
-    parser.add_argument("--profile", default="current", help="profile for the per-shot table (current, historical or a candidate)")
+    parser.add_argument("--profile", default="current", help="profile for the per-shot table (current or a candidate)")
     parser.add_argument("--baseline", type=Path, help="history snapshot to compare with instead of the last different run")
     parser.add_argument("--check-baseline", type=Path, help="enforce accuracy gates against this baseline results.csv, including provenance")
     parser.add_argument("--library", type=Path, action="append", help=argparse.SUPPRESS)

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Cup capture, after ogolf game/hole/CupCapture.cs. The green is a solid surface, so the cup is never a
 // physical hole: this decides when the ball drops, and the ball then animates into the cup. A ball too fast to
-// drop crosses the open cup here instead (StepOverCup), which ogolf does not model.
+// drop crosses the open cup here instead (AdvanceCrossing), which ogolf does not model.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -40,6 +40,14 @@ namespace OpenFairway::CupCapture
     OPENFAIRWAYPHYSICS_API bool CapturesLanding(const FVector3f& ContactPosition, const FVector3f& Cup);
 
     /**
+     * Where a move from Start by Delta first carries the ball centre over the cup: the fraction (0-1) of the move at
+     * which it crosses the rim's cylinder with the centre at green level (within two ball radii of the surface), or 0
+     * when it starts over the cup. Unset when the move never reaches the cup. Cup frame: the cup at the origin, +Y
+     * its normal, metres.
+     */
+    OPENFAIRWAYPHYSICS_API TOptional<float> ApertureEntry(const FVector3f& Start, const FVector3f& Delta);
+
+    /**
      * Where a holed ball's centre settles: on its entry side of the cup, as close to the centre as the flagstick
      * allows, with the whole ball below the surface.
      */
@@ -53,7 +61,7 @@ namespace OpenFairway::CupCapture
     inline constexpr float RimRestitution = 0.1f;
     inline constexpr float RimFriction = 0.3f;
 
-    /** Longest step StepOverCup takes, so the rim contact resolves well inside one ball radius of travel. */
+    /** Longest step AdvanceCrossing takes, so the rim contact resolves well inside one ball radius of travel. */
     inline constexpr float CrossingSubstepS = 0.00025f;
 
     /**
@@ -78,19 +86,14 @@ namespace OpenFairway::CupCapture
         float ConsumedSeconds = 0.0f;
     };
 
-    /** Local cup frame (+Y surface normal); gravity must be rotated into that frame too.
-     * Resolves contact at impact time and reports time used so callers can integrate the remainder after exit.
+    /**
+     * Advances a ball crossing the open cup too fast to drop (CrossesTooFast) by up to Dt. Off the green it falls freely,
+     * and the rim's edge (a circle at Cup.Y) strikes it with RimRestitution and RimFriction against its spin: a firm ball
+     * hops over the far lip slower, one off centre turns across the cup, and one just over the limit through the centre
+     * can hit the back and drop. Cup frame (+Y the surface normal; Gravity rotated into it too), metres, m/s and rad/s.
+     * Resolves contact at impact time and reports the time used, so callers can integrate the remainder after exit.
      * MaxSubstep is exposed for convergence tests, not for tuning the lip's response.
      */
     OPENFAIRWAYPHYSICS_API FCrossingStep AdvanceCrossing(FBallState& State, const FVector3f& Cup,
         const FVector3f& Gravity, float Dt, float MaxSubstep = CrossingSubstepS);
-
-    /**
-     * Compatibility wrapper for a level cup. For oriented cups or time accounting use AdvanceCrossing.
-     * Advances a ball crossing the open cup too fast to drop (CrossesTooFast) by up to Dt. Off the green it falls freely,
-     * and the rim's edge (a level circle at Cup.Y) strikes it with RimRestitution and RimFriction against its spin: a
-     * firm ball hops over the far lip slower, one off centre turns across the cup, and one just over the limit through
-     * the centre can hit the back and drop. OpenFairway frame (Y up), metres, m/s and rad/s.
-     */
-    OPENFAIRWAYPHYSICS_API ECupCrossing StepOverCup(FBallState& State, const FVector3f& Cup, float Dt);
 } // namespace OpenFairway::CupCapture

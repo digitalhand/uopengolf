@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Builds UOpenGolf-<version>-Windows-x64-Setup.exe from a packaged game folder with Inno Setup 6.
 # Used by the Package Windows workflow; locally, after `ue.ps1 Package`:
-#   powershell -File Assets\Installer\build_installer.ps1 -PackageDir Packaged\Windows -Version 0.0.8 -OutputDir Packaged\dist
+#   powershell -File Assets\Installer\build_installer.ps1 -PackageDir Packaged\Windows -Version 0.0.x -OutputDir Packaged\dist
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$PackageDir,

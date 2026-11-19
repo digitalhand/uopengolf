@@ -1,10 +1,57 @@
 # Phase status
 
+## Physics cleanup: legacy code removed, files split, docs rewritten — 2026-11-18 (Windows)
+
+The gameplay physics is unchanged. Everything it no longer used is removed, the physics code is split by
+concern, and the physics docs describe the current feature.
+
+- **Removed.** The ported legacy flight (its drag polynomial and lift curves, launch-regime overrides and
+  Euler step), the measured research-ball comparison model, `HistoricalReference()` and
+  `LegacyCalibrated()` with every toggle only they used (the split-step ground solver, total-spin contact,
+  the ported turf catalog, hard regime lookups, the no-air stimp solve), the C# golden-fixture harness, and
+  the tests of those (`Fixtures`, `FlightDiagnostics`, `GreenReference`, `FlightCorrections`). The ground air
+  drag and the stimp solve keep the drag curve they were calibrated with, as
+  `FlightAerodynamics::GroundDragCoefficient`.
+- **Pinned.** The new `UOpenGolf.Physics.GameplayPins` pins 27 headless shots, the stimp friction and the
+  ground drag, recorded before the cleanup. `GreenPlay` keeps the green checks on the gameplay profile, and
+  `LandingResponse` the landing-bucket checks.
+- **Renamed.** Physics code names no ball brand: the measured drag table is `BallData.h`.
+- **Split.**
+  - `GolfPhysics.cpp` became Atmosphere, FlightStep, Impact and GroundRoll.
+  - The ball actor became lifecycle, motion, surface, cup and presentation files.
+  - The obstacle and canopy rules moved to `Obstacles`, and the steps the simulator and the actor share to `ShotStep`.
+  - Unit factors moved to `Units.h`, which the game's wind HUD uses too.
+  - The test helpers moved to `PhysicsTestUtils.h` and `ShotLibrary.h`, and the turf fit to `RolloutCalibrationTest.cpp`.
+- **Scripts.**
+  - `flight_fit.py` reads the flight table and ball constants from the engine headers and has `check`, `fit` and `refine` (the former one-off driver fit, now cohorted by launch spin ratio).
+  - `carry_audit.py --before/--markdown` replaces `flight_comparison.py`.
+  - `shot_library.py` holds the shared loader.
+- **Docs.** The physics reference describes the current pipeline from launch to cup; `Accuracy.md` replaces
+  `CarryAudit.md`, with fresh numbers.
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor built.
+- `UOpenGolf` passed 113 of 113 before the cleanup (`Saved/Automation/20261118-181316-dde96588`) and 112 of 112
+  after it (`Saved/Automation/20261118-185048-bf64e25c`): four legacy-only tests removed, three added.
+- The shot-library replay (196 shots) is identical to before in every reported column, and `shot_compare.py`
+  reports a change of +0.00 in every metric. The range tests report the same numbers, except one camera-zoom
+  reading (0.001).
+- `shot_compare.py --check-baseline` fails the same gate as before: mid launches at 4000 rpm and above roll
+  2.3 yd off lm (1.1 yd in the baseline).
+- Python: 93 engine-free tests; 89 pass, 3 skip without NumPy, and `test_grass_stability` still needs Pillow,
+  which this Python lacks. With NumPy the flight-fit tests pass and `flight_fit.py check` reproduces Unreal's
+  carry errors to about 0.01 yd.
+
+Not verified:
+
+- `flight_fit.py refine` (SciPy is not installed here);
+- Linux;
+- packaged builds.
+
 ## Flight model fitted to reference flights; reference data moved out of the repo — 2026-11-18 (Windows)
 
 Full shots carried 5–10 yd long: against tour averages (tm) the flight was 10.1 yd long on average,
 against the launch-monitor export (lm) 4.1 yd off per shot. See
-[CarryAudit.md](../Plugins/OpenFairwayPhysics/Docs/CarryAudit.md) for the analysis.
+[Accuracy.md](../Plugins/OpenFairwayPhysics/Docs/Accuracy.md) for the current results.
 
 - **Flight model.** Gameplay flight is `EFlightModel::SpinRatioV1`: drag and lift as curves in the spin
   ratio, plus 0.68 of a modern ball's measured drag rise below Re 100k, integrated with coupled RK4.
@@ -222,7 +269,7 @@ timestep and surface override for experiments. The earlier shot library was not 
 provenance manifest and can gate a run against a baseline (`--check-baseline`). The new
 export importer (now `monitor_import.py`) adds launch-monitor exports, and `recording_import.py` added the 36 recorded launches
 (`recorded_20261113`, replayed but not compared). See the
-[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration).
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-calibration).
 
 `UOpenGolf.Range.Shot` compared a drive's roll-out on the range's real terrain against flat
 headless ground with a 1 yd offline margin, so the longer roll took it to 1.21 yd. Its new trace

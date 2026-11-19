@@ -2,73 +2,22 @@
 // Rollout regressions from recorded range shots (November 2026): spin about the contact normal checked a
 // tilted-axis shot, a ball launched along the ground ran with no landing loss, and full shots stopped dead on
 // fairway. Later checks: the turf's backspin loss needs load, the ground step reads only the ball's state (wind at its
-// own height, drag without the launch regime), and a full shot struck along the ground keeps its struck grass drag.
+// own height, drag independent of the launch), and a full shot struck along the ground keeps its struck grass drag.
 // Cases are named by their launch values; the club labels on those recordings are not reliable.
-// "Previous" is the gameplay profile before the turf recalibration and axis-aware spin.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
 #include "OpenFairway/ShotSimulator.h"
+#include "PhysicsTestUtils.h"
 
 using namespace OpenFairway;
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOpenFairwayRolloutRegressionTest, "UOpenGolf.Physics.RolloutRegression",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-namespace RolloutRegressionTestDetail
-{
-    const FVector3f LevelNormal(0.0f, 1.0f, 0.0f);
-
-    FBallPhysicsProfile Previous()
-    {
-        FBallPhysicsProfile Profile;
-        Profile.bRecalibratedTurf = false;
-        Profile.Bounce.bAxisAwareSpin = false;
-        Profile.Rollout.bAxisAwareSpin = false;
-        Profile.Rollout.bCoupledContact = false;
-        return Profile;
-    }
-
-    FLaunchData MakeLaunch(float SpeedMph, float VlaDeg, float HlaDeg, float BackSpinRpm, float SideSpinRpm)
-    {
-        FLaunchData Launch;
-        Launch.SpeedMph = SpeedMph;
-        Launch.VerticalLaunchDeg = VlaDeg;
-        Launch.HorizontalLaunchDeg = HlaDeg;
-        Launch.BackSpinRpm = BackSpinRpm;
-        Launch.SideSpinRpm = SideSpinRpm;
-        return Launch;
-    }
-
-    float Yards(float Meters)
-    {
-        return Meters * YardsPerMeter;
-    }
-
-    float RollYd(const FShotSimulationResult& Result)
-    {
-        return Yards(Result.TotalM - Result.CarryM);
-    }
-
-    /** Meters a ball already rolling at SpeedMps travels on level ground of this surface. */
-    float RollMeters(const FSurfaceSettings& Surface, float SpeedMps)
-    {
-        const FRolloutProfile Rollout;
-        FBallState State;
-        State.Velocity = FVector3f(SpeedMps, 0.0f, 0.0f);
-        State.Spin = FVector3f::CrossProduct(LevelNormal, State.Velocity) / GolfPhysics::Radius;
-        const int32 Steps = static_cast<int32>(60.0f / GolfPhysics::SimulationDt);
-        for (int32 Step = 0; Step < Steps && !GolfPhysics::CanRest(State, true, LevelNormal, Surface, Rollout); ++Step)
-        {
-            State = GolfPhysics::StepGround(State, LevelNormal, Surface, Rollout, 0.0f, GolfPhysics::SimulationDt);
-        }
-        return State.Position.X;
-    }
-} // namespace RolloutRegressionTestDetail
-
 bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
 {
-    using namespace RolloutRegressionTestDetail;
+    using namespace OpenFairwayTest;
     const FBallPhysicsProfile Current;
     const FResolvedShotParams Shot;
     const FSurfaceSettings Fairway = Shot.ResolveSurface(ESurface::Fairway, Current);
@@ -109,18 +58,16 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Uniform wind still reaches a ball on the ground at any height"), At(5.0f, Headwind).Equals(IntoWind.Velocity, 1e-6f));
     }
 
-    // Air drag on the ground reads the ball, not the launch: environments resolved for a 150 mph, 11 deg drive and a
-    // 75 mph, 35 deg pitch (different regime drag multipliers and high-launch drag) give the same ground step.
+    // Air drag on the ground reads the ball, not the launch: environments resolved for an 11 deg drive and a 35 deg pitch
+    // give the same ground step.
     {
-        const FResolvedShotParams Driven = FResolvedShotParams::Resolve(Current, {}, 150.0f, 11.0f, 2300.0f, 2300.0f);
-        const FResolvedShotParams Pitched = FResolvedShotParams::Resolve(Current, {}, 75.0f, 35.0f, 8000.0f, 8000.0f);
-        TestTrue(TEXT("The two launches resolve to different flight environments"),
-            Driven.Environment.DragScale != Pitched.Environment.DragScale || Driven.Environment.InitialLaunchAngleDeg != Pitched.Environment.InitialLaunchAngleDeg);
+        const FResolvedShotParams Driven = FResolvedShotParams::Resolve(Current, {}, 11.0f, 2300.0f, 2300.0f);
+        const FResolvedShotParams Pitched = FResolvedShotParams::Resolve(Current, {}, 35.0f, 8000.0f, 8000.0f);
         FBallState Rolling;
         Rolling.Velocity = FVector3f(25.0f, 0.0f, 0.0f);
         Rolling.Spin = FVector3f::CrossProduct(LevelNormal, Rolling.Velocity) / GolfPhysics::Radius;
-        const auto A = GolfPhysics::StepGround(Rolling, LevelNormal, Fairway, Current.Rollout, 0, GolfPhysics::SimulationDt, Driven.Environment, Driven.Flight);
-        const auto B = GolfPhysics::StepGround(Rolling, LevelNormal, Fairway, Current.Rollout, 0, GolfPhysics::SimulationDt, Pitched.Environment, Pitched.Flight);
+        const auto A = GolfPhysics::StepGround(Rolling, LevelNormal, Fairway, Current.Rollout, 0, GolfPhysics::SimulationDt, Driven.Environment);
+        const auto B = GolfPhysics::StepGround(Rolling, LevelNormal, Fairway, Current.Rollout, 0, GolfPhysics::SimulationDt, Pitched.Environment);
         TestTrue(TEXT("Same ground state, same ground step, whatever the launch"), A.Velocity.Equals(B.Velocity, 1e-6f) && A.Spin.Equals(B.Spin, 1e-4f));
     }
 
@@ -175,42 +122,40 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
         FBallState Sidespin = Landing;
         Sidespin.Spin.Y = -3000.0f * GolfPhysics::RadPerRpm;
         const FLandingResponse Bite{0.5f, 0.0f, 8.0f, 20.0f};
-        const FSurfaceSettings PreviousFairway = Shot.ResolveSurface(ESurface::Fairway, Previous());
         const auto Out = [&](const FBallState& In, const FSurfaceSettings& Surface, const FBounceProfile& Bounce)
         { return GolfPhysics::ResolveImpact(In, LevelNormal, Surface, Bounce, true, Bite).Velocity; };
         const FVector3f Plain = Out(Landing, Fairway, Current.Bounce);
         const FVector3f WithSide = Out(Sidespin, Fairway, Current.Bounce);
         AddInfo(FString::Printf(TEXT("Impact out: backspin only %s, with 3000 rpm about the normal %s"), *Plain.ToString(), *WithSide.ToString()));
         TestTrue(TEXT("Spin about the normal does not change the impact"), Plain.Equals(WithSide, 1e-5f));
-        TestTrue(TEXT("The previous model read it as backspin"),
-            FMath::Abs(Out(Landing, PreviousFairway, Previous().Bounce).X - Out(Sidespin, PreviousFairway, Previous().Bounce).X) > 0.1f);
+        FSurfaceSettings Green = Shot.ResolveSurface(ESurface::Green, Current);
+        TestTrue(TEXT("Nor on a surface with the bounce profile's retention and bite"),
+            Out(Landing, Green, Current.Bounce).Equals(Out(Sidespin, Green, Current.Bounce), 1e-5f));
 
         FBallState Pivoting;
         Pivoting.Spin = FVector3f(0.0f, 50.0f, 0.0f);
         TestTrue(TEXT("A ball that only pivots can rest"), GolfPhysics::CanRest(Pivoting, true, LevelNormal, Fairway, Current.Rollout));
-        TestFalse(TEXT("The previous rest check waited for it"), GolfPhysics::CanRest(Pivoting, true, LevelNormal, Fairway, Previous().Rollout));
     }
 
     // Turf takes its landing loss from the impact alone: the same impact state leaves the same way whatever
     // launch (and so whatever landing bucket) produced it.
     {
-        const auto Resolved = [&](float SpeedMph, float VlaDeg, float SpinRpm)
+        const auto Resolved = [&](float VlaDeg, float SpinRpm)
         {
-            const FResolvedShotParams Params = FResolvedShotParams::Resolve(Current, {}, SpeedMph, VlaDeg, SpinRpm, SpinRpm);
+            const FResolvedShotParams Params = FResolvedShotParams::Resolve(Current, {}, VlaDeg, SpinRpm, SpinRpm);
             return TPair<FSurfaceSettings, FLandingResponse>(Params.ResolveSurface(ESurface::Fairway, Current), Params.Landing);
         };
-        const auto Driven = Resolved(150.0f, 11.0f, 2300.0f);
-        const auto Pitched = Resolved(75.0f, 28.0f, 8000.0f);
+        const auto Driven = Resolved(11.0f, 2300.0f);
+        const auto Pitched = Resolved(28.0f, 8000.0f);
         TestTrue(TEXT("The two launches resolve to different landing responses"), Driven.Value.SpinBiteScale != Pitched.Value.SpinBiteScale);
         FBallState Landing;
         Landing.Velocity = FVector3f(15.0f, -12.0f, 1.0f);
         Landing.Spin = FVector3f(0.0f, 0.0f, 5000.0f * GolfPhysics::RadPerRpm);
         const FBallState A = GolfPhysics::ResolveImpact(Landing, LevelNormal, Driven.Key, Current.Bounce, true, Driven.Value);
         const FBallState B = GolfPhysics::ResolveImpact(Landing, LevelNormal, Pitched.Key, Current.Bounce, true, Pitched.Value);
-        // The two resolved surfaces differ only by float rounding in the blended regime multipliers (all neutral for turf).
         AddInfo(FString::Printf(TEXT("Same landing from two launches: velocity %s / %s, spin %s / %s"), *A.Velocity.ToString(), *B.Velocity.ToString(),
             *A.Spin.ToString(), *B.Spin.ToString()));
-        TestTrue(TEXT("Same impact state, same outgoing state on fairway"), A.Velocity.Equals(B.Velocity, 1e-4f) && A.Spin.Equals(B.Spin, 1e-2f));
+        TestTrue(TEXT("Same impact state, same outgoing state on fairway"), A.Velocity.Equals(B.Velocity) && A.Spin.Equals(B.Spin));
     }
 
     // The landing loss itself, with the friction impulse switched off so nothing else changes the tangential
@@ -290,11 +235,10 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
     {
         const FLaunchData Launch = MakeLaunch(107.82f, 8.36f, -10.65f, -401.0f, 4581.0f);
         const FShotSimulationResult Now = ShotSimulator::Simulate(Launch, ESurface::Fairway, Current);
-        const FShotSimulationResult Before = ShotSimulator::Simulate(Launch, ESurface::Fairway, Previous());
-        AddInfo(FString::Printf(TEXT("Tilted-axis 107.8 mph roll: %.1f yd (previous %.1f yd)"), RollYd(Now), RollYd(Before)));
-        TestTrue(TEXT("Tilted-axis shot rolls at least 2.5 times farther"), RollYd(Now) >= 2.5f * RollYd(Before));
+        const FShotSimulationResult AllBackspin = ShotSimulator::Simulate(MakeLaunch(107.82f, 8.36f, -10.65f, 4598.5f, 0.0f), ESurface::Fairway, Current);
+        AddInfo(FString::Printf(TEXT("Tilted-axis 107.8 mph roll: %.1f yd (the same spin as backspin: %.1f yd)"), RollYd(Now), RollYd(AllBackspin)));
+        TestTrue(TEXT("Tilted-axis shot rolls farther than the same spin as backspin"), RollYd(Now) > RollYd(AllBackspin));
         TestTrue(TEXT("Its landing bucket reads backspin, not total spin"), Now.LandingBucket == ELandingBucket::Run);
-        TestEqual(TEXT("Carry is unchanged"), Now.CarryM, Before.CarryM, 0.001f);
     }
 
     // 67.5 mph at -0.14 deg and 100.2 mph at 0.78 deg: launched along the ground, they used to run 220 and 396 yd on flat fairway.
@@ -325,7 +269,7 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
         float PreviousTotal = 0.0f;
         for (int32 Sample = -5; Sample <= 5; ++Sample)
         {
-            const float Total = ShotSimulator::Simulate(MakeLaunch(SpeedMps / 0.44704f, Sample * 0.1f, 0, 0, 0), ESurface::Fairway, Current).TotalM;
+            const float Total = ShotSimulator::Simulate(MakeLaunch(SpeedMps / MpsPerMph, Sample * 0.1f, 0, 0, 0), ESurface::Fairway, Current).TotalM;
             if (PreviousTotal > 0.0f)
                 TestTrue(FString::Printf(TEXT("%.0f m/s putt-speed launch: no jump above 3 percent per 0.1 degree across 0 deg"), SpeedMps),
                     FMath::Abs(Total - PreviousTotal) <= 0.03f * FMath::Max(Total, PreviousTotal));
@@ -385,35 +329,30 @@ bool FOpenFairwayRolloutRegressionTest::RunTest(const FString& Parameters)
 
     // Turf speed: fairway is slower than a 10 ft green on the stimpmeter, and rough slower again.
     {
-        const float FairwayFeet = RollMeters(Fairway, GreenSpeed::StimpmeterSpeedMps) / 0.3048f;
-        const float GreenFeet = RollMeters(Shot.ResolveSurface(ESurface::Green, Current), GreenSpeed::StimpmeterSpeedMps) / 0.3048f;
-        const float RoughFeet = RollMeters(Shot.ResolveSurface(ESurface::Rough, Current), GreenSpeed::StimpmeterSpeedMps) / 0.3048f;
-        const float PreviousFeet = RollMeters(Shot.ResolveSurface(ESurface::Fairway, Previous()), GreenSpeed::StimpmeterSpeedMps) / 0.3048f;
-        AddInfo(FString::Printf(TEXT("Stimpmeter: green %.1f ft, fairway %.1f ft (previous %.1f ft), rough %.1f ft"), GreenFeet, FairwayFeet, PreviousFeet, RoughFeet));
+        const float FairwayFeet = RollMeters(Fairway, GreenSpeed::StimpmeterSpeedMps) / MetersPerFoot;
+        const float GreenFeet = RollMeters(Shot.ResolveSurface(ESurface::Green, Current), GreenSpeed::StimpmeterSpeedMps) / MetersPerFoot;
+        const float RoughFeet = RollMeters(Shot.ResolveSurface(ESurface::Rough, Current), GreenSpeed::StimpmeterSpeedMps) / MetersPerFoot;
+        AddInfo(FString::Printf(TEXT("Stimpmeter: green %.1f ft, fairway %.1f ft, rough %.1f ft"), GreenFeet, FairwayFeet, RoughFeet));
         TestTrue(TEXT("Fairway is slower than the green"), FairwayFeet < GreenFeet);
         TestTrue(TEXT("Rough is slower than fairway"), RoughFeet < FairwayFeet);
     }
 
-    // Green and sand are not part of the turf recalibration.
+    // Green and sand are not part of the turf recalibration: they keep the bounce profile's landing.
     for (const ESurface Surface : {ESurface::Green, ESurface::Sand})
     {
         const FSurfaceSettings Now = Shot.ResolveSurface(Surface, Current);
-        const FSurfaceSettings Before = Shot.ResolveSurface(Surface, Previous());
         const FString Name = SurfaceCatalog::GetName(Surface);
-        TestEqual(Name + TEXT(" grass drag unchanged"), Now.GrassViscosity, Before.GrassViscosity);
         TestEqual(Name + TEXT(" has no form drag"), Now.GrassFormDrag, 0.0f);
-        TestTrue(Name + TEXT(" keeps the ported landing (retention and bite)"),
-            Now.LandingAngleLoss == 0.0f && Now.LandingSpinLoss == 0.0f && Before.LandingAngleLoss == 0.0f && Before.LandingSpinLoss == 0.0f);
+        TestTrue(Name + TEXT(" keeps the bounce profile's landing (retention and bite)"), Now.LandingAngleLoss == 0.0f && Now.LandingSpinLoss == 0.0f);
         TestTrue(Name + TEXT(" has no struck-along-the-ground drag"), Now.StruckViscosityScale == 1.0f && Now.StruckFormDragScale == 1.0f);
     }
-    // Every turf surface takes the state-based landing; the ported catalog keeps none.
+    // Every turf surface takes the state-based landing and the struck-along-the-ground drag.
     for (const ESurface Surface : {ESurface::Fairway, ESurface::FairwaySoft, ESurface::Rough, ESurface::Firm, ESurface::Fringe})
     {
         const FString Name = SurfaceCatalog::GetName(Surface);
-        TestTrue(Name + TEXT(" uses the state-based landing"), Shot.ResolveSurface(Surface, Current).LandingAngleLoss > 0.0f);
-        TestEqual(Name + TEXT(" keeps the ported landing on the previous profile"), Shot.ResolveSurface(Surface, Previous()).LandingAngleLoss, 0.0f);
-        const FSurfaceSettings Before = Shot.ResolveSurface(Surface, Previous());
-        TestTrue(Name + TEXT(" has no struck-along-the-ground drag on the previous profile"), Before.StruckViscosityScale == 1.0f && Before.StruckFormDragScale == 1.0f);
+        const FSurfaceSettings Now = Shot.ResolveSurface(Surface, Current);
+        TestTrue(Name + TEXT(" uses the state-based landing"), Now.LandingAngleLoss > 0.0f && Now.LandingSpinLoss > 0.0f);
+        TestTrue(Name + TEXT(" has the struck-along-the-ground drag"), Now.StruckViscosityScale < 1.0f && Now.StruckFormDragScale < 1.0f);
     }
     TestEqual(TEXT("A putt-speed launch gets none of the struck drag"), GolfPhysics::StruckAlongGroundWeight(10.0f), 0.0f);
     TestEqual(TEXT("A full-speed launch gets all of it"), GolfPhysics::StruckAlongGroundWeight(20.0f), 1.0f);

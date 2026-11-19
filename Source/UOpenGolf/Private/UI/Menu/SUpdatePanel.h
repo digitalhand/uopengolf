@@ -35,7 +35,7 @@ private:
 /** Short update texts shared by the update screen and Settings. */
 namespace UpdateText
 {
-    /** "Update to v0.0.8". */
+    /** "Update to v0.0.x". */
     FString Title(const UGameUpdateSubsystem& Updater);
     /** Settings' button: Check for updates, Checking..., or Update to v0.0.X. */
     FString ButtonLabel(const UGameUpdateSubsystem* Updater);

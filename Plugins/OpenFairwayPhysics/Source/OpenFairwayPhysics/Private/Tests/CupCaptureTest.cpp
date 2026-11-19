@@ -87,7 +87,7 @@ bool FOpenFairwayCupCaptureTest::RunTest(const FString& Parameters)
         Crossing.LowestY = Crossing.State.Position.Y;
         for (float Elapsed = 0.0f; Crossing.End == ECupCrossing::OverCup && Elapsed < 1.0f; Elapsed += GolfPhysics::SimulationDt)
         {
-            Crossing.End = StepOverCup(Crossing.State, Cup, GolfPhysics::SimulationDt);
+            Crossing.End = AdvanceCrossing(Crossing.State, Cup, FVector3f(0, -GolfPhysics::Gravity, 0), GolfPhysics::SimulationDt).Outcome;
             Crossing.LowestY = FMath::Min(Crossing.LowestY, Crossing.State.Position.Y);
         }
         return Crossing;
