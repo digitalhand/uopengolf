@@ -70,6 +70,66 @@ namespace OpenFairway
             return Weight >= 1.0f ? Landing : Lerp(1.0f, Landing, Weight);
         }
 
+        bool UsesTurfLanding(const FSurfaceSettings& Surface)
+        {
+            return Surface.LandingAngleLoss > 0.0f || Surface.LandingSpinLoss > 0.0f;
+        }
+
+        /**
+         * Tangential speed a turf impact keeps after its contact impulse, read only from the ball's state at
+         * the impact: exp(-k * vn/vt) for the turf the ball drives into (a steeper landing digs in more; a ball
+         * skimming the ground loses almost nothing) and max(0, 1 - min(c * R*backspin, GripLimit) / vt) for
+         * backspin gripping it. GripLimit is the Coulomb bound of the contact impulse (friction times the normal
+         * impulse, per unit mass): like friction, the grip needs load, so it fades out as the normal speed goes
+         * to zero. Nothing here depends on how the ball was launched.
+         */
+        float TurfRetention(const FBallState& State, const FVector3f& Normal, float IncomingSpeed, float GripLimit, const FSurfaceSettings& Surface)
+        {
+            constexpr float MinTangentSpeed = 0.01f;
+            const FVector3f Tangent = State.Velocity + IncomingSpeed * Normal;
+            const float TangentSpeed = Tangent.Size();
+            const float Backspin = TangentSpeed >= MinTangentSpeed ? FMath::Max(0.0f, Dot(State.Spin, Cross(Tangent / TangentSpeed, Normal))) : 0.0f;
+            const float Speed = FMath::Max(TangentSpeed, MinTangentSpeed);
+            const float Grip = FMath::Min(Surface.LandingSpinLoss * GolfPhysics::Radius * Backspin, FMath::Max(0.0f, GripLimit));
+            return FMath::Exp(-Surface.LandingAngleLoss * IncomingSpeed / Speed) * FMath::Max(0.0f, 1.0f - Grip / Speed);
+        }
+
+        /** Spin in the contact plane: the part that rolls or skids the ball. Spin about the normal only pivots it. */
+        FVector3f ContactPlaneSpin(const FVector3f& Spin, const FVector3f& Normal)
+        {
+            return Spin - Dot(Spin, Normal) * Normal;
+        }
+
+        /** The spin an impact reads: a rate for restitution, retention and spin-back (rpm) and one for the bounce spin ratio (rad/s). */
+        struct FImpactSpin
+        {
+            float Rpm = 0.0f;
+            float RatioRadPerSecond = 0.0f;
+        };
+
+        /**
+         * Axis-aware: the backspin across the ball's travel, so neither sidespin nor topspin checks the ball (the
+         * bounce spin ratio keeps its size either way); with no travel along the ground, the contact-plane spin.
+         * Otherwise the total spin, as ported.
+         */
+        FImpactSpin ReadImpactSpin(const FBallState& State, const FVector3f& Normal, float NormalSpeed, const FBounceProfile& Profile)
+        {
+            if (!Profile.bAxisAwareSpin)
+            {
+                const float Total = State.Spin.Size();
+                return {Total / GolfPhysics::RadPerRpm, Total};
+            }
+            const FVector3f Tangent = State.Velocity - NormalSpeed * Normal;
+            const float TangentSpeed = Tangent.Size();
+            if (TangentSpeed < 0.01f)
+            {
+                const float Plane = ContactPlaneSpin(State.Spin, Normal).Size();
+                return {Plane / GolfPhysics::RadPerRpm, Plane};
+            }
+            const float Backspin = Dot(State.Spin, Cross(Tangent / TangentSpeed, Normal));
+            return {FMath::Max(0.0f, Backspin) / GolfPhysics::RadPerRpm, FMath::Abs(Backspin)};
+        }
+
         float Restitution(float NormalSpeed, float SpinRpm, const FBounceProfile& Profile, float MinimumSpeed)
         {
             const float BaseCor = NormalSpeed < MinimumSpeed                    ? 0.0f
@@ -181,11 +241,63 @@ namespace OpenFairway
 
     FBallState GolfPhysics::StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt)
     {
+        if (Profile.bUseRungeKutta4)
+        {
+            return StepFlightRK4(State, Environment, Profile, Dt);
+        }
         // The wind where the ball is: State.Position.Y is its height above the launch ground.
         const FVector3f Wind = WindProfile::At(Environment, State.Position.Y);
         const FFlightAerodynamicsSample Sample = FlightAerodynamics::Sample(State.Velocity - Wind, State.Spin, Environment.AirDensity,
             Environment.AirViscosity, Environment.DragScale, Environment.LiftScale, Environment.InitialLaunchAngleDeg, Profile);
         return StepFlight(State, Environment, Sample, Dt);
+    }
+
+    FBallState GolfPhysics::StepFlightRK4(const FBallState& State, const FFlightEnvironment& Environment,
+        const FFlightProfile& Profile, float Dt, const FVector3f& GroundNormal)
+    {
+        auto Derivative = [&](const FBallState& S)
+        {
+            const FVector3f AirVelocity = S.Velocity - WindProfile::At(Environment, Dot(S.Position, GroundNormal));
+            const auto Aero = FlightAerodynamics::Sample(AirVelocity, S.Spin, Environment.AirDensity,
+                Environment.AirViscosity, Environment.DragScale, Environment.LiftScale, Environment.InitialLaunchAngleDeg, Profile);
+            FVector3f Acceleration(0, -Gravity, 0);
+            if (Aero.HasAerodynamics())
+            {
+                const float Q = 0.5f * Environment.AirDensity * CrossSection * Aero.Speed / Mass;
+                Acceleration -= Q * Aero.DragCoefficient * AirVelocity;
+                const float SpinLength = S.Spin.Size();
+                if (SpinLength > 0.1f)
+                {
+                    Acceleration += Q * Aero.LiftCoefficient * Cross(S.Spin, AirVelocity) / SpinLength;
+                }
+            }
+            return FBallState{S.Velocity, Acceleration, -Aero.SpinDecayRatePerSecond * S.Spin};
+        };
+        auto Advance = [](const FBallState& S, const FBallState& K, float H)
+        {
+            return FBallState{S.Position + H * K.Position, S.Velocity + H * K.Velocity, S.Spin + H * K.Spin};
+        };
+        const auto K1 = Derivative(State);
+        const auto K2 = Derivative(Advance(State, K1, Dt * 0.5f));
+        const auto K3 = Derivative(Advance(State, K2, Dt * 0.5f));
+        const auto K4 = Derivative(Advance(State, K3, Dt));
+        return {State.Position + (Dt / 6) * (K1.Position + 2 * K2.Position + 2 * K3.Position + K4.Position),
+            State.Velocity + (Dt / 6) * (K1.Velocity + 2 * K2.Velocity + 2 * K3.Velocity + K4.Velocity),
+            State.Spin + (Dt / 6) * (K1.Spin + 2 * K2.Spin + 2 * K3.Spin + K4.Spin)};
+    }
+
+    float GolfPhysics::FlightContactTime(const FBallState& State, const FFlightEnvironment& Environment,
+        const FFlightProfile& Profile, float Dt, const FVector3f& Normal, float PlaneHeight)
+    {
+        float Low = 0, High = Dt;
+        for (int32 Iteration = 0; Iteration < 20; ++Iteration)
+        {
+            const float Mid = (Low + High) * 0.5f;
+            const auto AtMid = StepFlightRK4(State, Environment, Profile, Mid);
+            if (Dot(AtMid.Position, Normal) > PlaneHeight) Low = Mid;
+            else High = Mid;
+        }
+        return High;
     }
 
     FBallState GolfPhysics::StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightAerodynamicsSample& Sample, float Dt)
@@ -221,7 +333,8 @@ namespace OpenFairway
         }
 
         const float IncomingSpeed = -NormalSpeed;
-        const float SpinRpm = State.Spin.Size() / RadPerRpm;
+        const FImpactSpin ImpactSpin = ReadImpactSpin(State, Normal, NormalSpeed, Profile);
+        const float SpinRpm = ImpactSpin.Rpm;
         const float MinimumSpeed = bFirstImpact
                                        ? (Surface.SurfaceBounce ? Surface.SurfaceBounce->FirstImpactMinimumSpeed : Profile.CorKillThreshold)
                                        : (Surface.SurfaceBounce ? Surface.SurfaceBounce->LaterImpactMinimumSpeed
@@ -258,11 +371,14 @@ namespace OpenFairway
 
         FVector3f Velocity = State.Velocity + Normal * (NormalImpulse / Mass) + TangentialImpulse / Mass;
         FVector3f Spin = State.Spin + Cross(Arm, TangentialImpulse) / Inertia;
-        float Retention = bFirstImpact
+        // Turf reads its loss from this impact alone; other surfaces keep the ported first-impact and rollout retention.
+        const bool bTurfLanding = UsesTurfLanding(Surface);
+        float Retention = bTurfLanding ? TurfRetention(State, Normal, IncomingSpeed, MaxTangentialImpulse / Mass, Surface)
+                          : bFirstImpact
                               ? FlightRetention(IncomingSpeed, SpinRpm, Profile)
                           : State.Velocity.Size() > 0.1f && Profile.RolloutSpinRatioThreshold > 0.0f
                               ? Lerp(Profile.RolloutLowSpinRetention, Profile.RolloutHighSpinRetention,
-                                    FMath::Min(State.Spin.Size() * Radius / State.Velocity.Size() / Profile.RolloutSpinRatioThreshold, 1.0f))
+                                    FMath::Min(ImpactSpin.RatioRadPerSecond * Radius / State.Velocity.Size() / Profile.RolloutSpinRatioThreshold, 1.0f))
                               : Profile.RolloutHighSpinRetention;
         // A grazing contact spends little energy pushing into the surface.
         const float NormalEnergyShare = FMath::Clamp(IncomingSpeed * IncomingSpeed / FMath::Max(State.Velocity.SizeSquared(), 1e-12f), 0.0f, 1.0f);
@@ -284,11 +400,11 @@ namespace OpenFairway
         FBallState Resolved = State;
         Resolved.Velocity = Velocity;
         Resolved.Spin = Spin;
-        return bFirstImpact && Response.SpinBiteScale > 0.0f ? ApplyLandingBite(State, Resolved, Normal, Surface, Response) : Resolved;
+        return bFirstImpact && !bTurfLanding && Response.SpinBiteScale > 0.0f ? ApplyLandingBite(State, Resolved, Normal, Surface, Response) : Resolved;
     }
 
     FBallState GolfPhysics::StepGround(const FBallState& State, const FVector3f& InNormal, const FSurfaceSettings& Surface,
-        const FRolloutProfile& Profile, float ImpactSpinRpm, float Dt)
+        const FRolloutProfile& Profile, float ImpactSpinRpm, float Dt, const FFlightEnvironment& Environment, const FFlightProfile& Flight)
     {
         const FVector3f Normal = ValidNormal(InNormal);
         FVector3f Velocity = State.Velocity - Dot(State.Velocity, Normal) * Normal;
@@ -298,7 +414,9 @@ namespace OpenFairway
         const FVector3f SlopeForce = FVector3f(0.0f, -Mass * Gravity, 0.0f) + Normal * NormalLoad;
         const float SlopeLength = SlopeForce.Size();
         const float StaticCapacity = Surface.RollingFriction * Profile.SlopeResistanceRatio * NormalLoad;
-        if (Velocity.SizeSquared() < 0.05f * 0.05f && State.Spin.SizeSquared() < 8.0f * 8.0f && SlopeLength <= StaticCapacity)
+        // Spin about the normal pivots the ball in place; only contact-plane spin can still roll it.
+        const FVector3f RollingSpin = Profile.bAxisAwareSpin ? ContactPlaneSpin(State.Spin, Normal) : State.Spin;
+        if (Velocity.SizeSquared() < 0.05f * 0.05f && RollingSpin.SizeSquared() < 8.0f * 8.0f && SlopeLength <= StaticCapacity)
         {
             FBallState Stopped = State;
             Stopped.Velocity = FVector3f::ZeroVector;
@@ -314,13 +432,66 @@ namespace OpenFairway
             return Held;
         }
 
-        const float Multiplier = SpinFrictionMultiplier(FMath::Max(ImpactSpinRpm, State.Spin.Size() / RadPerRpm), Velocity.Size(), Profile);
+        const float Multiplier = SpinFrictionMultiplier(FMath::Max(ImpactSpinRpm, RollingSpin.Size() / RadPerRpm), Velocity.Size(), Profile);
+        if (Profile.bCoupledContact)
+        {
+            // Apply passive resistance before enforcing contact. The old split step left a rolling
+            // ball slipping after every drag update, then waited for a slip threshold to correct it.
+            const float Speed = Velocity.Size();
+            const float K = 6.0f * PiF * Radius * Surface.GrassViscosity / Mass;
+            const float Decay = FMath::Exp(-K * Dt);
+            const float DragIntegral = K > 1e-8f ? (1.0f - Decay) / K : Dt;
+            FVector3f NextVelocity = Velocity * (Decay / (1.0f + Surface.GrassFormDrag * Speed * DragIntegral));
+            // Air drag does not disappear when the ball touches grass. Use the flight drag curve and air
+            // conditions, keeping aerodynamic and turf drag separate. A ball on the ground is one radius above
+            // its lie wherever that lie is, so it meets the wind at that height, and its drag reads only its own
+            // state and the ball's drag scale: not the launch's regime multiplier or high-launch boost.
+            const FVector3f Wind = WindProfile::At(Environment, Radius);
+            const FVector3f TangentWind = Wind - Dot(Wind, Normal) * Normal;
+            const FVector3f AirVelocity = NextVelocity - TangentWind;
+            const float AirSpeed = AirVelocity.Size();
+            if (AirSpeed >= FlightAerodynamics::MinAerodynamicSpeed)
+            {
+                const float Reynolds = Environment.AirDensity * AirSpeed * Radius * 2.0f / Environment.AirViscosity;
+                const float SpinRatio = State.Spin.Size() * Radius / AirSpeed;
+                const float DragCoefficient = FlightAerodynamics::GetCd(Reynolds, Flight) *
+                                              FlightAerodynamics::GetSpinDragMultiplier(SpinRatio, Reynolds, Flight) * Environment.BallDragScale;
+                const float AirDragRate = 0.5f * DragCoefficient * Environment.AirDensity * CrossSection / Mass;
+                NextVelocity = TangentWind + AirVelocity / (1.0f + AirDragRate * AirSpeed * Dt);
+            }
+            const float RollingMultiplier = 1.0f + (Multiplier - 1.0f) * Surface.RollingSpinScale;
+            const float RollingDelta = Surface.RollingFriction * RollingMultiplier * NormalLoad / Mass * Dt;
+            const float DraggedSpeed = NextVelocity.Size();
+            if (DraggedSpeed > 0.0f)
+            {
+                NextVelocity *= FMath::Max(0.0f, DraggedSpeed - RollingDelta) / DraggedSpeed;
+            }
+            NextVelocity += SlopeForce / Mass * Dt;
+            FVector3f NextSpin = ResistContactSpin(DampenSpin(State.Spin, Surface.GrassViscosity, Dt),
+                Normal, Surface.RollingFriction, NormalLoad, Dt);
+            const FVector3f Arm = -Radius * Normal;
+            const FVector3f Contact = NextVelocity + Cross(NextSpin, Arm);
+            const FVector3f NextSlip = Contact - Dot(Contact, Normal) * Normal;
+            FVector3f Impulse = -2.0f * Mass / 7.0f * NextSlip;
+            const float SlidingMultiplier = 1.0f + (Multiplier - 1.0f) * Surface.SlidingSpinScale;
+            const float Capacity = Surface.KineticFriction * SlidingMultiplier * NormalLoad * Dt;
+            const float ImpulseSize = Impulse.Size();
+            if (ImpulseSize > Capacity && ImpulseSize > 0.0f)
+            {
+                Impulse *= Capacity / ImpulseSize;
+            }
+            NextVelocity += Impulse / Mass;
+            NextSpin += Cross(Arm, Impulse) / Inertia;
+            return FBallState{State.Position + NextVelocity * Dt, NextVelocity, NextSpin};
+        }
         const bool bRolling = Slip.Size() < Profile.TangentVelocityThreshold;
         FVector3f UpdatedSpin = State.Spin;
         if (!bRolling && Slip.SizeSquared() > 0.0000001f)
         {
             FVector3f FrictionImpulse = -2.0f * Mass / 7.0f * Slip;
-            const float MaxImpulse = Surface.KineticFriction * Multiplier * NormalLoad * Dt;
+            // Scale 1 keeps the multiplier exactly; recalibrated turf (0) slides at its own kinetic friction.
+            const float SlidingMultiplier = Surface.SlidingSpinScale == 1.0f ? Multiplier : 1.0f + (Multiplier - 1.0f) * Surface.SlidingSpinScale;
+            const float MaxImpulse = Surface.KineticFriction * SlidingMultiplier * NormalLoad * Dt;
             const float ImpulseLength = FrictionImpulse.Size();
             if (ImpulseLength > MaxImpulse)
             {
@@ -338,7 +509,13 @@ namespace OpenFairway
             const float RollingMultiplier = Surface.RollingSpinScale == 1.0f ? Multiplier : 1.0f + (Multiplier - 1.0f) * Surface.RollingSpinScale;
             RollingForce = -Surface.RollingFriction * RollingMultiplier * NormalLoad * (Velocity / Velocity.Size());
         }
-        const FVector3f GrassDrag = -6.0f * PiF * Radius * Surface.GrassViscosity * Velocity;
+        FVector3f GrassDrag = -6.0f * PiF * Radius * Surface.GrassViscosity * Velocity;
+        if (Surface.GrassFormDrag > 0.0f)
+        {
+            // Blades the ball has to push through: a drag that grows with speed squared, so a ball skidding
+            // along the turf at full-shot speed slows far faster than one rolling out.
+            GrassDrag -= Mass * Surface.GrassFormDrag * Velocity.Size() * Velocity;
+        }
         const FVector3f Acceleration = (SlopeForce + RollingForce + GrassDrag) / Mass;
         FVector3f UpdatedVelocity = Velocity + Acceleration * Dt;
         if (Dot(Velocity, UpdatedVelocity) < 0.0f && SlopeLength <= StaticCapacity)
@@ -375,15 +552,26 @@ namespace OpenFairway
     bool GolfPhysics::CanRest(const FBallState& State, bool bSupported, const FVector3f& InNormal, const FSurfaceSettings& Surface,
         const FRolloutProfile& Profile)
     {
-        if (!bSupported || State.Velocity.SizeSquared() >= 0.05f * 0.05f || State.Spin.SizeSquared() >= 0.5f * 0.5f)
+        if (!bSupported || State.Velocity.SizeSquared() >= 0.05f * 0.05f)
         {
             return false;
         }
 
         const FVector3f Normal = ValidNormal(InNormal);
+        // A ball pivoting about the normal is not rolling anywhere; it rests once its contact-plane spin is gone.
+        const FVector3f RollingSpin = Profile.bAxisAwareSpin ? ContactPlaneSpin(State.Spin, Normal) : State.Spin;
+        if (RollingSpin.SizeSquared() >= 0.5f * 0.5f)
+        {
+            return false;
+        }
         const FVector3f SlopeGravity(0.0f, -Mass * Gravity, 0.0f);
         const FVector3f TangentGravity = SlopeGravity - Normal * Dot(SlopeGravity, Normal);
         return TangentGravity.Size() <= Surface.RollingFriction * Profile.SlopeResistanceRatio * Mass * Gravity * FMath::Max(0.0f, Normal.Y);
+    }
+
+    float GolfPhysics::RolloutSpinRpm(const FVector3f& Spin, const FVector3f& InNormal, const FRolloutProfile& Profile)
+    {
+        return (Profile.bAxisAwareSpin ? ContactPlaneSpin(Spin, ValidNormal(InNormal)) : Spin).Size() / RadPerRpm;
     }
 
     FVector3f GolfPhysics::LaunchSpin(const FVector3f& Velocity, const FVector3f& MeasuredSpin, const FVector3f& InNormal, const FBounceProfile& Profile)
@@ -399,6 +587,24 @@ namespace OpenFairway
         const float Rolling = (1.0f - LandingWeight(FMath::Abs(NormalSpeed), Profile)) *
                               (1.0f - RampUp(Tangent.Size(), PuttSpeedRampStartMps, PuttSpeedRampEndMps));
         return Rolling <= 0.0f ? FVector3f::ZeroVector : Rolling * Cross(Normal, Tangent) / Radius;
+    }
+
+    float GolfPhysics::StruckAlongGroundWeight(float TangentSpeed)
+    {
+        return RampUp(TangentSpeed, PuttSpeedRampStartMps, PuttSpeedRampEndMps);
+    }
+
+    FSurfaceSettings GolfPhysics::StruckAlongGround(const FSurfaceSettings& Surface, float Weight)
+    {
+        const float W = FMath::Clamp(Weight, 0.0f, 1.0f);
+        if (W <= 0.0f)
+        {
+            return Surface;
+        }
+        FSurfaceSettings Struck = Surface;
+        Struck.GrassViscosity *= Lerp(1.0f, Surface.StruckViscosityScale, W);
+        Struck.GrassFormDrag *= Lerp(1.0f, Surface.StruckFormDragScale, W);
+        return Struck;
     }
 
     bool GolfPhysics::HasRebound(const FVector3f& Velocity, const FVector3f& InNormal, const TOptional<FSurfaceBounceSettings>& Settings)

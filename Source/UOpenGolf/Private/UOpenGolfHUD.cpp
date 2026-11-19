@@ -24,6 +24,8 @@
 #include "OpenGolfWindSubsystem.h"
 #include "UI/Wind/WindDebug.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogUOpenGolfHUD, Log, All);
+
 namespace
 {
     TAutoConsoleVariable<int32> CVarWindDebug(TEXT("uopengolf.WindDebug"), 0,
@@ -59,6 +61,11 @@ void AUOpenGolfHUD::RefreshTheme()
                 WindContent = WindWidget->TakeWidget();
                 Indicator = Cast<UOpenGolfWindIndicator>(WindWidget->WidgetTree->FindWidget(TEXT("WindIndicator")));
             }
+        }
+        else
+        {
+            // check_package_start.py fails a package on this line: the asset was left out of the cook.
+            UE_LOG(LogUOpenGolfHUD, Error, TEXT("Wind indicator widget %s did not load; the wind HUD is hidden."), *WindWidgetClass.ToString());
         }
         ensureMsgf(Indicator, TEXT("The range wind Widget Blueprint must contain WindIndicator."));
         Widget = SNew(SRangeHud).Controller(Controller).WindIndicator(Indicator).WindContent(WindContent);

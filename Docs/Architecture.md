@@ -197,11 +197,22 @@ is the ball, tracer, shot camera and Slate HUD (shot tiles and launch-monitor st
   mapping, and resolving surfaces at actual contact points. Physics calculations
   belong to OpenFairway.
 
-Current physics defaults add speed-dependent flight spin decay and continuous
-interpolation of calibration scales and landing responses. The explicit
-`HistoricalReference()` profile preserves the pinned C# behavior for golden tests;
-parity with that profile is not independent physical validation. See the
-[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flightscope-comparisons-and-replay-shots) for the changes and measurements.
+Current physics defaults add:
+
+- speed-dependent flight spin decay;
+- continuous interpolation of calibration scales and landing responses;
+- contact that reads only the backspin across the ball's travel;
+- a coupled ground step, with air drag on the rolling ball;
+- a turf landing loss read from the impact itself;
+- a struck-along-the-ground grass drag for topped shots.
+
+The turf is fitted to launch-monitor rollout, and the gameplay flight's drag and lift to reference
+flights (tour averages, a launch-monitor export and a trajectory calculator); the data stays outside
+the repository. The explicit `HistoricalReference()` profile preserves the pinned C# behavior for
+golden tests; parity with that profile is not independent physical validation. See
+[Flight model](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model)
+and [Turf rollout calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration)
+in the physics reference for the changes and measurements.
 
 The sibling repositories are not required, modified, or linked by the build. The
 connector port is described in the [launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md);

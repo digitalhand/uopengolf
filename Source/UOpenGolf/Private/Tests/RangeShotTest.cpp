@@ -33,11 +33,53 @@ namespace
 
     // The world sweep and the headless loop split the landing step differently; allow for that.
     constexpr float CarryToleranceYd = 1.0f;
+    constexpr float LandingOfflineToleranceYd = 0.5f;
+    // After landing the live ball rolls over the range's real contours, which the flat headless ground lacks: where
+    // this drive rolls out, the back fairway falls about 0.7 degrees to the right, worth about 1.2 yd over its
+    // 25 yd roll. On flat ground the live ball matches the prediction within 0.1 yd (UOpenGolf.Range.RolloutSurfaces).
     constexpr float TotalToleranceYd = 2.0f;
-    constexpr float OfflineToleranceYd = 1.0f;
+    constexpr float OfflineToleranceYd = 2.0f;
+    // A cross-slope gentler than this is treated as flat for the downhill check.
+    constexpr float CrossSlopeCheckDeg = 0.2f;
+
+    /** What the live ball met: where it first landed (core frame, from the shot start) and the ground it rolled on. */
+    struct FRangeShotTrace
+    {
+        bool bLanded = false;
+        FVector3f LandingPosition = FVector3f::ZeroVector;
+        FVector3f GroundNormalSum = FVector3f::ZeroVector;
+        int32 GroundSteps = 0;
+        float MaxTiltDeg = 0.0f;
+    };
+
+    /** The first landing's position in a headless shot traced with the same profile and air as PredictShot. */
+    OpenFairway::FShotSimulationResult PredictWithLanding(const AOpenFairwayBall& Ball, FVector3f& OutLanding)
+    {
+        OpenFairway::FAirConditions Air;
+        Air.TemperatureF = Ball.TemperatureF;
+        Air.AltitudeFt = Ball.AltitudeFt;
+        Air.RelativeHumidity = Ball.RelativeHumidity;
+        Air.PressurePa = Ball.PressurePa;
+        Air.WindSpeedMph = Ball.WindSpeedMph;
+        Air.WindFromDeg = Ball.WindFromDeg - Ball.AimYawDeg;
+        OpenFairway::FBallPhysicsProfile Predicted = Ball.Profile;
+        Predicted.GreenStimpFeet = OpenFairway::GreenSpeed::Clamp(Ball.GreenStimpFeet);
+        bool bLanded = false;
+        OpenFairway::FShotSimulationOptions Options;
+        Options.Trace = [&bLanded, &OutLanding](const OpenFairway::FPhysicsTraceSample& Sample)
+        {
+            if (!bLanded && Sample.Phase == TEXT("ImpactIn"))
+            {
+                bLanded = true;
+                OutLanding = Sample.State.Position;
+            }
+        };
+        return OpenFairway::ShotSimulator::Simulate(AOpenFairwayBall::ToLaunchData(DriveLaunch()), OpenFairway::ESurface::Fairway, Predicted, Air,
+            OpenFairway::ShotSimulator::DefaultMaxTimeSeconds, FVector3f(0.0f, 1.0f, 0.0f), Options);
+    }
 } // namespace
 
-DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FHitRangeShot, FAutomationTestBase*, Test);
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FHitRangeShot, FAutomationTestBase*, Test, TSharedPtr<FRangeShotTrace>, Trace);
 
 bool FHitRangeShot::Update()
 {
@@ -52,17 +94,32 @@ bool FHitRangeShot::Update()
         }
         return false;
     }
+    // Diagnostics only: the trace never drives the physics.
+    Mode->GetBall()->DiagnosticTrace = [Trace = Trace](const OpenFairway::FPhysicsTraceSample& Sample)
+    {
+        if (!Trace->bLanded && Sample.Phase == TEXT("ImpactIn"))
+        {
+            Trace->bLanded = true;
+            Trace->LandingPosition = Sample.State.Position;
+        }
+        else if (Sample.Phase == TEXT("Ground"))
+        {
+            Trace->GroundNormalSum += Sample.Normal;
+            ++Trace->GroundSteps;
+            Trace->MaxTiltDeg = FMath::Max(Trace->MaxTiltDeg, FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Sample.Normal.Y, -1.0f, 1.0f))));
+        }
+    };
     Test->TestTrue(TEXT("Launch accepted"), Mode->GetBall()->Launch(DriveLaunch()));
     return true;
 }
 
-DEFINE_LATENT_AUTOMATION_COMMAND_ONE_PARAMETER(FVerifyRangeShot, FAutomationTestBase*, Test);
+DEFINE_LATENT_AUTOMATION_COMMAND_TWO_PARAMETER(FVerifyRangeShot, FAutomationTestBase*, Test, TSharedPtr<FRangeShotTrace>, Trace);
 
 bool FVerifyRangeShot::Update()
 {
     UWorld* World = GEditor->PlayWorld;
     const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
-    const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     if (!Ball)
     {
         Test->AddError(TEXT("The ball disappeared during the shot."));
@@ -83,16 +140,41 @@ bool FVerifyRangeShot::Update()
     {
         return true;
     }
+    Ball->DiagnosticTrace = nullptr;
     const OpenFairway::FShotSimulationResult Predicted = Ball->PredictShot(DriveLaunch(), EOpenFairwaySurface::Fairway);
     const float Yards = OpenFairway::YardsPerMeter;
     Test->AddInfo(FString::Printf(TEXT("Range: carry %.2f, total %.2f, offline %.2f yd; headless: carry %.2f, total %.2f, offline %.2f yd"),
         Shot.CarryM * Yards, Shot.TotalM * Yards, Shot.LateralM * Yards, Predicted.CarryM * Yards, Predicted.TotalM * Yards, Predicted.LateralM * Yards));
+
+    // Split the offline difference into flight-and-landing and roll-out, and report the ground the live ball rolled on.
+    FVector3f HeadlessLanding = FVector3f::ZeroVector;
+    const OpenFairway::FShotSimulationResult Traced = PredictWithLanding(*Ball, HeadlessLanding);
+    const FVector3f AimRight = OpenFairway::ShotSetup::Rotate(FVector3f(0.0f, 0.0f, 1.0f), FVector3f(0.0f, 1.0f, 0.0f), FMath::DegreesToRadians(-Ball->AimYawDeg));
+    const float LiveLandingOffline = FVector3f::DotProduct(Trace->LandingPosition, AimRight) * Yards;
+    const float HeadlessLandingOffline = HeadlessLanding.Z * Yards;
+    const FVector3f MeanNormal = Trace->GroundSteps > 0 ? Trace->GroundNormalSum.GetSafeNormal() : FVector3f(0.0f, 1.0f, 0.0f);
+    const float CrossSlopeDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(FVector3f::DotProduct(MeanNormal, AimRight), -1.0f, 1.0f)));
+    Test->AddInfo(FString::Printf(TEXT("Landing offline: range %.2f, headless %.2f yd. Roll-out drift: range %.2f, headless %.2f yd. ")
+                                  TEXT("Ground under the live roll: %d steps, mean tilt %.2f deg (cross-slope %.2f deg toward the aim's right), max %.2f deg. ")
+                                  TEXT("Traced headless total %.2f yd (PredictShot %.2f)."),
+        LiveLandingOffline, HeadlessLandingOffline, Shot.LateralM * Yards - LiveLandingOffline, Predicted.LateralM * Yards - HeadlessLandingOffline,
+        Trace->GroundSteps, FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(MeanNormal.Y, -1.0f, 1.0f))), CrossSlopeDeg, Trace->MaxTiltDeg,
+        Traced.TotalM * Yards, Predicted.TotalM * Yards));
     Test->TestTrue(TEXT("Landed"), Shot.bLanded);
     Test->TestTrue(TEXT("At rest"), Shot.bAtRest);
     Test->TestTrue(TEXT("Landed on fairway"), Shot.LandingSurface == EOpenFairwaySurface::Fairway);
+    Test->TestTrue(TEXT("The live landing was traced"), Trace->bLanded && Trace->GroundSteps > 0);
     Test->TestEqual(TEXT("Carry matches headless"), Shot.CarryM * Yards, Predicted.CarryM * Yards, CarryToleranceYd);
+    Test->TestEqual(TEXT("Landing offline matches headless"), LiveLandingOffline, HeadlessLandingOffline, LandingOfflineToleranceYd);
     Test->TestEqual(TEXT("Total matches headless"), Shot.TotalM * Yards, Predicted.TotalM * Yards, TotalToleranceYd);
     Test->TestEqual(TEXT("Offline matches headless"), Shot.LateralM * Yards, Predicted.LateralM * Yards, OfflineToleranceYd);
+    if (FMath::Abs(CrossSlopeDeg) > CrossSlopeCheckDeg)
+    {
+        // A normal tilted toward the right means the ground falls to the right, so the live roll drifts that way.
+        const float ExtraDrift = (Shot.LateralM - Predicted.LateralM) * Yards - (LiveLandingOffline - HeadlessLandingOffline);
+        Test->TestTrue(FString::Printf(TEXT("The live roll-out drifts downhill of the flat prediction (%+.2f yd on a %+.2f deg cross-slope)"), ExtraDrift, CrossSlopeDeg),
+            ExtraDrift * FMath::Sign(CrossSlopeDeg) >= -0.1f);
+    }
     Test->TestEqual(TEXT("Roll is total minus carry"), Shot.RollM, Shot.TotalM - Shot.CarryM, 1e-3f);
     return true;
 }
@@ -108,8 +190,9 @@ bool FUOpenGolfRangeShotTest::RunTest(const FString& Parameters)
         return false;
     }
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
-    ADD_LATENT_AUTOMATION_COMMAND(FHitRangeShot(this));
-    ADD_LATENT_AUTOMATION_COMMAND(FVerifyRangeShot(this));
+    const TSharedPtr<FRangeShotTrace> Trace = MakeShared<FRangeShotTrace>();
+    ADD_LATENT_AUTOMATION_COMMAND(FHitRangeShot(this, Trace));
+    ADD_LATENT_AUTOMATION_COMMAND(FVerifyRangeShot(this, Trace));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
     return true;
 }
@@ -209,6 +292,77 @@ public:
 private:
     FAutomationTestBase* Test;
 };
+
+/**
+ * The recorded range shots that exposed the rollout faults (2026-11-13), hit on the real range: each must come to rest with
+ * the headless carry. Totals are reported, not asserted: the range's contours and rough take part in the roll-out.
+ */
+class FReplayRecordedShots : public IAutomationLatentCommand
+{
+public:
+    explicit FReplayRecordedShots(FAutomationTestBase* InTest) : Test(InTest) {}
+    bool Update() override
+    {
+        UWorld* World = GEditor->PlayWorld;
+        auto* Mode = World && World->HasBegunPlay() ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
+        if (!Mode || !Mode->GetBall())
+        {
+            if (GetCurrentRunTime() > 30) { Test->AddError(TEXT("Range did not start")); return true; }
+            return false;
+        }
+        // The recorded launches (2026-11-13) that exposed the rollout faults, named by their launch values: the club
+        // selected when they were hit is not a reliable label.
+        struct FRecorded
+        {
+            float Speed, Vla, Hla, Back, Side;
+        };
+        const FRecorded Shots[] = {{67.47f, -0.14f, 16.22f, 1406.0f, 4599.0f}, {57.71f, 0.08f, 7.44f, -1257.0f, -408.0f},
+            {100.17f, 0.78f, -6.69f, 2368.0f, -1011.0f}, {107.82f, 8.36f, -10.65f, -401.0f, 4581.0f}};
+        AOpenFairwayBall* Ball = Mode->GetBall();
+        const float Yards = OpenFairway::YardsPerMeter;
+        for (const FRecorded& Recorded : Shots)
+        {
+            const FString Label = FString::Printf(TEXT("%.1f mph at %.2f deg (%.0f back, %.0f side rpm)"), Recorded.Speed, Recorded.Vla, Recorded.Back, Recorded.Side);
+            const TCHAR* Name = *Label;
+            FOpenFairwayLaunch Launch;
+            Launch.BallSpeedMph = Recorded.Speed;
+            Launch.VerticalLaunchDeg = Recorded.Vla;
+            Launch.HorizontalLaunchDeg = Recorded.Hla;
+            Launch.bHasBackSpin = Launch.bHasSideSpin = true;
+            Launch.BackSpinRpm = Recorded.Back;
+            Launch.SideSpinRpm = Recorded.Side;
+            Mode->ResetBallToTee();
+            if (!Test->TestTrue(FString::Printf(TEXT("%s accepted"), Name), Ball->Launch(Launch)))
+                continue;
+            for (int32 Frame = 0; Ball->IsMoving() && Frame < 60 * 60; ++Frame)
+                Ball->Tick(1.0f / 60.0f);
+            FOpenFairwayShotResult Result;
+            Ball->GetShotResult(Result);
+            const OpenFairway::FShotSimulationResult Predicted = Ball->PredictShot(Launch, EOpenFairwaySurface::Fairway);
+            Test->AddInfo(FString::Printf(TEXT("%s on the range: carry %.1f, total %.1f, offline %.1f yd, rests on %s after %.1f s; flat fairway: carry %.1f, total %.1f yd"),
+                Name, Result.CarryM * Yards, Result.TotalM * Yards, Result.LateralM * Yards,
+                OpenFairway::SurfaceCatalog::GetName(static_cast<OpenFairway::ESurface>(Result.Surface)), Result.ElapsedS,
+                Predicted.CarryM * Yards, Predicted.TotalM * Yards));
+            Test->TestTrue(FString::Printf(TEXT("%s comes to rest"), Name),
+                Result.bAtRest && Result.TerminationReason == EOpenFairwayShotTermination::Rest);
+            Test->TestEqual(FString::Printf(TEXT("%s carry matches headless (yd)"), Name), Result.CarryM * Yards, Predicted.CarryM * Yards, CarryToleranceYd);
+        }
+        return true;
+    }
+private:
+    FAutomationTestBase* Test;
+};
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeRecordedShotsTest, "UOpenGolf.Range.RecordedShots",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FRangeRecordedShotsTest::RunTest(const FString&)
+{
+    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true)) return false;
+    ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
+    FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FReplayRecordedShots>(this));
+    ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
+    return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeFrameRatesTest, "UOpenGolf.Range.FrameRates",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

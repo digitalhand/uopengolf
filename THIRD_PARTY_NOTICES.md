@@ -36,10 +36,10 @@ projects keep their own licenses and are recorded here if imported.
 | [OpenFairway](https://github.com/digitalhand/openfairway) | Earlier C# physics | Superseded by ogolf-physics; not ported |
 | [ogolf](https://github.com/digitalhand/ogolf) | Reference for greens, lies, and surface integration | Not yet ported |
 
-`Data/ShotLibrary/` stores results from the
-[FlightScope Trajectory Optimizer](https://trajectory.flightscope.com/) for the
-maintainer's recorded launch-monitor shots, as comparison data for the physics (see its
-[README](Data/ShotLibrary/README.md#provenance)). No FlightScope code or assets are included.
+`Assets/Data/ShotLibrary/` stores only uopengolf's own shot recordings. Third-party reference data
+used to check and fit the physics (launch-monitor exports, published averages, calculator output)
+and research papers are kept outside the repository and are not distributed with it (see
+[Assets/Data](Assets/Data/README.md#where-the-data-lives)); the physics docs cite the papers.
 
 Unreal Engine must be obtained separately and is governed by the
 [Unreal Engine EULA](https://www.unrealengine.com/eula/unreal), not this repository's MIT license.

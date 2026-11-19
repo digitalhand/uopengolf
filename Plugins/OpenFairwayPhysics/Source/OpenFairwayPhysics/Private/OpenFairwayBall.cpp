@@ -336,7 +336,7 @@ FShotSimulationResult AOpenFairwayBall::PredictShot(const FOpenFairwayLaunch& La
     Air.WindFromDeg -= AimYawDeg;
     FBallPhysicsProfile Predicted = Profile;
     Predicted.GreenStimpFeet = GreenSpeed::Clamp(GreenStimpFeet);
-    return ShotSimulator::Simulate(ToLaunchData(LaunchData), ToCoreSurface(Surface), Predicted, Air);
+    return ShotSimulator::Simulate(ToLaunchData(LaunchData), ToCoreSurface(Surface), Predicted, Air, MaxShotSeconds);
 }
 
 bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
@@ -360,7 +360,7 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     const FShotSpin Spin = ShotSetup::ParseSpin(Data);
     // Every surface this shot touches resolves its green from this stimp.
     Profile.GreenStimpFeet = GreenSpeed::Clamp(GreenStimpFeet);
-    ShotParams = FResolvedShotParams::Resolve(Profile, GetAirConditions(), Data.SpeedMph, Data.VerticalLaunchDeg, Spin.TotalSpinRpm);
+    ShotParams = FResolvedShotParams::Resolve(Profile, GetAirConditions(), Data.SpeedMph, Data.VerticalLaunchDeg, Spin.TotalSpinRpm, Spin.BackSpinRpm);
     SurfaceSettings = ShotParams.ResolveSurface(ToCoreSurface(CurrentSurface), Profile);
     FLaunchVectors Vectors = ShotSetup::BuildLaunchVectors(Data.SpeedMph, Data.VerticalLaunchDeg, Data.HorizontalLaunchDeg, Spin.BackSpinRpm, Spin.SideSpinRpm);
     if (!FMath::IsNearlyZero(AimYawDeg))
@@ -381,6 +381,7 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     SubstepAccumulator = 0.0f;
     ShotStep = 0;
     RolloutImpactSpinRpm = 0.0f;
+    StruckWeight = 0.0f;
     bHoled = false;
     CrossingCup.Reset();
     MeasuredCup.Reset();
@@ -492,13 +493,37 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
     {
         return StepCupCrossing(Dt);
     }
+    if (ShotStep == 0 && BallState == EOpenFairwayBallState::Flight && ShotParams.Rollout.bCoupledContact)
+    {
+        FGroundHit Ground;
+        if (ProbeGround(Ground, GroundProbeUpM, GolfPhysics::Radius + GroundProbeDistanceM) &&
+            FVector3f::DotProduct(Velocity, Ground.Normal) <= 0.0f)
+        {
+            FloorNormal = Ground.Normal;
+            SetSurface(ResolveSurface(Ground.Component.Get(), Ground.PhysMaterial.Get()));
+            RecordLanding(FloorNormal);
+            const FBallState Initial{ToCore(SimLocation - ShotStart) / CmPerM + CoreUp * GolfPhysics::Radius, Velocity, Omega};
+            TracePhysics(DiagnosticTrace, 0, Dt, TEXT("ImpactIn"), ToCoreSurface(CurrentSurface), Initial, FloorNormal);
+            StruckWeight = GolfPhysics::StruckAlongGroundWeight((Velocity - FloorNormal * FVector3f::DotProduct(Velocity, FloorNormal)).Size());
+            const auto Contact = GolfPhysics::ResolveImpact(Initial, FloorNormal, SurfaceSettings, ShotParams.Bounce, true, ShotParams.Landing);
+            Velocity = Contact.Velocity;
+            Omega = Contact.Spin;
+            BallState = EOpenFairwayBallState::Rollout;
+            bOnGround = !GolfPhysics::HasRebound(Velocity, FloorNormal, SurfaceSettings.SurfaceBounce);
+            if (bOnGround) Velocity -= FloorNormal * FVector3f::DotProduct(Velocity, FloorNormal);
+            TracePhysics(DiagnosticTrace, 0, Dt, TEXT("ImpactOut"), ToCoreSurface(CurrentSurface), {Initial.Position, Velocity, Omega}, FloorNormal);
+            BroadcastLanded();
+        }
+    }
     const bool bWasOnGround = bOnGround;
     const FVector3f PreviousVelocity = Velocity;
     const FVector3f PreviousSpin = Omega;
     // Flight reads the height above the launch ground: ShotStart is the ball centre, one radius up.
     const FVector3f Position = ToCore(SimLocation - ShotStart) / CmPerM + FVector3f(0.0f, GolfPhysics::Radius, 0.0f);
     const FBallState State{Position, Velocity, Omega};
-    const FBallState Next = bWasOnGround ? GolfPhysics::StepGround(State, FloorNormal, SurfaceSettings, ShotParams.Rollout, RolloutImpactSpinRpm, Dt)
+    // A full shot struck into or along the ground keeps its struck grass drag on every surface it rolls over.
+    const FBallState Next = bWasOnGround ? GolfPhysics::StepGround(State, FloorNormal, GolfPhysics::StruckAlongGround(SurfaceSettings, StruckWeight),
+                                               ShotParams.Rollout, RolloutImpactSpinRpm, Dt, ShotParams.Environment, ShotParams.Flight)
                                          : GolfPhysics::StepFlight(State, ShotParams.Environment, ShotParams.Flight, Dt);
     Velocity = Next.Velocity;
     Omega = Next.Spin;
@@ -539,19 +564,48 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
         const FVector End = MoveStart + Delta;
         FCollisionQueryParams Params(SCENE_QUERY_STAT(OpenFairwayBallSweep), false, this);
         Params.bReturnPhysicalMaterial = true;
-        const bool bHit = GetWorld()->SweepSingleByChannel(
-            Hit, MoveStart, End, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SafeMarginCm), Params);
+        // Airborne sweeps must detect the true sphere's first contact. Shrinking it can
+        // postpone a grazing touchdown by a full step, past the RK4 contact solver's interval.
+        // Supported movement retains clearance so tangential sweeps do not stick to turf.
+        const bool bDescending = !bOnGround && FVector3f::DotProduct(Velocity, FloorNormal) < -0.01f;
+        float SweepMarginCm = bDescending ? 0.0f : SafeMarginCm;
+        bool bHit = GetWorld()->SweepSingleByChannel(
+            Hit, MoveStart, End, FQuat::Identity, TraceChannel, FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SweepMarginCm), Params);
+        if (bHit && Hit.bStartPenetrating && bDescending)
+        {
+            // Terrain/float tolerances can leave a supported sphere barely overlapping.
+            // This is recovery, not a new airborne impact; preserve the usual clearance.
+            SweepMarginCm = SafeMarginCm;
+            Hit = FHitResult();
+            bHit = GetWorld()->SweepSingleByChannel(Hit, MoveStart, End, FQuat::Identity, TraceChannel,
+                FCollisionShape::MakeSphere(GolfPhysics::Radius * CmPerM - SweepMarginCm), Params);
+        }
         if (bHit && Hit.bBlockingHit)
         {
             // Rest the true sphere tangent to the contact (the sweep sphere was a margin smaller).
-            SimLocation = Hit.bStartPenetrating ? MoveStart + Hit.Normal * (Hit.PenetrationDepth + SafeMarginCm) : Hit.Location + Hit.ImpactNormal * SafeMarginCm;
+            SimLocation = Hit.bStartPenetrating ? MoveStart + Hit.Normal * (Hit.PenetrationDepth + SafeMarginCm) : Hit.Location + Hit.ImpactNormal * SweepMarginCm;
             return true;
         }
         SimLocation = End;
         return false;
     };
     FHitResult Hit;
-    const bool bHit = MoveWithSweep(ToUnreal(Velocity * Dt) * CmPerM, Hit);
+    const FVector3f Displacement = !bWasOnGround && ShotParams.Flight.bUseRungeKutta4
+        ? Next.Position - State.Position : Velocity * Dt;
+    const bool bHit = MoveWithSweep(ToUnreal(Displacement) * CmPerM, Hit);
+    if (bHit && !bWasOnGround && ShotParams.Flight.bUseRungeKutta4 &&
+        ToCore(Hit.ImpactNormal).Y > 0.7f && !IsObstacle(Hit.GetComponent()))
+    {
+        const FVector3f Normal = ToCore(Hit.ImpactNormal).GetSafeNormal();
+        const FVector3f SurfacePoint = ToCore(Hit.ImpactPoint - ShotStart) / CmPerM + CoreUp * GolfPhysics::Radius;
+        const float PlaneHeight = FVector3f::DotProduct(SurfacePoint, Normal) + GolfPhysics::Radius;
+        const float ContactTime = GolfPhysics::FlightContactTime(State, ShotParams.Environment, ShotParams.Flight, Dt, Normal, PlaneHeight);
+        const auto Contact = GolfPhysics::StepFlightRK4(State, ShotParams.Environment, ShotParams.Flight, ContactTime);
+        Velocity = Contact.Velocity;
+        Omega = Contact.Spin;
+        Hit.Time = ContactTime / Dt;
+        SimLocation = ShotStart + ToUnreal(Contact.Position - CoreUp * GolfPhysics::Radius) * CmPerM;
+    }
     HandleCollision(bHit ? &Hit : nullptr, bWasOnGround, PreviousVelocity);
     if (bHoled)
     {
@@ -583,6 +637,8 @@ bool AOpenFairwayBall::StepPhysics(float Dt)
 
     UpdateCupHeight();
     Result.ApexM = FMath::Max(Result.ApexM, static_cast<float>(SimLocation.Z - ShotStart.Z) / CmPerM);
+    TracePhysics(DiagnosticTrace, Result.ElapsedS, Dt, bOnGround ? TEXT("Ground") : TEXT("Flight"),
+        ToCoreSurface(CurrentSurface), {ToCore(SimLocation - ShotStart) / CmPerM + CoreUp * GolfPhysics::Radius, Velocity, Omega}, FloorNormal);
     // Before the rest check: a ball that stops over the cup drops, it never rests there.
     if (BallState == EOpenFairwayBallState::Rollout && bOnGround && TryCaptureInCup(SimLocation, false))
     {
@@ -656,6 +712,8 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
                     return;
                 }
 
+                TracePhysics(DiagnosticTrace, Result.ElapsedS, GolfPhysics::SimulationDt, TEXT("ImpactIn"),
+                    ToCoreSurface(CurrentSurface), {ToCore(SimLocation - ShotStart) / CmPerM + CoreUp * GolfPhysics::Radius, Velocity, Omega}, Normal);
                 const FBallState Resolved = GolfPhysics::ResolveImpact(
                     FBallState{FVector3f::ZeroVector, Velocity, Omega}, Normal, SurfaceSettings, ShotParams.Bounce, bLandedFromFlight, ShotParams.Landing);
                 if (FVector3f::DotProduct(Velocity, Normal) < 0.0f && bLandedFromFlight)
@@ -664,6 +722,8 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
                 }
                 Velocity = Resolved.Velocity;
                 Omega = Resolved.Spin;
+                TracePhysics(DiagnosticTrace, Result.ElapsedS, GolfPhysics::SimulationDt, TEXT("ImpactOut"),
+                    ToCoreSurface(CurrentSurface), {ToCore(SimLocation - ShotStart) / CmPerM + CoreUp * GolfPhysics::Radius, Velocity, Omega}, Normal);
 
                 if (!GolfPhysics::HasRebound(Velocity, Normal, SurfaceSettings.SurfaceBounce) && BallState == EOpenFairwayBallState::Rollout)
                 {
@@ -718,7 +778,7 @@ void AOpenFairwayBall::HandleCollision(const FHitResult* Hit, bool bWasOnGround,
 void AOpenFairwayBall::RecordLanding(const FVector3f& Normal)
 {
     // The impact spin keeps its "bite" on roll-out friction as the spin decays.
-    RolloutImpactSpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
+    RolloutImpactSpinRpm = GolfPhysics::RolloutSpinRpm(Omega, Normal, ShotParams.Rollout);
     Result.bLanded = true;
     Result.LandingSpeedMps = Velocity.Size();
     Result.LandingAngleDeg = AngleDegrees(Velocity, Normal);

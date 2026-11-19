@@ -93,9 +93,22 @@ requiring a Zen cache service; normal interactive editor sessions use engine def
 Default timeout is 600 seconds; use `-TimeoutSeconds` or `--timeout` (up to 3600) to change it.
 Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
 
-The report validator and the FlightScope comparison script also have engine-free checks:
-`python3 -m unittest Assets.Scripts.test_automation_report` and `python3 -m unittest Assets.Scripts.test_flightscope_compare` from the repository root
-(Windows), or the same with `python3` (Linux).
+The report validator, the shot comparison and the launch-monitor and recorded-shot importers also
+have engine-free checks: `python -m unittest Assets.Scripts.test_automation_report Assets.Scripts.test_shot_compare
+Assets.Scripts.test_monitor_import Assets.Scripts.test_recording_import` from the repository root (Windows), or the
+same with `python3` (Linux).
+`python Assets/Scripts/shot_compare.py` replays the shot library in the editor and reports the physics
+against the reference results; `python Assets/Scripts/carry_audit.py` reports flight per reference
+session. Third-party reference data lives outside the repository, in `UOPENGOLF_DATA` (default
+`~/data/uopengolf`); see [Assets/Data](../Assets/Data/README.md#where-the-data-lives) and the
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#shot-library).
+`Assets/Scripts/ue.ps1 Test -Filter UOpenGolf.Calibration.Rollout` (opt-in, about two minutes) fits the
+turf landing loss and ground resistance, then the struck-along-the-ground drag of topped shots,
+against the local shots with a reference total and writes every candidate to
+`Saved/ShotLibrary/calibration.csv`; it never changes the catalog. `python Assets/Scripts/flight_fit.py`
+(needs NumPy) refits the flight table the same way. See
+[Turf rollout calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration)
+and [Flight model](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model).
 
 The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
 committed with its terrain, vegetation and range actors.

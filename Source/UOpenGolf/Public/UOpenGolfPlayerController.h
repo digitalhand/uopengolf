@@ -14,6 +14,21 @@ class UInputMappingContext;
 struct FInputActionValue;
 struct FKey;
 
+/** A test shot typed into the Test shots panel. The defaults are a basic straight shot: 100 mph, 16°, 5000 rpm, no curve. */
+struct UOPENGOLF_API FOpenGolfCustomShot
+{
+    float BallSpeedMps = 44.704f;
+    float VerticalLaunchDeg = 16.0f;
+    /** Negative is left, positive right. */
+    float HorizontalLaunchDeg = 0.0f;
+    int32 TotalSpinRpm = 5000;
+    /** Negative curves the ball left, positive right. */
+    float SpinAxisDeg = 0.0f;
+
+    /** Each value moved inside the launch-monitor limits that UOpenLaunchMonitorSubsystem::InjectCustomShot checks. */
+    FOpenGolfCustomShot Clamped() const;
+};
+
 /**
  * Range controls and the shot camera. Keys: C connect, T disconnect, H hit selected shot, P presets, Tab next
  * club, R tee up the ball again, G play the hole / back to the range, B place the ball (Hole mode; then click the
@@ -50,14 +65,25 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Launch Monitor")
     void DisconnectLaunchMonitor();
 
+    /** Hits the selected test shot (H): the custom shot when it is selected, otherwise the selected preset. */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Launch Monitor")
     void InjectReplayShot();
 
+    /** Selects a preset, which also leaves the custom shot. */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Replay")
     bool SelectReplayShot(int32 Index);
 
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Replay")
     int32 GetSelectedReplayShot() const { return SelectedReplayIndex; }
+
+    /** Makes H hit the custom shot. Its values last until the map reloads (Main menu, or quitting). */
+    void SelectCustomShot() { bCustomShotSelected = true; }
+    bool IsCustomShotSelected() const { return bCustomShotSelected; }
+    const FOpenGolfCustomShot& GetCustomShot() const { return CustomShot; }
+    /** Stores the values limited by FOpenGolfCustomShot::Clamped. */
+    void SetCustomShot(const FOpenGolfCustomShot& Shot) { CustomShot = Shot.Clamped(); }
+    /** Back to the straight-shot defaults. */
+    void ResetCustomShot() { CustomShot = FOpenGolfCustomShot(); }
 
     void ToggleReplayPanel();
     void SetReplayPanelOpen(bool bOpen);
@@ -193,6 +219,8 @@ private:
     bool bMainMenuOpen = false;
     TSharedPtr<SWidget> ReplayPanel;
     int32 SelectedReplayIndex = 0;
+    FOpenGolfCustomShot CustomShot;
+    bool bCustomShotSelected = false;
     bool bReplayPanelOpen = false;
     bool bPlacingBall = false;
     // How long A or D has been held, for the turn-rate ramp.

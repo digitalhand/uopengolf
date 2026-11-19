@@ -28,6 +28,8 @@ class OPENFAIRWAYPHYSICS_API AOpenFairwayBall : public AActor
 
 public:
     AOpenFairwayBall();
+    /** Optional SI diagnostic callback, disabled by default. */
+    OpenFairway::FPhysicsTrace DiagnosticTrace;
 
     /** Launches from the current position, snapped to the ground beneath it. Returns false for invalid launch data. */
     UFUNCTION(BlueprintCallable, Category = "OpenFairway")
@@ -319,6 +321,8 @@ private:
     bool bOnGround = false;
     EOpenFairwaySurface CurrentSurface = EOpenFairwaySurface::Fairway;
     float RolloutImpactSpinRpm = 0.0f;
+    /** Share of the struck-along-the-ground grass drag this shot rolls with (0 unless it was launched into the ground). */
+    float StruckWeight = 0.0f;
     float SubstepAccumulator = 0.0f;
     /** Physics steps since launch; seeds canopy deflection so a repeated shot takes the same path. */
     uint32 ShotStep = 0;

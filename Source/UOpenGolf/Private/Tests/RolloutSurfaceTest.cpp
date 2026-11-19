@@ -17,7 +17,7 @@
 namespace RolloutSurfaceTestDetail
 {
     /**
-     * Replay shot 0, the low wood, decoded from its Square Home frame: 51.17 m/s, 6.95 degrees up, 0.63 left,
+     * Replay shot 0, the low wood, decoded from its launch-monitor replay frame: 51.17 m/s, 6.95 degrees up, 0.63 left,
      * 1933 rpm (1932 back, 48 left) on a 1.42-degree left axis. The game converts it the same way.
      */
     FOpenFairwayLaunch LowWood()
@@ -180,4 +180,113 @@ bool FRolloutSurfaceTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Rough rolls much shorter than fairway"), RoughRollYd < 0.8f * FairwayRollYd);
     return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRecordedContactParityTest, "UOpenGolf.Range.RecordedContactParity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FRecordedContactParityTest::RunTest(const FString& Parameters)
+{
+    using namespace RolloutSurfaceTestDetail;
+    FTestWorldWrapper Wrapper;
+    if (!Wrapper.CreateTestWorld(EWorldType::EditorPreview)) return false;
+    UWorld& World = *Wrapper.GetTestWorld();
+    auto* Near = AddGround(World, FVector2D(-10, -100), FVector2D(40, 100));
+    auto* Far = AddGround(World, FVector2D(40, -100), FVector2D(600, 100));
+    Wrapper.TickTestWorld(1.0f / 60.0f);
+    auto* Ball = World.SpawnActor<AOpenFairwayBall>();
+    struct FCase { float Speed, Angle, Direction, Back, Side; };
+    const FCase Cases[] = {{67.47f, -0.14f, 16.22f, 1406, 4599}, {100.17f, 0.78f, -6.69f, 2368, -1011},
+        {107.82f, 8.36f, -10.65f, -401, 4581}, {113.9f, 0.6f, -3.8f, 2068, 0}, {91.4f, 1.4f, 9.7f, 1948, 0}};
+    auto MakeLaunch = [](const FCase& C)
+    {
+        FOpenFairwayLaunch L;
+        L.BallSpeedMph = C.Speed; L.VerticalLaunchDeg = C.Angle; L.HorizontalLaunchDeg = C.Direction;
+        L.BackSpinRpm = C.Back; L.SideSpinRpm = C.Side; L.bHasBackSpin = true; L.bHasSideSpin = true;
+        return L;
+    };
+    for (int32 Index = 0; Index < static_cast<int32>(OpenFairway::ESurface::Count); ++Index)
+    {
+        const auto Surface = static_cast<EOpenFairwaySurface>(Index);
+        TagSurface(*Near, Surface); TagSurface(*Far, Surface);
+        for (const auto& C : Cases)
+        {
+            const auto Launch = MakeLaunch(C);
+            FOpenFairwayShotResult Live;
+            if (!Play(*Ball, Launch, Live, *this)) continue;
+            const auto Predicted = Ball->PredictShot(Launch, Surface);
+            const FString Label = FString::Printf(TEXT("Surface %d, %.2f mph / %.2f deg"), Index, C.Speed, C.Angle);
+            TestEqual(Label + TEXT(" carry parity (yd)"), Yards(Live.CarryM), Yards(Predicted.CarryM), 0.25f);
+            TestEqual(Label + TEXT(" total parity (yd)"), Yards(Live.TotalM), Yards(Predicted.TotalM), 0.25f);
+        }
+    }
+    TagSurface(*Near, EOpenFairwaySurface::Fairway);
+    for (const auto Destination : {EOpenFairwaySurface::Rough, EOpenFairwaySurface::Green, EOpenFairwaySurface::Sand})
+    {
+        TagSurface(*Far, Destination);
+        bool bSawFairway = false, bSawDestination = false;
+        Ball->DiagnosticTrace = [&](const OpenFairway::FPhysicsTraceSample& S)
+        {
+            bSawFairway |= S.Surface == OpenFairway::ESurface::Fairway;
+            bSawDestination |= S.Surface == static_cast<OpenFairway::ESurface>(Destination);
+        };
+        FOpenFairwayShotResult Live;
+        Play(*Ball, MakeLaunch(Cases[0]), Live, *this);
+        Ball->DiagnosticTrace = nullptr;
+        TestTrue(TEXT("Ground trace observes both sides of the boundary"), bSawFairway && bSawDestination);
+        TestEqual(TEXT("Final surface matches the ground under the ball"), Live.Surface, Destination);
+    }
+    Wrapper.DestroyTestWorld(false);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFlightParityTest, "UOpenGolf.Range.FlightParity",
+    EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+// The gameplay flight (measured aerodynamics, RK4) in the live ball: carry matches the headless prediction
+// and does not depend on the render rate or a stall. The launches are launch-monitor shots from full to topped,
+// including one that lands within a single physics step.
+bool FFlightParityTest::RunTest(const FString& Parameters)
+{
+    using namespace RolloutSurfaceTestDetail;
+    FTestWorldWrapper Wrapper;
+    if (!Wrapper.CreateTestWorld(EWorldType::EditorPreview))
+        return false;
+    UWorld& World = *Wrapper.GetTestWorld();
+    TagSurface(*AddGround(World, FVector2D(-100, -200), FVector2D(600, 200)), EOpenFairwaySurface::Fairway);
+    Wrapper.TickTestWorld(1.0f / 60.0f);
+    auto* Ball = World.SpawnActor<AOpenFairwayBall>();
+    struct FCase { float Speed, Angle, Spin; };
+    const FCase Cases[] = {{109.3f, 16.7f, 5072}, {78.1f, 10.2f, 2460}, {61, 8.4f, 1644}, {79, 25.9f, 7991}, {73, -1.5f, 1337}, {60, 0.02f, 1500}};
+    for (const FCase& C : Cases)
+    {
+        FOpenFairwayLaunch Launch = LowWood();
+        Launch.BallSpeedMph = C.Speed;
+        Launch.VerticalLaunchDeg = C.Angle;
+        Launch.HorizontalLaunchDeg = 0;
+        Launch.TotalSpinRpm = C.Spin;
+        Launch.BackSpinRpm = C.Spin;
+        Launch.SideSpinRpm = 0;
+        Launch.SpinAxisDeg = 0;
+        const FString Label = FString::Printf(TEXT("%.1f mph / %.2f deg"), C.Speed, C.Angle);
+        const auto Expected = Ball->PredictShot(Launch, EOpenFairwaySurface::Fairway);
+        float Baseline = 0;
+        // 30 fps, 144 fps, then 60 fps with a 0.1 s stall every 30 frames.
+        for (int32 Rate = 0; Rate < 3; ++Rate)
+        {
+            Ball->PlaceAt(FVector(0, 0, 50));
+            TestTrue(Label + TEXT(" launches"), Ball->Launch(Launch));
+            for (int32 Step = 0; Ball->IsMoving() && Step < 30000; ++Step)
+                Ball->Tick(Rate == 0 ? 1.0f / 30.0f : Rate == 1 ? 1.0f / 144.0f : (Step % 30 == 0 ? 0.1f : 1.0f / 60.0f));
+            FOpenFairwayShotResult Result;
+            TestTrue(Label + TEXT(" rests"), Ball->GetShotResult(Result) && Result.bAtRest);
+            TestEqual(Label + TEXT(" live carry matches headless (yd)"), Yards(Result.CarryM), Yards(Expected.CarryM), 0.25f);
+            if (Rate == 0)
+                Baseline = Result.CarryM;
+            else
+                TestEqual(Label + TEXT(" carry independent of render rate"), Result.CarryM, Baseline, 0.001f);
+        }
+    }
+    Wrapper.DestroyTestWorld(false);
+    return true;
+}
+
 #endif

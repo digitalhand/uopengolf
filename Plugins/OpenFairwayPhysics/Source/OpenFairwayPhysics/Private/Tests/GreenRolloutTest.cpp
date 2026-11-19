@@ -38,9 +38,9 @@ bool FOpenFairwayGreenRolloutTest::RunTest(const FString& Parameters)
     const FSurfaceSettings Fairway = Shot.ResolveSurface(ESurface::Fairway, Profile);
     const FSurfaceSettings Green = Shot.ResolveSurface(ESurface::Green, Profile);
 
-    // Full shots land with at least this much spin. Below about 1,250 rpm the fairway's low-spin
-    // calibration still rolls a slow ball farther than a stimp-10 green.
-    for (const float SpinRpm : {2000.0f, 2500.0f, 6000.0f})
+    // The recalibrated fairway is slower than a stimp-10 green after any landing spin (the ported fairway,
+    // with its low-spin calibration, rolled a slow ball farther than the green below about 1,250 rpm).
+    for (const float SpinRpm : {0.0f, 1000.0f, 2000.0f, 2500.0f, 6000.0f})
     {
         for (const float SpeedMps : {2.0f, 3.0f, 5.0f, 8.0f, 12.0f})
         {
@@ -56,6 +56,13 @@ bool FOpenFairwayGreenRolloutTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("A faster green rolls farther"), RollMeters(Shot.ResolveSurface(ESurface::Green, Faster), 5.0f, 2500.0f) > RollMeters(Green, 5.0f, 2500.0f));
     TestEqual(TEXT("A stimpmeter ball stops at the stimp distance"), RollMeters(Green, GreenSpeed::StimpmeterSpeedMps, 0.0f),
         GreenSpeed::DefaultStimpFeet * 0.3048f, 0.1f);
+    for (float Stimp = GreenSpeed::MinStimpFeet; Stimp <= GreenSpeed::MaxStimpFeet; Stimp += 1.0f)
+    {
+        FBallPhysicsProfile Selected;
+        Selected.GreenStimpFeet = Stimp;
+        TestEqual(FString::Printf(TEXT("Stimp %.0f measures within 0.1 m"), Stimp),
+            RollMeters(Shot.ResolveSurface(ESurface::Green, Selected), GreenSpeed::StimpmeterSpeedMps, 0.0f), Stimp * 0.3048f, 0.1f);
+    }
 
     // The historical reference keeps the ported green, which stops a fast roll short of the fairway.
     const FBallPhysicsProfile Reference = FBallPhysicsProfile::HistoricalReference();

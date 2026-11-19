@@ -13,6 +13,9 @@ inline constexpr int32 LaunchMonitorDefaultOpenConnectPort = 4921;
 /** FLaunchMonitorShot::Source of an Open Connect shot starts with this, followed by the connector's DeviceID. */
 inline const TCHAR* const LaunchMonitorOpenConnectSource = TEXT("Open Connect");
 
+/** FLaunchMonitorShot::Source of a shot typed in by hand (UOpenLaunchMonitorSubsystem::InjectCustomShot). */
+inline const TCHAR* const LaunchMonitorCustomSource = TEXT("Custom");
+
 /** Where launch-monitor shots come from. One provider is active at a time. */
 UENUM(BlueprintType)
 enum class ELaunchMonitorProvider : uint8

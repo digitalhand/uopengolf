@@ -37,7 +37,7 @@ bool FOpenFairwayWindTest::RunTest(const FString& Parameters)
 {
     const FBallPhysicsProfile Profile;
     // Calm air is the default; parity with the pre-wind engine is pinned by the Fixtures and
-    // the FlightScopeAnalysis regression carries.
+    // the FlightDiagnostics regression carries.
     const FShotSimulationResult Calm = ShotSimulator::Simulate(WindIron(), ESurface::Fairway, Profile, FAirConditions());
     FAirConditions DirectionOnly;
     DirectionOnly.WindFromDeg = 135.0f;

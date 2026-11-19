@@ -61,6 +61,37 @@ namespace OpenFairway
         OPENFAIRWAYPHYSICS_API FVector3f Rotate(const FVector3f& Vector, const FVector3f& Axis, float AngleRadians);
     } // namespace ShotSetup
 
+    /** Optional diagnostic sample, in core SI units; never used to drive physics. */
+    struct FPhysicsTraceSample
+    {
+        float TimeS;
+        float Dt;
+        FString Phase;
+        ESurface Surface;
+        FBallState State;
+        FVector3f Normal;
+        float SlipMps;
+        float EnergyJ;
+    };
+    using FPhysicsTrace = TFunction<void(const FPhysicsTraceSample&)>;
+    inline void TracePhysics(const FPhysicsTrace& Trace, float TimeS, float Dt, const TCHAR* Phase,
+        ESurface Surface, const FBallState& State, const FVector3f& Normal)
+    {
+        if (Trace)
+        {
+            const FVector3f Contact = State.Velocity + FVector3f::CrossProduct(State.Spin, -GolfPhysics::Radius * Normal);
+            Trace({TimeS, Dt, Phase, Surface, State, Normal,
+                (Contact - FVector3f::DotProduct(Contact, Normal) * Normal).Size(), GolfPhysics::KineticEnergy(State)});
+        }
+    }
+    struct FShotSimulationOptions
+    {
+        float Dt = GolfPhysics::SimulationDt;
+        FPhysicsTrace Trace;
+        /** Explicit surface for calibration experiments; unset for gameplay predictions. */
+        TOptional<FSurfaceSettings> SurfaceOverride;
+    };
+
     /** Outcome of a headless shot on one planar surface. Distances are meters along the shot direction. */
     struct FShotSimulationResult
     {
@@ -83,10 +114,17 @@ namespace OpenFairway
         bool bFirstImpactSpinback = false;
         /** False when the time limit ran out before the ball stopped. */
         bool bAtRest = false;
+        int32 BounceCount = 0;
+        float GroundDistanceM = 0.0f;
         ELandingBucket LandingBucket = ELandingBucket::Run;
         FString RegimeKey;
         FString MatchedRegimeKey;
         FShotSpin Spin;
+        float OutsideMeasuredCoverageS = 0;
+        float MinFlightRe = MAX_flt;
+        float MaxFlightRe = 0;
+        float MinFlightSpinRatio = MAX_flt;
+        float MaxFlightSpinRatio = 0;
     };
 
     /**
@@ -97,10 +135,12 @@ namespace OpenFairway
      */
     namespace ShotSimulator
     {
-        constexpr float DefaultMaxTimeSeconds = 30.0f;
+        // Fast ground shots on a green can legitimately roll beyond 30 seconds.
+        constexpr float DefaultMaxTimeSeconds = 120.0f;
 
         OPENFAIRWAYPHYSICS_API FShotSimulationResult Simulate(const FLaunchData& Launch, ESurface Surface = ESurface::Fairway,
             const FBallPhysicsProfile& Profile = FBallPhysicsProfile(), const FAirConditions& Air = FAirConditions(),
-            float MaxTimeSeconds = DefaultMaxTimeSeconds, const FVector3f& GroundNormal = FVector3f(0.0f, 1.0f, 0.0f));
+            float MaxTimeSeconds = DefaultMaxTimeSeconds, const FVector3f& GroundNormal = FVector3f(0.0f, 1.0f, 0.0f),
+            const FShotSimulationOptions& Options = FShotSimulationOptions());
     } // namespace ShotSimulator
 } // namespace OpenFairway

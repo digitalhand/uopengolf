@@ -54,8 +54,8 @@ namespace OpenFairway
     };
 
     /**
-     * Ball-specific modifiers with the calibrated defaults: regime overrides derived from FS
-     * reference data and landing responses per landing bucket.
+     * Ball-specific modifiers with the calibrated defaults: regime overrides inherited from
+     * ogolf-physics and landing responses per landing bucket.
      */
     struct OPENFAIRWAYPHYSICS_API FBallPhysicsProfile
     {
@@ -81,6 +81,11 @@ namespace OpenFairway
          * at 4 m/s stops within 2 m instead of running on 2.5 m. HistoricalReference keeps the catalog value.
          */
         float SandRollingFriction = 0.45f;
+        /**
+         * Play the turf surfaces (fairway, soft fairway, rough, firm, fringe) with the catalog recalibrated
+         * to launch-monitor rollout instead of the ported values (SurfaceCatalog::Get). HistoricalReference keeps the ported turf.
+         */
+        bool bRecalibratedTurf = true;
 
         /** Interpolate calibrated scales and landing responses across launch conditions. */
         bool bInterpolateCalibration = true;
@@ -92,11 +97,15 @@ namespace OpenFairway
         FBounceProfile Bounce;
         FRolloutProfile Rollout;
 
-        /** Current defaults, with continuous calibration and speed-dependent spin decay. */
+        /** Gameplay defaults: SpinRatioV1 flight with RK4, recalibrated turf and landing responses. */
         FBallPhysicsProfile();
 
         /** Pinned C# behavior for reference verification; not the gameplay default. */
         static FBallPhysicsProfile HistoricalReference();
+        /** The previous gameplay flight: calibrated legacy aerodynamics and the Euler step. Turf unchanged. */
+        static FBallPhysicsProfile LegacyCalibrated();
+        /** Pro V1-only aerodynamics with RK4, kept for comparison. */
+        static FBallPhysicsProfile ProV1Reference();
 
         /** Matched key is "interpolated" for continuous calibration; regime key remains descriptive. */
         FRegimeScaleOverride ResolveScaleOverride(float SpeedMph, float LaunchAngleDeg, float TotalSpinRpm, FString& OutRegimeKey,
@@ -148,9 +157,12 @@ namespace OpenFairway
         FString RegimeKey;
         FString MatchedRegimeKey;
 
-        /** Resolves a launch (PhysicsParamsFactory.Create without the surface). */
+        /**
+         * Resolves a launch (PhysicsParamsFactory.Create without the surface). Flight calibration reads the total
+         * spin; with an axis-aware bounce profile the landing response reads BackSpinRpm when it is given.
+         */
         static FResolvedShotParams Resolve(const FBallPhysicsProfile& Profile, const FAirConditions& Air, float SpeedMph, float LaunchAngleDeg,
-            float TotalSpinRpm);
+            float TotalSpinRpm, TOptional<float> BackSpinRpm = {});
 
         /** Contact parameters of a surface for this shot, with profile and regime multipliers applied. */
         FSurfaceSettings ResolveSurface(ESurface Surface, const FBallPhysicsProfile& Profile) const;

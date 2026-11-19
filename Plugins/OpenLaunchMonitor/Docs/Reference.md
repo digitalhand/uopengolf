@@ -38,7 +38,7 @@ threading are documented below.
 - Club data (path, face to target, attack angle, dynamic loft, impact location) matched to its
   shot, with per-field flags.
 - Club and handedness selection sent to the device.
-- Ten built-in replay shots (both FlightScope comparisons, varied synthetic shots and hardware captures) and
+- Ten built-in replay shots (a low wood and a mid iron, varied synthetic shots and hardware captures) and
   arbitrary replay frames in hex,
   through the same events as the device.
 - Automatic reconnect with backoff after a dropped link.
@@ -128,7 +128,7 @@ during Play. See [Recording shots](../../../Docs/Playing.md#recording-shots) and
 
 - `GetReplayShotNames()` and `GetReplayShotDescription(Index)` expose the catalog and
   decoded inputs without firing shot events. Descriptions identify synthetic versus
-  captured shots and available FlightScope references.
+  captured shots.
 - `InjectReplayShotAt(Index)` delivers a chosen preset; an invalid index returns false
   without firing an event. Repeating an index repeats the inputs with a new shot number.
 - `InjectReplayShot()` still cycles through the catalog. The game's **Test shots [P]**
@@ -136,13 +136,19 @@ during Play. See [Recording shots](../../../Docs/Playing.md#recording-shots) and
   in the game module, keeping the plugin independent of Slate and physics.
 - `InjectReplayFrames(BallHex, ClubHex)` decodes your own frames; malformed input is
   reported through `OnError` and not delivered.
+- `InjectCustomShot(BallSpeedMps, VerticalLaunchDeg, HorizontalLaunchDeg, TotalSpinRpm, SpinAxisDeg)`
+  delivers values typed in by hand, exactly, with `Source` `"Custom"` (`LaunchMonitorCustomSource`). The five
+  values are `Measured`; back and side spin are `Derived` from total spin and axis, the same way as an Open
+  Connect shot without them (`Private/LaunchMonitorSpin.h`). A value outside `LaunchMonitorLimits`
+  (`Public/LaunchMonitorLimits.h`, the limits every decoder applies) is reported through `OnError` and not
+  delivered. The game's **Custom** button in **Test shots [P]** uses it.
 
 | Index | Preset | Source |
 | ---: | --- | --- |
-| 0 | Low wood, 114.5 mph / 6.95° / 1933 rpm | Synthetic; 23:05 screenshot, FS carry 119.8 yd |
+| 0 | Low wood, 114.5 mph / 6.95° / 1933 rpm | Synthetic |
 | 1 | Square Home, 57.5 mph | Recorded ball and club frames |
 | 2 | Square Home putt | Recorded, untracked club data |
-| 3 | Mid iron, 75.7 mph / 20.78° / 4463 rpm | Synthetic; 22:05 screenshot, FS carry 87.6 yd, HLA mismatch noted |
+| 3 | Mid iron, 75.7 mph / 20.78° / 4463 rpm | Synthetic, launched left |
 | 4 | Driver, 150 mph / 12.5° / 2335 rpm | Synthetic |
 | 5 | Iron, 102.1 mph / 17.4° / 5391 rpm | Synthetic |
 | 6 | Wedge, 66.4 mph / 23.2° / 6449 rpm | Synthetic |
@@ -154,7 +160,7 @@ Speeds are rounded for display; Square packets store 0.01 m/s increments. Captur
 come from open-lm-connector's pinned test fixtures. New synthetic frames leave
 back/side spin missing so the normal decoder derives them from total spin and
 axis; the original wood frame retains its supplied components. Additional presets
-have no fabricated club readings or FlightScope targets. Selecting or injecting a
+have no fabricated club readings. Selecting or injecting a
 replay does not connect to hardware or change the device's selected club.
 
 ## Threading and ownership
@@ -192,7 +198,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Scripts/ue.ps1 Test -Filter 
 | `UOpenGolf.LaunchMonitor.Session` | Handshake timing, heartbeat, arming, club data matching, link loss and reconnecting, with a fake transport and scheduler |
 | `UOpenGolf.LaunchMonitor.OperationWait` | Completion, cancellation, shutdown and deadline behavior with a deterministic clock |
 | `UOpenGolf.LaunchMonitor.Cancellation` | Repeated disconnect/reconnect, obsolete completions and worker initialization failure with a fake transport |
-| `UOpenGolf.LaunchMonitor.Replay` | All presets decode, indexed repeat, screenshot inputs, invalid-index and malformed-frame rejection, and absent club-data clearing |
+| `UOpenGolf.LaunchMonitor.Replay` | All presets decode, indexed repeat, low wood and mid iron inputs, invalid-index and malformed-frame rejection, and absent club-data clearing |
+| `UOpenGolf.LaunchMonitor.CustomShot` | Typed values arrive exactly with the Custom source, back/side spin derived from total and axis, and out-of-limit or non-finite values rejected |
 | `UOpenGolf.LaunchMonitor.BlueZModel` | BlueZ object mapping: discovery filter, device/address lookup, characteristic resolution per device, error classification and HUD messages |
 | `UOpenGolf.LaunchMonitor.BlueZBus` | Linux only: missing-library reporting, system-bus calls, cancellation without waiting, posting without a reply, adapter property reads (skips without a bus or adapter) |
 

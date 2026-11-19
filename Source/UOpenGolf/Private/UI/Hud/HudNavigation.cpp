@@ -13,7 +13,8 @@ namespace HudNavigationDetail
         if(!Widget->GetVisibility().IsVisible()||!Widget->IsEnabled())return;
         const FName Tag=Widget->GetTag();
         InHud|=Tag==TEXT("TrainingHud")||Tag==TEXT("PlayControls")||Tag==TEXT("WindControls")||Tag==TEXT("TestShotControls");
-        if(InHud && Widget->SupportsKeyboardFocus())Out.Add(Widget);
+        // A text box passes its focus to its inner text, which is listed itself; listing both would trap Up on it.
+        if(InHud && Widget->SupportsKeyboardFocus() && Widget->GetType()!=TEXT("SEditableTextBox"))Out.Add(Widget);
         for(int32 I=0;I<Widget->GetChildren()->Num();++I)Controls(Widget->GetChildren()->GetChildAt(I),Out,InHud);
     }
     bool NavigationKey(FKey Key)
@@ -84,6 +85,8 @@ bool FHudNavigation::HandleKeyDownEvent(FSlateApplication& App,const FKeyEvent& 
         Index=(Index+(Previous?-1:1)+Items.Num())%Items.Num();
         App.SetKeyboardFocus(Items[Index],EFocusCause::Navigation);return true;
     }
+    // A custom test-shot field takes typing (digits, Backspace, Delete); the panel keeps it from the play keys.
+    if(Focus.IsValid()&&Focus->GetType()==TEXT("SEditableText"))return false;
     return !HudNavigationDetail::NavigationKey(Key);
 }
 bool FHudNavigation::HandleKeyUpEvent(FSlateApplication& App,const FKeyEvent& Event)

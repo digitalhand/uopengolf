@@ -110,6 +110,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Launch Monitor|Replay")
     bool InjectReplayFrames(const FString& BallFrameHex, const FString& ClubFrameHex);
 
+    /**
+     * Delivers a shot typed in by hand, with Source LaunchMonitorCustomSource. Back and side spin are derived from
+     * total spin and axis. False, and nothing delivered, when a value is outside LaunchMonitorLimits.
+     */
+    UFUNCTION(BlueprintCallable, Category = "Launch Monitor|Replay")
+    bool InjectCustomShot(float BallSpeedMps, float VerticalLaunchDeg, float HorizontalLaunchDeg, int32 TotalSpinRpm, float SpinAxisDeg);
+
     UFUNCTION(BlueprintPure, Category = "Launch Monitor")
     ELaunchMonitorConnectionState GetConnectionState() const { return ConnectionState; }
 

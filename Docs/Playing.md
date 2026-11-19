@@ -157,7 +157,7 @@ when the shot arrives. The club resets to Driver at the start of every Play sess
 ### Recording shots
 
 Real launch-monitor shots can be saved, tagged with the selected club, to replay them
-in other tools (openfairway's shot injector, the FlightScope Trajectory Optimizer) and
+in other tools (such as openfairway's shot injector) and
 compare with this engine. While you are signed in, recording also saves eligible range
 shots to your online profile, for the club averages and shot history in Settings › Player
 (see [Menu and account](#menu-and-account)). Recording off saves
@@ -179,8 +179,9 @@ Each time recording is switched on, the first shot reserves a unique session fol
 `~/Documents/...`), so recordings survive rebuilds and reinstalls. Each shot is one file named
 `club_<club>_shot_<n>.json`, such as `club_driver_shot_1.json` then
 `club_7i_shot_2.json`: `n` counts every shot in the session, whatever the club. Club
-codes match the shot library: `driver`, `3w`, `5w`, `7w`, `4i` to `9i`, `pw`, `gw`,
-`sw`, `putter`.
+codes are `driver`, `3w`, `5w`, `7w`, `4i` to `9i`, `pw`, `gw`, `sw` and `putter`.
+The club is the one selected when the shot arrived, not a measurement. Imported into the
+shot library, it is kept as `reported_club` and never read by the physics or the comparison.
 
 Only shots from the connected device are recorded; replay and test shots (**H**,
 **P**) never are. A completed shot waits for its club response, or until three seconds
@@ -300,8 +301,22 @@ Choose a preset and click **Hit selected shot [H]**. Selecting an item only upda
 the preview; **H** hits and repeats the selected shot from the tee. **P** or **Close**
 returns to the range. The selection lasts for the current Play session.
 
-Ten presets include both supplied screenshots (114.5 mph low wood and 75.7 mph
-mid iron), the Square Home 57.5 mph and putt captures, and a driver, iron, wedge,
-chip, high flop and straight putt. The panel shows launch/spin inputs and available FlightScope
-targets; synthetic samples are identified. See the
+Ten presets include a 114.5 mph low wood and a 75.7 mph mid iron, the Square Home
+57.5 mph and putt captures, and a driver, iron, wedge, chip, high flop and straight
+putt. The panel shows launch/spin inputs; synthetic samples are identified. See the
 [replay catalog](../Plugins/OpenLaunchMonitor/Docs/Reference.md#replay-shots) for details.
+
+#### Custom shots
+
+Click **Custom** next to the dropdown to type in your own shot. The fields start as a
+basic straight shot: 100 mph ball speed, 16° launch angle, 0° direction, 5000 rpm total
+spin and 0° spin axis. Ball speed is in your speed units (Settings › Player); a negative
+direction or axis is left, positive is right. Press **Enter** or click another control to
+keep a value. Text that is not a number puts the field back, and a value beyond what a
+launch monitor can report is limited to it. **Straight shot** restores the defaults.
+
+**Hit custom shot [H]** hits the values, and **H** hits them again from the tee as often as
+you like, so the same shot can be repeated exactly. Keys typed into a field stay there:
+H, P and the other play keys only act once you leave the field, and Tab moves to the next
+field. Choosing a preset from the dropdown goes back to the presets; the custom values are
+kept until you return to the main menu or quit. Custom shots are not recorded, like the presets.

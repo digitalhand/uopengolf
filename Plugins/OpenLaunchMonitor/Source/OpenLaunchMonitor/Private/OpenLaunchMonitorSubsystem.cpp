@@ -4,6 +4,8 @@
 #include "Bluetooth/GattTransport.h"
 #include "HAL/IConsoleManager.h"
 #include "IPAddress.h"
+#include "LaunchMonitorLimits.h"
+#include "LaunchMonitorSpin.h"
 #include "OpenConnect/OpenConnectProtocol.h"
 #include "OpenConnect/OpenConnectServer.h"
 #include "OpenLaunchMonitorLog.h"
@@ -49,15 +51,15 @@ namespace
     // synthesized presets exercise the same decoder and events as hardware shots.
     // New frames omit back/side components so the decoder derives them from total/axis.
     const FReplayShot ReplayShots[] = {
-        {TEXT("Low wood - 114.5 mph (23:05 screenshot)"), TEXT("110237FD13B702C1FF8D078E008C073000"), TEXT("11070FA000C4FFCAFECA08"), TEXT("FlightScope carry: 119.8 yd; apex: 14.6 ft. Synthetic replay of screenshot inputs.")},
+        {TEXT("Low wood - 114.5 mph"), TEXT("110237FD13B702C1FF8D078E008C073000"), TEXT("11070FA000C4FFCAFECA08"), TEXT("Synthetic low wood.")},
         {TEXT("Square Home capture - 57.5 mph"), TEXT("1102370A0A9A09C8001A16E8FF7C15D0FF"), TEXT("11070FC0FB1A00A1FEFB0C"), TEXT("Recorded Square Home ball and club frames.")},
         {TEXT("Square Home putt capture"), TEXT("1102138101E6FF91010000000000000000"), TEXT("110700FFFFFFFFFFFFFFFF"), TEXT("Recorded putt with untracked club data.")},
-        {TEXT("Mid iron - 75.7 mph (22:05 screenshot)"), TEXT("110237380D1E089FFF6F11F2F700800080"), TEXT(""), TEXT("FlightScope carry: 87.6 yd; apex: 35.0 ft. Screenshot used HLA right; replay retains original left launch.")},
-        {TEXT("Driver - 150 mph"), TEXT("110237321AE20496001F09DE0300800080"), TEXT(""), TEXT("Synthetic driver with left spin axis; no FlightScope reference.")},
-        {TEXT("Iron - 102.1 mph"), TEXT("110237D411CC0696000F1532FB00800080"), TEXT(""), TEXT("Synthetic iron with right spin axis; no FlightScope reference.")},
-        {TEXT("Wedge - 66.4 mph"), TEXT("110237980B100974FF31193AFD00800080"), TEXT(""), TEXT("Synthetic wedge; no FlightScope reference.")},
-        {TEXT("Chip - 24.7 mph"), TEXT("1102374F0402070000840C000000800080"), TEXT(""), TEXT("Synthetic straight chip; no FlightScope reference.")},
-        {TEXT("High flop - 68.1 mph"), TEXT("110237E20B94112D00E02EACFF00800080"), TEXT(""), TEXT("Synthetic 45-degree, 12000 rpm flop; no FlightScope reference.")},
+        {TEXT("Mid iron - 75.7 mph"), TEXT("110237380D1E089FFF6F11F2F700800080"), TEXT(""), TEXT("Synthetic mid iron, launched left.")},
+        {TEXT("Driver - 150 mph"), TEXT("110237321AE20496001F09DE0300800080"), TEXT(""), TEXT("Synthetic driver with left spin axis.")},
+        {TEXT("Iron - 102.1 mph"), TEXT("110237D411CC0696000F1532FB00800080"), TEXT(""), TEXT("Synthetic iron with right spin axis.")},
+        {TEXT("Wedge - 66.4 mph"), TEXT("110237980B100974FF31193AFD00800080"), TEXT(""), TEXT("Synthetic wedge.")},
+        {TEXT("Chip - 24.7 mph"), TEXT("1102374F0402070000840C000000800080"), TEXT(""), TEXT("Synthetic straight chip.")},
+        {TEXT("High flop - 68.1 mph"), TEXT("110237E20B94112D00E02EACFF00800080"), TEXT(""), TEXT("Synthetic 45-degree, 12000 rpm flop.")},
         {TEXT("Straight putt - 5 mph"), TEXT("110213E000000000000000000000800080"), TEXT("110700FFFFFFFFFFFFFFFF"), TEXT("Synthetic straight putt: zero launch angles and spin; 2.24 m/s (5 mph rounded) at Square packet precision.")},
     };
 
@@ -283,6 +285,34 @@ bool UOpenLaunchMonitorSubsystem::InjectReplayFrames(const FString& BallFrameHex
     {
         DeliverClubData(ClubMetrics, ShotCounter);
     }
+    return true;
+}
+
+bool UOpenLaunchMonitorSubsystem::InjectCustomShot(float BallSpeedMps, float VerticalLaunchDeg, float HorizontalLaunchDeg, int32 TotalSpinRpm, float SpinAxisDeg)
+{
+    using namespace LaunchMonitorLimits;
+    // The same limits every provider's decoder applies, so a typed shot can never reach the physics with garbage.
+    const bool bFinite = FMath::IsFinite(BallSpeedMps) && FMath::IsFinite(VerticalLaunchDeg) && FMath::IsFinite(HorizontalLaunchDeg) && FMath::IsFinite(SpinAxisDeg);
+    if (!bFinite || BallSpeedMps <= 0.0f || BallSpeedMps >= MaxBallSpeedMps || FMath::Abs(VerticalLaunchDeg) >= MaxAbsVerticalAngleDeg ||
+        FMath::Abs(HorizontalLaunchDeg) >= MaxAbsHorizontalAngleDeg || TotalSpinRpm < 0 || TotalSpinRpm >= MaxSpinRpm || FMath::Abs(SpinAxisDeg) > MaxAbsSpinAxisDeg)
+    {
+        const FString Message = FString::Printf(TEXT("Custom shot is outside the launch-monitor limits: %.2f m/s, VLA %.2f, HLA %.2f, %d rpm, axis %.2f."),
+            BallSpeedMps, VerticalLaunchDeg, HorizontalLaunchDeg, TotalSpinRpm, SpinAxisDeg);
+        UE_LOG(LogOpenLaunchMonitor, Warning, TEXT("%s"), *Message);
+        ReportError(Message);
+        return false;
+    }
+    FLaunchMonitorShot Shot;
+    Shot.Source = LaunchMonitorCustomSource;
+    Shot.BallSpeedMps = BallSpeedMps;
+    Shot.VerticalLaunchDeg = VerticalLaunchDeg;
+    Shot.HorizontalLaunchDeg = HorizontalLaunchDeg;
+    Shot.TotalSpinRpm = TotalSpinRpm;
+    Shot.SpinAxisDeg = SpinAxisDeg;
+    for (ELaunchMonitorValueSource* Value : {&Shot.BallSpeedSource, &Shot.VerticalLaunchSource, &Shot.HorizontalLaunchSource, &Shot.TotalSpinSource, &Shot.SpinAxisSource})
+        *Value = ELaunchMonitorValueSource::Measured;
+    LaunchMonitorSpin::DeriveSpin(Shot);
+    DeliverShot(MoveTemp(Shot), 0);
     return true;
 }
 

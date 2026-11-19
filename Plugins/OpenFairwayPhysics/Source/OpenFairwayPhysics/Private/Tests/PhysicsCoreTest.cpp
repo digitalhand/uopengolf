@@ -101,9 +101,9 @@ bool FOpenFairwayPhysicsCoreTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Stimp clamped"), GreenSpeed::Clamp(30.0f), GreenSpeed::MaxStimpFeet);
     // The friction is solved with the green's grass drag; with none it is the constant-deceleration stimp rule.
     TestEqual(TEXT("Default green drag"), FBallPhysicsProfile().GreenGrassViscosity, 0.0009f);
-    TestEqual(TEXT("Reference green friction"), GreenSpeed::RollingFriction(10.0f, GreenSpeed::ReferenceGrassViscosity), 0.05179f, 1e-4f);
+    TestEqual(TEXT("Reference green friction"), GreenSpeed::RollingFriction(10.0f, GreenSpeed::ReferenceGrassViscosity, false), 0.05179f, 1e-4f);
     const float StimpDistanceM = 10.0f * 0.3048f;
-    TestEqual(TEXT("Drag-free green friction"), GreenSpeed::RollingFriction(10.0f, 0.0f),
+    TestEqual(TEXT("Drag-free green friction"), GreenSpeed::RollingFriction(10.0f, 0.0f, false),
         7.0f * GreenSpeed::StimpmeterSpeedMps * GreenSpeed::StimpmeterSpeedMps / (10.0f * GolfPhysics::Gravity * StimpDistanceM), 1e-5f);
     return true;
 }

@@ -39,14 +39,14 @@ bool FVerifyReplaySelection::Update()
     Test->TestEqual(TEXT("Direct injection cannot bypass permission"),Mode->GetBall()->GetShotNumber(),Before);
     FOpenGolfPermissionTestAccess::Set(World);
     FLaunchMonitorShot Shot;
-    Test->TestEqual(TEXT("Default selects screenshot wood"), Controller->GetSelectedReplayShot(), 0);
+    Test->TestEqual(TEXT("Default selects the low wood"), Controller->GetSelectedReplayShot(), 0);
     Controller->SetReplayPanelOpen(true);
-    Test->TestTrue(TEXT("Earlier screenshot selectable"), Controller->SelectReplayShot(3));
+    Test->TestTrue(TEXT("Mid iron selectable"), Controller->SelectReplayShot(3));
     Test->TestEqual(TEXT("Selection does not hit ball"),Mode->GetBall()->GetShotNumber(),Before);
     Controller->InjectReplayShot();
     Test->TestFalse(TEXT("Hit closes selector"), Controller->IsReplayPanelOpen());
     Test->TestTrue(TEXT("Selected shot delivered to range"), Monitor->GetLastShot(Shot) && Mode->GetBall()->IsMoving());
-    Test->TestEqual(TEXT("Selected screenshot inputs"), Shot.GetBallSpeedMph(), 75.7f, 0.02f);
+    Test->TestEqual(TEXT("Selected mid iron inputs"), Shot.GetBallSpeedMph(), 75.7f, 0.02f);
     const int32 FirstNumber = Shot.ShotNumber;
     Controller->InjectReplayShot();
     Monitor->GetLastShot(Shot);
@@ -79,7 +79,7 @@ bool FVerifySelectedWoodCarry::Update()
     {
         // The wood lands about 110 m out on the fairway's gentle contour, some 12 cm above the tee, so it carries a
         // little short of the flat-ground prediction (121.5 yd). The old low-launch lift recovery carried 128.1 yd and
-        // the historical flight 123.8 yd (Docs/FlightScopeAnalysis.md), so 1 yd still tells them apart.
+        // the historical flight 123.8 yd (UOpenGolf.Physics.FlightDiagnostics), so 1 yd still tells them apart.
         const float Yards = OpenFairway::YardsPerMeter;
         const float Carry = Result.CarryM * Yards;
         const float Predicted = Mode->GetBall()->PredictShot(Result.Launch, EOpenFairwaySurface::Fairway).CarryM * Yards;

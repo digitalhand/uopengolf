@@ -36,6 +36,12 @@ class PackageStartLogTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, marker):
                     validate_start_log(self.path)
 
+    def test_rejects_uncooked_wind_widget(self):
+        self.write(INIT + LOADED + "LogUOpenGolfHUD: Error: Wind indicator widget /Game/UOpenGolf/UI/WBP_WindIndicator."
+                   "WBP_WindIndicator_C did not load; the wind HUD is hidden.\n")
+        with self.assertRaisesRegex(ValueError, "uncooked content"):
+            validate_start_log(self.path)
+
     def test_rejects_other_map(self):
         self.write(INIT + "LogLoad: Took 0.41 seconds to LoadMap(/Game/Other)\n")
         with self.assertRaises(ValueError):

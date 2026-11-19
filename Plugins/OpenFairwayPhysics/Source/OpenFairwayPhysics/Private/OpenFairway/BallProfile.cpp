@@ -173,6 +173,9 @@ namespace OpenFairway
 
     FBallPhysicsProfile::FBallPhysicsProfile()
     {
+        // Lift and drag from the spin ratio alone, with no launch-regime corrections. See Docs/CarryAudit.md.
+        Flight.Model = EFlightModel::SpinRatioV1;
+        Flight.bUseRungeKutta4 = true;
         // First-impact bite per landing bucket. Run is neutral so drivers, woods and low-spin irons
         // keep the calibrated bounce. Bites fade in from 8 to 20 m/s impact speed.
         LandingResponses[static_cast<int32>(ELandingBucket::Run)] = FLandingResponse();
@@ -180,8 +183,9 @@ namespace OpenFairway
         LandingResponses[static_cast<int32>(ELandingBucket::Check)] = FLandingResponse{0.85f, 0.0f, 8.0f, 20.0f};
         LandingResponses[static_cast<int32>(ELandingBucket::Spinback)] = FLandingResponse{1.0f, 1.2f, 8.0f, 20.0f};
 
-        // Calibrated regime overrides from FS reference data: they correct systematic carry
+        // Calibrated regime overrides, inherited from ogolf-physics: they correct systematic carry
         // bias per launch regime (chips under-carry at low Reynolds, drivers over-carry at high).
+        // Only the legacy flight model reads them; the measured models ignore them.
         // Chip shots (speed < 60 mph).
         RegimeScaleOverrides.Add(TEXT("C-S0"), Scale(0.70f, 1.20f));
         RegimeScaleOverrides.Add(TEXT("C-S0-V1-P0"), Scale(0.55f, 1.15f));
@@ -226,7 +230,7 @@ namespace OpenFairway
 
     FBallPhysicsProfile FBallPhysicsProfile::HistoricalReference()
     {
-        FBallPhysicsProfile Profile;
+        FBallPhysicsProfile Profile = LegacyCalibrated();
         Profile.bInterpolateCalibration = false;
         Profile.Flight.SpinDecayCoefficient = 0.0f;
         Profile.Flight.ConstantSpinDecayRatePerSecond = 0.2f;
@@ -236,6 +240,26 @@ namespace OpenFairway
         Profile.GreenGrassViscosity = GreenSpeed::ReferenceGrassViscosity;
         Profile.SandPlowRatio = 0.0f;
         Profile.SandRollingFriction = SurfaceCatalog::Get(ESurface::Sand).RollingFriction;
+        Profile.bRecalibratedTurf = false;
+        Profile.Bounce.bAxisAwareSpin = false;
+        Profile.Rollout.bAxisAwareSpin = false;
+        Profile.Rollout.bCoupledContact = false;
+        return Profile;
+    }
+
+    FBallPhysicsProfile FBallPhysicsProfile::LegacyCalibrated()
+    {
+        FBallPhysicsProfile Profile;
+        Profile.Flight.Model = EFlightModel::LegacyCalibrated;
+        Profile.Flight.bUseRungeKutta4 = false;
+        return Profile;
+    }
+
+    FBallPhysicsProfile FBallPhysicsProfile::ProV1Reference()
+    {
+        FBallPhysicsProfile Profile;
+        Profile.Flight.Model = EFlightModel::ProV1ResearchV1;
+        Profile.Flight.bUseRungeKutta4 = true;
         return Profile;
     }
 
@@ -313,16 +337,19 @@ namespace OpenFairway
     }
 
     FResolvedShotParams FResolvedShotParams::Resolve(const FBallPhysicsProfile& Profile, const FAirConditions& Air, float SpeedMph,
-        float LaunchAngleDeg, float TotalSpinRpm)
+        float LaunchAngleDeg, float TotalSpinRpm, TOptional<float> BackSpinRpm)
     {
         FResolvedShotParams Params;
         Params.Regime = Profile.ResolveScaleOverride(SpeedMph, LaunchAngleDeg, TotalSpinRpm, Params.RegimeKey, Params.MatchedRegimeKey);
-        Params.Landing = Profile.ResolveLandingResponse(LaunchAngleDeg, TotalSpinRpm, Params.LandingBucket);
+        // Only backspin bites at landing, so a sidespin-heavy launch is not bucketed as a checking wedge.
+        const float LandingSpinRpm = Profile.Bounce.bAxisAwareSpin && BackSpinRpm.IsSet() ? FMath::Max(0.0f, BackSpinRpm.GetValue()) : TotalSpinRpm;
+        Params.Landing = Profile.ResolveLandingResponse(LaunchAngleDeg, LandingSpinRpm, Params.LandingBucket);
         Params.Environment.AirDensity = Air.Density();
         Params.Environment.AirViscosity = Atmosphere::DynamicViscosity(Atmosphere::FahrenheitToCelsius(Air.TemperatureF));
         Params.Environment.DragScale = Profile.DragScaleMultiplier * Params.Regime.DragScaleMultiplier;
         Params.Environment.LiftScale = Profile.LiftScaleMultiplier * Params.Regime.LiftScaleMultiplier;
         Params.Environment.InitialLaunchAngleDeg = LaunchAngleDeg;
+        Params.Environment.BallDragScale = Profile.DragScaleMultiplier;
         Params.Environment.Wind = Air.WindVelocity();
         Params.Environment.WindReferenceHeightM = Air.WindReferenceHeightM;
         Params.Environment.WindRoughnessM = Air.WindRoughnessM;
@@ -334,10 +361,10 @@ namespace OpenFairway
 
     FSurfaceSettings FResolvedShotParams::ResolveSurface(ESurface Surface, const FBallPhysicsProfile& Profile) const
     {
-        const FSurfacePhysicsSettings& Base = SurfaceCatalog::Get(Surface);
+        const FSurfacePhysicsSettings& Base = SurfaceCatalog::Get(Surface, Profile.bRecalibratedTurf);
         // A green's rolling friction is its stimp speed, solved with its grass drag; both are set on the profile, as is sand's.
         const bool bGreen = Surface == ESurface::Green;
-        const float BaseRolling = bGreen                       ? GreenSpeed::RollingFriction(Profile.GreenStimpFeet, Profile.GreenGrassViscosity)
+        const float BaseRolling = bGreen                       ? GreenSpeed::RollingFriction(Profile.GreenStimpFeet, Profile.GreenGrassViscosity, Profile.Rollout.bCoupledContact)
                                   : Surface == ESurface::Sand ? FMath::Max(0.0f, Profile.SandRollingFriction)
                                                               : Base.RollingFriction;
         const float BaseViscosity = bGreen ? Profile.GreenGrassViscosity : Base.GrassViscosity;
@@ -346,6 +373,8 @@ namespace OpenFairway
         Settings.KineticFriction = Base.KineticFriction * Profile.KineticFrictionMultiplier * Regime.KineticFrictionMultiplier;
         Settings.RollingFriction = BaseRolling * Profile.RollingFrictionMultiplier * Regime.RollingFrictionMultiplier;
         Settings.GrassViscosity = BaseViscosity * Profile.GrassViscosityMultiplier * Regime.GrassViscosityMultiplier;
+        // Both grass drag terms scale together.
+        Settings.GrassFormDrag = Base.GrassFormDrag * Profile.GrassViscosityMultiplier * Regime.GrassViscosityMultiplier;
         Settings.SpinbackResponseScale = Base.SpinbackResponseScale;
         Settings.CriticalAngle = Base.CriticalAngle + Profile.CriticalAngleOffsetRadians + Regime.CriticalAngleOffsetRadians;
         Settings.SpinbackThetaBoostMax = Base.SpinbackThetaBoostMax * Profile.SpinbackThetaBoostMultiplier * Regime.SpinbackThetaBoostMultiplier;
@@ -354,8 +383,13 @@ namespace OpenFairway
         Settings.SpinbackSpeedStartMps = Base.SpinbackSpeedStartMps;
         Settings.SpinbackSpeedEndMps = Base.SpinbackSpeedEndMps;
         Settings.RollingSpinScale = Base.RollingSpinScale;
+        Settings.SlidingSpinScale = Base.SlidingSpinScale;
         Settings.RestitutionScale = Base.RestitutionScale;
         Settings.ImpactRetentionScale = Base.ImpactRetentionScale;
+        Settings.LandingAngleLoss = Base.LandingAngleLoss;
+        Settings.LandingSpinLoss = Base.LandingSpinLoss;
+        Settings.StruckViscosityScale = Base.StruckViscosityScale;
+        Settings.StruckFormDragScale = Base.StruckFormDragScale;
         Settings.ImpactPlowRatio = Surface == ESurface::Sand ? FMath::Max(0.0f, Profile.SandPlowRatio) : 0.0f;
         Settings.SurfaceBounce = Base.SurfaceBounce;
         return Settings;

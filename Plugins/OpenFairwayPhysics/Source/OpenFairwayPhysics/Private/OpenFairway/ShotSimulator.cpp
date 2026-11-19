@@ -105,18 +105,19 @@ namespace OpenFairway
     }
 
     FShotSimulationResult ShotSimulator::Simulate(const FLaunchData& Launch, ESurface SurfaceType, const FBallPhysicsProfile& Profile,
-        const FAirConditions& Air, float MaxTimeSeconds, const FVector3f& GroundNormal)
+        const FAirConditions& Air, float MaxTimeSeconds, const FVector3f& GroundNormal, const FShotSimulationOptions& Options)
     {
         FShotSimulationResult Result;
-        if (!Launch.IsValid())
+        if (!Launch.IsValid() || !FMath::IsFinite(Options.Dt) || Options.Dt <= 0.0f || Options.Dt > 0.1f ||
+            !FMath::IsFinite(MaxTimeSeconds) || MaxTimeSeconds <= 0 || MaxTimeSeconds / Options.Dt > MAX_int32)
         {
             return Result;
         }
 
         Result.Spin = ShotSetup::ParseSpin(Launch);
         const FResolvedShotParams Params =
-            FResolvedShotParams::Resolve(Profile, Air, Launch.SpeedMph, Launch.VerticalLaunchDeg, Result.Spin.TotalSpinRpm);
-        const FSurfaceSettings Surface = Params.ResolveSurface(SurfaceType, Profile);
+            FResolvedShotParams::Resolve(Profile, Air, Launch.SpeedMph, Launch.VerticalLaunchDeg, Result.Spin.TotalSpinRpm, Result.Spin.BackSpinRpm);
+        const FSurfaceSettings Surface = Options.SurfaceOverride.Get(Params.ResolveSurface(SurfaceType, Profile));
         const FLaunchVectors Vectors =
             ShotSetup::BuildLaunchVectors(Launch.SpeedMph, Launch.VerticalLaunchDeg, Launch.HorizontalLaunchDeg, Result.Spin.BackSpinRpm, Result.Spin.SideSpinRpm);
         Result.bValid = true;
@@ -124,7 +125,7 @@ namespace OpenFairway
         Result.RegimeKey = Params.RegimeKey;
         Result.MatchedRegimeKey = Params.MatchedRegimeKey;
 
-        constexpr float Dt = GolfPhysics::SimulationDt;
+        const float Dt = Options.Dt;
         constexpr float Radius = GolfPhysics::Radius;
         const FVector3f Normal = GroundNormal.SizeSquared() > 0.000001f ? GroundNormal.GetSafeNormal() : UpAxis;
         FVector3f Velocity = Vectors.Velocity;
@@ -134,8 +135,39 @@ namespace OpenFairway
         bool bOnGround = false;
         bool bCarryRecorded = false;
         float RolloutImpactSpinRpm = 0.0f;
+        float LandingSpinRpm = 0.0f;
+        // Share of the struck-along-the-ground grass drag this shot rolls with (0 unless it starts on the ground).
+        float StruckWeight = 0.0f;
         Result.ApexM = Position.Y;
 
+        // A supported launch into (or along) the plane contacts at t=0. Do not first
+        // add a timestep of gravity/flight and manufacture a landing velocity or carry.
+        if (Params.Rollout.bCoupledContact && FVector3f::DotProduct(Velocity, Normal) <= 0.0f)
+        {
+            const float NormalSpeed = FVector3f::DotProduct(Velocity, Normal);
+            const FVector3f Tangent = Velocity - Normal * NormalSpeed;
+            Result.LandingSpeedMps = Velocity.Size();
+            Result.LandingSpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
+            Result.LandingAngleDeg = FMath::RadiansToDegrees(FMath::Atan2(-NormalSpeed, Tangent.Size()));
+            Result.FirstImpactTangentInMps = Tangent.Size();
+            RolloutImpactSpinRpm = GolfPhysics::RolloutSpinRpm(Omega, Normal, Params.Rollout);
+            StruckWeight = GolfPhysics::StruckAlongGroundWeight(Tangent.Size());
+            TracePhysics(Options.Trace, 0, Dt, TEXT("ImpactIn"), SurfaceType, {Position, Velocity, Omega}, Normal);
+            const auto Contact = GolfPhysics::ResolveImpact({Position, Velocity, Omega}, Normal, Surface, Params.Bounce, true, Params.Landing);
+            Velocity = Contact.Velocity;
+            Omega = Contact.Spin;
+            bFlight = false;
+            bCarryRecorded = true;
+            bOnGround = !GolfPhysics::HasRebound(Velocity, Normal, Surface.SurfaceBounce);
+            Result.BounceCount = bOnGround ? 0 : 1;
+            if (bOnGround) Velocity -= Normal * FVector3f::DotProduct(Velocity, Normal);
+            Result.FirstImpactTangentOutMps = Tangent.IsNearlyZero() ? 0 : FVector3f::DotProduct(Velocity, Tangent.GetSafeNormal());
+            Result.bFirstImpactSpinback = Result.FirstImpactTangentOutMps < 0;
+            TracePhysics(Options.Trace, 0, Dt, TEXT("ImpactOut"), SurfaceType, {Position, Velocity, Omega}, Normal);
+        }
+
+        // A full shot struck into or along the ground keeps its struck grass drag for the whole roll.
+        const FSurfaceSettings GroundSurface = GolfPhysics::StruckAlongGround(Surface, StruckWeight);
         const int32 Steps = static_cast<int32>(MaxTimeSeconds / Dt);
         for (int32 Step = 0; Step < Steps; ++Step)
         {
@@ -147,10 +179,21 @@ namespace OpenFairway
                     Params.Environment.AirViscosity, Params.Environment.DragScale, Params.Environment.LiftScale, Params.Environment.InitialLaunchAngleDeg,
                     Params.Flight);
                 const FVector3f Previous = Position;
-                const FBallState Next = GolfPhysics::StepFlight(FBallState{Position, Velocity, Omega}, Params.Environment, Sample, Dt);
+                if (bFlight)
+                {
+                    Result.MinFlightRe = FMath::Min(Result.MinFlightRe, Sample.Reynolds);
+                    Result.MaxFlightRe = FMath::Max(Result.MaxFlightRe, Sample.Reynolds);
+                    Result.MinFlightSpinRatio = FMath::Min(Result.MinFlightSpinRatio, Sample.SpinRatio);
+                    Result.MaxFlightSpinRatio = FMath::Max(Result.MaxFlightSpinRatio, Sample.SpinRatio);
+                    if (Sample.bOutsideMeasuredCoverage) Result.OutsideMeasuredCoverageS += Dt;
+                }
+                const FBallState PreviousState{Position, Velocity, Omega};
+                const FBallState Next = Params.Flight.bUseRungeKutta4
+                    ? GolfPhysics::StepFlightRK4({Position, Velocity, Omega}, Params.Environment, Params.Flight, Dt, Normal)
+                    : GolfPhysics::StepFlight(FBallState{Position, Velocity, Omega}, Params.Environment, Sample, Dt);
                 Velocity = Next.Velocity;
                 Omega = Next.Spin;
-                Position += Velocity * Dt;
+                Position = Next.Position;
                 Result.ApexM = FMath::Max(Result.ApexM, Position.Y);
 
                 const float ContactDistance = FVector3f::DotProduct(Position, Normal) - Radius;
@@ -158,18 +201,31 @@ namespace OpenFairway
                 {
                     // Back up to the moment of contact, bounce, then use the rest of the step.
                     const float PreviousDistance = FVector3f::DotProduct(Previous, Normal) - Radius;
-                    const float ImpactFraction =
+                    float ImpactFraction =
                         PreviousDistance > 0.0f ? FMath::Clamp(PreviousDistance / (PreviousDistance - ContactDistance), 0.0f, 1.0f) : 0.0f;
-                    Position = Previous + (Position - Previous) * ImpactFraction;
+                    if (Params.Flight.bUseRungeKutta4)
+                    {
+                        // A very low launch can complete its entire flight inside one step.
+                        // The chord starts on the ground, so linear interpolation would invent zero carry.
+                        const float High = GolfPhysics::FlightContactTime(PreviousState, Params.Environment, Params.Flight, Dt, Normal, Radius);
+                        ImpactFraction = High / Dt;
+                        const auto Contact = GolfPhysics::StepFlightRK4(PreviousState, Params.Environment, Params.Flight, High, Normal);
+                        Position = Contact.Position;
+                        Velocity = Contact.Velocity;
+                        Omega = Contact.Spin;
+                    }
+                    else Position = Previous + (Position - Previous) * ImpactFraction;
                     Position += Normal * (Radius - FVector3f::DotProduct(Position, Normal));
                     const float PreImpactSpeed = Velocity.Size();
                     const float PreImpactNormalSpeed = FMath::Abs(FVector3f::DotProduct(Velocity, Normal));
                     const FVector3f PreImpactTangent = Velocity - Normal * FVector3f::DotProduct(Velocity, Normal);
                     if (!bCarryRecorded)
                     {
-                        RolloutImpactSpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
+                        LandingSpinRpm = Omega.Size() / GolfPhysics::RadPerRpm;
+                        RolloutImpactSpinRpm = GolfPhysics::RolloutSpinRpm(Omega, Normal, Params.Rollout);
                     }
 
+                    TracePhysics(Options.Trace, (Step + ImpactFraction) * Dt, Dt, TEXT("ImpactIn"), SurfaceType, {Position, Velocity, Omega}, Normal);
                     const FBallState Resolved = GolfPhysics::ResolveImpact(FBallState{FVector3f::ZeroVector, Velocity, Omega}, Normal, Surface,
                         Params.Bounce, bFlight, Params.Landing);
                     if (FVector3f::DotProduct(Velocity, Normal) < 0.0f && bFlight)
@@ -179,6 +235,8 @@ namespace OpenFairway
                     Velocity = Resolved.Velocity;
                     Omega = Resolved.Spin;
                     bOnGround = !bFlight && !GolfPhysics::HasRebound(Velocity, Normal, Surface.SurfaceBounce);
+                    Result.BounceCount += bOnGround ? 0 : 1;
+                    TracePhysics(Options.Trace, (Step + ImpactFraction) * Dt, Dt, TEXT("ImpactOut"), SurfaceType, {Position, Velocity, Omega}, Normal);
                     if (bOnGround)
                     {
                         Velocity -= Normal * FVector3f::DotProduct(Velocity, Normal);
@@ -201,22 +259,24 @@ namespace OpenFairway
                             }
                         }
                         Result.LandingSpeedMps = PreImpactSpeed;
-                        Result.LandingSpinRpm = RolloutImpactSpinRpm;
+                        Result.LandingSpinRpm = LandingSpinRpm;
                         Result.LandingAngleDeg = FMath::Atan2(PreImpactNormalSpeed, FMath::Max(PreTangentSpeed, 0.0001f)) * RadToDeg;
                         Result.CarryM = FMath::Max(FVector3f::DotProduct(Position, Vectors.ShotDirection), 0.0f);
                         Result.HangTimeS = (static_cast<float>(Step) + ImpactFraction) * Dt;
                         bCarryRecorded = true;
                     }
                     Position += Velocity * (1.0f - ImpactFraction) * Dt;
+                    if (bOnGround) Result.GroundDistanceM += Velocity.Size() * (1.0f - ImpactFraction) * Dt;
                 }
             }
             else
             {
-                const FBallState Next = GolfPhysics::StepGround(FBallState{FVector3f::ZeroVector, Velocity, Omega}, Normal, Surface, Params.Rollout,
-                    RolloutImpactSpinRpm, Dt);
+                const FBallState Next = GolfPhysics::StepGround(FBallState{Position, Velocity, Omega}, Normal, GroundSurface, Params.Rollout,
+                    RolloutImpactSpinRpm, Dt, Params.Environment, Params.Flight);
                 Velocity = Next.Velocity;
                 Omega = Next.Spin;
                 Position += Velocity * Dt;
+                Result.GroundDistanceM += Velocity.Size() * Dt;
                 const float ContactDistance = FVector3f::DotProduct(Position, Normal) - Radius;
                 if (ContactDistance < 0.0f)
                 {
@@ -224,9 +284,12 @@ namespace OpenFairway
                 }
             }
 
+            TracePhysics(Options.Trace, (Step + 1) * Dt, Dt, bOnGround ? TEXT("Ground") : TEXT("Flight"),
+                SurfaceType, {Position, Velocity, Omega}, Normal);
             if (GolfPhysics::CanRest(FBallState{Position, Velocity, Omega}, bOnGround, Normal, Surface, Params.Rollout))
             {
                 Result.bAtRest = true;
+                TracePhysics(Options.Trace, (Step + 1) * Dt, Dt, TEXT("Rest"), SurfaceType, {Position, Velocity, Omega}, Normal);
                 break;
             }
         }

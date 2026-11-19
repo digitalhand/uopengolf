@@ -3,6 +3,7 @@
 
 #include "Dom/JsonObject.h"
 #include "LaunchMonitorLimits.h"
+#include "LaunchMonitorSpin.h"
 #include "Policies/CondensedJsonPrintPolicy.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -71,39 +72,9 @@ namespace
         OutValue = bOutHas ? static_cast<float>(Value.GetValue()) : 0.0f;
     }
 
-    bool Has(ELaunchMonitorValueSource Source) { return Source != ELaunchMonitorValueSource::Missing; }
-
-    /** Fills whichever of total/axis or back/side the connector left out, as the Square decoder does. */
-    void DeriveSpin(FLaunchMonitorShot& Shot)
-    {
-        if (Has(Shot.TotalSpinSource) && Has(Shot.SpinAxisSource))
-        {
-            const float AxisRadians = FMath::DegreesToRadians(Shot.SpinAxisDeg);
-            if (!Has(Shot.BackSpinSource))
-            {
-                Shot.BackSpinRpm = FMath::RoundToInt32(Shot.TotalSpinRpm * FMath::Cos(AxisRadians));
-                Shot.BackSpinSource = ELaunchMonitorValueSource::Derived;
-            }
-            if (!Has(Shot.SideSpinSource))
-            {
-                Shot.SideSpinRpm = FMath::RoundToInt32(Shot.TotalSpinRpm * FMath::Sin(AxisRadians));
-                Shot.SideSpinSource = ELaunchMonitorValueSource::Derived;
-            }
-        }
-        else if (Has(Shot.BackSpinSource) && Has(Shot.SideSpinSource))
-        {
-            if (!Has(Shot.TotalSpinSource))
-            {
-                Shot.TotalSpinRpm = FMath::RoundToInt32(FMath::Sqrt(float(FMath::Square(Shot.BackSpinRpm) + FMath::Square(Shot.SideSpinRpm))));
-                Shot.TotalSpinSource = ELaunchMonitorValueSource::Derived;
-            }
-            if (!Has(Shot.SpinAxisSource))
-            {
-                Shot.SpinAxisDeg = FMath::RadiansToDegrees(FMath::Atan2(float(Shot.SideSpinRpm), float(Shot.BackSpinRpm)));
-                Shot.SpinAxisSource = ELaunchMonitorValueSource::Derived;
-            }
-        }
-    }
+    // The connector may send only total/axis or only back/side spin.
+    using LaunchMonitorSpin::DeriveSpin;
+    using LaunchMonitorSpin::Has;
 
     FString Write(const TSharedRef<FJsonObject>& Object)
     {

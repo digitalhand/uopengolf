@@ -10,6 +10,8 @@ Enable the plugin, add `OpenFairwayPhysics` to your module dependencies, and use
 
 - [Quick start](Docs/Reference.md#quick-start)
 - [Surfaces and greens](Docs/Reference.md#surfaces)
+- [Flight model](Docs/Reference.md#flight-model) and the [carry audit](Docs/CarryAudit.md)
+- [Turf rollout calibration](Docs/Reference.md#turf-rollout-calibration), including [topped shots](Docs/Reference.md#topped-shots)
 - [Physics profiles](Docs/Reference.md#ball-profile-and-launch-regimes)
 - [Tests and fixtures](Docs/Reference.md#tests-and-golden-fixtures)
 - [Known gaps](Docs/Reference.md#known-gaps)

@@ -31,6 +31,7 @@ matching completed tests; an empty or failed run is not a pass.
 | --- | --- |
 | Startup | `UOpenGolf.Smoke` |
 | Flight, bounce, roll, stimp or contact | `UOpenGolf.Physics` and the affected range integration tests |
+| Turf roll or flight accuracy against reference shots | Needs the local reference data ([Assets/Data](../Assets/Data/README.md#where-the-data-lives)): `python Assets/Scripts/shot_compare.py --build --check-baseline <local data>/baselines/pre_contact_20261116.csv`, then `python Assets/Scripts/carry_audit.py`; for a refit, `UOpenGolf.Calibration.Rollout` (opt-in, not under `UOpenGolf.Physics`) or `python Assets/Scripts/flight_fit.py` |
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |

@@ -1,5 +1,256 @@
 # Phase status
 
+## Flight model fitted to reference flights; reference data moved out of the repo — 2026-11-18 (Windows)
+
+Full shots carried 5–10 yd long: against tour averages (tm) the flight was 10.1 yd long on average,
+against the launch-monitor export (lm) 4.1 yd off per shot. See
+[CarryAudit.md](../Plugins/OpenFairwayPhysics/Docs/CarryAudit.md) for the analysis.
+
+- **Flight model.** Gameplay flight is `EFlightModel::SpinRatioV1`: drag and lift as curves in the spin
+  ratio, plus 0.68 of a modern ball's measured drag rise below Re 100k, integrated with coupled RK4.
+  No club, launch-angle or regime term reaches it. The table (`SpinRatioData.h`) is fitted by
+  `Assets/Scripts/flight_fit.py` to tm, lm and the trajectory calculator (fs), weighted 2 : 1 : 0.5,
+  with drag never below 0.17 and the low-spin lift of a measured modern ball.
+  - Carry bias / error: tm +0.3 / 2.3 yd (legacy +10.1 / 10.1), lm −2.2 / 2.2 (−1.0 / 4.1), fs −3.8 /
+    3.8. Apex error against lm 0.6 ft (2.7). The men's tour-average driver carries 276.4 yd against 275.
+  - `LegacyCalibrated()` keeps the previous flight, and `ProV1Reference()` the measured-coefficient
+    model of one modern ball (13.3 yd error against lm), for comparison.
+- **Reference data.** Third-party data (lm, tm, fs), the accuracy baseline and the research papers
+  moved to a local folder outside the repository (`UOPENGOLF_DATA`, default `~/data/uopengolf`), and
+  `.gitignore` keeps them out. The replay test and the scripts read both the repository's recordings
+  and the local sessions, each shot in its session's air, and skip the local ones when absent. Code,
+  tests and docs no longer name the sources; comparison docs use the acronyms lm, tm and fs.
+  `monitor_import.py` replaces the export importer; `carry_audit.py` reports flight per session.
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor built.
+- `UOpenGolf` passed 112 of 113 (`Saved/Automation/20261118-115409-8a89cd6b`), with the usual warnings.
+  `UOpenGolf.Range.RecordedContactParity` fails one case: a 113.9 mph / 0.6° launch that touches down
+  twice on sand ends 0.31 yd farther live than headless (0.25 yd allowed). Flight and both impacts
+  agree; the live sweep finds the second, grazing contact a step late.
+- `shot_compare.py --check-baseline` against the moved baseline fails one gate: mid launches above
+  4000 rpm roll 2.3 yd short of lm (1.1 yd before; 0.5 yd allowed). The new flight lands about 1.3°
+  steeper and slower than lm's model, and the turf was fitted to the legacy landings. Roll error
+  overall is 1.8 yd, total error 3.9 yd (4.0 before).
+- Every library shot's RK4 carry converges within 0.1 yd of a 960 Hz run; live and headless carry
+  agree within 0.25 yd at 30, 144 and stalled 60 fps.
+- 82 of 83 Python tests pass; `test_grass_stability` needs PIL, which this Python lacks.
+
+Not verified:
+
+- a turf refit to the new landings, and the ground step for the rest of an impact step;
+- the new flight in headwinds against the published wind sets;
+- flight beyond 36–175 mph;
+- Linux;
+- packaged builds.
+
+## Review fixes: turf grip bound, ground wind, topped shots — 2026-11-17 (Windows)
+
+A review of the turf landing law found three faults. All three were confirmed in the code and the
+saved replay.
+
+- **Grip without load.** The landing law's backspin term applied in full at any downward normal
+  speed. A touch at 0.1 mm/s kept 68.7% of a 2 m/s, 2000 rpm ball's speed, and none at 8000 rpm.
+  The term is now bounded by the contact's Coulomb limit (kinetic friction times the normal
+  impulse), the same bound the friction impulse uses. It fades out as the normal speed goes to
+  zero.
+- **Ground wind from the launch height.** `StepGround` read the wind at the ball's height above its
+  launch point. Under the 10 m profile a ball rolling 1 m above the tee got 61% of the wind, and one
+  below it none. A ball on the ground now meets the wind one radius above its own lie.
+  - The ground step's air drag also stopped reading the launch's regime drag multiplier (0.55–1.11)
+    and high-launch drag (up to 1.24×). It uses `FFlightEnvironment::BallDragScale` and the ball's
+    own velocity and spin.
+- **Topped shots.** lm's six rows launched below 0° (no carry, no apex) stopped 32–47 yd short
+  and failed three baseline gates. They are scored, not excluded.
+  - No model that reads only the ball's state can fit them together with lm's shots that fly
+    first. lm rolls 113.9 mph at +0.6° 69.2 yd after landing at 0.8°, but 103.7 mph at −0.2°,
+    in nearly the same ground state, 124.6 yd.
+  - A full shot struck into or along the ground now keeps its own share of the turf's grass drag
+    for its whole roll (`StruckViscosityScale` 0.26, `StruckFormDragScale` 0.69).
+  - The share ramps in over 12–18 m/s of launch speed, so putts are unaffected.
+  - At full speed, total distance steps by about 45% between 0° and 0.1°, as lm's own results
+    do. `RolloutRegression` checks continuity on each side of 0° instead of across it.
+- **Refit.** `UOpenGolf.Calibration.Rollout` now fits in two stages: the turf values on the shots
+  that leave the ground, then the struck drag on the topped shots.
+  - A new constraint keeps rough holding a resting ball on slopes at least 1° steeper than a green,
+    as `SlopeRollout` requires. An unconstrained run had dropped fairway rolling friction to 0.029.
+  - Fairway: k 0.665, c 0.464, rolling friction 0.0469, grass drag 0.0242 plus 0.0086 /m speed
+    squared, 7.4 ft on a stimpmeter (no longer on the 6 ft floor).
+- **Against lm** (124 shots): roll error 1.23 yd (3.67 under the first 2026-11-17 fit), total
+  error 3.98 yd (5.36). The six topped shots finish within 0.9 yd on average (worst 2.5 yd).
+  - The three 0.6–1.6° shots that fly now roll within 0.8 yd, but carry 6–16 yd short, so they
+    total 7–16 yd short.
+  - Against the baseline `pre_contact_20261116.csv` (now in the local reference data), every gate of
+    `shot_compare.py --check-baseline` passes; worst roll is 7.8 yd against a 25.75 yd limit.
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor built.
+- `UOpenGolf.Physics` passed 21 of 21 (`Saved/Automation/20261117-145826-71a0b18f`); its one warning
+  is `ShotInterrupt`'s intended stop.
+- `UOpenGolf.Range` passed 36 of 36, four with the usual warnings
+  (`Saved/Automation/20261117-145843-45790213`).
+  - The drive totals 268.3 yd.
+  - The four recorded problem launches total 81.3, 41.5, 77.4 and 110.8 yd on the range, against
+    87.1, 41.5, 77.5 and 111.1 yd on flat fairway. The first, a topped shot, ends in rough on the
+    range.
+- The calibration ran in `Saved/Automation/20261117-145705-5a36a301`.
+- All 32 Python tests for the four script test modules passed.
+
+Not verified:
+
+- flight: carry runs 2–4 yd short below 90 mph and 4 yd long above 105 mph;
+- shots above 121 mph ball speed;
+- topped shots on rough or the other turf surfaces, and on slopes;
+- flight wind height, which is still measured from the launch ground;
+- Linux;
+- packaged builds;
+- a real Square Home shot in play.
+
+## Wind HUD in packaged builds; custom test shots — 2026-11-17 (Windows)
+
+- **Wind HUD.** `AUOpenGolfHUD` loads `WBP_WindIndicator` only by a C++ soft path. No package referenced it,
+  so the cook left it out: the 2026-11-09 package had nothing under `UOpenGolf/UI`. The packaged HUD then
+  showed no wind indicator and logged nothing. `Config/DefaultGame.ini` now always cooks `/Game/UOpenGolf/UI`.
+  The HUD logs an error when the widget does not load, `check_package_start.py` fails a package on that
+  error, and `UOpenGolf.Smoke.UOpenGolf` checks that the packaging settings cook the widget's folder.
+- **Custom test shots.** **Custom** in Test shots [P] shows five fields that start as a straight shot:
+  100 mph, 16°, 0°, 5000 rpm, 0° axis. Speed is in the player's units. **H** repeats the typed shot. Values
+  are limited to `LaunchMonitorLimits`, which moved to the plugin's Public folder, and last until the map
+  reloads.
+  - The shot goes in through the new `UOpenLaunchMonitorSubsystem::InjectCustomShot` with Source "Custom".
+    It keeps the admin gate and is never recorded.
+  - Back and side spin are derived by `DeriveSpin`, now shared with Open Connect in `Private/LaunchMonitorSpin.h`.
+  - Keys typed into a field never reach the play keys. HUD navigation (F6 or gamepad) lets typing through to
+    a field and no longer lists a text box twice.
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor and game built.
+
+| Tests | Report (`Saved/Automation/`) |
+| --- | --- |
+| `UOpenGolf.LaunchMonitor`, 19 of 19, including the new `CustomShot` and all of Open Connect | `20261117-145451-0ab458a4` |
+| `UOpenGolf.Range.CustomShot` | `20261117-145521-8b551c17` |
+| `UOpenGolf.Range.ReplaySelection` | `20261117-145534-ba3d0c0a` |
+| `UOpenGolf.Smoke` | `20261117-145550-0b5b3faf` |
+| `UOpenGolf.Menu.HudNavigation`, `UOpenGolf.Range.WindControls`, `InputBindings` and `HudControls` | `20261117-1456*` |
+| Rendered `UOpenGolf.Visual.CustomShotPanel` (new), `ReplaySelector` and `RangeHudControls` | `20261117-145701-3ce410d0`, `-145756-*`, `-145825-*` |
+
+Six `test_check_package_start.py` tests passed. `ue.ps1 Package` passed its start check
+(`20261117-150025-package-8823fe05`), and the manifest lists `UOpenGolf/UI/WBP_WindIndicator.uasset`. A headless
+start of that package listed a live `WBP_WindIndicator_C` with its `WindIndicator`.
+
+Not verified:
+
+- the packaged wind HUD seen on screen;
+- typing speeds in km/h or m/s;
+- gamepad navigation into the fields;
+- Linux.
+
+## Turf landing read from the impact; club labels dropped — 2026-11-17 (Windows)
+
+Superseded the same day: the fit values, lm results and baseline gate failures below were
+replaced by "Review fixes: turf grip bound, ground wind, topped shots" above.
+
+A review of the 2026-11-16 fixes against standard contact physics found the lm fit came mostly
+from an inherited multiplier. On the 115 airborne lm shots, the first impact's loss of forward
+speed was 43% the Coulomb friction impulse, 54% the retention multiplier
+(`0.95 × clamp(1 − rpm/8000, 0.4, 1)`) and 3% the landing bite. The multiplier's ramp only patched
+the ground-launch runaway the multiplier itself caused. The bite was chosen from the launch's spin
+and angle, not from the impact.
+
+- **Turf landing.** A turf impact now keeps the standard restitution and Coulomb-capped friction
+  impulse, then `exp(−k·vn/vt) · max(0, 1 − c·R·ωb/vt)` of its tangential velocity and contact-plane
+  spin (`LandingAngleLoss`, `LandingSpinLoss`). It is read from the impact alone. It replaces the
+  first-impact retention, its ramp, the landing-bucket bite and the rollout-bounce retention on
+  fairway, soft fairway, rough, firm and fringe. The fields added on 2026-11-16 for those layers are
+  gone. Green, sand and `HistoricalReference()` are unchanged.
+- **Fit.** `UOpenGolf.Calibration.Rollout` (opt-in) searches the new law with rolling friction and
+  both grass drags. It keeps total distance continuous across launch angle, with a margin under the
+  regression limits, and holds the fairway between 6 ft (a judgment) and the green on a stimpmeter.
+  Fairway: k 0.84, c 0.14, rolling friction 0.0735, grass drag 0.0229 plus 0.0039 /m speed squared,
+  6.0 ft stimp.
+- **Against lm.** Airborne roll error is 1.66 yd (1.96 yd on 2026-11-16) and total error
+  5.4 yd (6.0). The six shots launched below 0° stop 32–47 yd short. lm totals those at about
+  1.2 yd per mph but its 0.6–1.6° shots at about 0.93 yd per mph, and no model whose total follows
+  launch angle can match both. A fit within ±10 yd there would have cost 0.6 yd of airborne error
+  and 8.7 yd of extra roll on low launches; the airborne fit was chosen. Against
+  the baseline `pre_contact_20261116.csv`, `shot_compare.py --check-baseline`
+  fails three gates through those rows: roll error 3.42 → 3.67 yd, worst roll 34.3 → 47.1 yd and
+  ground class 22.2 → 29.4 yd. Total error and provenance pass. The gates were left as they are.
+- **Club labels.** The lm export's club is the one selected in the app (club speed and smash
+  factor export as 0); those shots were irons. `shots.csv` now names the column `reported_club`,
+  and nothing reads it. `shot_compare.py` lost its per-club table and `--club`, and gained errors by
+  ball speed. Tests and docs describe shots by launch values.
+- **Also in this set** (made on 2026-11-16 after the entry below and kept):
+  - air drag on a ball on the ground;
+  - contact at t = 0 for a launch along or into the ground;
+  - the stimp solve includes air drag;
+  - a 120 s headless time limit;
+  - `UOpenGolf.Range.RecordedContactParity`.
+
+  Before this change that set failed the 15% launch-angle check (17%).
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor built. `UOpenGolf.Physics` passed 21
+of 21 (`Saved/Automation/20261117-094954-f3bf7f6c`); its one warning is `ShotInterrupt`'s intended
+stop. `UOpenGolf.Range` passed 35 of 35, four with the usual warnings
+(`Saved/Automation/20261117-095006-a7bfb3a3`). In that run the four recorded problem launches rest
+within 0.3 yd of flat fairway: 48.5, 45.3, 84.5 and 110.9 yd. The drive totals 264.3 yd.
+`UOpenGolf.Calibration.Rollout` ran in `Saved/Automation/20261117-095234-8f56336f`. All 23 Python
+tests for the three scripts passed.
+
+Not verified:
+
+- flight: carry runs 2–4 yd short below 90 mph and 4 yd long above 105 mph;
+- shots above 121 mph ball speed;
+- rough and the other turf surfaces;
+- Linux;
+- packaged builds;
+- a real Square Home shot in play.
+
+## Turf rollout recalibrated to launch-monitor shots — 2026-11-16 (Windows)
+
+Recorded range shots showed ground-launched shots running 129–263 yd, a tilted-axis shot (107.8 mph,
+85° spin axis) checked by its sidespin, and full shots stopping dead on fairway. The labels below
+(GW #1, 7i #4 and so on) are the clubs selected when the shots were recorded, which were not reliable. Impacts and ground contact now
+read axis-aware spin, and the five turf surfaces play a catalog fitted to a 124-shot launch-monitor
+export (lm, now in the local reference data). The fit added a speed-squared grass drag, cut
+the first-impact loss and landing bite, and took the impact-spin friction multiplier off turf.
+`HistoricalReference()` keeps the ported model. lm roll error fell from 22.9 to 3.4 yd on
+average. The ground step is now coupled (`FRolloutProfile::bCoupledContact`): drag and rolling
+resistance, then a friction impulse that leaves each step rolling, instead of letting a rolling
+ball slip until a threshold. It leaves the lm fit unchanged (3.42 yd either way). The ball
+actor and the headless simulator gained an optional diagnostic trace, and the simulator a
+timestep and surface override for experiments. The earlier shot library was not restored;
+`Assets/Scripts/shot_compare.py`, replacing the earlier comparison script, reads the reference data, writes a
+provenance manifest and can gate a run against a baseline (`--check-baseline`). The new
+export importer (now `monitor_import.py`) adds launch-monitor exports, and `recording_import.py` added the 36 recorded launches
+(`recorded_20261113`, replayed but not compared). See the
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration).
+
+`UOpenGolf.Range.Shot` compared a drive's roll-out on the range's real terrain against flat
+headless ground with a 1 yd offline margin, so the longer roll took it to 1.21 yd. Its new trace
+shows the live and headless balls landing at the same offline point (-9.02 yd each); the
+whole gap appears during roll-out. There the live ball rolls 6.6 s over fairway falling 0.66° to
+the right, ending 1.2 yd right of the flat prediction. Before the recalibration the same slope
+gave 0.80 yd over a 14 yd roll. On flat ground the live ball matches the prediction within 0.1 yd
+(`UOpenGolf.Range.RolloutSurfaces`). The test now requires landing offline within 0.5 yd, rest
+offline within 2 yd (as for total), and any roll-out difference to point downhill.
+
+Validation: Unreal Engine 5.8, Windows x64, Development editor built. `UOpenGolf.Physics` passed
+21 of 21 (`Saved/Automation/20261116-164024-0e954557`), including `RolloutRegression`,
+`ShotLibrary` and the historical `Fixtures`; the one warning is `ShotInterrupt`'s intended safety
+stop. `UOpenGolf.Range` passed 34 of 34, four with warnings as in earlier runs, including
+`Range.Shot` after the change above and the new `RecordedShots`
+(`Saved/Automation/20261116-164211-4aae2f48`). `shot_compare.py` replayed all 160 library shots and
+reported the 124 lm shots (`Saved/ShotLibrary/history/20261116-163329.csv`). All 19 Python tests
+for the three scripts passed.
+
+The new `UOpenGolf.Range.RecordedShots` hits the recorded problem shots on the range
+(`Saved/Automation/20261116-164143-4e7a82dd`). GW #1 now totals 70.5 yd (recorded 129.2), GW #4
+64.6 (133.4), 9i #3 109.0 (262.7) and 7i #4 121.4 (75.4). Each rests on fairway within 1.4 yd of
+its flat-fairway prediction.
+
+Not verified: `--check-baseline`, which needs a saved baseline run; drivers, rough and the other
+turf surfaces, which have no reference shots; Linux; packaged builds; a real Square Home shot in
+play after the change.
+
 ## Sign-in: standing QR code, two buttons, switching users — 2026-11-13 (Windows)
 
 Signed out, every Settings page shows a QR code under the last category, captioned

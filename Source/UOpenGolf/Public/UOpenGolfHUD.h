@@ -18,6 +18,9 @@ public:
     virtual void DrawHUD() override;
     void RefreshTheme();
 
+    /** Only this C++ path refers to the wind Widget Blueprint, so Config/DefaultGame.ini always cooks its folder. */
+    static constexpr const TCHAR* WindWidgetPath = TEXT("/Game/UOpenGolf/UI/WBP_WindIndicator.WBP_WindIndicator_C");
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -27,7 +30,7 @@ private:
     TObjectPtr<UUserWidget> WindWidget;
 
     UPROPERTY(EditDefaultsOnly, Category = "UOpenGolf|UI")
-    TSoftClassPtr<UUserWidget> WindWidgetClass = TSoftClassPtr<UUserWidget>(FSoftObjectPath(TEXT("/Game/UOpenGolf/UI/WBP_WindIndicator.WBP_WindIndicator_C")));
+    TSoftClassPtr<UUserWidget> WindWidgetClass = TSoftClassPtr<UUserWidget>(FSoftObjectPath(WindWidgetPath));
 
     TSharedPtr<SWidget> Widget;
     /** Play mode, ball placement and hole score; see SPlayModeBar. */

@@ -37,6 +37,7 @@ namespace OpenFairway
         float DragCoefficient = 0.0f;
         float LiftCoefficient = 0.0f;
         float SpinDecayRatePerSecond = 0.0f;
+        bool bOutsideMeasuredCoverage = false;
 
         bool HasAerodynamics() const;
     };
@@ -78,21 +79,43 @@ namespace OpenFairway
          * Radius): with a profiled Environment the wind at height 0 is zero.
          */
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightProfile& Profile, float Dt);
+        /** Coupled RK4; resamples height-dependent wind and aerodynamics at every stage. */
+        OPENFAIRWAYPHYSICS_API FBallState StepFlightRK4(const FBallState& State, const FFlightEnvironment& Environment,
+            const FFlightProfile& Profile, float Dt, const FVector3f& GroundNormal = FVector3f(0, 1, 0));
+        /** Locate descending contact with a plane Dot(Position, Normal)=PlaneHeight. */
+        OPENFAIRWAYPHYSICS_API float FlightContactTime(const FBallState& State, const FFlightEnvironment& Environment,
+            const FFlightProfile& Profile, float Dt, const FVector3f& Normal, float PlaneHeight);
         /**
          * Sample must come from the local air-relative velocity, State.Velocity minus
          * WindProfile::At(Environment, State.Position.Y) (the wind at the ball's height).
          */
         OPENFAIRWAYPHYSICS_API FBallState StepFlight(const FBallState& State, const FFlightEnvironment& Environment, const FFlightAerodynamicsSample& Sample, float Dt);
 
-        /** Contact impulse with spin-dependent restitution, friction-limited tangential response and landing bite. */
+        /**
+         * Contact impulse with spin-dependent restitution and a friction-limited tangential response. On turf
+         * (LandingAngleLoss or LandingSpinLoss set) the impact then keeps a share of its tangential speed read from
+         * its own angle and backspin, the backspin part bounded by the contact's Coulomb limit; other surfaces use
+         * the bounce profile's retention and, on the first impact, the landing bucket's bite.
+         */
         OPENFAIRWAYPHYSICS_API FBallState ResolveImpact(const FBallState& State, const FVector3f& Normal, const FSurfaceSettings& Surface,
             const FBounceProfile& Profile, bool bFirstImpact = true, const FLandingResponse& Response = FLandingResponse());
 
-        /** One ground step: sliding friction until rolling, rolling resistance, grass drag and slope. */
+        /**
+         * One ground step: sliding friction until rolling, rolling resistance, grass drag, air drag and slope.
+         * The ball meets the wind one radius above its lie, whatever State.Position is, and its air drag reads
+         * only its velocity, spin and Environment.BallDragScale, not the launch's regime or launch angle.
+         */
         OPENFAIRWAYPHYSICS_API FBallState StepGround(const FBallState& State, const FVector3f& Normal, const FSurfaceSettings& Surface,
-            const FRolloutProfile& Profile, float ImpactSpinRpm, float Dt);
+            const FRolloutProfile& Profile, float ImpactSpinRpm, float Dt,
+            const FFlightEnvironment& Environment = FFlightEnvironment(), const FFlightProfile& Flight = FFlightProfile());
 
         OPENFAIRWAYPHYSICS_API float SpinFrictionMultiplier(float SpinRpm, float Speed, const FRolloutProfile& Profile);
+
+        /**
+         * The landing spin a roll-out remembers (StepGround's ImpactSpinRpm), rpm: the spin in the contact
+         * plane, or the total spin when the profile is not axis-aware.
+         */
+        OPENFAIRWAYPHYSICS_API float RolloutSpinRpm(const FVector3f& Spin, const FVector3f& Normal, const FRolloutProfile& Profile);
 
         /** True when a supported ball is slow enough and the slope cannot move it. */
         OPENFAIRWAYPHYSICS_API bool CanRest(const FBallState& State, bool bSupported, const FVector3f& Normal, const FSurfaceSettings& Surface,
@@ -100,6 +123,20 @@ namespace OpenFairway
 
         /** Spin the ball leaves the club with: measured spin, or rolling spin for a putt with none measured. */
         OPENFAIRWAYPHYSICS_API FVector3f LaunchSpin(const FVector3f& Velocity, const FVector3f& MeasuredSpin, const FVector3f& Normal, const FBounceProfile& Profile);
+
+        /**
+         * How much of a turf surface's struck-along-the-ground drag a shot gets when it is launched into or
+         * along the ground at this tangential speed (m/s): none for a putt (below 12 m/s), all of it for a
+         * topped full shot (18 m/s and up). The same ramp tells a putt from a topped shot in LaunchSpin.
+         */
+        OPENFAIRWAYPHYSICS_API float StruckAlongGroundWeight(float TangentSpeed);
+
+        /**
+         * The surface a ball struck along the ground rolls on for the rest of its shot: grass drags scaled
+         * toward StruckViscosityScale and StruckFormDragScale by Weight (0 returns Surface unchanged). This is
+         * the one rule in the roll that reads how the shot started; see the reference docs, "Topped shots".
+         */
+        OPENFAIRWAYPHYSICS_API FSurfaceSettings StruckAlongGround(const FSurfaceSettings& Surface, float Weight);
 
         /** True when the ball leaves the surface high enough to count as a bounce rather than a roll. */
         OPENFAIRWAYPHYSICS_API bool HasRebound(const FVector3f& Velocity, const FVector3f& Normal, const TOptional<FSurfaceBounceSettings>& Settings);
