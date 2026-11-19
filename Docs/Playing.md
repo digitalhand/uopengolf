@@ -111,8 +111,7 @@ checked.
 - **Test shots [P] | Hit [H]** (bottom left): only shown while no launch monitor is
   connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
-  from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`),
-  currently **v0.0.8**. Change the version there; packaged builds use the same value.
+  from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`), Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](Releases.md#versioning)).
 
 On the range, a stopped ball stays put for 3 seconds with its result shown, then goes back to
@@ -285,14 +284,8 @@ during Play, about 72% of the authored speed, which is the 10 m reading. In calm
 optional console commands, see
 [Validate wind and flag movement](RangeAssets.md#validate-wind-and-flag-movement).
 
-The current flight calibration understates headwinds:
-- **Driver:** into 30 mph the 150 mph replay climbs higher and carries 52 yd shorter.
-  Published aerodynamics predict a loss of 67–87 yd.
-- **Low-launch shots:** these gain carry. The low wood test shot carries 9 yd farther into 30 mph.
-
-The wind's direction is correct. The cause, the measurements and the references are in
-[Headwinds](../Plugins/OpenFairwayPhysics/Docs/Reference.md#headwinds); the fix is a recalibration that
-has not been done yet.
+The wind's direction and its growth with height are tested; how much a strong headwind costs has not yet been
+compared with published wind data (see the physics [known gaps](../Plugins/OpenFairwayPhysics/Docs/Reference.md#known-gaps)).
 
 ### Selecting test shots
 

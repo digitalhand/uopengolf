@@ -95,11 +95,11 @@ bool FOpenFairwayWindHeightTest::RunTest(const FString& Parameters)
     using namespace WindProfileTestDetail;
     const FBallPhysicsProfile Profile;
 
-    const FResolvedShotParams Params = FResolvedShotParams::Resolve(Profile, FAirConditions(), 120.0f, 16.3f, 7097.0f);
+    const FResolvedShotParams Params = FResolvedShotParams::Resolve(Profile, FAirConditions(), 16.3f, 7097.0f);
     TestEqual(TEXT("Resolve copies the reference height"), Params.Environment.WindReferenceHeightM, 10.0f);
     TestEqual(TEXT("Resolve copies the roughness"), Params.Environment.WindRoughnessM, 0.03f);
 
-    // One flight step reads the ball's height from its position.
+    // One flight step reads the ball's height from its position. The ball flies level, so every RK4 stage is at that height.
     FFlightEnvironment Windy;
     Windy.Wind = FVector3f(-4.47f, 0.0f, 0.0f);
     Windy.WindReferenceHeightM = 10.0f;
@@ -109,7 +109,7 @@ bool FOpenFairwayWindHeightTest::RunTest(const FString& Parameters)
     Uniform.WindReferenceHeightM = 0.0f;
     auto Step = [](const FFlightEnvironment& Environment, float HeightM)
     {
-        const FBallState State{FVector3f(0.0f, HeightM, 0.0f), FVector3f(40.0f, 15.0f, 0.0f), FVector3f(0.0f, 0.0f, 300.0f)};
+        const FBallState State{FVector3f(0.0f, HeightM, 0.0f), FVector3f(40.0f, 0.0f, 0.0f), FVector3f(0.0f, 0.0f, 300.0f)};
         return GolfPhysics::StepFlight(State, Environment, FFlightProfile(), GolfPhysics::SimulationDt);
     };
     const FBallState AtLaunch = Step(Windy, GolfPhysics::Radius);

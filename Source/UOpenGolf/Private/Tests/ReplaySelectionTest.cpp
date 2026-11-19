@@ -78,8 +78,7 @@ bool FVerifySelectedWoodCarry::Update()
     if (Mode && Mode->GetBall() && Mode->GetBall()->GetShotResult(Result) && Result.bLanded)
     {
         // The wood lands about 110 m out on the fairway's gentle contour, some 12 cm above the tee, so it carries a
-        // little short of the flat-ground prediction (121.5 yd). The old low-launch lift recovery carried 128.1 yd and
-        // the historical flight 123.8 yd (UOpenGolf.Physics.FlightDiagnostics), so 1 yd still tells them apart.
+        // little short of the flat-ground prediction; 1 yd tells a wrong replay from a right one.
         const float Yards = OpenFairway::YardsPerMeter;
         const float Carry = Result.CarryM * Yards;
         const float Predicted = Mode->GetBall()->PredictShot(Result.Launch, EOpenFairwaySurface::Fairway).CarryM * Yards;

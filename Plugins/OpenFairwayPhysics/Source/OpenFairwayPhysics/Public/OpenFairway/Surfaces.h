@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
-// Ported from ogolf-physics addons/openfairway physics/SurfacePhysicsCatalog.cs,
-// SurfacePhysicsSettings.cs, PhysicsEnums.cs and GreenSpeed.cs
-// at e6d793ae9477efaf55dc9078d7260f76bb532a7d. The default green grass drag differs from that
-// source (see GreenSpeed::GrassViscosity); FBallPhysicsProfile::HistoricalReference keeps the ported value.
-// Sand landings also plow (FBallPhysicsProfile::SandPlowRatio), which the reference profile leaves off, and sand
-// rolls at FBallPhysicsProfile::SandRollingFriction; the reference keeps the catalog's ported 0.30.
-// The turf surfaces also have a recalibrated catalog fitted to launch-monitor rollout (FBallPhysicsProfile::bRecalibratedTurf).
+// The surface catalog and green speed. The base values were originally ported from ogolf-physics
+// (SurfacePhysicsCatalog.cs, GreenSpeed.cs); the turf surfaces are recalibrated to launch-monitor roll-out, the green
+// has its own grass drag (GreenSpeed::GrassViscosity), and sand plows and rolls at the ball profile's values
+// (FBallPhysicsProfile::SandPlowRatio, SandRollingFriction).
 #pragma once
 
 #include "OpenFairway/Profiles.h"
@@ -25,7 +22,7 @@ namespace OpenFairway
         Count
     };
 
-    /** Surface tuning values before ball-profile and launch-regime multipliers. */
+    /** Surface tuning values before the ball profile's multipliers. */
     struct FSurfacePhysicsSettings
     {
         float KineticFriction = 0.5f;
@@ -50,7 +47,7 @@ namespace OpenFairway
          * Turf landing loss from the impact itself (k): after the contact impulse an impact keeps
          * exp(-k * vn / vt) of its tangential velocity, vn and vt being the incoming normal and tangential
          * speeds. With this or LandingSpinLoss set, impacts on the surface use neither the bounce profile's
-         * retention nor the landing bucket's bite. 0 on both keeps the ported impact.
+         * retention nor the landing bucket's bite. 0 on both (green, sand) keeps the bounce profile's impact.
          */
         float LandingAngleLoss = 0.0f;
         /**
@@ -64,7 +61,7 @@ namespace OpenFairway
         /**
          * Grass drag scales (linear and speed-squared) for a full shot struck into or along the ground, a topped
          * shot that never flies, for the rest of its roll. Blended in from putt speed by
-         * GolfPhysics::StruckAlongGroundWeight. 1 on both (green, sand, the ported catalog) changes nothing.
+         * GolfPhysics::StruckAlongGroundWeight. 1 on both (green, sand) changes nothing.
          */
         float StruckViscosityScale = 1.0f;
         float StruckFormDragScale = 1.0f;
@@ -74,11 +71,11 @@ namespace OpenFairway
     namespace SurfaceCatalog
     {
         /**
-         * Single source of truth for surface tuning (the default green is 10 ft on the stimpmeter).
-         * The ported ogolf-physics values by default; bRecalibratedTurf gives the turf surfaces (fairway,
-         * soft fairway, rough, firm, fringe) fitted to launch-monitor rollout. Green and sand are the same in both.
+         * Single source of truth for surface tuning (the default green is 10 ft on the stimpmeter). The turf
+         * surfaces (fairway, soft fairway, rough, firm, fringe) share a landing law and ground resistance fitted to
+         * launch-monitor roll-out on fairway, each keeping its ported ratio of grass drag and rolling friction to fairway's.
          */
-        OPENFAIRWAYPHYSICS_API const FSurfacePhysicsSettings& Get(ESurface Surface, bool bRecalibratedTurf = false);
+        OPENFAIRWAYPHYSICS_API const FSurfacePhysicsSettings& Get(ESurface Surface);
 
         OPENFAIRWAYPHYSICS_API const TCHAR* GetName(ESurface Surface);
     } // namespace SurfaceCatalog
@@ -99,11 +96,12 @@ namespace OpenFairway
          * fairway's 0.0017, so a ball crossing a green from fairway rolls farther.
          */
         constexpr float GrassViscosity = 0.0009f;
-        /** The ported ogolf-physics green drag, kept by FBallPhysicsProfile::HistoricalReference. */
-        constexpr float ReferenceGrassViscosity = 0.011f;
 
         OPENFAIRWAYPHYSICS_API float Clamp(float StimpFeet);
-        /** Rolling friction that, with this grass viscosity, stops a stimpmeter ball at the stimp distance. */
-        OPENFAIRWAYPHYSICS_API float RollingFriction(float StimpFeet, float Viscosity = GrassViscosity, bool bAirDrag = true);
+        /**
+         * Rolling friction that, with this grass viscosity and the ground air drag in standard air, stops a stimpmeter
+         * ball at the stimp distance.
+         */
+        OPENFAIRWAYPHYSICS_API float RollingFriction(float StimpFeet, float Viscosity = GrassViscosity);
     } // namespace GreenSpeed
 } // namespace OpenFairway

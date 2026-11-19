@@ -166,10 +166,7 @@ bool FRolloutSurfaceTest::RunTest(const FString& Parameters)
     Wrapper.DestroyTestWorld(false);
 
     const OpenFairway::FBallPhysicsProfile Profile;
-    const auto Params = OpenFairway::FResolvedShotParams::Resolve(Profile, OpenFairway::FAirConditions(), 51.17f / OpenFairway::MpsPerMph, 6.95f, 1933.0f);
-    TestEqual(TEXT("Regime kinetic friction neutral"), Params.Regime.KineticFrictionMultiplier, 1.0f, 1e-6f);
-    TestEqual(TEXT("Regime rolling friction neutral"), Params.Regime.RollingFrictionMultiplier, 1.0f, 1e-6f);
-    TestEqual(TEXT("Regime grass drag neutral"), Params.Regime.GrassViscosityMultiplier, 1.0f, 1e-6f);
+    const auto Params = OpenFairway::FResolvedShotParams::Resolve(Profile, OpenFairway::FAirConditions(), 6.95f, 1933.0f);
     TestEqual(TEXT("Run adds no bite"), Params.Landing.SpinBiteScale, 0.0f);
 
     // The same shot on rough carries the same and runs out much shorter.

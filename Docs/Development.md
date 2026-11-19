@@ -93,25 +93,30 @@ requiring a Zen cache service; normal interactive editor sessions use engine def
 Default timeout is 600 seconds; use `-TimeoutSeconds` or `--timeout` (up to 3600) to change it.
 Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
 
-The report validator, the shot comparison and the launch-monitor and recorded-shot importers also
-have engine-free checks: `python -m unittest Assets.Scripts.test_automation_report Assets.Scripts.test_shot_compare
-Assets.Scripts.test_monitor_import Assets.Scripts.test_recording_import` from the repository root (Windows), or the
-same with `python3` (Linux).
-`python Assets/Scripts/shot_compare.py` replays the shot library in the editor and reports the physics
-against the reference results; `python Assets/Scripts/carry_audit.py` reports flight per reference
-session. Third-party reference data lives outside the repository, in `UOPENGOLF_DATA` (default
-`~/data/uopengolf`); see [Assets/Data](../Assets/Data/README.md#where-the-data-lives) and the
-[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#shot-library).
-`Assets/Scripts/ue.ps1 Test -Filter UOpenGolf.Calibration.Rollout` (opt-in, about two minutes) fits the
-turf landing loss and ground resistance, then the struck-along-the-ground drag of topped shots,
-against the local shots with a reference total and writes every candidate to
-`Saved/ShotLibrary/calibration.csv`; it never changes the catalog. `python Assets/Scripts/flight_fit.py`
-(needs NumPy) refits the flight table the same way. See
-[Turf rollout calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration)
-and [Flight model](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model).
+The engine-free script checks run from the repository root with
+`python -m unittest discover -s Assets/Scripts -p "test_*.py"` (`python3` on Linux); see [Testing](Testing.md).
 
 The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
 committed with its terrain, vegetation and range actors.
+
+### Physics accuracy scripts
+
+These compare the physics with reference shots. Third-party reference data lives outside the repository, in
+`UOPENGOLF_DATA` (default `~/data/uopengolf`; see [Assets/Data](../Assets/Data/README.md#where-the-data-lives)).
+Without it the scripts use the repository's own recordings only. `shot_compare.py` and the calibration test build or run
+the editor, so close it first.
+
+| Command | What it does |
+| --- | --- |
+| `python Assets/Scripts/shot_compare.py [--build]` | Runs `UOpenGolf.Physics.ShotLibrary`, which replays every library shot into `Saved/ShotLibrary/results.csv`, then reports carry, total, roll, apex and landing angle against the references, by launch class and ball speed, and the change since the last different run |
+| `... --check-baseline <local data>/baselines/pre_contact_20261116.csv` | Also enforces the accuracy gates against that baseline, and that the results are fresh for the current sources and binaries |
+| `python Assets/Scripts/carry_audit.py [--before <results.csv>] [--markdown <file>]` | Flight accuracy per reference session from the last results; with `--before`, that run's errors, the largest change of any shot and an optional before/after Markdown report |
+| `python Assets/Scripts/flight_fit.py check \| fit \| refine` | Flies the shipping flight table in Python (`check`), or refits it (`fit`, all knots; `refine`, the low-spin knots), printing a candidate table. Needs NumPy; `refine` also SciPy |
+| `Assets/Scripts/ue.ps1 Test -Filter UOpenGolf.Calibration.Rollout` | Fits the turf landing loss, ground resistance and topped-shot drag to the local shots with a reference total; writes every candidate to `Saved/ShotLibrary/calibration.csv` and never changes the catalog |
+| `python Assets/Scripts/monitor_import.py <export.csv>`, `recording_import.py <recordings> <session>` | Add a launch-monitor export to the local data, or the game's own recordings to the repository's library |
+
+What the numbers mean, and how the flight and turf were fitted, is in the physics
+[accuracy](../Plugins/OpenFairwayPhysics/Docs/Accuracy.md) and [calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#calibration) docs.
 
 ### Package (Windows and Linux)
 

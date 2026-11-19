@@ -47,13 +47,14 @@ python Assets/Scripts/shot_compare.py            # replay every shot, then print
 python Assets/Scripts/shot_compare.py --build    # build the editor first, after C++ changes
 python Assets/Scripts/shot_compare.py --skip-run --session recorded_20261113 --sort roll
 python Assets/Scripts/carry_audit.py             # flight (carry, apex, landing) per session
+python Assets/Scripts/flight_fit.py check        # the same flight in Python, for refitting the flight table
 ```
 
 `+/-` is engine minus reference: `+` means the engine carries, rolls or peaks higher, or lands
 steeper. Roll and total are graded only for shots with a reference total; sessions that give only a
-carry (and apex or landing angle) are flight references for `carry_audit.py`. See the
-[physics reference](../../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration)
-for what the turf and the flight were fitted to.
+carry (and apex or landing angle) are flight references for `carry_audit.py`. See
+[Accuracy](../../Plugins/OpenFairwayPhysics/Docs/Accuracy.md) for the results and what the turf and the flight were
+fitted to, and [Development](../../Docs/Development.md#physics-accuracy-scripts) for every script.
 
 `recorded_20261113` keeps the launch inputs of the range shots that showed the rollout faults, with
 the original recording JSON under `recordings/`. It has no reference results: the report replays

@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: MIT
-// Ported from ogolf-physics addons/openfairway physics/ShotSetup.cs and PhysicsAdapter.cs
-// at e6d793ae9477efaf55dc9078d7260f76bb532a7d.
+// Launch setup and the headless shot loop, originally ported from ogolf-physics (ShotSetup.cs, PhysicsAdapter.cs).
 #pragma once
 
 #include "OpenFairway/BallProfile.h"
 #include "OpenFairway/GolfPhysics.h"
+#include "OpenFairway/Units.h"
 
 namespace OpenFairway
 {
-    constexpr float MpsPerMph = 0.44704f;
-    constexpr float YardsPerMeter = 1.09361f;
-    constexpr float FeetPerMeter = 3.28084f;
-
     /**
      * Launch-monitor ball data: mph, degrees and rpm, with positive HLA, axis and side spin
      * to the right. Unset spin values are derived from the others.
@@ -57,7 +53,7 @@ namespace OpenFairway
         OPENFAIRWAYPHYSICS_API FLaunchVectors BuildLaunchVectors(float SpeedMph, float VerticalLaunchDeg, float HorizontalLaunchDeg, float BackSpinRpm,
             float SideSpinRpm);
 
-        /** Right-handed rotation about a unit axis (Godot's Vector3.Rotated, which the reference used). */
+        /** Right-handed rotation of Vector about a unit axis by AngleRadians. */
         OPENFAIRWAYPHYSICS_API FVector3f Rotate(const FVector3f& Vector, const FVector3f& Axis, float AngleRadians);
     } // namespace ShotSetup
 
@@ -117,9 +113,8 @@ namespace OpenFairway
         int32 BounceCount = 0;
         float GroundDistanceM = 0.0f;
         ELandingBucket LandingBucket = ELandingBucket::Run;
-        FString RegimeKey;
-        FString MatchedRegimeKey;
         FShotSpin Spin;
+        /** Seconds of flight outside the Reynolds number and spin ratio the flight table was fitted over. */
         float OutsideMeasuredCoverageS = 0;
         float MinFlightRe = MAX_flt;
         float MaxFlightRe = 0;
@@ -128,8 +123,8 @@ namespace OpenFairway
     };
 
     /**
-     * Headless shot simulation on one planar surface, stepping at 120 Hz like the ogolf-physics
-     * PhysicsAdapter. Used for regression fixtures and to predict a shot without a world.
+     * Headless shot simulation on one planar surface, stepping at 120 Hz like the ball actor. Used by the tests, the
+     * shot-library replay and AOpenFairwayBall::PredictShot to play a shot without a world.
      * GroundNormal tilts the plane through the launch point (OpenFairway frame, +Y up); a zero
      * normal plays as level ground.
      */

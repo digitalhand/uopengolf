@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "OpenFairway/Units.h"
 #include "OpenGolfFlagCloth.h"
 #include "OpenGolfFlagstickComponent.h"
 
@@ -9,7 +10,7 @@
 
 namespace
 {
-    constexpr float MpsPerMph = 0.44704f;
+    using OpenFairway::MpsPerMph;
     const FVector PoleTop(0.0, 0.0, UOpenGolfFlagstickComponent::PoleHeightCm);
 
     struct FFlagRun

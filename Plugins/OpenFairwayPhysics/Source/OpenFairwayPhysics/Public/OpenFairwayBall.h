@@ -3,6 +3,7 @@
 
 #include "Engine/OverlapResult.h"
 #include "GameFramework/Actor.h"
+#include "OpenFairway/Obstacles.h"
 #include "OpenFairway/ShotSimulator.h"
 #include "OpenFairwayTypes.h"
 #include "OpenFairwayBall.generated.h"
@@ -16,10 +17,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOpenFairwayBallAtRest, const FOpe
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnOpenFairwayBallHoled, const FOpenFairwayShotResult&, Result);
 
 /**
- * A golf ball driven by the OpenFairway core. Unreal (Chaos) is used the way ogolf-physics
- * uses Jolt: sphere sweeps and line traces find contacts, normals and surfaces, while flight,
- * bounce, roll and rest come from the calibrated OpenFairway equations at 120 Hz. The ball
- * does not simulate as a Chaos rigid body, so the two never compete for the same motion.
+ * A golf ball driven by the OpenFairway core. Chaos only answers queries: sphere sweeps and line traces find
+ * contacts, normals and surfaces, while flight, bounce, roll and rest come from the OpenFairway equations at 120 Hz.
+ * The ball does not simulate as a Chaos rigid body, so the two never compete for the same motion. The implementation
+ * is split by concern across OpenFairwayBall*.cpp.
  */
 UCLASS(Blueprintable)
 class OPENFAIRWAYPHYSICS_API AOpenFairwayBall : public AActor
@@ -120,8 +121,8 @@ public:
      */
     static FVector3f ResolveObstacleHit(const FVector3f& Velocity, const FVector3f& Normal, const FVector3f& AwayFromObstacle);
 
-    static constexpr float ObstacleRestitution = 0.30f;
-    static constexpr float ObstacleEscapeMps = 1.0f;
+    static constexpr float ObstacleRestitution = OpenFairway::Obstacles::ObstacleRestitution;
+    static constexpr float ObstacleEscapeMps = OpenFairway::Obstacles::ObstacleEscapeMps;
 
     /**
      * The tag ("OpenFairway.Canopy") that marks foliage, such as a tree's branches and leaves, on the component or
@@ -143,8 +144,8 @@ public:
      */
     static FVector3f ResolveCanopyDrag(const FVector3f& Velocity, float PathM, uint32 Seed);
 
-    static constexpr float CanopyDecayLengthM = 4.0f;
-    static constexpr float CanopyDeflectionDegPerSqrtM = 6.0f;
+    static constexpr float CanopyDecayLengthM = OpenFairway::Obstacles::CanopyDecayLengthM;
+    static constexpr float CanopyDeflectionDegPerSqrtM = OpenFairway::Obstacles::CanopyDeflectionDegPerSqrtM;
 
     /** The wind in world space (X downrange, Y right, Z up), m/s, at its reference height (the authored speed). */
     UFUNCTION(BlueprintPure, Category = "OpenFairway|Air")
@@ -287,7 +288,7 @@ private:
     bool TryEnterCup(const FVector& Start, const FVector& End, const FVector3f& PreviousVelocity, const FVector3f& PreviousSpin, float Dt);
     /** Captures the ball into the cup at Cup (world): it stops and sinks in over HoleDropSeconds. */
     void StartHoleDrop(const FOpenFairwayCup& Cup, const TCHAR* How);
-    /** One step of a crossing over the open cup (CupCapture::StepOverCup) in place of the ground step and sweep. */
+    /** One step of a crossing over the open cup (CupCapture::AdvanceCrossing) in place of the ground step and sweep. */
     bool StepCupCrossing(float Dt);
     /** Advances the crossing by Dt from the ball's state; false once it ends, holed or back on the green. */
     bool AdvanceCupCrossing(float Dt);
@@ -306,6 +307,12 @@ private:
     void AddTracerPoint(bool bForce);
     void ClearTracer();
     OpenFairway::FAirConditions GetAirConditions() const;
+    /** The shot's air while it moves, else the air settings now. */
+    OpenFairway::FFlightEnvironment GetAirEnvironment() const;
+    /** SimLocation's offset from the shot's start, OpenFairway frame (m). */
+    FVector3f CoreOffset() const;
+    /** The ball centre in the OpenFairway frame (m), measured from the launch ground: ShotStart is the centre, one radius up. */
+    FVector3f CorePosition() const;
 
     EOpenFairwayBallState BallState = EOpenFairwayBallState::Rest;
     /** World position (cm) the physics steps from; the actor only follows it. Taken from the actor at launch from rest. */

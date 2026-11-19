@@ -36,8 +36,7 @@ namespace
 bool FOpenFairwayWindTest::RunTest(const FString& Parameters)
 {
     const FBallPhysicsProfile Profile;
-    // Calm air is the default; parity with the pre-wind engine is pinned by the Fixtures and
-    // the FlightDiagnostics regression carries.
+    // Calm air is the default; UOpenGolf.Physics.GameplayPins pins calm-air flights.
     const FShotSimulationResult Calm = ShotSimulator::Simulate(WindIron(), ESurface::Fairway, Profile, FAirConditions());
     FAirConditions DirectionOnly;
     DirectionOnly.WindFromDeg = 135.0f;
@@ -87,14 +86,16 @@ bool FOpenFairwayWindTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Sea-level air density"), Ball->GetAirDensityKgM3(), 1.18f, 0.02f);
     Ball->MarkAsGarbage();
 
-    // A ball moving with the air has no airspeed: gravity only, never NaN.
+    // A ball moving with the air has no airspeed: gravity only, never NaN. The step is short enough that gravity alone
+    // leaves the ball below the aerodynamic speed (FlightAerodynamics::MinAerodynamicSpeed) at every RK4 stage.
     FFlightEnvironment Environment;
     Environment.Wind = FVector3f(10.0f, 0.0f, 3.0f);
+    constexpr float Dt = 0.05f;
     const FBallState Drifting{FVector3f::ZeroVector, Environment.Wind, FVector3f(0.0f, 0.0f, 300.0f)};
-    const FBallState Next = GolfPhysics::StepFlight(Drifting, Environment, FFlightProfile(), 0.1f);
+    const FBallState Next = GolfPhysics::StepFlight(Drifting, Environment, FFlightProfile(), Dt);
     TestTrue(TEXT("Still air relative to the ball stays finite"), !Next.Velocity.ContainsNaN() && !Next.Spin.ContainsNaN());
     TestTrue(TEXT("Still air relative to the ball is gravity only"),
-        Next.Velocity.Equals(Environment.Wind + FVector3f(0.0f, -GolfPhysics::Gravity * 0.1f, 0.0f), 1e-5f));
+        Next.Velocity.Equals(Environment.Wind + FVector3f(0.0f, -GolfPhysics::Gravity * Dt, 0.0f), 1e-5f));
     return true;
 }
 #endif

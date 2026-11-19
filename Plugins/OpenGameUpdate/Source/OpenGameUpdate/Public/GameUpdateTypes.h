@@ -35,7 +35,7 @@ struct OPENGAMEUPDATE_API FGameUpdateConfig
 /** One published release, as read from the update source. */
 struct OPENGAMEUPDATE_API FGameUpdateRelease
 {
-    /** Without the leading "v", such as 0.0.8. */
+    /** Without the leading "v", such as 0.0.x. */
     FString Version;
     /** The release's web page, for notes or a manual download. */
     FString PageUrl;

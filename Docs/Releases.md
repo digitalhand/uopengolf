@@ -169,7 +169,7 @@ uninstaller in **Apps**. Its `AppId` must never change: it is how a newer Setup 
 existing install. To build one locally after `ue.ps1 Package`:
 
 ```powershell
-powershell -File Assets\Installer\build_installer.ps1 -PackageDir Packaged\Windows -Version 0.0.8 -OutputDir Packaged\dist
+powershell -File Assets\Installer\build_installer.ps1 -PackageDir Packaged\Windows -Version 0.1.0 -OutputDir Packaged\dist
 ```
 
 The updater relies on these release details, so keep them stable:

@@ -63,23 +63,7 @@ bool FOpenFairwayPhysicsCoreTest::RunTest(const FString& Parameters)
     Invalid.SpeedMph = -1.0f;
     TestFalse(TEXT("Negative speed rejected"), Invalid.IsValid());
 
-    // Regime keys and landing buckets use the calibration bins.
-    TestEqual(TEXT("Wood regime"), ShotRegimeKey::Build(114.46f, 6.95f, 1932.5f), FString(TEXT("D-S3-V0-P0")));
-    FBallPhysicsProfile Profile = FBallPhysicsProfile::HistoricalReference();
-    FString Key;
-    FString Matched;
-    Profile.ResolveScaleOverride(24.68f, 17.94f, 3204.0f, Key, Matched);
-    TestEqual(TEXT("Chip regime"), Key, FString(TEXT("C-S0-V1-P1")));
-    TestEqual(TEXT("Chip falls back to family override"), Matched, FString(TEXT("C-S0")));
-    const FRegimeScaleOverride& Driver = Profile.ResolveScaleOverride(150.0f, 12.5f, 2335.0f, Key, Matched);
-    TestEqual(TEXT("Driver override"), Matched, FString(TEXT("D-S4-V1-P0")));
-    TestEqual(TEXT("Driver drag"), Driver.DragScaleMultiplier, 0.98f);
-    TestTrue(TEXT("Low spin runs"), LandingBucket::Classify(10.0f, 2000.0f) == ELandingBucket::Run);
-    TestTrue(TEXT("Mid spin releases"), LandingBucket::Classify(20.0f, 5000.0f) == ELandingBucket::Release);
-    TestTrue(TEXT("High spin checks"), LandingBucket::Classify(30.0f, 7000.0f) == ELandingBucket::Check);
-    TestTrue(TEXT("Very high spin, high launch spins back"), LandingBucket::Classify(40.0f, 10000.0f) == ELandingBucket::Spinback);
-    TestTrue(TEXT("Very high spin, low launch checks"), LandingBucket::Classify(12.0f, 10000.0f) == ELandingBucket::Check);
-
+    const FBallPhysicsProfile Profile;
     // Ground friction, rest and rebound rules.
     const FRolloutProfile Rollout;
     TestEqual(TEXT("No spin, no extra friction"), GolfPhysics::SpinFrictionMultiplier(0.0f, 40.0f, Rollout), 1.0f, 1e-6f);
@@ -99,12 +83,14 @@ bool FOpenFairwayPhysicsCoreTest::RunTest(const FString& Parameters)
     // Green speed: a faster green rolls more freely; stimps are clamped to the supported range.
     TestTrue(TEXT("Faster green, less friction"), GreenSpeed::RollingFriction(13.0f) < GreenSpeed::RollingFriction(9.0f));
     TestEqual(TEXT("Stimp clamped"), GreenSpeed::Clamp(30.0f), GreenSpeed::MaxStimpFeet);
-    // The friction is solved with the green's grass drag; with none it is the constant-deceleration stimp rule.
+    // The friction is solved with the green's grass drag and the air: more drag leaves less for rolling friction, and
+    // no drag at all is close to the constant-deceleration stimp rule.
     TestEqual(TEXT("Default green drag"), FBallPhysicsProfile().GreenGrassViscosity, 0.0009f);
-    TestEqual(TEXT("Reference green friction"), GreenSpeed::RollingFriction(10.0f, GreenSpeed::ReferenceGrassViscosity, false), 0.05179f, 1e-4f);
-    const float StimpDistanceM = 10.0f * 0.3048f;
-    TestEqual(TEXT("Drag-free green friction"), GreenSpeed::RollingFriction(10.0f, 0.0f, false),
-        7.0f * GreenSpeed::StimpmeterSpeedMps * GreenSpeed::StimpmeterSpeedMps / (10.0f * GolfPhysics::Gravity * StimpDistanceM), 1e-5f);
+    TestTrue(TEXT("More grass drag, less rolling friction"), GreenSpeed::RollingFriction(10.0f, 0.011f) < GreenSpeed::RollingFriction(10.0f));
+    const float StimpDistanceM = 10.0f * MetersPerFoot;
+    const float ConstantDeceleration = 7.0f * GreenSpeed::StimpmeterSpeedMps * GreenSpeed::StimpmeterSpeedMps / (10.0f * GolfPhysics::Gravity * StimpDistanceM);
+    TestTrue(TEXT("Drag-free green friction is below the constant-deceleration rule"), GreenSpeed::RollingFriction(10.0f, 0.0f) < ConstantDeceleration);
+    TestEqual(TEXT("and within 5% of it"), GreenSpeed::RollingFriction(10.0f, 0.0f), ConstantDeceleration, ConstantDeceleration * 0.05f);
     return true;
 }
 

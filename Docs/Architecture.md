@@ -118,8 +118,8 @@ The `OpenFairwayPhysics` runtime plugin is the physics core and its Unreal wrapp
 
 | Layer | Location (`Plugins/OpenFairwayPhysics/Source/OpenFairwayPhysics/`) | Notes |
 | --- | --- | --- |
-| OpenFairway core | `Public/OpenFairway/`, `Private/OpenFairway/` | Flight, impact, ground and rest equations, surfaces, ball profile and launch regimes, headless `ShotSimulator`; depends only on Core, SI units in its own right-handed frame |
-| Unreal wrapper | `Public/OpenFairwayBall.h`, `Public/OpenFairwayTypes.h`, `Public/OpenFairwayPhysicalMaterial.h` | Ball actor stepping the core at 120 Hz; Chaos sphere sweeps and line traces for contacts; surfaces from physical materials or tags; presentation-only visual roll; Blueprint launch, results and events |
+| OpenFairway core | `Public/OpenFairway/`, `Private/OpenFairway/` | Air, the fitted flight table and RK4 flight, impact, ground roll and rest, the surface catalog and green speed, the ball profile and landing buckets, cup capture, obstacles and canopy, the steps shared by the simulator and the actor (`ShotStep`), and the headless `ShotSimulator`; depends only on Core, SI units in its own right-handed frame |
+| Unreal wrapper | `Public/OpenFairwayBall.h`, `Public/OpenFairwayTypes.h`, `Public/OpenFairwayPhysicalMaterial.h` | Ball actor stepping the core at 120 Hz (`Private/OpenFairwayBall*.cpp`, split into lifecycle, motion, surfaces, cups and presentation); Chaos sphere sweeps and line traces for contacts; surfaces from physical materials or tags; presentation-only visual roll; Blueprint launch, results and events |
 
 Chaos only answers contact queries; the ball never simulates as a Chaos rigid body, so
 OpenFairway owns the motion. See the [plugin README](../Plugins/OpenFairwayPhysics/README.md).
@@ -189,42 +189,35 @@ is the ball, tracer, shot camera and Slate HUD (shot tiles and launch-monitor st
   session and both transports were ported natively to C++ from pinned revisions;
   no .NET runtime or bridge process is used.
 - `ogolf-physics`: the maintained C# golf physics (a successor of `openfairway`'s
-  addon) with a Godot-free core and calibration data. Its core, profiles, surfaces and
-  headless shot loop were ported to C++ from revision `e6d793a`; golden fixtures come
-  from its C# sources through an optional .NET harness.
+  addon). Its impact, ground, rest, surface and cup-capture equations and headless shot
+  loop were ported to C++ from revision `e6d793a`; the port no longer tracks it.
 - `openfairway`: the earlier C# physics; superseded by `ogolf-physics` and not ported.
 - `ogolf`: reference for contour/height data shared by rendering and collision, lie
   mapping, and resolving surfaces at actual contact points. Physics calculations
   belong to OpenFairway.
 
-Current physics defaults add:
-
-- speed-dependent flight spin decay;
-- continuous interpolation of calibration scales and landing responses;
-- contact that reads only the backspin across the ball's travel;
-- a coupled ground step, with air drag on the rolling ball;
-- a turf landing loss read from the impact itself;
-- a struck-along-the-ground grass drag for topped shots.
-
-The turf is fitted to launch-monitor rollout, and the gameplay flight's drag and lift to reference
-flights (tour averages, a launch-monitor export and a trajectory calculator); the data stays outside
-the repository. The explicit `HistoricalReference()` profile preserves the pinned C# behavior for
-golden tests; parity with that profile is not independent physical validation. See
-[Flight model](../Plugins/OpenFairwayPhysics/Docs/Reference.md#flight-model)
-and [Turf rollout calibration](../Plugins/OpenFairwayPhysics/Docs/Reference.md#turf-rollout-calibration)
-in the physics reference for the changes and measurements.
+Since the port, the physics has its own flight (drag and lift fitted against spin ratio, integrated
+with RK4), speed-dependent spin decay, contact that reads only the backspin across the ball's travel,
+a coupled ground step with air drag on the rolling ball, a turf landing loss read from the impact
+itself, a struck-along-the-ground grass drag for topped shots, wind that grows with height, and
+humid air. The turf is fitted to launch-monitor roll-out, and the flight to reference flights (tour
+averages, a launch-monitor export and a trajectory calculator); the data stays outside the
+repository. `UOpenGolf.Physics.GameplayPins` pins the resulting shots. See the
+[physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md) and
+[accuracy](../Plugins/OpenFairwayPhysics/Docs/Accuracy.md).
 
 The sibling repositories are not required, modified, or linked by the build. The
 connector port is described in the [launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md);
-the physics port in the [OpenFairway Physics README](../Plugins/OpenFairwayPhysics/README.md).
+the physics in the [OpenFairway Physics README](../Plugins/OpenFairwayPhysics/README.md).
 
 ## Data and simulation contracts
 
 [The launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md#shot-and-club-data) defines device units, optional
-measurements, signs, threading and shot association. The [physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#units-and-coordinate-frames)
+measurements, signs, threading and shot association. The [physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#units-and-frames)
 defines coordinate conversion and fixed-step ownership. Preserve measured input separately
-from game-side lie adjustments. Historical fixtures check the port; they do not establish
-physical accuracy.
+from game-side lie adjustments. The physics pins and parity tests check that the physics is
+unchanged and consistent; accuracy is measured against reference shots
+([Accuracy](../Plugins/OpenFairwayPhysics/Docs/Accuracy.md)).
 
 ## Windows and Linux
 
