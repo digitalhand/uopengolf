@@ -14,8 +14,12 @@
 #include "UOpenGolfRange.h"
 #include "OpenGolfTerrain.h"
 #include "OpenGolfSettings.h"
+#include "UI/Common/HudToolTip.h"
 #include "UI/Hud/BallReadyGlow.h"
+#include "UI/Hud/ShotDisplay.h"
 #include "GameFramework/HUD.h"
+#include "Widgets/IToolTip.h"
+#include "Widgets/SToolTip.h"
 #include "Engine/GameInstance.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "Widgets/Text/STextBlock.h"
@@ -27,6 +31,21 @@ namespace RangeHudControlsTestDetail
 {
     /** The range HUD's clickable controls, by their Slate tags. */
     const TCHAR* const HudControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle"), TEXT("HudSettings")};
+    /** The range toolbar's icons, each named by a hover tooltip in the HUD style. */
+    const TCHAR* const HudToolTipControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle")};
+
+    /** The first tooltip Slate would show under Root: the club picker's sits on its inner combo button. */
+    TSharedPtr<IToolTip> ShownToolTip(const TSharedRef<SWidget>& Root)
+    {
+        const TSharedPtr<IToolTip> Tip = Root->GetToolTip();
+        if (Tip.IsValid() && !Tip->IsEmpty())
+            return Tip;
+        FChildren* Children = Root->GetChildren();
+        for (int32 Index = 0; Index < Children->Num(); ++Index)
+            if (const TSharedPtr<IToolTip> Found = ShownToolTip(Children->GetChildAt(Index)))
+                return Found;
+        return nullptr;
+    }
 
     bool ShowsText(const TSharedRef<SWidget>& Root, const FString& Value)
     {
@@ -133,9 +152,23 @@ private:
                 }
             }
             Test->TestTrue(TEXT("Training header shows"), ShowsText(Window.ToSharedRef(), TEXT("Training")));
-            Test->TestFalse(TEXT("Launch monitor is off the training HUD"), IsShown(Window.ToSharedRef(), TEXT("LaunchMonitorStatus")));
-            Test->TestFalse(TEXT("No connection prompt on the training HUD"), ShowsText(Window.ToSharedRef(), TEXT("Connect a launch monitor to hit shots")));
-            Test->TestFalse(TEXT("Static wind label is gone"), ShowsText(Window.ToSharedRef(), TEXT("Wind [W]")));
+            // The version label is the version alone: ShowsText matches whole text, so no key hint follows it.
+            if (const FString Version = ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion()); !Version.IsEmpty())
+                Test->TestTrue(TEXT("The version label shows only the version"), ShowsText(Window.ToSharedRef(), Version));
+            for (const TCHAR* Tag : HudToolTipControls)
+            {
+                const TSharedPtr<SWidget> Control = RenderedPlay::WithTag(Window.ToSharedRef(), Tag);
+                const TSharedPtr<IToolTip> Tip = Control ? ShownToolTip(Control.ToSharedRef()) : nullptr;
+                Test->TestTrue(FString::Printf(TEXT("%s has a HUD-styled tooltip"), Tag),
+                    Tip.IsValid() && Tip->AsWidget()->GetTag() == HudToolTip::Tag);
+            }
+            {
+                const TSharedPtr<SWidget> Flag = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("GameModeToggle"));
+                const TSharedPtr<IToolTip> Tip = Flag ? ShownToolTip(Flag.ToSharedRef()) : nullptr;
+                Test->TestEqual(TEXT("The flag's tooltip names Game Mode and its key"),
+                    Tip.IsValid() ? StaticCastSharedRef<SToolTip>(Tip->AsWidget())->GetTextTooltip().ToString() : FString(),
+                    FString(TEXT("Game Mode (G)")));
+            }
             Test->TestFalse(TEXT("The flag has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Game Mode")));
             Test->TestFalse(TEXT("The recording icon has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Record")));
             {

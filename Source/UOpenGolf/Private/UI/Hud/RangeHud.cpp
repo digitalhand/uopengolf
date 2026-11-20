@@ -59,12 +59,7 @@ void SRangeHud::Construct(const FArguments& Args)
     SetTag(TEXT("TrainingHud"));
     WindIndicator = Args._WindIndicator;
     SetVisibility(TAttribute<EVisibility>::CreateSP(this, &SRangeHud::GetHudVisibility));
-    // Keep the settings cog on the header background until hovered.
-    CellStyle = FButtonStyle()
-        .SetNormal(FSlateNoResource())
-        .SetHovered(FSlateRoundedBoxBrush(HudStyle::HoverTileColor(), HudStyle::TileRadius))
-        .SetPressed(FSlateRoundedBoxBrush(HudStyle::LaunchTileColor(), HudStyle::TileRadius))
-        .SetDisabled(FSlateNoResource());
+    CellStyle = HudStyle::ToolbarButton();
     Refresh(true);
 
     // The menu button takes clicks; the rest of this layer passes them to the game.
@@ -102,7 +97,7 @@ void SRangeHud::Construct(const FArguments& Args)
             [
                 SNew(STextBlock).Visibility(EVisibility::HitTestInvisible).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
-                .Text(FText::FromString(ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion())+TEXT("   ·   HUD [F6 / View]")))
+                .Text(FText::FromString(ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion())))
             ]
         ]
     ];
@@ -213,10 +208,16 @@ void SRangeHud::Refresh(bool bText)
     bBallReady = LaunchMonitor && LaunchMonitor->IsBallReady();
     const bool bHole = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
     const bool bBallPlacement = bHole && (PlayerController->IsPlacingBall() || Mode->GetHoleRound().bPractice);
-    Heading = FText::FromString(bBallPlacement ? TEXT("Training · Ball Placement") : bHole ? TEXT("Airways") : TEXT("Training"));
-    HoleDetails = bHole && !bBallPlacement
-        ? FText::FromString(ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM)))
-        : FText::GetEmpty();
+    // Fixed headings are shared texts; the hole details are rebuilt only when they change, as the tiles are.
+    static const FText TrainingHeading = FText::FromString(TEXT("Training"));
+    static const FText PlacementHeading = FText::FromString(TEXT("Training · Ball Placement"));
+    static const FText HoleHeading = FText::FromString(TEXT("Airways"));
+    Heading = bBallPlacement ? PlacementHeading : bHole ? HoleHeading : TrainingHeading;
+    const FString Details = bHole && !bBallPlacement
+        ? ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM))
+        : FString();
+    if (HoleDetails.ToString() != Details)
+        HoleDetails = FText::FromString(Details);
 }
 
 EVisibility SRangeHud::GetHudVisibility() const

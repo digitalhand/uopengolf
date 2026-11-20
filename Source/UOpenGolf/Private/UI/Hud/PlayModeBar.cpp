@@ -4,6 +4,7 @@
 #include "UI/Hud/ShotDisplay.h"
 #include "UI/Club/ClubPicker.h"
 #include "UI/Common/HudStatusGlyph.h"
+#include "UI/Common/HudToolTip.h"
 #include "Engine/GameInstance.h"
 #include "OpenGolfOnlineSubsystem.h"
 #include "OpenLaunchMonitorSubsystem.h"
@@ -38,9 +39,12 @@ void SPlayModeBar::Construct(const FArguments& Args)
     Controller = Args._Controller;
     SetTag(TEXT("PlayControls"));
     SetVisibility(TAttribute<EVisibility>::CreateSP(this, &SPlayModeBar::GetBarVisibility));
+    // The game instance outlives the HUD, so the online service is looked up once rather than every frame.
+    const UGameInstance* Instance = Controller.IsValid() ? Controller->GetGameInstance() : nullptr;
+    UOpenLaunchMonitorSubsystem* LaunchMonitor = Instance ? Instance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr;
+    Online = Instance ? Instance->GetSubsystem<UOpenGolfOnlineSubsystem>() : nullptr;
     Refresh();
     RecordStyle = HudStyle::ToolbarButton();
-    const UGameInstance* Instance = Controller.IsValid() ? Controller->GetGameInstance() : nullptr;
     auto HoleOnly = [this] { return bHoleMode ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; };
     // clang-format off
     ChildSlot
@@ -58,14 +62,13 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible).Tag(TEXT("PlayToolbar"))
                         + SHorizontalBox::Slot().AutoWidth()
                         [
-                            SNew(SClubPicker).Tag(TEXT("ClubPicker"))
-                            .Monitor(Instance ? Instance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr)
+                            SNew(SClubPicker).Tag(TEXT("ClubPicker")).Monitor(LaunchMonitor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth()
                         [
                             SNew(SHudIconButton).Icon(SHudIconButton::EIcon::Flag).Tag(TEXT("GameModeToggle"))
                             .IsActive_Lambda([this] { return bHoleMode; })
-                            .ToolTipText_Lambda([this] { return FText::FromString(bHoleMode ? TEXT("Return to Training (G)") : TEXT("Game Mode (G)")); })
+                            .ToolTip(HudToolTip::Make(TAttribute<FText>::CreateSP(this, &SPlayModeBar::GetGameModeTip)))
 #if WITH_ACCESSIBILITY
                             .AccessibleText(FText::FromString(TEXT("Toggle Game Mode")))
 #endif
@@ -77,7 +80,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                             SNew(SHudIconButton).Icon(SHudIconButton::EIcon::Ball)
                             .Visibility_Lambda([this] { return bHoleMode ? EVisibility::Visible : EVisibility::Collapsed; })
                             .IsActive_Lambda([this] { return bPlacing; })
-                            .ToolTipText(FText::FromString(TEXT("Place ball (B)")))
+                            .ToolTip(HudToolTip::Make(FText::FromString(TEXT("Place ball (B)"))))
 #if WITH_ACCESSIBILITY
                             .AccessibleText(FText::FromString(TEXT("Place ball")))
 #endif
@@ -150,24 +153,13 @@ void SPlayModeBar::Construct(const FArguments& Args)
 TSharedRef<SWidget> SPlayModeBar::MakeRecordButton()
 {
     auto Color = [this] { return HudStyle::RecordColor(bRecording, FailedCount); };
-    auto Tip = [this]
-    {
-        FString Text = ShotDisplay::RecordTip(bRecording, bSignedIn);
-        if (bRecording)
-            Text += FString::Printf(TEXT("\n%d saved"), RecordedCount);
-        if (FailedCount > 0)
-            Text += FString::Printf(TEXT("\n%d unsaved"), FailedCount);
-        const UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
-        const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
-        if (FailedCount > 0 && Mode)
-            Text += TEXT("\n") + Mode->GetRecordingError() + TEXT(" - retrying");
-        return FText::FromString(Text);
-    };
+    // Bound weakly: the tooltip can be read for a moment after a HUD rebuild has released this widget.
+    const TAttribute<FText> Tip = TAttribute<FText>::CreateSP(this, &SPlayModeBar::GetRecordTip);
     return SNew(SButton).ButtonStyle(&RecordStyle).ContentPadding(FMargin(0)).Tag(TEXT("RecordToggle"))
         .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
-        .ToolTipText_Lambda(Tip)
+        .ToolTip(HudToolTip::Make(Tip))
 #if WITH_ACCESSIBILITY
-        .AccessibleText_Lambda(Tip)
+        .AccessibleText(Tip)
 #endif
         .OnClicked_Lambda([this]
         {
@@ -183,6 +175,26 @@ TSharedRef<SWidget> SPlayModeBar::MakeRecordButton()
                 .Color_Lambda(Color).Filled_Lambda([this] { return bRecording; })
             ]
         ];
+}
+
+FText SPlayModeBar::GetGameModeTip() const
+{
+    return FText::FromString(bHoleMode ? TEXT("Return to Training (G)") : TEXT("Game Mode (G)"));
+}
+
+FText SPlayModeBar::GetRecordTip() const
+{
+    FString Text = ShotDisplay::RecordTip(bRecording, bSignedIn);
+    if (bRecording)
+        Text += FString::Printf(TEXT("\n%d saved"), RecordedCount);
+    if (FailedCount > 0)
+    {
+        Text += FString::Printf(TEXT("\n%d unsaved"), FailedCount);
+        const UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
+        if (const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr)
+            Text += TEXT("\n") + Mode->GetRecordingError() + TEXT(" - retrying");
+    }
+    return FText::FromString(Text);
 }
 
 TSharedRef<SWidget> SPlayModeBar::MakeTile(TAttribute<FText> Value, const TCHAR* Label)
@@ -228,9 +240,8 @@ void SPlayModeBar::Refresh()
     bRecording = Mode && Mode->IsRecordingShots();
     RecordedCount = Mode ? Mode->GetRecordedShotCount() : 0;
     FailedCount = Mode ? Mode->GetFailedRecordingCount() : 0;
-    const UGameInstance* Instance = World ? World->GetGameInstance() : nullptr;
-    const UOpenGolfOnlineSubsystem* Online = Instance ? Instance->GetSubsystem<UOpenGolfOnlineSubsystem>() : nullptr;
-    bSignedIn = Online && Online->HasSession();
+    const UOpenGolfOnlineSubsystem* OnlineService = Online.Get();
+    bSignedIn = OnlineService && OnlineService->HasSession();
     if (!bHoleMode || !Ball)
         return;
 

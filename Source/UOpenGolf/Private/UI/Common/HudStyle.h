@@ -69,12 +69,14 @@ namespace HudStyle
 
     constexpr float TileRadius = 4.0f;
     constexpr float ToolbarButtonSize = 44.0f;
+    /** No background until hovered. Every state is set: a default FSlateBrush would draw a white box. */
     inline FButtonStyle ToolbarButton()
     {
         return FButtonStyle()
             .SetNormal(FSlateNoResource())
             .SetHovered(FSlateRoundedBoxBrush(HoverTileColor(), TileRadius))
-            .SetPressed(FSlateRoundedBoxBrush(LaunchTileColor(), TileRadius));
+            .SetPressed(FSlateRoundedBoxBrush(LaunchTileColor(), TileRadius))
+            .SetDisabled(FSlateNoResource());
     }
 
     /** Distance of corner panels from the viewport edge, in Slate units before the readable-DPI scale. */

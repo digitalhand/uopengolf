@@ -12,6 +12,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "PlayInEditorDataTypes.h"
+#include "UI/Common/HudToolTip.h"
 #include "Widgets/SToolTip.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SWindow.h"
@@ -77,17 +78,18 @@ namespace RenderedPlay
     }
 
     /**
-     * Every shown widget under Root whose tooltip would appear on hover, as "Type#Tag: text"; the game shows none
-     * (captions instead). Slate shows only non-empty tooltips (SlateUser.cpp), and engine widgets carry empty ones:
+     * Every shown widget under Root whose tooltip would appear on hover, as "Type#Tag: text"; the menus and panels show
+     * none (only the Training HUD's toolbar icons have tooltips, and the HUD is hidden behind them). Slate shows only non-empty
+     * tooltips (SlateUser.cpp), and engine widgets carry empty ones:
      * SComboButton binds its button's tooltip to its own, unset text, so those are not counted. Collapsed and hidden
      * subtrees cannot be hovered and are skipped.
      */
-    inline void WidgetsWithToolTips(const TSharedRef<SWidget>& Root, TArray<FString>& Out)
+    inline void WidgetsWithToolTips(const TSharedRef<SWidget>& Root, TArray<FString>& Out, bool bAllowHudToolTips = false)
     {
         if (!Root->GetVisibility().IsVisible())
             return;
         const TSharedPtr<IToolTip> ToolTip = Root->GetToolTip();
-        if (ToolTip.IsValid() && !ToolTip->IsEmpty())
+        if (ToolTip.IsValid() && !ToolTip->IsEmpty() && !(bAllowHudToolTips && ToolTip->AsWidget()->GetTag() == HudToolTip::Tag))
         {
             const TSharedRef<SWidget> Content = ToolTip->AsWidget();
             const FString Text = Content->GetTypeAsString() == TEXT("SToolTip") ? StaticCastSharedRef<SToolTip>(Content)->GetTextTooltip().ToString() : FString();
@@ -95,24 +97,26 @@ namespace RenderedPlay
         }
         FChildren* Children = Root->GetChildren();
         for (int32 Index = 0; Index < Children->Num(); ++Index)
-            WidgetsWithToolTips(Children->GetChildAt(Index), Out);
+            WidgetsWithToolTips(Children->GetChildAt(Index), Out, bAllowHudToolTips);
     }
 
     /**
      * Fails Test for every tooltip in the game window and its child windows (drop-down menus), naming the widgets and
-     * the screen (Where). The editor's own windows are not the game's and are skipped.
+     * the screen (Where). With bAllowHudToolTips, the Training HUD's own tooltips (HudToolTip) are allowed and any
+     * other is still a failure. The editor's own windows are not the game's and are skipped.
      */
-    inline void ExpectNoToolTips(FAutomationTestBase& Test, const TSharedRef<SWindow>& GameWindow, const FString& Where)
+    inline void ExpectNoToolTips(FAutomationTestBase& Test, const TSharedRef<SWindow>& GameWindow, const FString& Where,
+        bool bAllowHudToolTips = false)
     {
         TArray<FString> Found;
         TArray<TSharedRef<SWindow>> Pending = {GameWindow};
         while (!Pending.IsEmpty())
         {
             const TSharedRef<SWindow> Window = Pending.Pop();
-            WidgetsWithToolTips(Window, Found);
+            WidgetsWithToolTips(Window, Found, bAllowHudToolTips);
             Pending.Append(Window->GetChildWindows());
         }
-        Test.TestTrue(FString::Printf(TEXT("No tooltips on %s: %s"), *Where, *FString::Join(Found, TEXT(", "))), Found.IsEmpty());
+        Test.TestTrue(FString::Printf(TEXT("%s on %s: %s"), bAllowHudToolTips ? TEXT("Only HUD tooltips") : TEXT("No tooltips"), *Where, *FString::Join(Found, TEXT(", "))), Found.IsEmpty());
     }
 
     /** A desktop point on a drawn widget, at Alpha across its last painted size (0.5, 0.5 is its centre). */

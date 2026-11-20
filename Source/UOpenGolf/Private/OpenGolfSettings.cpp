@@ -81,7 +81,6 @@ namespace GolfSettings
         for (const FField& Field : Fields) Config.SetInt64(Section, Field.Name, this->*Field.Member);
         Config.SetString(Section, TEXT("DiagnosticDirectory"), *DiagnosticDirectory);
         Config.SetString(Section, TEXT("RecordingDirectory"), *RecordingDirectory);
-        Config.RemoveKeyFromSection(Section, TEXT("TimeZone"));
         return Config.Write(Filename);
     }
     namespace

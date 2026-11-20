@@ -7,6 +7,7 @@
 #include "Widgets/SCompoundWidget.h"
 
 class AUOpenGolfPlayerController;
+class UOpenGolfOnlineSubsystem;
 
 /**
  * Club, play and recording controls in the top-left corner. The flag switches between the range and
@@ -26,11 +27,14 @@ public:
 private:
     void Refresh();
     EVisibility GetBarVisibility() const;
-    bool IsHoleMode() const { return bHoleMode; }
     TSharedRef<SWidget> MakeRecordButton();
     TSharedRef<SWidget> MakeTile(TAttribute<FText> Value, const TCHAR* Label);
+    FText GetGameModeTip() const;
+    /** Where recorded shots go, the saved and unsaved counts, and the save error while retrying. */
+    FText GetRecordTip() const;
 
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
+    TWeakObjectPtr<UOpenGolfOnlineSubsystem> Online;
     bool bHoleMode = false;
     bool bPlacing = false;
     /** Placing a ball, or a hole with a placed ball: shown as training, with no Stroke, To Pin or Putts tiles. */

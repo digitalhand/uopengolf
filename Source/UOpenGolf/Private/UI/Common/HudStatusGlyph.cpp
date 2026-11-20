@@ -6,7 +6,6 @@
 namespace HudStatusGlyphDetail
 {
     constexpr float Stroke = 1.5f;
-    constexpr float DisabledAlpha = 0.4f;
 
     /** Draws a tinted polyline in the glyph's local units. */
     struct FPen
@@ -56,7 +55,7 @@ int32 SHudStatusGlyph::OnPaint(const FPaintArgs&, const FGeometry& Geometry, con
     int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
     FLinearColor Tint = Color.Get(FLinearColor::White) * WidgetStyle.GetColorAndOpacityTint();
-    Tint.A *= bParentEnabled ? 1.0f : HudStatusGlyphDetail::DisabledAlpha;
+    Tint.A *= bParentEnabled ? 1.0f : DisabledAlpha;
     Paint(Kind, Geometry, OutDrawElements, LayerId, Tint, Filled.Get(false));
     return LayerId + 1;
 }

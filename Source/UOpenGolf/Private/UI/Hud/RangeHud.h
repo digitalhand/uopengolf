@@ -42,7 +42,8 @@ private:
     // Translucent gray; the raw launch-monitor tiles are a little darker.
     FSlateRoundedBoxBrush TileBrush{HudStyle::TileColor(), HudStyle::TileRadius};
     FSlateRoundedBoxBrush LaunchBrush{HudStyle::LaunchTileColor(), HudStyle::TileRadius};
-    /** The status buttons: no background until hovered. */
+    /** Total, Carry and Roll: the tile color with an accent outline. */
     FSlateRoundedBoxBrush ResultBrush{HudStyle::TileColor(),HudStyle::TileRadius,HudStyle::AccentColor().CopyWithNewOpacity(.45f),1.f};
+    /** The settings cog: no background until hovered. */
     FButtonStyle CellStyle;
 };

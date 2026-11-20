@@ -28,7 +28,7 @@ public:
     virtual ~SMainMenu() override;
     void Open();
     void NavigateBack() { Back(); }
-    /** Opens the menu, if closed, at Settings › Launch Monitor, where the launch monitor is chosen and connected. */
+    /** Opens the menu, if closed, at Settings › Player. Opened from Training, leaving Settings returns straight there. */
     void OpenGeneralSettings();
     bool IsOpen() const { return bOpen; }
     /** True once Training has been entered: the home screen is then the pause menu. */

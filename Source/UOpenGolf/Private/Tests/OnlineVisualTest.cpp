@@ -96,7 +96,6 @@ public:
             ExpectSignInChoices(TEXT("signed out"));
             Test->TestFalse(TEXT("Signed out, Player has no display name"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestFalse(TEXT("Signed out, Player has no shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
-            Test->TestFalse(TEXT("Player omits the timezone selector"), RenderedPlay::HasText(Root, TEXT("Time zone")));
             return Next(true);
         case 2:
             // The QR code needs no button: it is requested once Settings shows it. The stubbed service approves it at

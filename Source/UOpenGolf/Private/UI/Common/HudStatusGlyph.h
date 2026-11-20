@@ -30,6 +30,8 @@ public:
         int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override;
     virtual FVector2D ComputeDesiredSize(float) const override;
     static constexpr float Size = 16.0f;
+    /** Opacity of an icon on a disabled control. */
+    static constexpr float DisabledAlpha = 0.4f;
     static void Paint(EKind Kind, const FGeometry& Geometry, FSlateWindowElementList& Elements, int32 Layer,
         const FLinearColor& Tint, bool bFilled = false);
 

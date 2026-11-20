@@ -1,7 +1,33 @@
 # Phase status
 
-Historical HUD and timezone descriptions below reflect their original releases. Current
-controls and local-time behavior are documented in [Playing](Playing.md#hud).
+## HUD toolbar, tooltips and local time — 2026-11-19 (Windows)
+
+Version **0.1.2**. Earlier entries describe the HUD and time zones as they were then;
+[Playing](Playing.md#hud) describes them now.
+
+- **Toolbar.** The Training HUD's status box is gone. The top-left toolbar holds the club
+  picker (a drawer of every club), the Game Mode flag, and the record toggle on the range
+  or the place-ball button on the hole. The top-right heading reads **Training**,
+  **Training · Ball Placement** or **Airways** with the hole details, and its cog opens
+  Settings › Player. The captions under the icons, the aim readout and the
+  `HUD [F6 / View]` hint beside the version were removed. F6 navigation is unchanged.
+- **Tooltips.** Each toolbar icon (club, flag, record, ball) names itself, with its
+  key, in a hover tooltip drawn in the HUD colors: an opaque dark tile, light text and a
+  thin accent outline, wrapped to 300 px. This replaces the 2026-11-11 rule that nothing in
+  the game shows a tooltip; menus and panels still show none. Engine text-only tooltips draw
+  black text on a bright background and ignore the border brush, so the HUD tooltip
+  supplies its own text widget (`UI/Common/HudToolTip`).
+- **Local time.** The **Time zone** setting was removed. Shot-history times and the
+  member-since date use this computer's local time; CSV exports keep UTC. An older
+  preferences file's `TimeZone` key is ignored. Club averages list the longest carry first.
+- **Review fixes.**
+  - Toolbar buttons had no disabled brush, so a disabled one would have drawn a white box.
+  - The club drawer's focus index is now bounds-checked.
+  - The play bar looked up the online service every frame; it now looks it up once.
+  - The course header's fixed headings are no longer rebuilt on every text refresh.
+  - The flag and ball buttons fade their icons with the widget's tint and disabled state.
+
+VERIFICATION_PENDING
 
 ## Ubuntu Debian installer — 2026-11-19 (Linux)
 

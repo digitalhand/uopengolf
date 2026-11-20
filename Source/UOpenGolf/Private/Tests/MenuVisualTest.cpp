@@ -75,7 +75,8 @@ public:
         const FStep& Step=Steps[Stage];
         if(Step.Capture)
         {
-            RenderedPlay::ExpectNoToolTips(*Test,Window.ToSharedRef(),Step.Capture);
+            // The Training HUD names its icons in HUD-styled tooltips; the menu pages have none.
+            RenderedPlay::ExpectNoToolTips(*Test,Window.ToSharedRef(),Step.Capture,FCString::Strcmp(Step.Capture,TEXT("gimmie-hud"))==0);
             if(FCString::Strcmp(Step.Capture,TEXT("home"))==0||FCString::Strcmp(Step.Capture,TEXT("pause"))==0)
                 ExpectMenuTopBar(*Test,Window.ToSharedRef(),W->GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>(),Step.Capture);
             File=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/TEXT("Screenshots/Menu")/FString::Printf(TEXT("%s-%s.png"),*FDateTime::Now().ToString(TEXT("%Y%m%d-%H%M%S")),Step.Capture));

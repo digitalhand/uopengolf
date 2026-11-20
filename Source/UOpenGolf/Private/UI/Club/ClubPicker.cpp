@@ -4,12 +4,14 @@
 #include "OpenLaunchMonitorSubsystem.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Common/HudStatusGlyph.h"
+#include "UI/Common/HudToolTip.h"
 #include "UI/Club/ClubGlyph.h"
 #include "UI/Common/MenuStyle.h"
 #include "UI/Hud/ShotDisplay.h"
 #include "OpenGolfSettings.h"
 #include "Widgets/Input/SComboButton.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/IToolTip.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SBorder.h"
@@ -80,11 +82,16 @@ void SClubPicker::Construct(const FArguments& Args)
     [
         SAssignNew(Picker, SComboButton).ComboButtonStyle(&ComboStyle).ButtonStyle(&ToggleStyle).HasDownArrow(false)
         .ContentPadding(FMargin(0)).HAlign(HAlign_Center).VAlign(VAlign_Center)
-        .ToolTipText_Lambda(Tip)
+        // No tooltip over the open drawer. A tooltip with its own content is never empty, so it is withheld instead.
+        .ToolTip_Lambda([this, ToolTip = TSharedPtr<IToolTip>(HudToolTip::Make(TAttribute<FText>::CreateLambda(Tip)))]
+        {
+            return Picker.IsValid() && Picker->IsOpen() ? TSharedPtr<IToolTip>() : ToolTip;
+        })
         .MenuPlacement(MenuPlacement_BelowAnchor)
         .OnComboBoxOpened_Lambda([this, Clubs, Current, Rows = MoveTemp(Rows)]
         {
-            Picker->SetMenuContentWidgetToFocus(Rows[static_cast<int32>(Current())]);
+            const int32 Selected = static_cast<int32>(Current());
+            Picker->SetMenuContentWidgetToFocus(Rows[Rows.IsValidIndex(Selected) ? Selected : 0]);
             if (GolfSettings::Get().ReducedMotion)
                 DrawerSlide.JumpToEnd();
             else

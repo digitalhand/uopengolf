@@ -136,7 +136,7 @@ by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
 
 | Folder | Contents |
 | --- | --- |
-| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, icon button, slider, switch, status glyph, page header |
+| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, icon button, slider, switch, status glyph, HUD tooltip, page header |
 | `Hud/` | The Training HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
 | `Club/` | Club picker and club-face glyph |
 | `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |

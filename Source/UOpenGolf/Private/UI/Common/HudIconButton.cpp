@@ -28,8 +28,11 @@ int32 SHudIconButton::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry,
     const FVector2f GlyphSize(SHudStatusGlyph::Size, SHudStatusGlyph::Size);
     const FVector2f Offset = (FVector2f(Geometry.GetLocalSize()) - GlyphSize) * 0.5f;
     const FGeometry Glyph = Geometry.MakeChild(GlyphSize, FSlateLayoutTransform(Offset));
+    // Tinted and dimmed as SHudStatusGlyph is, so a faded or disabled button fades its icon too.
+    FLinearColor Tint = WidgetStyle.GetColorAndOpacityTint();
+    Tint.A *= bParentEnabled && IsEnabled() ? 1.0f : SHudStatusGlyph::DisabledAlpha;
     SHudStatusGlyph::Paint(Icon == EIcon::Flag ? SHudStatusGlyph::EKind::Flag : SHudStatusGlyph::EKind::Ball,
-        Glyph, OutDrawElements, LayerId + 2, FLinearColor::White);
+        Glyph, OutDrawElements, LayerId + 2, Tint);
     return LayerId + 3;
 }
 

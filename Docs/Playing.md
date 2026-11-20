@@ -46,15 +46,15 @@ instead.
 | **Escape** | Cancel placing the ball, or close the wind controls or the test-shot list; otherwise open the pause menu |
 | **F6** | Move the keys onto the HUD's buttons, or back to the game (see [Without a mouse](#without-a-mouse)) |
 
-Use the mouse for the toolbar, settings menu, wind controls, test-shot panel, and ball
-placement. Hover over a toolbar icon for its name or status.
+Use the mouse for the toolbar, settings cog, wind controls, test-shot panel, and ball
+placement. Hover over a toolbar icon for its name, key, or status.
 
 #### Without a mouse
 
 The HUD's buttons also work from the keyboard or a gamepad:
 
-- **F6** (gamepad: **View**) moves the keys onto the HUD's buttons. These are the club picker,
-  the status icons, the play buttons, the wind controls and the test-shot list.
+- **F6** (gamepad: **View**) moves the keys onto the HUD's buttons. These are the toolbar (club,
+  Game Mode, record or place ball), the settings cog, the wind controls and the test-shot list.
 - **Up**/**Down**, **Tab**/**Shift+Tab** or the D-pad move between them.
 - **Enter**, **Space** or **A** presses the focused one.
 - **Escape** (gamepad: **B**) or **F6** again hands the keys back to the game, so **Tab**

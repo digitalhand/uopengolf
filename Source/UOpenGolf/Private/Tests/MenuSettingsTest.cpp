@@ -48,16 +48,8 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     const FString File=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/TEXT("Automation")/(FGuid::NewGuid().ToString()+TEXT(".ini")));
     P.CalculatedSpin=1;P.AutoTee=0;P.GimmieFeet=8;TestTrue(TEXT("Write preferences"),P.WriteConfig(File));
     GConfig->UnloadFile(File);
-    constexpr const TCHAR* Section = TEXT("UOpenGolf.Preferences.v1");
-    FConfigFile Legacy; Legacy.Read(File); Legacy.bCanSaveAllSections = true;
-    Legacy.SetInt64(Section, TEXT("TimeZone"), 4);
-    TestTrue(TEXT("Write legacy preferences"), Legacy.Write(File));
     GolfSettings::FPreferences Loaded;Loaded.ReadConfig(File);
     TestTrue(TEXT("Preferences survive disk round trip"),P==Loaded);
-    TestTrue(TEXT("Save preferences after loading legacy file"), Loaded.WriteConfig(File));
-    FConfigFile Current; Current.Read(File);
-    int32 ObsoleteZone = 0;
-    TestFalse(TEXT("Save removes obsolete timezone key"), Current.GetInt(Section, TEXT("TimeZone"), ObsoleteZone));
     GConfig->UnloadFile(File);IFileManager::Get().Delete(*File);
     return true;
 }

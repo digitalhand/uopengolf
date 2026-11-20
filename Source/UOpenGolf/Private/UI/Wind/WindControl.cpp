@@ -4,7 +4,6 @@
 #include "Widgets/Input/SButton.h"
 #include "OpenGolfSettings.h"
 #include "UI/Common/HudStyle.h"
-#include "OpenGolfSettings.h"
 
 #include "OpenGolfWindIndicator.h"
 #include "Play/OpenGolfWindSetting.h"
