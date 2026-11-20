@@ -31,6 +31,7 @@ jobs:
             Config
             Assets/Scripts
             Assets/Installer
+            Assets/Images/Icons/png
       - name: Test release scripts
         run: python3 -B -m unittest Assets.Scripts.test_project_version Assets.Scripts.test_check_package_start Assets.Scripts.test_check_package_runner Assets.Scripts.test_build_deb
       - name: Resolve version

@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from Assets.Installer.build_deb import build_package, debian_version, main
+from Assets.Installer.build_deb import ICON_SIZES, build_package, debian_version, main
 
 
 @unittest.skipUnless(shutil.which("dpkg-deb"), "Debian packaging tools required")
@@ -53,8 +53,11 @@ class DebPackageTests(unittest.TestCase):
             self.assertFalse(any("/Saved/" in name or name.endswith(".debug") for name in names))
             for name in ("./opt/uopengolf/LICENSE", "./opt/uopengolf/THIRD_PARTY_NOTICES.md",
                          "./opt/uopengolf/NOTICES.txt", "./opt/uopengolf/UOpenGolf/Binaries/Linux/game.sym",
-                         "./usr/share/applications/uopengolf.desktop"):
+                         "./usr/share/applications/uopengolf.desktop",
+                         *(f"./usr/share/icons/hicolor/{size}x{size}/apps/uopengolf.png" for size in ICON_SIZES)):
                 self.assertIn(name, names)
+            for size in ICON_SIZES:
+                self.assertEqual(files.getmember(f"./usr/share/icons/hicolor/{size}x{size}/apps/uopengolf.png").mode, 0o644)
             for name in ("./usr/bin/uopengolf", "./opt/uopengolf/UOpenGolf/Binaries/Linux/UOpenGolf"):
                 self.assertEqual(files.getmember(name).mode, 0o755)
             self.assertTrue(all(member.uid == member.gid == 0 for member in files))

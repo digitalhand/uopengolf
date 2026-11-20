@@ -16,6 +16,9 @@ from Assets.Scripts.project_version import VERSION  # noqa: E402
 
 
 INSTALLER = Path(__file__).resolve().parent
+ICONS = PROJECT / "Assets/Images/Icons/png"
+# Sizes installed into the hicolor theme for uopengolf.desktop's Icon=uopengolf.
+ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
 BINARY = Path("UOpenGolf/Binaries/Linux/UOpenGolf")
 # ELF dependencies, plus SDL's dynamically loaded desktop/audio libraries.
 # Ubuntu 24.04 uses the t64 ALSA package name.
@@ -79,6 +82,10 @@ def build_package(package_dir: Path, version: str, output_dir: Path) -> Path:
         desktop = stage / "usr/share/applications/uopengolf.desktop"
         desktop.parent.mkdir(parents=True)
         shutil.copyfile(INSTALLER / "uopengolf.desktop", desktop)
+        for icon_size in ICON_SIZES:
+            icon = stage / f"usr/share/icons/hicolor/{icon_size}x{icon_size}/apps/uopengolf.png"
+            icon.parent.mkdir(parents=True)
+            shutil.copyfile(ICONS / f"UOpenGolf_{icon_size}.png", icon)
         docs = stage / "usr/share/doc/uopengolf"
         docs.mkdir(parents=True)
         shutil.copyfile(PROJECT / "LICENSE", docs / "copyright")

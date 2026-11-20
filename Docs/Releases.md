@@ -154,6 +154,14 @@ download those artifacts too.
 - **Licenses:** each package includes `LICENSE` and `THIRD_PARTY_NOTICES.md`, as well as the
   engine's `NOTICES.txt`.
 - **Content:** builds reject local config files before cooking. Use a clean runner checkout.
+- **Icons and splash:** these must be committed; the runner only has what is in Git.
+  - `Build/Windows/Application.ico` is compiled into both Windows executables and is also the Setup icon.
+  - `Content/Splash/Splash.bmp` is the game splash on both platforms. It must be a BMP: packaging stages only
+    `Splash.bmp`, and packaged Linux builds can't read PNG. If the editor's **Game Splash** setting is given a PNG,
+    it replaces the BMP with `Splash.png`, and packages then show no splash.
+  - `Content/Splash/Icon.bmp` (64×64, 32-bit) is the Linux window icon.
+  - The `.deb` application-menu icon comes from `Assets/Images/Icons/png/UOpenGolf_<size>.png`.
+  - `Build/Linux/Application.png` only appears in the editor's settings; packaging doesn't use it.
 
 ### Ubuntu installer
 
@@ -167,8 +175,8 @@ sudo apt install ./UOpenGolf-0.1.0-Linux-amd64.deb
 
 Launch **UOpenGolf** from the application menu, or run `uopengolf`. Install a newer `.deb`
 the same way to upgrade. Close the game first. Remove it through your package manager or
-`sudo apt remove uopengolf`. The package owns `/opt/uopengolf`, `/usr/bin/uopengolf` and
-the application-menu entry. Settings and logs use `~/.config/Epic/UOpenGolf/Saved`;
+`sudo apt remove uopengolf`. The package owns `/opt/uopengolf`, `/usr/bin/uopengolf`, the
+application-menu entry and its icons in `/usr/share/icons/hicolor`. Settings and logs use `~/.config/Epic/UOpenGolf/Saved`;
 recordings keep their configured location. Removal and purge preserve those user files.
 Portable installations are not migrated automatically. The Vulkan/GPU requirements in
 [Development](Development.md) still apply; the package does not install graphics drivers.
