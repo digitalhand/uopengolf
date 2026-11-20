@@ -176,7 +176,8 @@ sudo apt install ./UOpenGolf-0.1.0-Linux-amd64.deb
 Launch **UOpenGolf** from the application menu, or run `uopengolf`. Install a newer `.deb`
 the same way to upgrade. Close the game first. Remove it through your package manager or
 `sudo apt remove uopengolf`. The package owns `/opt/uopengolf`, `/usr/bin/uopengolf`, the
-application-menu entry and its icons in `/usr/share/icons/hicolor`. Settings and logs use `~/.config/Epic/UOpenGolf/Saved`;
+application-menu entry, its icons in `/usr/share/icons/hicolor` and the AppStream metadata
+in `/usr/share/metainfo`. Settings and logs use `~/.config/Epic/UOpenGolf/Saved`;
 recordings keep their configured location. Removal and purge preserve those user files.
 Portable installations are not migrated automatically. The Vulkan/GPU requirements in
 [Development](Development.md) still apply; the package does not install graphics drivers.
@@ -192,6 +193,15 @@ content. It includes project and third-party notices, keeps runtime `.sym` files
 `.debug` files and `Saved` folders, and writes a `.sha256` beside the `.deb`. Debian metadata
 maps prereleases such as `0.1.0-rc.1` to `0.1.0~rc.1`, so the final release sorts after them.
 The workflow produces this installer alongside the portable archive and symbols archive.
+
+Software centres take the installed game's name, summary, developer, licence, icon and
+screenshots from `Assets/Installer/uopengolf.metainfo.xml`. The builder fills in the release
+version and date. Its screenshots are `main`-branch URLs of files in `Assets/Images`, so keep
+those files, or update the URLs. Its `<pkgname>` must stay equal to the package name: KDE
+Discover ignores AppStream data that names no package. Opening a downloaded `.deb` in Discover
+still shows the file name up to its first dot, a generic icon and an unknown licence. That
+view reads the file name and PackageKit's details, never the package's metadata, and PackageKit
+reports every Ubuntu package's licence as unknown.
 
 ### In-game updates
 

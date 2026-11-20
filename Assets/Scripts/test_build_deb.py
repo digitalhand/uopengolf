@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 """Build and inspect small Debian packages without installing on the host."""
+from datetime import date
 import hashlib
 import io
 from pathlib import Path
@@ -9,8 +10,11 @@ import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
+from xml.etree import ElementTree
 
-from Assets.Installer.build_deb import ICON_SIZES, build_package, debian_version, main
+from Assets.Installer.build_deb import ICON_SIZES, METAINFO_ID, appstream_metadata, build_package, debian_version, main
+
+METAINFO = f"./usr/share/metainfo/{METAINFO_ID}.metainfo.xml"
 
 
 @unittest.skipUnless(shutil.which("dpkg-deb"), "Debian packaging tools required")
@@ -64,6 +68,36 @@ class DebPackageTests(unittest.TestCase):
         checksum = package.with_suffix(".deb.sha256").read_text()
         self.assertEqual(checksum, f"{hashlib.sha256(package.read_bytes()).hexdigest()}  {package.name}\n")
         self.assertTrue((self.source / "UOpenGolf/Saved/Config/account.ini").exists())
+
+    def test_appstream_metadata_for_software_centres(self):
+        with patch("Assets.Installer.build_deb.release_date", return_value=date(2026, 11, 20)):
+            package = self.build("1.2.3-rc.1")
+        archive = subprocess.check_output(["dpkg-deb", "--fsys-tarfile", str(package)])
+        with tarfile.open(fileobj=io.BytesIO(archive)) as files:
+            self.assertEqual(files.getmember(METAINFO).mode, 0o644)
+            text = files.extractfile(METAINFO).read().decode("utf-8")
+        component = ElementTree.fromstring(text)
+        self.assertEqual(component.findtext("id"), METAINFO_ID)
+        package_name = subprocess.check_output(["dpkg-deb", "-f", str(package), "Package"], text=True).strip()
+        self.assertEqual(component.findtext("pkgname"), package_name)
+        self.assertEqual(component.findtext("launchable"), "uopengolf.desktop")
+        self.assertEqual(component.findtext("icon"), "uopengolf")
+        self.assertEqual(component.findtext("developer/name"), "UOpenGolf contributors")
+        # The project's code is MIT; the package also ships Unreal Engine runtime binaries.
+        self.assertTrue(component.findtext("project_license").startswith("MIT AND LicenseRef-proprietary="))
+        self.assertEqual(component.find("releases/release").attrib,
+                         {"version": "1.2.3-rc.1", "date": "2026-11-20", "type": "development"})
+        self.assertNotRegex(text, r"@[A-Z_]+@")
+        if shutil.which("appstreamcli"):
+            metainfo = self.root / f"{METAINFO_ID}.metainfo.xml"
+            metainfo.write_text(text, encoding="utf-8")
+            subprocess.run(["appstreamcli", "validate", "--no-net", str(metainfo)], check=True,
+                           stdout=subprocess.DEVNULL)
+
+    def test_stable_release_type(self):
+        component = ElementTree.fromstring(appstream_metadata("1.2.3"))
+        self.assertEqual(component.find("releases/release").get("type"), "stable")
+        self.assertEqual(component.find("releases/release").get("version"), "1.2.3")
 
     def test_launcher_passes_arguments_and_uses_user_storage(self):
         package = self.build()
