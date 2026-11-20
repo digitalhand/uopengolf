@@ -90,8 +90,8 @@ public:
             // The test-shot layer spans the viewport over the play controls: only its button may take clicks.
             Test->TestEqual(TEXT("The closed test-shot layer only takes clicks on its button"),
                 ClickTargets(SNew(SReplayShotPanel).Controller(Controller)), FString(TEXT("SButton")));
-            Test->TestEqual(TEXT("The range's play bar only takes clicks on the flag button"),
-                ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SHudIconButton")));
+            Test->TestEqual(TEXT("The range's play bar takes clicks only on its three controls"),
+                ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SClubPicker, SHudIconButton, SButton")));
             const TSharedRef<SWindControl> Control = SNew(SWindControl).Controller(Controller);
             Test->TestEqual(TEXT("Closed, the wind controls only take clicks on the indicator"), ClickTargets(Control), FString(TEXT("SButton")));
 

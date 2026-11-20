@@ -1,5 +1,8 @@
 # Phase status
 
+Historical HUD and timezone descriptions below reflect their original releases. Current
+controls and local-time behavior are documented in [Playing](Playing.md#hud).
+
 ## Ubuntu Debian installer — 2026-11-19 (Linux)
 
 The Linux release workflow now produces `UOpenGolf-<version>-Linux-amd64.deb` and its
@@ -721,7 +724,7 @@ page, under the cog.
 - The **Range shots** pending/rejected counts were removed.
 - Plugin: `SOpenGolfAccountButton` lost its cog state. Its sign-in and logout variants each
   show only in their session state (tags `AccountSignIn` and `AccountSignOut`).
-  `SOpenGolfAccountPanel` gained `Page` (Account or Shots), `TimeZone` and `TimeZoneName`.
+  `SOpenGolfAccountPanel` gained `Page` (Account or Shots). The later local-time cleanup removed the zone override.
 
 Development editor builds passed on Linux with Unreal 5.8.4, with adaptive unity disabled
 and with `ue.sh build`. No other editor was running during these runs.

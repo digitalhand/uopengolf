@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Hud/RangeHud.h"
 #include "UI/Hud/BallReadyGlow.h"
-#include "UI/Club/ClubPicker.h"
 #include "UI/Common/HudStatusGlyph.h"
-#include "OpenGolfOnlineSubsystem.h"
 #include "Widgets/Input/SButton.h"
 #include "RangePerformance.h"
 #include "ProfilingDebugging/CpuProfilerTrace.h"
@@ -18,6 +16,7 @@
 #include "Play/OpenGolfPlayRules.h"
 #include "Styling/CoreStyle.h"
 #include "UOpenGolfGameMode.h"
+#include "UOpenGolfRange.h"
 #include "UOpenGolfPlayerController.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -38,11 +37,9 @@ namespace
     constexpr float HudTileHeight = 48.0f;
     constexpr float HudTileGap = 2.0f;
     constexpr float HudGroupGap = 6.0f;
-    /** The tile grid's width: the column never grows past it, whatever the heading or club picker says. */
+    /** The tile grid's width: the column never grows past it, whatever the heading says. */
     constexpr float HudColumnWidth = 2.0f * (HudTileWidth + 2.0f * HudTileGap);
     constexpr float HudEdge = HudStyle::Edge;
-    /** Space kept under the tiles so they never cover the status box. */
-    constexpr float HudStatusReserve = 56.0f + HudScale::BottomPanelGap;
     /** Version label distance from the bottom edge, inside HudScale::BottomPanelGap. */
     constexpr float HudVersionBottom = 6.0f;
     /** Shot and status text is rebuilt this often; the wind arrow still turns with the camera every frame. */
@@ -62,18 +59,15 @@ void SRangeHud::Construct(const FArguments& Args)
     SetTag(TEXT("TrainingHud"));
     WindIndicator = Args._WindIndicator;
     SetVisibility(TAttribute<EVisibility>::CreateSP(this, &SRangeHud::GetHudVisibility));
-    // Status buttons: no background until hovered, like the tiles when they are.
-    const FMargin CellPadding(6, 2);
+    // Keep the settings cog on the header background until hovered.
     CellStyle = FButtonStyle()
         .SetNormal(FSlateNoResource())
         .SetHovered(FSlateRoundedBoxBrush(HudStyle::HoverTileColor(), HudStyle::TileRadius))
         .SetPressed(FSlateRoundedBoxBrush(HudStyle::LaunchTileColor(), HudStyle::TileRadius))
-        .SetDisabled(FSlateNoResource())
-        .SetNormalPadding(CellPadding)
-        .SetPressedPadding(CellPadding);
+        .SetDisabled(FSlateNoResource());
     Refresh(true);
 
-    // Only the club picker and the status buttons take clicks; everything else passes them to the game (HudLayers).
+    // The menu button takes clicks; the rest of this layer passes them to the game.
     // clang-format off
     ChildSlot
     [
@@ -93,7 +87,7 @@ void SRangeHud::Construct(const FArguments& Args)
                     Args._WindContent.IsValid() ? Args._WindContent.ToSharedRef() : SNullWidget::NullWidget
                 ]
             ]
-            + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(HudEdge, HudEdge, HudEdge, HudStatusReserve)
+            + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(HudEdge)
             [
                 // Shrinks, never grows, to fit short viewports.
                 SNew(SScaleBox).Visibility(EVisibility::SelfHitTestInvisible).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
@@ -103,9 +97,6 @@ void SRangeHud::Construct(const FArguments& Args)
                     [ MakeColumn() ]
                 ]
             ]
-            // Bottom padding matches the Test shots button in the opposite corner.
-            + SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(HudEdge, 0, HudEdge, HudScale::BottomPanelGap)
-            [ MakeStatusBox() ]
             // Game version in the bottom-left corner, under the Test shots button.
             + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, 0, 0, HudVersionBottom)
             [
@@ -126,19 +117,35 @@ TSharedRef<SWidget> SRangeHud::MakeColumn()
         [
             SNew(SBorder).Visibility(EVisibility::SelfHitTestInvisible).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Tag(TEXT("ShotHeading"))
             [
-                SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible)
-                + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+                SNew(SVerticalBox).Visibility(EVisibility::SelfHitTestInvisible)
+                + SVerticalBox::Slot().AutoHeight()
                 [
-                    // A long heading is cut short rather than widening the column.
-                    SNew(STextBlock).Visibility(EVisibility::HitTestInvisible).Font(HudStyle::Font("Bold", 10)).ColorAndOpacity(HudStyle::TextColor())
-                    .OverflowPolicy(ETextOverflowPolicy::Ellipsis)
-                    .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
-                    .Text_Lambda([this] { return FText::FromString(Heading); })
+                    SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible)
+                    + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+                    [
+                        SNew(STextBlock).Visibility(EVisibility::HitTestInvisible).Font(HudStyle::Font("Bold", 12))
+                        .ColorAndOpacity(HudStyle::TextColor()).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+                        .Text_Lambda([this] { return Heading; })
+                    ]
+                    + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+                    [
+                        SNew(SButton).ButtonStyle(&CellStyle).ContentPadding(FMargin(8, 6)).Tag(TEXT("HudSettings"))
+#if WITH_ACCESSIBILITY
+                        .AccessibleText(FText::FromString(TEXT("Open settings")))
+#endif
+                        .OnClicked_Lambda([this]
+                        {
+                            if (Controller.IsValid()) Controller->OpenGeneralSettings();
+                            return FReply::Handled();
+                        })
+                        [SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Settings)]
+                    ]
                 ]
-                + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8, 0, 0, 0)
+                + SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 2)
                 [
-                    SNew(SClubPicker).Tag(TEXT("ClubPicker"))
-                    .Monitor(Controller.IsValid() && Controller->GetGameInstance() ? Controller->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr)
+                    SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
+                    .Visibility_Lambda([this] { return HoleDetails.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+                    .Text_Lambda([this] { return HoleDetails; })
                 ]
             ]
         ];
@@ -156,108 +163,6 @@ TSharedRef<SWidget> SRangeHud::MakeColumn()
         Column->AddSlot().AutoHeight().Padding(0.0f, First == 0 ? 0.0f : HudGroupGap, 0.0f, 0.0f)[Grid];
     }
     return Column;
-}
-
-TSharedRef<SWidget> SRangeHud::MakeStatusBox()
-{
-    // Aim, then the launch monitor (opens its settings) and recording (toggles, as F9 does), then any error.
-    // clang-format off
-    return SNew(SBorder).Visibility(EVisibility::SelfHitTestInvisible).BorderImage(&TileBrush).Padding(FMargin(12, 4))
-        [
-            SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible)
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 10, 0)
-            [
-                SNew(SBox).Visibility(EVisibility::HitTestInvisible)
-                [
-                    MakeStatusCell(TAttribute<FText>::CreateLambda([this] { return FText::FromString(AimText); }),
-                        FSlateColor(FLinearColor::White), TEXT("Aim [A/D · Shift fine]"))
-                ]
-            ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[ MakeLaunchMonitorButton() ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)[ MakeRecordButton() ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10, 0, 0, 0)
-            [
-                SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudLabelColor())
-                .Visibility_Lambda([this] { return ErrorText.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
-                .Text_Lambda([this] { return FText::FromString(ErrorText); })
-            ]
-        ];
-    // clang-format on
-}
-
-TSharedRef<SWidget> SRangeHud::MakeLaunchMonitorButton()
-{
-    // clang-format off
-    const TSharedRef<SWidget> Icons = SNew(SHorizontalBox)
-        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-        [
-            SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::LaunchMonitor)
-            .Color_Lambda([this] { return HudStyle::StateColor(ConnectionState); })
-        ]
-        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6, 0, 0, 0)
-        [
-            SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Battery).Color(HudStyle::TextColor())
-            .Visibility_Lambda([this] { return BatteryPercent < 0 ? EVisibility::Collapsed : EVisibility::Visible; })
-            .Level_Lambda([this] { return BatteryPercent / 100.0f; })
-        ]
-        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
-        [
-            SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(FLinearColor::White)
-            .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
-            .Text_Lambda([this] { return FText::FromString(ShotDisplay::BatteryLabel(BatteryPercent)); })
-        ];
-    return SNew(SButton).ButtonStyle(&CellStyle).ContentPadding(FMargin(0)).Tag(TEXT("LaunchMonitorStatus"))
-#if WITH_ACCESSIBILITY
-        // Read by screen readers only; the game shows no tooltips.
-        .AccessibleText_Lambda([this] { return FText::FromString(ShotDisplay::LaunchMonitorTip(ConnectionState, BatteryPercent)); })
-#endif
-        .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->OpenLaunchMonitorSettings(); return FReply::Handled(); })
-        [
-            MakeIconCell(Icons, TAttribute<FText>::CreateLambda([this] { return FText::FromString(ShotDisplay::LaunchMonitorCaption(ConnectionState)); }))
-        ];
-    // clang-format on
-}
-
-TSharedRef<SWidget> SRangeHud::MakeRecordButton()
-{
-    auto Color = [this] { return HudStyle::RecordColor(bRecording, FailedCount); };
-    // clang-format off
-    const TSharedRef<SWidget> Icons = SNew(SHorizontalBox)
-        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-        [
-            SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Record).Color_Lambda(Color).Filled_Lambda([this] { return bRecording; })
-        ]
-        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4, 0, 0, 0)
-        [
-            SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity_Lambda([Color] { return FSlateColor(Color()); })
-            .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
-            .Visibility_Lambda([this] { return bRecording || FailedCount > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
-            .Text_Lambda([this] { return FText::FromString(ShotDisplay::RecordCount(bRecording, RecordedCount, FailedCount)); })
-        ];
-    // Recording is a range control: the hole never records, so it offers no toggle.
-    return SNew(SButton).ButtonStyle(&CellStyle).ContentPadding(FMargin(0)).Tag(TEXT("RecordToggle"))
-        .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
-#if WITH_ACCESSIBILITY
-        .AccessibleText_Lambda([this] { return FText::FromString(ShotDisplay::RecordTip(bRecording, bSignedIn)); })
-#endif
-        .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->ToggleRecordShots(); Refresh(true); return FReply::Handled(); })
-        [
-            MakeIconCell(Icons, FText::FromString(TEXT("Record [F9]")))
-        ];
-    // clang-format on
-}
-
-TSharedRef<SWidget> SRangeHud::MakeIconCell(const TSharedRef<SWidget>& Icons, const TAttribute<FText>& Caption) const
-{
-    // Laid out as the text cells: the value line, then the caption.
-    // clang-format off
-    return SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)[ Icons ]
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-        [
-            SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor()).Text(Caption)
-        ];
-    // clang-format on
 }
 
 void SRangeHud::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
@@ -305,26 +210,13 @@ void SRangeHud::Refresh(bool bText)
         if(TileValues[I].ToString()!=Tiles[I].Value)TileValues[I]=FText::FromString(Tiles[I].Value);
         if(TileLabels[I].ToString()!=Tiles[I].Label)TileLabels[I]=FText::FromString(Tiles[I].Label);
     }
-    Heading = ShotDisplay::Heading(bHasResult ? &Result : nullptr);
-
-    ConnectionState = LaunchMonitor ? LaunchMonitor->GetConnectionState() : ELaunchMonitorConnectionState::Disconnected;
-    BatteryPercent = LaunchMonitor ? LaunchMonitor->GetBatteryPercent() : -1;
     bBallReady = LaunchMonitor && LaunchMonitor->IsBallReady();
-    // Off the target line; on the hole, also how far wide of the cup the line passes.
-    bRangeMode = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Range;
     const bool bHole = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
-    AimText = OpenGolfPlay::AimOffsetLabel(PlayerController ? PlayerController->GetAimOffsetDeg() : 0.0f, 0.0f,
-        bHole && PlayerController->IsShortGameView());
-    if (bHole && PlayerController && FMath::Abs(PlayerController->GetAimOffsetDeg()) >= .05f)
-        AimText += TEXT(" / ") + GolfSettings::Distance(Mode->GetDistanceToCupM() * FMath::Tan(FMath::DegreesToRadians(FMath::Abs(PlayerController->GetAimOffsetDeg()))), PlayerController->IsShortGameView());
-    // Recording saves shots locally and, while signed in, to the online profile too.
-    bRecording = Mode && Mode->IsRecordingShots();
-    RecordedCount = Mode ? Mode->GetRecordedShotCount() : 0;
-    FailedCount = Mode ? Mode->GetFailedRecordingCount() : 0;
-    const UOpenGolfOnlineSubsystem* Online = GameInstance ? GameInstance->GetSubsystem<UOpenGolfOnlineSubsystem>() : nullptr;
-    bSignedIn = Online && Online->HasSession();
-    ErrorText = ShotDisplay::StatusError(LaunchMonitor ? LaunchMonitor->GetLastError() : FString(), FailedCount,
-        FailedCount > 0 && Mode ? Mode->GetRecordingError() : FString());
+    const bool bBallPlacement = bHole && (PlayerController->IsPlacingBall() || Mode->GetHoleRound().bPractice);
+    Heading = FText::FromString(bBallPlacement ? TEXT("Training · Ball Placement") : bHole ? TEXT("Airways") : TEXT("Training"));
+    HoleDetails = bHole && !bBallPlacement
+        ? FText::FromString(ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM)))
+        : FText::GetEmpty();
 }
 
 EVisibility SRangeHud::GetHudVisibility() const
@@ -340,44 +232,33 @@ TSharedRef<SWidget> SRangeHud::MakeTile(int32 Index)
     // Total, Carry and Roll (the first three) stand out by color and outline only: every tile has the same size and
     // value font, so each label fits under its value.
     return SNew(SBox).WidthOverride(HudTileWidth).HeightOverride(HudTileHeight).Tag(TEXT("ShotTile"))
+    .Clipping(EWidgetClipping::ClipToBounds)
     .Visibility_Lambda([Index]{ const int32 Detail = GolfSettings::Get().ShotData; return Detail == 2 || Index < 3 || (Detail == 1 && (Index < 5 || Index == 12)) ? EVisibility::Visible : EVisibility::Collapsed; })
     [
-        SNew(SBorder).BorderImage(Index<3 ? &ResultBrush : bLaunch ? &LaunchBrush : &TileBrush).Padding(FMargin(6, 2)).VAlign(VAlign_Center)
+        SNew(SBorder).BorderImage(Index<3 ? &ResultBrush : bLaunch ? &LaunchBrush : &TileBrush).Padding(FMargin(6, 3))
         [
             SNew(SVerticalBox)
-            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+            + SVerticalBox::Slot().FillHeight(2)
             [
                 // Long text such as "Soft Fairway" shrinks to fit the tile.
                 SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+                .HAlign(HAlign_Center).VAlign(VAlign_Center)
                 [
                     SNew(STextBlock).Font(HudStyle::Font("Bold", 16)).ColorAndOpacity(Index<3?HudStyle::AccentColor():HudStyle::TextColor())
                     .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
                     .Text_Lambda([this, Index] { return TileValues.IsValidIndex(Index) ? TileValues[Index] : FText::GetEmpty(); })
                 ]
             ]
-            + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+            + SVerticalBox::Slot().FillHeight(1)
             [
-                SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
-                .Text_Lambda([this,Index]{return TileLabels.IsValidIndex(Index)?TileLabels[Index]:FText::GetEmpty();})
+                SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+                .HAlign(HAlign_Center).VAlign(VAlign_Center)
+                [
+                    SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
+                    .Text_Lambda([this,Index]{return TileLabels.IsValidIndex(Index)?TileLabels[Index]:FText::GetEmpty();})
+                ]
             ]
         ]
     ];
-    // clang-format on
-}
-
-TSharedRef<SWidget> SRangeHud::MakeStatusCell(TAttribute<FText> Value, TAttribute<FSlateColor> Color, const TCHAR* Label) const
-{
-    // clang-format off
-    return SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-        [
-            SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(Color)
-            .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor).Text(Value)
-        ]
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
-        [
-            SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudLabelColor())
-            .Text(FText::FromString(Label))
-        ];
     // clang-format on
 }

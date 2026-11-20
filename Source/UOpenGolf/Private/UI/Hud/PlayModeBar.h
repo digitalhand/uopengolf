@@ -9,8 +9,8 @@
 class AUOpenGolfPlayerController;
 
 /**
- * Play controls in the top-left corner, in the same tiles as the shot HUD: the hole flag switches between the range and
- * playing the hole (G); while playing, a ball button places the ball (B) and a row of tiles shows the hole, strokes,
+ * Club, play and recording controls in the top-left corner. The flag switches between the range and
+ * playing the hole (G); while playing, a ball button places the ball (B) and a row of tiles shows strokes,
  * distance to the pin and putts. A banner names the score when the ball drops. Hidden with the test-shot panel.
  */
 class SPlayModeBar : public SCompoundWidget
@@ -27,15 +27,19 @@ private:
     void Refresh();
     EVisibility GetBarVisibility() const;
     bool IsHoleMode() const { return bHoleMode; }
-    TSharedRef<SWidget> MakeIconButton(SHudIconButton::EIcon Icon, TAttribute<bool> IsActive, FSimpleDelegate OnClicked, TAttribute<FText> Caption);
+    TSharedRef<SWidget> MakeRecordButton();
     TSharedRef<SWidget> MakeTile(TAttribute<FText> Value, const TCHAR* Label);
 
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
     bool bHoleMode = false;
     bool bPlacing = false;
-    /** Placing a ball, or a hole with a placed ball: titled as practice, with no Stroke, To Pin or Putts tiles. */
+    /** Placing a ball, or a hole with a placed ball: shown as training, with no Stroke, To Pin or Putts tiles. */
     bool bPlacementView = false;
-    FText HoleText;
+    bool bRangeMode = false;
+    bool bRecording = false;
+    bool bSignedIn = false;
+    int32 RecordedCount = 0;
+    int32 FailedCount = 0;
     FText StrokeText;
     FText ToPinText;
     FText PuttsText;
@@ -44,6 +48,7 @@ private:
     FText BannerDetail;
     float BannerOpacity = 0.0f;
 
+    FButtonStyle RecordStyle;
     FSlateRoundedBoxBrush TileBrush{HudStyle::TileColor(), HudStyle::TileRadius};
     FSlateRoundedBoxBrush BannerBrush{HudStyle::LaunchTileColor(), 8.0f};
 };

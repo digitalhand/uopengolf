@@ -612,9 +612,9 @@ void AUOpenGolfPlayerController::OpenMainMenu()
     if (MainMenu.IsValid()) MainMenu->Open();
 }
 
-void AUOpenGolfPlayerController::OpenLaunchMonitorSettings()
+void AUOpenGolfPlayerController::OpenGeneralSettings()
 {
-    if (MainMenu.IsValid()) MainMenu->OpenLaunchMonitorSettings();
+    if (MainMenu.IsValid()) MainMenu->OpenGeneralSettings();
 }
 
 bool AUOpenGolfPlayerController::IsPauseMenu() const

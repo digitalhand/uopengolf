@@ -8,7 +8,7 @@
 
 namespace HudScale
 {
-    /** Gap under the bottom-corner panels (Test shots button, status box), leaving room for the version label. */
+    /** Gap under the Test shots button, leaving room for the version label. */
     constexpr float BottomPanelGap = 24.0f;
 
     /** DPI scale for viewport panels: undoes viewport shrinking so they stay readable in small editor viewports. */

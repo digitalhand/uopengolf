@@ -29,13 +29,21 @@ namespace OpenGolfAccountPanelDetail
     constexpr float DeleteColumn = 110, DeleteIconSize = 32, TimeColumn = 230, ValueColumn = 125;
     const TCHAR* BackTag = TEXT("PageBack");
     const TCHAR* HistoryFields[] = {TEXT("shot_at"),TEXT("carry_yd"),TEXT("roll_yd"),TEXT("ball_speed_mph"),TEXT("launch_angle_deg"),TEXT("launch_direction_deg"),TEXT("total_spin_rpm"),TEXT("spin_axis_deg"),TEXT("back_spin_rpm"),TEXT("side_spin_rpm"),TEXT("face_angle_deg"),TEXT("club_path_deg"),TEXT("face_to_path_deg"),TEXT("attack_angle_deg"),TEXT("dynamic_loft_deg")};
-    const TCHAR* HistoryCaptions[] = {TEXT("Time"),TEXT("Carry"),TEXT("Roll"),TEXT("Ball speed"),TEXT("Launch angle"),TEXT("Launch direction"),TEXT("Total spin"),TEXT("Spin axis"),TEXT("Backspin"),TEXT("Sidespin"),TEXT("Face angle"),TEXT("Club path"),TEXT("Face to path"),TEXT("Attack angle"),TEXT("Dynamic loft")};
+    const TCHAR* HistoryCaptions[] = {TEXT("Time (local)"),TEXT("Carry"),TEXT("Roll"),TEXT("Ball speed"),TEXT("Launch angle"),TEXT("Launch direction"),TEXT("Total spin"),TEXT("Spin axis"),TEXT("Backspin"),TEXT("Sidespin"),TEXT("Face angle"),TEXT("Club path"),TEXT("Face to path"),TEXT("Attack angle"),TEXT("Dynamic loft")};
     static_assert(UE_ARRAY_COUNT(HistoryFields) == UE_ARRAY_COUNT(HistoryCaptions), "Every history field has a caption.");
 
-    /** One history cell: the shot time in TimeZone, or a number to one decimal. Face to path is derived. */
-    FString HistoryValue(const TSharedPtr<FJsonObject>& Row,int32 Field,const FString& TimeZone)
+    TOptional<double> AverageCarry(const FJsonObject& Row)
     {
-        if(Field==0)return ShotTime(OpenGolfOnline::Text(Row,HistoryFields[0]),TimeZone);
+        double Carry = 0.0;
+        if (Row.TryGetNumberField(TEXT("avg_carry_yd"), Carry) && FMath::IsFinite(Carry))
+            return Carry;
+        return {};
+    }
+
+    /** One history cell: the local shot time, or a number to one decimal. Face to path is derived. */
+    FString HistoryValue(const TSharedPtr<FJsonObject>& Row,int32 Field)
+    {
+        if(Field==0)return ShotTime(OpenGolfOnline::Text(Row,HistoryFields[0]));
         double Value;
         if(FString(HistoryFields[Field])==TEXT("face_to_path_deg"))
         {
@@ -123,7 +131,6 @@ void SOpenGolfAccountPanel::Construct(const FArguments& Args)
     Online=Args._Online;Style=Args._Style;bShowHeading=Args._ShowHeading;PageType=Args._Page;
     DisplayNameDraft=Args._DisplayNameDraft.IsValid()?Args._DisplayNameDraft:MakeShared<FOpenGolfDisplayNameDraft>();
     DisplayNameDraft->Synchronize(Online.Get());
-    TimeZone=Args._TimeZone;TimeZoneName=Args._TimeZoneName.IsEmpty()?TEXT("local"):Args._TimeZoneName;
     bWasSignedIn=Online.IsValid()&&Online->HasSession();
     // The account this panel starts with is not a change: otherwise the first Rebuild would reset bLoadedCarry and
     // request club averages a second time.
@@ -256,7 +263,7 @@ void SOpenGolfAccountPanel::BuildProfile(const TSharedRef<SVerticalBox>& Page,UO
     auto* S=&Service;
     auto Profile=AddSection(Page,TEXT("PROFILE"));
     Profile->AddSlot().AutoHeight()[SNew(STextBlock).Font(Style.GetFont(Style.BodySize)).ColorAndOpacity(Style.TextColor)
-        .Text_Lambda([this,S]{return FText::FromString(TEXT("Member since ")+ShotDate(OpenGolfOnline::Text(S->GetProfile(),TEXT("created_at")),TimeZone));})];
+        .Text_Lambda([S]{return FText::FromString(TEXT("Member since ")+ShotDate(OpenGolfOnline::Text(S->GetProfile(),TEXT("created_at"))));})];
     Profile->AddSlot().AutoHeight().Padding(0,6,0,0)[SNew(STextBlock).Tag(TEXT("AccountAdmin"))
         .Font(Style.GetFont(Style.SmallSize)).ColorAndOpacity(Style.AccentColor).Text(FText::FromString(TEXT("admin")))
         .Visibility_Lambda([S]{return S->HasPermission(TEXT("ogolf:admin"))?EVisibility::Visible:EVisibility::Collapsed;})];
@@ -284,15 +291,30 @@ void SOpenGolfAccountPanel::BuildClubs(const TSharedRef<SVerticalBox>& Page,UOpe
     Clubs->AddSlot().AutoHeight().Padding(0,0,0,8)[SNew(SHorizontalBox)
         +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(TEXT("Last 90 days. Select a club to view its shots."),Style.SmallSize,true)]
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(ButtonGap,0,0,0)[Button(TEXT("Refresh"),[S]{S->LoadCarry();},true)]];
-    if(Service.GetCarry().IsEmpty())Clubs->AddSlot().AutoHeight()[Text(TEXT("No saved club statistics yet."))];
-    for(const auto& Value:Service.GetCarry())
-        if(Value->Type==EJson::Object)Clubs->AddSlot().AutoHeight().Padding(0,0,0,4)[ClubRow(Service,Value->AsObject())];
+    TArray<TSharedPtr<FJsonObject>> SortedCarry;
+    for (const TSharedPtr<FJsonValue>& Value : Service.GetCarry())
+    {
+        if (Value.IsValid() && Value->Type == EJson::Object && Value->AsObject().IsValid())
+            SortedCarry.Add(Value->AsObject());
+    }
+    if (SortedCarry.IsEmpty())
+        Clubs->AddSlot().AutoHeight()[Text(TEXT("No saved club statistics yet."))];
+    SortedCarry.StableSort([](const TSharedPtr<FJsonObject>& A, const TSharedPtr<FJsonObject>& B)
+    {
+        const TOptional<double> Left = AverageCarry(*A);
+        const TOptional<double> Right = AverageCarry(*B);
+        return Left.IsSet() && (!Right.IsSet() || Left.GetValue() > Right.GetValue());
+    });
+    for (const TSharedPtr<FJsonObject>& Row : SortedCarry)
+        Clubs->AddSlot().AutoHeight().Padding(0, 0, 0, 4)[ClubRow(Service, Row)];
 }
 TSharedRef<SWidget> SOpenGolfAccountPanel::ClubRow(UOpenGolfOnlineSubsystem& Service,const TSharedPtr<FJsonObject>& Row)
 {
     auto* S=&Service;
     const FString Club=OpenGolfOnline::Text(Row,TEXT("club"));
     const double Shots=Number(Row,TEXT("shots"));
+    const TOptional<double> Carry = AverageCarry(*Row);
+    const FString AverageLabel = Carry.IsSet() ? FString::Printf(TEXT("%.1f yd average"), Carry.GetValue()) : TEXT("—");
     const FString ShotCount=FString::Printf(TEXT("%.0f %s"),Shots,FMath::IsNearlyEqual(Shots,1.0)?TEXT("shot"):TEXT("shots"));
     // One button per club, tagged ClubRow:<club code>, laid out as table columns.
     return SNew(SButton).ButtonStyle(&Style.Button).IsEnabled_Lambda([S]{return !S->IsBusy();}).Tag(FName(*(TEXT("ClubRow:")+Club)))
@@ -302,7 +324,7 @@ TSharedRef<SWidget> SOpenGolfAccountPanel::ClubRow(UOpenGolfOnlineSubsystem& Ser
         .OnClicked_Lambda([this,S,Club]{bHistory=true;ConfirmDeleteId.Empty();S->LoadHistory(Club);bRebuild=true;return FReply::Handled();})
         [SNew(SHorizontalBox)
             +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(ClubColumn)[Text(ClubAbbreviation(Club))]]
-            +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(AverageColumn)[Text(FString::Printf(TEXT("%.1f yd average"),Number(Row,TEXT("avg_carry_yd"))))]]
+            +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(AverageColumn)[Text(AverageLabel)]]
             +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(ShotsColumn)[Text(ShotCount,Style.SmallSize,true)]]
             +SHorizontalBox::Slot().FillWidth(1)
             +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -317,7 +339,7 @@ void SOpenGolfAccountPanel::BuildHistory(const TSharedRef<SVerticalBox>& Page,UO
     auto Header=SNew(SHorizontalBox);
     Header->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(DeleteColumn)];
     for(int32 I=0;I<UE_ARRAY_COUNT(HistoryCaptions);++I)
-        Header->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(I==0?TimeColumn:ValueColumn)[Text(I==0?FString::Printf(TEXT("%s (%s)"),HistoryCaptions[0],*TimeZoneName):FString(HistoryCaptions[I]),Style.SmallSize,true)]];
+        Header->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(I==0?TimeColumn:ValueColumn)[Text(HistoryCaptions[I],Style.SmallSize,true)]];
     const float Offset=HistoryList.IsValid()?HistoryList->GetScrollOffset():0;
     HistoryRows.Empty();
     for(const auto& Value:Service.GetHistory())if(Value->Type==EJson::Object)HistoryRows.Add(Value->AsObject());
@@ -343,6 +365,6 @@ TSharedRef<SWidget> SOpenGolfAccountPanel::HistoryLine(UOpenGolfOnlineSubsystem&
     auto Line=SNew(SHorizontalBox);
     Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(DeleteColumn).HAlign(HAlign_Left)[Delete]];
     for(int32 I=0;I<UE_ARRAY_COUNT(HistoryFields);++I)
-        Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(I==0?TimeColumn:ValueColumn)[Text(HistoryValue(Row,I,TimeZone),Style.SmallSize)]];
+        Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(I==0?TimeColumn:ValueColumn)[Text(HistoryValue(Row,I),Style.SmallSize)]];
     return Line;
 }

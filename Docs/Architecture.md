@@ -7,7 +7,7 @@ The game module is `UOpenGolf`. Its C++ GameMode uses the map's saved range cont
 scenes. Range shots start from the tee; hole play uses the current lie and counts strokes and putts.
 In range mode, the GameMode returns a stopped ball to the tee after the configured delay; the ball keeps
 its last shot result until the next launch. The HUD
-adds a Slate widget (`SRangeHud`) with shot tiles and a launch-monitor status box; the player controller
+adds a Slate widget (`SRangeHud`) with shot tiles and a course header with a settings button; the player controller
 binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D held
 to turn the aim) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
 actions and one mapping context built in code (no input assets); a HUD panel that holds keyboard
@@ -137,7 +137,7 @@ by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
 | Folder | Contents |
 | --- | --- |
 | `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, icon button, slider, switch, status glyph, page header |
-| `Hud/` | The Training HUD: `SRangeHud` (shot tiles, status box), play buttons and hole tiles, shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
+| `Hud/` | The Training HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
 | `Club/` | Club picker and club-face glyph |
 | `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |
 | `Menu/` | `SMainMenu` (home, pause, Settings, Shot history, dialogs) and display-mode options |
@@ -180,7 +180,7 @@ flowchart LR
 
 Every node exists in a first form: replay is built in, physics is the OpenFairway
 plugin, course geometry is the saved terrain built from the OpenGolfCourse kit, and presentation
-is the ball, tracer, shot camera and Slate HUD (shot tiles and launch-monitor status box).
+is the ball, tracer, shot camera and Slate HUD (shot tiles, course header, and play controls).
 
 ## Reference projects
 

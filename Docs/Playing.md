@@ -46,10 +46,8 @@ instead.
 | **Escape** | Cancel placing the ball, or close the wind controls or the test-shot list; otherwise open the pause menu |
 | **F6** | Move the keys onto the HUD's buttons, or back to the game (see [Without a mouse](#without-a-mouse)) |
 
-The mouse is used for the test-shot panel at the bottom left, the play buttons at the top
-left, the wind indicator and its controls at the top centre, the club picker, the status
-box's two icons, and placing the ball. The shot tiles take no clicks. Nothing in the game
-shows a tooltip; captions under the icons name what they do.
+Use the mouse for the toolbar, settings menu, wind controls, test-shot panel, and ball
+placement. Hover over a toolbar icon for its name or status.
 
 #### Without a mouse
 
@@ -75,35 +73,18 @@ checked.
   red until the launch monitor detects the ball, green once it does. Without a launch
   monitor it stays red. It hides while the ball flies or rolls, until it is teed up again,
   while you place a ball and on a practice hole (a placed ball).
-- **Shot tiles** (right edge): a header with the shot number and its state (in flight,
-  rolling, at rest; empty before the first shot) and the club picker, then the results
-  (total, carry, roll, apex, offline, hang time, landing), the club data and, in darker
-  tiles, the raw launch-monitor values. The column keeps its width whatever the club or
-  heading. `…` means the value is still coming, `—` that it is missing, `*` that it is
-  derived from other measurements, and `L`/`R` the direction.
-- **Club picker** (in the tile header): the club face and its abbreviation (**DR**, **7i**,
-  **PW**, …). Click it to choose a club from the list; **Tab** also changes clubs.
-- **Status box** (bottom right): **Aim** (Straight, or degrees left/right of the target
-  line, in tenths under 10°; on the hole also how far wide of the cup the line passes, in
-  yards, or feet in the short game), then two icons:
-  - the **launch monitor**, green when Ready, amber while scanning or connecting and gray
-    when disconnected, with its battery level when the device reports one. Its caption reads
-    **Connect [C]** while disconnected. Click it to open Settings › Launch Monitor; **C** connects
-    and **T** disconnects.
-  - on the range only, the **record** toggle, captioned **Record [F9]**: a red dot with the
-    number of shots saved while recording, a gray ring when off. Click it or press **F9**. The
-    hole has no record toggle and never records.
-
-  A failed save turns the record icon amber with the unsaved count, and the error shows
-  beside the icons while retrying; see [Recording errors and retries](#recording-errors-and-retries).
-  A launch-monitor error shows there too.
-- **Play buttons** (top left): round icon buttons in the tile style. The flag button
-  (**Game Mode [G]**) switches to the hole; while playing it is ringed and reads **Range [G]**,
-  and a ball button (**Place ball [B]**) appears beside it. Under them the hole tiles show
-  **Hole 1 · Par 4 · 400 yd**, the stroke being played, the distance **To Pin** (feet on the
-  green, yards elsewhere) and **Putts**. While you place a ball, and for the rest of a hole
-  with a placed ball, the heading reads **Practice · Ball placement** and those three tiles
-  are hidden. A banner names the score when the ball drops.
+- **Top right.** The cog opens Settings directly. The heading reads **Training**,
+  or **Training · Ball Placement** while placing or playing a placed ball. In Game Mode it
+  shows **Airways**, with the hole number, par, and length below. The shot tiles below
+  show game results, club data, and raw launch-monitor values. `…` means a value is pending,
+  `—` means it is missing, `*` means it is derived, and `L`/`R` indicate direction.
+- **Top left.** The club icon opens the club drawer. The flag switches between Training
+  and Game Mode. The record icon toggles range recording, as does **F9**. It turns red
+  while recording or amber if a save fails. Hover over it for counts and save details.
+- **Hole play.** The ball icon replaces Record. Click it or press **B** to place the ball.
+  Below the toolbar, the hole tiles show the current stroke, distance **To Pin**, and
+  **Putts**. These tiles hide during ball placement.
+  A banner names the score when the ball drops.
 - **Wind** (top centre): the wind speed and an arrow for the way it blows, turned with the
   camera. Click it (or press **W**) to slide out the wind controls under it:
   - an **On/Off** switch; off is calm, and the speed is kept for when it is switched back on;
@@ -117,8 +98,8 @@ checked.
   already in the air keeps the wind it was hit in. Click the indicator again, or press **W**
   or **Escape**, to close the controls. Wind set from the console shows in them too, and
   nothing set during Play is saved to the map.
-- **Test shots [P] | Hit [H]** (bottom left): only shown while no launch monitor is
-  connected. See [Selecting test shots](#selecting-test-shots).
+- **Test shots [P] | Hit [H]** (bottom left): shown when manual shots are enabled and
+  no launch monitor is connected. See [Selecting test shots](#selecting-test-shots).
 - **Version** (bottom-left corner, under the test-shot button): `v` plus `ProjectVersion`
   from `Config/DefaultGame.ini` (`[/Script/EngineSettings.GeneralProjectSettings]`), Change the version there; packaged builds use the same value.
   Release builds from CI use the tag's version instead (see [Versioning](Releases.md#versioning)).
@@ -173,10 +154,10 @@ nothing, locally or online. Recording is a range feature: the hole shows no reco
 **F9** does nothing there, and hole shots are never recorded. Recording keeps its on/off
 state for when you return to the range.
 
-1. Connect the launch monitor (**C**) and wait for **Ready**: the launch-monitor icon turns
-   green. The record icon is a gray ring.
-2. Press **F9** or click the record icon to start recording. The dot turns red and counts
-   saved shots. Press **F9** or click it again to stop. Recording is off at every Play start.
+1. Connect the launch monitor (**C**) and check for **Ready** in Settings › Launch Monitor.
+   The record icon is a white ring while recording is off.
+2. Press **F9** or click the record icon to start recording. The dot turns red. Hover over it
+   to see the saved count. Press **F9** or click it again to stop. Recording is off at every Play start.
 3. Select the club with **Tab** before each shot; the club selected when the shot
    arrives is the one recorded.
 
@@ -235,8 +216,8 @@ the folder, writing, or renaming fails, the shot remains in memory and retries o
 per second during Play. Later shots retain their own file numbers and session folders.
 The saved count advances only on success.
 
-The status box shows the number of unsaved records and the save error, including
-while disconnected or recording is off. Restore access to the folder while Play
+Hover over the record icon to see the number of unsaved records and the save error,
+including when disconnected or recording is off. Restore access to the folder while Play
 remains open to let the retries complete. Ending Play makes one final save attempt
 and logs any remaining unsaved count and destination. **There is no recovery across
 Play sessions or application restarts**; failed recordings still in memory are lost.
@@ -245,7 +226,7 @@ Play sessions or application restarts**; failed recordings still in memory are l
 
 The home page, and the pause menu that **Escape** opens during Training, share a top bar:
 **UOPEN GOLF**, the launch-monitor status (click it for Settings › Launch Monitor), an account icon
-and a cog. The cog is the only way into **Settings**; the pages have no Settings button. While
+and a settings cog. The cog opens **Settings** from either the menu or the training HUD. While
 signed out the account icon signs in (it opens Settings › Player); while signed in it is the
 logout icon.
 
@@ -259,12 +240,9 @@ logout icon.
   screen, and approve. It signs in the account your phone's browser is logged in to. The QR
   code disappears once you are signed in.
 - Signed in: the member-since date, the **Display name** (**Save display name** saves it at
-  once) and **Shot history**. Its **View** opens the club averages of the last 90 days, with
-  clubs abbreviated (**DR**, **7i**, **PW**); select a club for its shots. Back returns to
-  Player.
-- **Time zone**: the zone for shot-history times and the member-since date. **Local** (this
-  computer's zone) is the default; UTC and common zones such as **Pacific (PT)** are listed,
-  with daylight saving applied. It changes at once, without Apply. CSV exports stay in UTC.
+  once) and **Shot history**. Its **View** shows club averages for the last 90 days,
+  with the longest average carry at the top. Select a club to view individual shots.
+  Shot times and the member-since date use this computer's local time. CSV exports use UTC.
 
 ### Settings
 

@@ -159,8 +159,7 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
         +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[SNew(STextBlock).Font(HudStyle::Font("Regular",MenuStyle::SmallSize)).ColorAndOpacity(Style.LabelColor).Text_Lambda([this]{return FText::FromString(!SaveError.IsEmpty()?SaveError:DisplayNameDraft->bSaving?TEXT("Saving display name..."):!DisplayNameDraft->Error.IsEmpty()?DisplayNameDraft->Error:Dirty()?TEXT("Unsaved changes"):TEXT("All changes saved"));})]
         +SHorizontalBox::Slot().AutoWidth().Padding(MenuStyle::ButtonGap,0,0,0)[Button(TEXT("Reset All"),[this]{
             // The launch-monitor connection is changed live, never by Reset All.
-            // Nor is the time zone, which also applies at once.
-            Draft={};Draft.Provider=Saved.Provider;Draft.OpenConnectPort=Saved.OpenConnectPort;Draft.OpenConnectLan=Saved.OpenConnectLan;Draft.TimeZone=Saved.TimeZone;
+            Draft={};Draft.Provider=Saved.Provider;Draft.OpenConnectPort=Saved.OpenConnectPort;Draft.OpenConnectLan=Saved.OpenConnectLan;
             Video.VSync=0;Video.FPS=60;Video.Scale=100;for(int32& Q:Video.Quality)Q=2;
             Video.Mode=DisplayOptions::ShownMode(DisplayOptions::Borderless,BorderlessIsFullscreen);Video.Resolution=EngineSettings()->GetDesktopResolution();RefreshSettings();})]
         +SHorizontalBox::Slot().AutoWidth().Padding(MenuStyle::ButtonGap,0,0,0)[Button(TEXT("Discard"),[this]{Draft=Saved;Video=SavedVideo;DisplayNameDraft->Discard(OnlineService());SaveError.Empty();RefreshSettings();})]
@@ -175,7 +174,7 @@ void SMainMenu::BuildPlayer(TSharedRef<SVerticalBox> Rows)
     UOpenGolfOnlineSubsystem* Online=OnlineService();
     if(Online&&Matches(TEXT("Account"),TEXT("Sign in, create account, profile, display name")))
         Rows->AddSlot().AutoHeight()[SNew(SOpenGolfAccountPanel).Tag(TEXT("PlayerAccountPanel")).Online(Online).Style(Style).ShowHeading(false).DisplayNameDraft(DisplayNameDraft)
-            .Page(EOpenGolfAccountPage::Account).TimeZone(GolfSettings::ChosenTimeZone().Id)];
+            .Page(EOpenGolfAccountPage::Account)];
     const FString ShotsHelp=TEXT("Club averages and saved shots from the last 90 days.");
     if(Matches(TEXT("Shot history"),ShotsHelp))
     {
@@ -183,11 +182,6 @@ void SMainMenu::BuildPlayer(TSharedRef<SVerticalBox> Rows)
         AddRow(Rows,TEXT("Shot history"),ShotsHelp,Button(TEXT("View"),[this]{Pages.Remove(TEXT("shots"));Route=ERoute::Shots;bRebuildPending=true;}))
             ->SetVisibility(TAttribute<EVisibility>::CreateLambda([this]{return HasProfile()?EVisibility::Visible:EVisibility::Collapsed;}));
     }
-    TArray<FString> ZoneLabels;TArray<int32> ZoneValues;
-    const TConstArrayView<GolfSettings::FTimeZoneChoice> Zones=GolfSettings::TimeZones();
-    for(int32 I=0;I<Zones.Num();++I){ZoneLabels.Add(Zones[I].Label);ZoneValues.Add(I);}
-    AddChoice(Rows,TEXT("Time zone"),TEXT("Times in your shot history. Changes at once; Local uses this computer's time zone."),ZoneLabels,ZoneValues,
-        [this]{return Draft.TimeZone;},[this](int32 V){CommitNow([V](P& Prefs){Prefs.TimeZone=V;},TEXT("Could not save the time zone. Check storage and retry."));});
     AddPreference(Rows,TEXT("Handedness"),TEXT("Player and device preference; measured launch directions stay unchanged."),&P::LeftHanded,{TEXT("Right"),TEXT("Left")},{0,1});
     AddPreference(Rows,TEXT("Distance units"),TEXT("Carry, total and long distances."),&P::DistanceUnits,{TEXT("Yards"),TEXT("Meters")},{0,1});
     AddPreference(Rows,TEXT("Putting units"),TEXT("Short distances and height."),&P::PuttingUnits,{TEXT("Feet"),TEXT("Meters")},{0,1});

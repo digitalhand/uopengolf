@@ -48,15 +48,13 @@ browser is still logged in to Auth0; that is what lets a player sign out and sig
 someone else. A QR sign-in uses the account the phone's browser is logged in to, which
 the game cannot change.
 
-Shot history shows club averages, with clubs abbreviated (**DR**, **7i**, **PW**), then
-one club's shots, with confirmed deletion and pipe-delimited CSV export. Shot times
-show in the **Time zone** chosen in Settings › Player: this computer's zone by default,
-or UTC or a listed zone such as Pacific, with daylight saving applied. The CSV keeps
-the API's UTC times. Statistics use the existing 90-day window and history limit of
+Shot history lists club averages from longest to shortest carry. Club abbreviations
+include **DR**, **7i**, and **PW**. Select a club to see its shots, delete a shot with
+confirmation, or export a pipe-delimited CSV. Shot times and member-since dates use
+the computer's local time. CSV exports keep the API's UTC times. Statistics use the existing 90-day window and history limit of
 200 shots. Pending and rejected upload counts are not shown. Each **View** opens on
 freshly loaded club averages. The history filter does not change the club selected
-for the next shot. The range HUD has a clickable club picker using the approved
-OGolf artwork. Tab still changes the next shot's club. Recording (**F9** or the HUD's
+for the next shot. The upper-left club selector opens a drawer of available clubs. Tab still changes the next shot's club. Recording (**F9** or the HUD's
 record icon) decides whether shots are saved: while recording and signed in, eligible
 range shots are queued for the online profile as well as written locally. There is no
 separate save-to-profile setting; an older player file's `save_to_profile` value is ignored. The current server excludes lob wedge

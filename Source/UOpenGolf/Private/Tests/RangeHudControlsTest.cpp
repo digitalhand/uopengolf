@@ -10,8 +10,10 @@
 #include "Framework/Application/SlateApplication.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfGameMode.h"
+#include "UOpenGolfHUD.h"
 #include "UOpenGolfRange.h"
 #include "OpenGolfTerrain.h"
+#include "OpenGolfSettings.h"
 #include "UI/Hud/BallReadyGlow.h"
 #include "GameFramework/HUD.h"
 #include "Engine/GameInstance.h"
@@ -24,7 +26,7 @@
 namespace RangeHudControlsTestDetail
 {
     /** The range HUD's clickable controls, by their Slate tags. */
-    const TCHAR* const HudControls[] = {TEXT("ClubPicker"), TEXT("RecordToggle"), TEXT("LaunchMonitorStatus")};
+    const TCHAR* const HudControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle"), TEXT("HudSettings")};
 
     bool ShowsText(const TSharedRef<SWidget>& Root, const FString& Value)
     {
@@ -61,15 +63,14 @@ namespace RangeHudControlsTestDetail
         return Widget && Widget->GetVisibility().IsVisible();
     }
 
-    const TCHAR* const PlacingHeading = TEXT("Practice  ·  Ball placement");
+    const TCHAR* const PlacingHeading = TEXT("Training · Ball Placement");
 } // namespace RangeHudControlsTestDetail
 
 /**
- * Clicks the range HUD's controls as a player would: the club picker and both status buttons must be reachable,
- * the record button toggles recording and the launch-monitor button opens Settings › Launch Monitor. Also checks that
+ * Clicks the range HUD's controls as a player would: the club picker and toolbar and settings buttons must be reachable,
+ * the record button toggles recording and the cog opens Settings › Player. Also checks that
  * changing clubs never resizes the shot tiles, that the ball-ready glow shows at address, that placing a ball
- * retitles the hole and hides its tiles, that recording and the glow stay off the hole where they do not apply, and
- * that nothing has a tooltip.
+ * retitles the hole and hides its tiles, that recording and the glow stay off the hole where they do not apply.
  */
 class FRangeHudControlsCapture : public IAutomationLatentCommand
 {
@@ -83,6 +84,7 @@ public:
             Test->AddError(FString::Printf(TEXT("Range HUD controls test timed out at stage %d"), Stage));
             FScreenshotRequest::Reset();
             RemoveReadyGlow();
+            RestorePreferences();
             return true;
         }
         UWorld* World = GEditor->PlayWorld;
@@ -130,7 +132,18 @@ private:
                     Test->TestTrue(FString::Printf(TEXT("A click reaches %s; hit path: %s"), Tag, *HitPath), bReached);
                 }
             }
-            RenderedPlay::ExpectNoToolTips(*Test, Window.ToSharedRef(), TEXT("the range HUD"));
+            Test->TestTrue(TEXT("Training header shows"), ShowsText(Window.ToSharedRef(), TEXT("Training")));
+            Test->TestFalse(TEXT("Launch monitor is off the training HUD"), IsShown(Window.ToSharedRef(), TEXT("LaunchMonitorStatus")));
+            Test->TestFalse(TEXT("No connection prompt on the training HUD"), ShowsText(Window.ToSharedRef(), TEXT("Connect a launch monitor to hit shots")));
+            Test->TestFalse(TEXT("Static wind label is gone"), ShowsText(Window.ToSharedRef(), TEXT("Wind [W]")));
+            Test->TestFalse(TEXT("The flag has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Game Mode")));
+            Test->TestFalse(TEXT("The recording icon has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Record")));
+            {
+                const FVector2D ClubSize = SizeOf(Window.ToSharedRef(), TEXT("ClubPicker"));
+                Test->TestTrue(TEXT("Toolbar buttons have equal sizes"),
+                    ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("GameModeToggle")), 0.5)
+                    && ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("RecordToggle")), 0.5));
+            }
             Test->TestTrue(TEXT("The ball is at address"), Mode->IsBallAtAddress());
             Test->TestTrue(TEXT("The ball-ready glow shows at address"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
             // The longest club name used to widen the heading row, and with it every tile.
@@ -140,17 +153,35 @@ private:
             if (UOpenLaunchMonitorSubsystem* Monitor = Player->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
             {
                 StartClub = Monitor->GetClub();
-                Monitor->SetClub(ELaunchMonitorClub::PitchingWedge);
+                Monitor->SetClub(ELaunchMonitorClub::Iron7);
             }
+            return ClickThen(TEXT("ClubPicker"), 20);
+        case 20:
+            Test->TestTrue(TEXT("The club drawer opens"), FSlateApplication::Get().AnyMenusVisible());
+            return Capture(TEXT("club-drawer"));
+        case 21:
+            if (!RenderedPlay::ClickLabelled(*Test, TEXT("8i"))) return true;
             Stage = 2;
-            return Wait(1.0);
+            return Wait(0.5);
         case 2:
+            Test->TestFalse(TEXT("Selecting a club closes the drawer"), FSlateApplication::Get().AnyMenusVisible());
+            if (const UOpenLaunchMonitorSubsystem* Monitor = Player->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
+                Test->TestEqual(TEXT("Drawer selection updates the monitor's club"), Monitor->GetClub(), ELaunchMonitorClub::Iron8);
             Test->TestTrue(FString::Printf(TEXT("A club change keeps the heading width: %s, then %s"), *HeadingSize.ToString(),
                 *SizeOf(Window.ToSharedRef(), TEXT("ShotHeading")).ToString()), SizeOf(Window.ToSharedRef(), TEXT("ShotHeading")).Equals(HeadingSize, 0.5));
             Test->TestTrue(FString::Printf(TEXT("A club change keeps the tile size: %s, then %s"), *TileSize.ToString(),
                 *SizeOf(Window.ToSharedRef(), TEXT("ShotTile")).ToString()), SizeOf(Window.ToSharedRef(), TEXT("ShotTile")).Equals(TileSize, 0.5));
-            Test->TestTrue(TEXT("The club picker shows PW"), ShowsText(Window.ToSharedRef(), TEXT("PW")));
-            return Capture(TEXT("hud-pw"));
+            Test->TestFalse(TEXT("The closed club picker has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("8i")));
+            return ClickThen(TEXT("ClubPicker"), 22);
+        case 22:
+            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
+            Stage = 23;
+            return Wait(0.5);
+        case 23:
+            Test->TestFalse(TEXT("Escape dismisses the club drawer"), FSlateApplication::Get().AnyMenusVisible());
+            Test->TestFalse(TEXT("Escape from the drawer keeps the game in Training"), Player->IsMainMenuOpen());
+            Stage = 2;
+            return Capture(TEXT("hud-club"));
         case 3:
             if (UOpenLaunchMonitorSubsystem* Monitor = Player->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
                 Monitor->SetClub(StartClub);
@@ -183,17 +214,17 @@ private:
             return ClickThen(TEXT("RecordToggle"), 10);
         case 10:
             Test->TestFalse(TEXT("The record button stops recording"), Mode->IsRecordingShots());
-            return ClickThen(TEXT("LaunchMonitorStatus"), 11);
+            return ClickThen(TEXT("HudSettings"), 11);
         case 11:
-            Test->TestTrue(TEXT("The launch-monitor button opens the menu"), Player->IsMainMenuOpen());
-            Test->TestTrue(TEXT("The menu shows Settings › Launch Monitor"), ShowsText(Window.ToSharedRef(), TEXT("Launch monitor connection")));
-            RenderedPlay::ExpectNoToolTips(*Test, Window.ToSharedRef(), TEXT("Settings › Launch Monitor"));
-            return Capture(TEXT("lm-settings"));
+            Test->TestTrue(TEXT("The cog opens the menu"), Player->IsMainMenuOpen());
+            Test->TestTrue(TEXT("The menu shows Settings › Player"), ShowsText(Window.ToSharedRef(), TEXT("Handedness")));
+            RenderedPlay::ExpectNoToolTips(*Test, Window.ToSharedRef(), TEXT("Settings › Player"));
+            return Capture(TEXT("player-settings"));
         case 12:
-            // Back to the pause menu, then resume Training, through the menu's own Escape handling.
+            // Escape from Settings should return directly to the current Training session.
             if (Player->IsMainMenuOpen())
             {
-                if (++Escapes > 4)
+                if (++Escapes > 1)
                 {
                     Test->AddError(TEXT("Escape did not close the menu"));
                     return true;
@@ -201,7 +232,34 @@ private:
                 FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
                 return Wait(1.0);
             }
-            Mode->SetPlayMode(EOpenGolfPlayMode::Hole);
+            Test->TestEqual(TEXT("Settings preserves the current mode"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
+            return ClickThen(TEXT("HudSettings"), 24);
+        case 24:
+            if (!RenderedPlay::ClickLabelled(*Test, GolfSettings::Get().LeftHanded ? TEXT("Left") : TEXT("Right")))
+                return true;
+            Stage = 25;
+            return Wait(0.5);
+        case 25:
+            if (!RenderedPlay::ClickLabelled(*Test, GolfSettings::Get().LeftHanded ? TEXT("Right") : TEXT("Left")))
+                return true;
+            Stage = 26;
+            return Wait(0.5);
+        case 26:
+            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
+            Stage = 27;
+            return Wait(0.5);
+        case 27:
+            Test->TestTrue(TEXT("Unsaved changes keep Settings open"), Player->IsMainMenuOpen());
+            if (!RenderedPlay::ClickLabelled(*Test, TEXT("Discard and go back")))
+                return true;
+            Stage = 28;
+            return Wait(0.5);
+        case 28:
+            Test->TestFalse(TEXT("Discard returns directly to training"), Player->IsMainMenuOpen());
+            Test->TestEqual(TEXT("Discard keeps the range session"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
+            return ClickThen(TEXT("GameModeToggle"), 33);
+        case 33:
+            Test->TestEqual(TEXT("The flag switches the session to Game Mode"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
             Player->TogglePlacingBall();
             Stage = 13;
             return Wait(1.5);
@@ -211,13 +269,14 @@ private:
             Test->TestFalse(TEXT("The glow hides while placing"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
             Test->TestFalse(TEXT("Stroke, To Pin and Putts hide while placing"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
             Test->TestFalse(TEXT("The hole has no record toggle"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
-            RenderedPlay::ExpectNoToolTips(*Test, Window.ToSharedRef(), TEXT("the hole HUD"));
             return Capture(TEXT("placing"));
         case 14:
             Player->CancelPlacingBall();
             Stage = 15;
             return Wait(1.0);
         case 15:
+            Test->TestTrue(TEXT("Game Mode shows Airways"), ShowsText(Window.ToSharedRef(), TEXT("Airways")));
+            Test->TestTrue(TEXT("Course header shows the hole details"), ShowsText(Window.ToSharedRef(), TEXT("Hole 1  ·  Par 4  ·  400 yd")));
             // A normal hole: the tiles and the glow are back; recording stays a range control, and F9 is ignored.
             Test->TestTrue(TEXT("The hole tiles show on a normal hole"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
             Test->TestTrue(TEXT("The glow shows at address on the hole"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
@@ -252,6 +311,39 @@ private:
             Test->TestFalse(TEXT("The range is not practice"), Mode->IsPractice());
             Test->TestTrue(TEXT("The record toggle is back on the range"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
             Test->TestTrue(TEXT("The glow is back on the range"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
+            if (!GolfSettings::BypassStartupMenu()) return true;
+            SavedPreferences = GolfSettings::Get();
+            {
+                GolfSettings::FPreferences Preferences = SavedPreferences.GetValue();
+                Preferences.HudPercent = 150;
+                Preferences.TextPercent = 150;
+                Preferences.ReducedMotion = 1;
+                if (!Test->TestTrue(TEXT("Apply large HUD, large text and reduced motion"), GolfSettings::Commit(Preferences, PlayWorld())))
+                    return true;
+                if (AUOpenGolfHUD* Hud = Cast<AUOpenGolfHUD>(Player->GetHUD())) Hud->RefreshTheme();
+                Window->Resize(FVector2D(1024, 640));
+            }
+            Stage = 29;
+            return Wait(0.5);
+        case 29:
+            for (const TCHAR* Tag : HudControls)
+            {
+                const TSharedPtr<SWidget> Control = RenderedPlay::WithTag(Window.ToSharedRef(), Tag);
+                FString HitPath;
+                Test->TestTrue(FString::Printf(TEXT("Large HUD keeps %s reachable"), Tag),
+                    Control.IsValid() && Reachable(Window.ToSharedRef(), *Control, HitPath));
+            }
+            return ClickThen(TEXT("ClubPicker"), 30);
+        case 30:
+            Test->TestTrue(TEXT("The drawer opens with reduced motion"), FSlateApplication::Get().AnyMenusVisible());
+            return Capture(TEXT("large-hud-reduced-motion"));
+        case 31:
+            RenderedPlay::Click(Window.ToSharedRef(), RenderedPlay::PointOn(*Window, FVector2D(0.5, 0.25)));
+            Stage = 32;
+            return Wait(0.5);
+        case 32:
+            Test->TestFalse(TEXT("Clicking outside dismisses the drawer"), FSlateApplication::Get().AnyMenusVisible());
+            RestorePreferences();
             return true;
         default:
             return true;
@@ -259,6 +351,17 @@ private:
     }
 
     UWorld* PlayWorld() const { return GEditor->PlayWorld; }
+
+    void RestorePreferences()
+    {
+        if (SavedPreferences.IsSet())
+        {
+            GolfSettings::Commit(SavedPreferences.GetValue(), PlayWorld());
+            if (Player && PlayWorld())
+                if (AUOpenGolfHUD* Hud = Cast<AUOpenGolfHUD>(Player->GetHUD())) Hud->RefreshTheme();
+            SavedPreferences.Reset();
+        }
+    }
 
     /** Removes the green test glow and brings the HUD back. */
     void RemoveReadyGlow()
@@ -284,7 +387,10 @@ private:
             Test->AddError(FString(TEXT("Missing HUD control: ")) + Tag);
             return true;
         }
-        RenderedPlay::Click(Window.ToSharedRef(), RenderedPlay::PointOn(*Control));
+        // Keep Slate's cursor position in sync with the routed test event across popup and focus changes.
+        FSlateApplication::Get().SetCursorPos(RenderedPlay::PointOn(*Control));
+        if (!RenderedPlay::ClickOn(*Test, Window.ToSharedRef(), Control, Tag))
+            return true;
         Stage = NextStage;
         return Wait(1.0);
     }
@@ -306,6 +412,7 @@ private:
     int32 Escapes = 0;
     double WaitUntil = 0;
     FString File;
+    TOptional<GolfSettings::FPreferences> SavedPreferences;
     FVector2D HeadingSize = FVector2D::ZeroVector;
     FVector2D TileSize = FVector2D::ZeroVector;
     ELaunchMonitorClub StartClub = ELaunchMonitorClub::Driver;

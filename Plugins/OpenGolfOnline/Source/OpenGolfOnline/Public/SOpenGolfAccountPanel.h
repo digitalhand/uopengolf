@@ -37,7 +37,7 @@ enum class EOpenGolfAccountPage : uint8
 
 /**
  * One part of the player's account (Page). A host that draws its own page header passes ShowHeading(false) and uses
- * GetTitle and HandleBack. Shot times show in TimeZone.
+ * GetTitle and HandleBack. Shot times use the computer's local time.
  */
 class OPENGOLFONLINE_API SOpenGolfAccountPanel : public SCompoundWidget
 {
@@ -48,10 +48,6 @@ public:
     /** Draws the title row (back while in shot history, title, sign out). False when the host draws it. */
     SLATE_ARGUMENT(bool, ShowHeading)
     SLATE_ARGUMENT(EOpenGolfAccountPage, Page)
-    /** IANA time zone for shot times and the member-since date, such as "America/Los_Angeles"; empty is this computer's. */
-    SLATE_ARGUMENT(FString, TimeZone)
-    /** Short name of TimeZone for the time column's caption, such as "PT"; empty reads "local". */
-    SLATE_ARGUMENT(FString, TimeZoneName)
     /** Shared with the host's Apply/Discard controls. A standalone panel owns its own draft. */
     SLATE_ARGUMENT(TSharedPtr<FOpenGolfDisplayNameDraft>, DisplayNameDraft)
     SLATE_END_ARGS()
@@ -89,7 +85,7 @@ private:
     TArray<TSharedPtr<FJsonObject>> HistoryRows;
     int32 SeenShape = -1;
     uint64 SeenHistoryRevision = MAX_uint64;
-    FString ConfirmDeleteId, LastAccountKey, TimeZone, TimeZoneName;
+    FString ConfirmDeleteId, LastAccountKey;
     EOpenGolfAccountPage PageType = EOpenGolfAccountPage::Account;
     bool bShowHeading = true, bLoadedCarry = false, bWasSignedIn = false, bHistory = false, bRebuild = false;
 };

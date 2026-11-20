@@ -111,18 +111,6 @@ TArray<ShotDisplay::FTile> ShotDisplay::BuildTiles(const FOpenFairwayShotResult*
     return Tiles;
 }
 
-FString ShotDisplay::Heading(const FOpenFairwayShotResult* Result)
-{
-    if (!Result)
-    {
-        return FString();
-    }
-    const TCHAR* State = Result->TerminationReason == EOpenFairwayShotTermination::SafetyStop ? TEXT("interrupted") : Result->bAtRest ? TEXT("at rest")
-                                                                                                                  : Result->bLanded   ? TEXT("rolling")
-                                                                                                                                      : TEXT("in flight");
-    return FString::Printf(TEXT("Shot %d · %s"), Result->ShotNumber, State);
-}
-
 FString ShotDisplay::ClubLabel(ELaunchMonitorClub Club)
 {
     switch (Club)
@@ -146,37 +134,9 @@ FString ShotDisplay::ClubLabel(ELaunchMonitorClub Club)
     return TEXT("—");
 }
 
-FString ShotDisplay::HoleHeading(int32 Par, const FString& Distance, bool bPractice)
+FString ShotDisplay::HoleDetails(int32 Par, const FString& Distance)
 {
-    return bPractice ? FString(TEXT("Practice  ·  Ball placement")) : FString::Printf(TEXT("Hole 1  ·  Par %d  ·  %s"), Par, *Distance);
-}
-
-FString ShotDisplay::LaunchMonitorCaption(ELaunchMonitorConnectionState State)
-{
-    return State == ELaunchMonitorConnectionState::Disconnected ? TEXT("Connect [C]") : TEXT("Launch monitor");
-}
-
-FString ShotDisplay::BatteryLabel(int32 BatteryPercent)
-{
-    return BatteryPercent < 0 ? FString(TEXT("—")) : FString::Printf(TEXT("%d%%"), BatteryPercent);
-}
-
-FString ShotDisplay::LaunchMonitorTip(ELaunchMonitorConnectionState State, int32 BatteryPercent)
-{
-    FString Tip = StaticEnum<ELaunchMonitorConnectionState>()->GetDisplayNameTextByValue(static_cast<int64>(State)).ToString();
-    if (BatteryPercent >= 0)
-        Tip += FString::Printf(TEXT(" · battery %d%%"), BatteryPercent);
-    // The click opens Settings → Launch Monitor, where Square Home or an Open Connect connector is chosen.
-    return Tip + (State == ELaunchMonitorConnectionState::Disconnected ? TEXT(". Click for launch monitor settings. C connects.")
-                                                                         : TEXT(". Click for launch monitor settings. T disconnects."));
-}
-
-FString ShotDisplay::RecordCount(bool bRecording, int32 ShotCount, int32 FailedRecordings)
-{
-    const FString Unsaved = FailedRecordings > 0 ? FString::Printf(TEXT("%d unsaved"), FailedRecordings) : FString();
-    if (!bRecording)
-        return Unsaved;
-    return Unsaved.IsEmpty() ? FString::FromInt(ShotCount) : FString::Printf(TEXT("%d · %s"), ShotCount, *Unsaved);
+    return FString::Printf(TEXT("Hole 1  ·  Par %d  ·  %s"), Par, *Distance);
 }
 
 FString ShotDisplay::RecordTip(bool bRecording, bool bSignedIn)
@@ -186,11 +146,6 @@ FString ShotDisplay::RecordTip(bool bRecording, bool bSignedIn)
                          : TEXT("Not recording. Click or press F9 to save shots on this computer.");
     return bSignedIn ? TEXT("Recording: shots are saved on this computer and to your online profile. Click or press F9 to stop.")
                      : TEXT("Recording: shots are saved on this computer. Sign in to also save them to your online profile. Click or press F9 to stop.");
-}
-
-FString ShotDisplay::StatusError(const FString& LaunchMonitorError, int32 FailedRecordings, const FString& RecordingError)
-{
-    return FailedRecordings > 0 ? RecordingError + TEXT(" - retrying") : LaunchMonitorError;
 }
 
 FString ShotDisplay::VersionLabel(const FString& ProjectVersion)

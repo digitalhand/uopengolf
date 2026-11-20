@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // The account in the real menu against a stubbed online service: the top bar's sign-in and logout icons beside the
-// cog, Settings › Player's account, Shot history and time zone, and abbreviated clubs.
+// cog, Settings › Player's account, Shot history with local dates, and abbreviated clubs.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Tests/RenderedPlay.h"
@@ -11,11 +11,11 @@
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
 #include "OpenGolfOnlineSubsystem.h"
-#include "OpenGolfSettings.h"
 #include "UI/Menu/MainMenu.h"
 #include "UOpenGolfPlayerController.h"
 #include "UObject/StrongObjectPtr.h"
 #include "HAL/FileManager.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
 
@@ -24,12 +24,6 @@ namespace OnlineVisualTestDetail
     /** The 7 iron row of the stubbed club statistics, and the page header's back control. */
     const TCHAR* ClubRowTag = TEXT("ClubRow:7I");
     const TCHAR* PageBackTag = TEXT("PageBack");
-    const TCHAR* PacificLabel = TEXT("Pacific (PT)");
-    /** The stubbed shot's time, 2026-11-11T00:00:00Z, as Pacific (PST) wall time. */
-    FString PacificShotTime()
-    {
-        return FText::AsDateTime(FDateTime(2026, 11, 10, 16, 0, 0), EDateTimeStyle::Medium, EDateTimeStyle::Short, FText::GetInvariantTimeZone()).ToString();
-    }
     bool IsShownWidget(const TSharedPtr<SWidget>& Widget) { return Widget.IsValid() && Widget->GetVisibility().IsVisible(); }
 } // namespace OnlineVisualTestDetail
 
@@ -75,15 +69,34 @@ public:
             // Home page, signed out.
             Test->TestFalse(TEXT("No Settings button on the home page"), RenderedPlay::FindButton(Root, TEXT("Settings")).IsValid());
             ExpectTopBar(TEXT("AccountSignIn"), TEXT("AccountSignOut"), TEXT("signed out"));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, TEXT("AccountSignIn")), TEXT("the sign-in icon")));
+            Test->TestFalse(TEXT("Starting Training does not require sign-in"), Service->HasSession());
+            if (!ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("Training")), TEXT("Training while signed out")))
+                return true;
+            Stage = 19;
+            Until = GetCurrentRunTime() + 1;
+            return false;
+        case 19:
+            Test->TestFalse(TEXT("Training closes the main menu"), Player->IsMainMenuOpen());
+            Test->TestFalse(TEXT("Training keeps the player signed out"), Service->HasSession());
+            {
+                const TSharedPtr<SWidget> Cog = RenderedPlay::WithTag(Window, TEXT("HudSettings"));
+                Test->TestTrue(TEXT("Training paints the settings cog while signed out"),
+                    Cog.IsValid() && RenderedPlay::PathAt(Window, RenderedPlay::PointOn(*Cog)).ContainsWidget(Cog.Get()));
+            }
+            Menu->Open();
+            Stage = 20;
+            Until = GetCurrentRunTime() + 1;
+            return false;
+        case 20:
+            Stage = 0;
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, TEXT("AccountSignIn")), TEXT("the sign-in icon")));
         case 1:
             SettingsPage=RenderedPlay::WithTag(Root,TEXT("MenuPageHost"))->GetChildren()->GetChildAt(0);
-            TimeZoneControl=RenderedPlay::FindButton(Root,GolfSettings::ChosenTimeZone().Label);
             Test->TestTrue(TEXT("The sign-in icon opens Settings"), RenderedPlay::HasText(Root, TEXT("Settings")));
             ExpectSignInChoices(TEXT("signed out"));
             Test->TestFalse(TEXT("Signed out, Player has no display name"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestFalse(TEXT("Signed out, Player has no shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
-            Test->TestTrue(TEXT("Player offers the time zone"), RenderedPlay::HasText(Root, TEXT("Time zone")));
+            Test->TestFalse(TEXT("Player omits the timezone selector"), RenderedPlay::HasText(Root, TEXT("Time zone")));
             return Next(true);
         case 2:
             // The QR code needs no button: it is requested once Settings shows it. The stubbed service approves it at
@@ -97,7 +110,6 @@ public:
             return Next(true);
         case 4:
             Test->TestTrue(TEXT("Login preserves the Settings page"),SettingsPage==RenderedPlay::WithTag(Root,TEXT("MenuPageHost"))->GetChildren()->GetChildAt(0));
-            Test->TestTrue(TEXT("Login preserves unrelated controls"),TimeZoneControl==RenderedPlay::FindButton(Root,GolfSettings::ChosenTimeZone().Label));
             ExpectTopBar(TEXT("AccountSignOut"), TEXT("AccountSignIn"), TEXT("signed in"));
             Test->TestTrue(TEXT("Player shows the display name"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestTrue(TEXT("Player shows shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
@@ -108,59 +120,72 @@ public:
             Capture(Window, TEXT("player-signed-in"));
             return false;
         case 5:
-            // The time-zone drop-down shows the current zone; the choice opens in a menu window.
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::FindButton(Root, GolfSettings::ChosenTimeZone().Label), TEXT("the time zone")));
+            return Next(ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("View")), TEXT("Shot history's View")));
         case 6:
-            return Next(RenderedPlay::ClickLabelled(*Test, PacificLabel));
-        case 7:
-            Test->TestEqual(TEXT("Pacific applies at once"), FString(GolfSettings::ChosenTimeZone().Short), FString(TEXT("PT")));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::FindButton(Root, TEXT("View")), TEXT("Shot history's View")));
-        case 8:
             if (Service->IsBusy())
                 return false;
             Test->TestTrue(TEXT("Shot history page"), RenderedPlay::HasText(Root, TEXT("Shot history")));
             for (const TCHAR* Label : {TEXT("7i"), TEXT("150.5 yd average"), TEXT("12 shots")})
                 Test->TestTrue(FString(TEXT("Club row shows ")) + Label, RenderedPlay::HasText(Root, Label));
+            ExpectClubOrder(Root, {TEXT("DR"), TEXT("5W"), TEXT("7I"), TEXT("PW"), TEXT("GW")});
+            if (!ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("Refresh")), TEXT("Refresh club averages")))
+                return true;
+            Stage = 18;
+            Until = GetCurrentRunTime() + 1;
+            return false;
+        case 18:
+            if (Service->IsBusy())
+                return false;
+            ExpectClubOrder(Root, {TEXT("5W"), TEXT("DR"), TEXT("7I"), TEXT("PW"), TEXT("GW")});
+            Stage = 6;
             Capture(Window, TEXT("clubs"));
             return false;
-        case 9:
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, ClubRowTag), TEXT("the 7i row")));
-        case 10:
+        case 7:
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, ClubRowTag), TEXT("the 7i row")));
+        case 8:
             if (Service->IsBusy())
                 return false;
             Test->TestTrue(TEXT("History title names the club"), RenderedPlay::HasText(Root, TEXT("7i — shot history")));
-            Test->TestTrue(TEXT("Time column names the zone"), RenderedPlay::HasText(Root, TEXT("Time (PT)")));
-            Test->TestTrue(TEXT("Shot time is Pacific"), RenderedPlay::HasText(Root, PacificShotTime()));
+            Test->TestTrue(TEXT("Time column is labeled local"), RenderedPlay::HasText(Root, TEXT("Time (local)")));
+            Test->TestTrue(TEXT("Shot time is local"), RenderedPlay::HasText(Root,
+                FText::AsDateTime(FDateTime(2026, 11, 11), EDateTimeStyle::Medium, EDateTimeStyle::Short).ToString()));
+            {
+                FString Csv;
+                ExportFile = Service->ExportHistory();
+                Test->TestTrue(TEXT("Shot history exports CSV"), FFileHelper::LoadFileToString(Csv, *ExportFile));
+                Test->TestTrue(TEXT("CSV keeps the raw UTC timestamp"), Csv.Contains(TEXT("Timestamp (UTC)"))
+                    && Csv.Contains(TEXT("\"2026-11-11T00:00:00Z\"")));
+            }
             Capture(Window, TEXT("history"));
             return false;
-        case 11:
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, PageBackTag), TEXT("back from one club")));
-        case 12:
+        case 9:
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, PageBackTag), TEXT("back from one club")));
+        case 10:
             if (Service->IsBusy())
                 return false;
             Test->TestTrue(TEXT("Back returns to the club list"), RenderedPlay::HasText(Root, TEXT("7i")) && !RenderedPlay::HasText(Root, TEXT("7i — shot history")));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, ClubRowTag), TEXT("the 7i row again")));
-        case 13:
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, ClubRowTag), TEXT("the 7i row again")));
+        case 11:
             if (Service->IsBusy())
                 return false;
             Test->TestTrue(TEXT("The club's shots reopen"), RenderedPlay::HasText(Root, TEXT("7i — shot history")));
             // Leave one club's shots by the cog rather than Back.
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, TEXT("MenuSettings")), TEXT("the cog from one club's shots")));
-        case 14:
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, TEXT("MenuSettings")), TEXT("the cog from one club's shots")));
+        case 12:
             Test->TestTrue(TEXT("The cog returns to Player"), RenderedPlay::HasText(Root, TEXT("Display name")));
             Test->TestFalse(TEXT("Club averages stay on their own page"), RenderedPlay::HasText(Root, TEXT("CLUB AVERAGES")));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::FindButton(Root, TEXT("View")), TEXT("Shot history's View again")));
-        case 15:
+            return Next(ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("View")), TEXT("Shot history's View again")));
+        case 13:
             if (Service->IsBusy())
                 return false;
             // A cached page would reopen on the last club's shots.
             Test->TestTrue(TEXT("View reopens on the club averages"), RenderedPlay::HasText(Root, TEXT("Shot history")) && RenderedPlay::HasText(Root, TEXT("7i")));
             Test->TestFalse(TEXT("View does not reopen the last club's shots"), RenderedPlay::HasText(Root, TEXT("7i — shot history")));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, PageBackTag), TEXT("back from shot history")));
-        case 16:
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, PageBackTag), TEXT("back from shot history")));
+        case 14:
             Test->TestTrue(TEXT("Back returns to Player"), RenderedPlay::HasText(Root, TEXT("Display name")));
-            return Next(RenderedPlay::ClickOn(*Test, Window, RenderedPlay::WithTag(Root, TEXT("AccountSignOut")), TEXT("the logout icon")));
-        case 17:
+            return Next(ClickOn(Window, RenderedPlay::WithTag(Root, TEXT("AccountSignOut")), TEXT("the logout icon")));
+        case 15:
             Test->TestFalse(TEXT("The logout icon ends the session"), Service->HasSession());
             ExpectTopBar(TEXT("AccountSignIn"), TEXT("AccountSignOut"), TEXT("after logout"));
             ExpectSignInChoices(TEXT("after logout"));
@@ -175,7 +200,7 @@ public:
     }
 
 private:
-    TSharedPtr<SWidget> SettingsPage, TimeZoneControl;
+    TSharedPtr<SWidget> SettingsPage;
     void Start(UWorld& PlayWorld, AUOpenGolfPlayerController& Player)
     {
         StorageRoot = FPaths::ProjectSavedDir() / TEXT("Automation") / FGuid::NewGuid().ToString(EGuidFormats::Digits);
@@ -192,7 +217,13 @@ private:
             else if (Url.EndsWith(TEXT("oauth/token"))) Body = TEXT("{\"access_token\":\"test\",\"refresh_token\":\"test\",\"token_type\":\"Bearer\",\"expires_in\":3600}");
             else if (Url.EndsWith(TEXT("userinfo"))) Body = TEXT("{\"sub\":\"test|visual\"}");
             else if (Url.EndsWith(TEXT("/sync"))) Body = TEXT("{\"id\":\"test-player\",\"display_name\":\"Test Golfer\",\"created_at\":\"2026-11-11T00:00:00Z\"}");
-            else if (Url.Contains(TEXT("/clubs/carry"))) Body = TEXT("[{\"club\":\"7I\",\"shots\":12,\"avg_carry_yd\":150.5}]");
+            else if (Url.Contains(TEXT("/clubs/carry")))
+            {
+                const double WoodCarry = CarryRequests++ == 0 ? 225.0 : 250.0;
+                Body = FString::Printf(TEXT("[{\"club\":\"PW\",\"shots\":6,\"avg_carry_yd\":101.2},"
+                    "{\"club\":\"GW\",\"shots\":4},{\"club\":\"DR\",\"shots\":5,\"avg_carry_yd\":225},"
+                    "{\"club\":\"5W\",\"shots\":3,\"avg_carry_yd\":%.1f},{\"club\":\"7I\",\"shots\":12,\"avg_carry_yd\":150.5}]"), WoodCarry);
+            }
             else if (Url.Contains(TEXT("/shots?"))) Body = TEXT("[{\"id\":\"019a0000-0000-7000-8000-000000000001\",\"club\":\"7I\",\"shot_at\":\"2026-11-11T00:00:00Z\",\"carry_yd\":150.5,\"roll_yd\":-2.1,\"ball_speed_mph\":105.5,\"launch_angle_deg\":18.0,\"total_spin_rpm\":6000}]");
             auto Cancel = MakeShared<OpenGolfOnline::FRequestCancellation, ESPMode::ThreadSafe>();
             Cancel->Finished.store(true);
@@ -209,8 +240,6 @@ private:
             }
             return Cancel;
         }, StorageRoot);
-        // The time zone is changed through the menu; it is restored at the end. Automation never writes the player's file.
-        SavedPreferences = GolfSettings::Get();
         Controller = &Player;
         Menu = SNew(SMainMenu).Controller(&Player).Online(Service.Get());
         PlayWorld.GetGameViewport()->AddViewportWidgetContent(Menu.ToSharedRef(), 1000);
@@ -225,6 +254,29 @@ private:
         ++Stage;
         Until = GetCurrentRunTime() + 1;
         return false;
+    }
+
+    bool ClickOn(const TSharedRef<SWindow>& Window, const TSharedPtr<SWidget>& Widget, const FString& Label)
+    {
+        if (Widget.IsValid())
+            FSlateApplication::Get().SetCursorPos(RenderedPlay::PointOn(*Widget));
+        return RenderedPlay::ClickOn(*Test, Window, Widget, Label);
+    }
+
+    void ExpectClubOrder(const TSharedRef<SWidget>& Root, TArrayView<const TCHAR* const> Clubs)
+    {
+        TOptional<double> PreviousY;
+        for (const TCHAR* Club : Clubs)
+        {
+            const FName Tag(*(FString(TEXT("ClubRow:")) + Club));
+            const TSharedPtr<SWidget> Row = RenderedPlay::WithTag(Root, Tag);
+            if (!Test->TestTrue(FString::Printf(TEXT("Shows club %s"), Club), Row.IsValid()))
+                return;
+            const double Y = RenderedPlay::PointOn(*Row).Y;
+            if (PreviousY.IsSet())
+                Test->TestTrue(FString::Printf(TEXT("Club %s follows the previous club"), Club), Y > PreviousY.GetValue());
+            PreviousY = Y;
+        }
     }
 
     /** The account icon for the session shows alone, between the launch-monitor status and the cog. */
@@ -281,11 +333,15 @@ private:
         if (Controller.IsValid())
         {
             Controller->SetMainMenuOpen(false);
-            GolfSettings::Commit(SavedPreferences, Controller->GetWorld());
         }
         if (Service.IsValid()) Service->CancelSignIn();
         Menu.Reset();
         Service.Reset();
+        if (!ExportFile.IsEmpty())
+        {
+            IFileManager::Get().Delete(*ExportFile);
+            IFileManager::Get().DeleteDirectory(*FPaths::GetPath(ExportFile));
+        }
         if (!StorageRoot.IsEmpty()) IFileManager::Get().DeleteDirectory(*StorageRoot, false, true);
         FScreenshotRequest::Reset();
     }
@@ -294,11 +350,10 @@ private:
     TStrongObjectPtr<UOpenGolfOnlineSubsystem> Service;
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
     TSharedPtr<SMainMenu> Menu;
-    GolfSettings::FPreferences SavedPreferences;
     OpenGolfOnline::FHttpCallback DeferredProfileReply;
-    int32 Stage = 0;
+    int32 Stage = 0, CarryRequests = 0;
     double Until = 0, ProfileReadyAt = 0;
-    FString File, StorageRoot, ScreenRoot, ProfileBody;
+    FString File, StorageRoot, ScreenRoot, ProfileBody, ExportFile;
 };
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOnlineVisualTest, "UOpenGolf.Visual.Online",

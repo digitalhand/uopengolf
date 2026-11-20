@@ -29,7 +29,7 @@ public:
     void Open();
     void NavigateBack() { Back(); }
     /** Opens the menu, if closed, at Settings › Launch Monitor, where the launch monitor is chosen and connected. */
-    void OpenLaunchMonitorSettings();
+    void OpenGeneralSettings();
     bool IsOpen() const { return bOpen; }
     /** True once Training has been entered: the home screen is then the pause menu. */
     bool IsPauseMenu() const { return bStarted; }
@@ -78,7 +78,7 @@ private:
     void AddFolderRow(TSharedRef<SVerticalBox> Rows, const TCHAR* Label, FString GolfSettings::FPreferences::*Member, bool bDiagnostic);
     /** Whether a row is shown under the current search. */
     bool Matches(const FString& Label, const FString& Help) const;
-    /** Settings → Player: the account (sign in, or the profile and Shot history), Time zone and player preferences. */
+    /** Settings → Player: the account (sign in, or the profile and Shot history) and player preferences. */
     void BuildPlayer(TSharedRef<SVerticalBox> Rows);
     /** Settings → Launch Monitor: the live connection, the provider choice and the Open Connect connector. */
     void BuildLaunchMonitor(TSharedRef<SVerticalBox> Rows);

@@ -59,6 +59,9 @@ void SWindControl::Construct(const FArguments& Args)
                     [
                         // Over the indicator: an outline while hovered or open, and the click that opens the panel.
                         SAssignNew(ClickArea, SButton).ButtonStyle(FCoreStyle::Get(),"NoBorder").ContentPadding(0).Tag(TEXT("WindToggle"))
+#if WITH_ACCESSIBILITY
+                        .AccessibleText(FText::FromString(TEXT("Wind settings")))
+#endif
                         .OnClicked_Lambda([this]
                         {
                             if (!Controller.IsValid())
@@ -78,13 +81,6 @@ void SWindControl::Construct(const FArguments& Args)
                                 })
                             ]
                         ]
-                    ]
-                    + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 3, 0, 0)
-                    [
-                        SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).Visibility(EVisibility::HitTestInvisible)
-                        .ColorAndOpacity_Lambda([IsOpen] { return FSlateColor(IsOpen() ? HudStyle::AccentColor() : HudStyle::LabelColor()); })
-                        .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor)
-                        .Text(FText::FromString(TEXT("Wind [W]")))
                     ]
                     + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 0)
                     [

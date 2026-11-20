@@ -7,7 +7,7 @@
 class SWidget;
 class UUserWidget;
 
-/** Range HUD: shot tiles, wind and its controls, launch-monitor status, play buttons and the optional wind debug overlay. */
+/** Range HUD: shot tiles, course header and settings, play toolbar, wind controls, and the optional wind debug overlay. */
 UCLASS()
 class UOPENGOLF_API AUOpenGolfHUD : public AHUD
 {

@@ -5,7 +5,7 @@
 #include "UI/Common/HudStyle.h"
 #include "Widgets/SLeafWidget.h"
 
-/** A round HUD button with a drawn icon: the hole flag (play mode) or a ball (place the ball). */
+/** A toolbar button with a drawn icon: the hole flag (play mode) or a ball (place the ball). */
 class SHudIconButton : public SLeafWidget
 {
 public:
@@ -15,11 +15,11 @@ public:
         Ball
     };
 
-    static constexpr float Size = 44.0f;
+    static constexpr float Size = HudStyle::ToolbarButtonSize;
 
     SLATE_BEGIN_ARGS(SHudIconButton) : _Icon(EIcon::Flag) {}
     SLATE_ARGUMENT(EIcon, Icon)
-    /** Draws the accent ring: the mode or tool is on. */
+    /** Draws the accent outline: the mode or tool is on. */
     SLATE_ATTRIBUTE(bool, IsActive)
     SLATE_EVENT(FSimpleDelegate, OnClicked)
     SLATE_END_ARGS()
@@ -36,18 +36,11 @@ public:
     virtual FCursorReply OnCursorQuery(const FGeometry& Geometry, const FPointerEvent& Event) const override;
 
 private:
-    void PaintFlag(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
-    void PaintBall(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
-
     EIcon Icon = EIcon::Flag;
     TAttribute<bool> IsActive;
     FSimpleDelegate OnClicked;
     bool bPressed = false;
 
-    // White fills tinted when drawn; the radius makes each a circle or pill at its drawn size.
-    FSlateRoundedBoxBrush Disc{FLinearColor::White, Size * 0.5f};
-    FSlateRoundedBoxBrush Ring{FLinearColor::Transparent, Size * 0.5f, HudStyle::AccentColor(), 2.5f};
-    FSlateRoundedBoxBrush BallFill{FLinearColor::White, 10.0f};
-    FSlateRoundedBoxBrush Dot{FLinearColor::White, 1.5f};
-    FSlateRoundedBoxBrush Pill{FLinearColor::White, 2.5f};
+    const FButtonStyle Style = HudStyle::ToolbarButton();
+    FSlateRoundedBoxBrush Outline{FLinearColor::Transparent, HudStyle::TileRadius, HudStyle::AccentColor(), 1.0f};
 };

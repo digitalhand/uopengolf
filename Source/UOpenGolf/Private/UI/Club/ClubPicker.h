@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#include "Animation/CurveSequence.h"
 #include "Widgets/SCompoundWidget.h"
-#include "OpenGolfAccountStyle.h"
 #include "LaunchMonitorTypes.h"
+#include "Styling/SlateTypes.h"
 class UOpenLaunchMonitorSubsystem;
 
 /**
- * The range HUD's club choice: the club face and its standard abbreviation (PW, 7i), opening a list of every club.
- * Its size never changes with the club, so the HUD column beside it stays put.
+ * A compact club selector with a scrollable drawer beneath it.
  */
 class SClubPicker : public SCompoundWidget
 {
@@ -16,7 +16,10 @@ public:
     void Construct(const FArguments& Args);
 private:
     TSharedPtr<class SComboButton> Picker;
-    FOpenGolfAccountStyle Style;
+    FCurveSequence DrawerSlide{0.0f, 0.14f, ECurveEaseFunction::QuadOut};
+    FSlateBrush DrawerBrush;
+    FComboButtonStyle ComboStyle;
+    FButtonStyle RowStyle;
+    FButtonStyle ToggleStyle;
     TWeakObjectPtr<UOpenLaunchMonitorSubsystem> Monitor;
-
 };

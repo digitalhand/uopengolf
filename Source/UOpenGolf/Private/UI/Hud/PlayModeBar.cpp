@@ -2,6 +2,12 @@
 #include "UI/Hud/PlayModeBar.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Hud/ShotDisplay.h"
+#include "UI/Club/ClubPicker.h"
+#include "UI/Common/HudStatusGlyph.h"
+#include "Engine/GameInstance.h"
+#include "OpenGolfOnlineSubsystem.h"
+#include "OpenLaunchMonitorSubsystem.h"
+#include "Widgets/Input/SButton.h"
 
 #include "Engine/World.h"
 #include "UI/Common/HudLayers.h"
@@ -11,7 +17,6 @@
 #include "Styling/CoreStyle.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfPlayerController.h"
-#include "UOpenGolfRange.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SDPIScaler.h"
@@ -34,6 +39,8 @@ void SPlayModeBar::Construct(const FArguments& Args)
     SetTag(TEXT("PlayControls"));
     SetVisibility(TAttribute<EVisibility>::CreateSP(this, &SPlayModeBar::GetBarVisibility));
     Refresh();
+    RecordStyle = HudStyle::ToolbarButton();
+    const UGameInstance* Instance = Controller.IsValid() ? Controller->GetGameInstance() : nullptr;
     auto HoleOnly = [this] { return bHoleMode ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; };
     // clang-format off
     ChildSlot
@@ -46,20 +53,35 @@ void SPlayModeBar::Construct(const FArguments& Args)
                 SNew(SVerticalBox)
                 + SVerticalBox::Slot().AutoHeight()
                 [
-                    SNew(SHorizontalBox)
-                    + SHorizontalBox::Slot().AutoWidth()
+                    SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(3)).Visibility(EVisibility::SelfHitTestInvisible)
                     [
-                        MakeIconButton(SHudIconButton::EIcon::Flag, TAttribute<bool>::CreateLambda([this] { return bHoleMode; }),
-                            FSimpleDelegate::CreateLambda([this] { if (Controller.IsValid()) Controller->TogglePlayMode(); }),
-                            TAttribute<FText>::CreateLambda([this] { return FText::FromString(bHoleMode ? TEXT("Range [G]") : TEXT("Game Mode [G]")); }))
-                    ]
-                    + SHorizontalBox::Slot().AutoWidth().Padding(10, 0, 0, 0)
-                    [
-                        SNew(SBox).Visibility_Lambda(HoleOnly)
+                        SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible).Tag(TEXT("PlayToolbar"))
+                        + SHorizontalBox::Slot().AutoWidth()
                         [
-                            MakeIconButton(SHudIconButton::EIcon::Ball, TAttribute<bool>::CreateLambda([this] { return bPlacing; }),
-                                FSimpleDelegate::CreateLambda([this] { if (Controller.IsValid()) Controller->TogglePlacingBall(); }),
-                                FText::FromString(TEXT("Place ball [B]")))
+                            SNew(SClubPicker).Tag(TEXT("ClubPicker"))
+                            .Monitor(Instance ? Instance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr)
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(SHudIconButton).Icon(SHudIconButton::EIcon::Flag).Tag(TEXT("GameModeToggle"))
+                            .IsActive_Lambda([this] { return bHoleMode; })
+                            .ToolTipText_Lambda([this] { return FText::FromString(bHoleMode ? TEXT("Return to Training (G)") : TEXT("Game Mode (G)")); })
+#if WITH_ACCESSIBILITY
+                            .AccessibleText(FText::FromString(TEXT("Toggle Game Mode")))
+#endif
+                            .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->TogglePlayMode(); })
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth()[ MakeRecordButton() ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(SHudIconButton).Icon(SHudIconButton::EIcon::Ball)
+                            .Visibility_Lambda([this] { return bHoleMode ? EVisibility::Visible : EVisibility::Collapsed; })
+                            .IsActive_Lambda([this] { return bPlacing; })
+                            .ToolTipText(FText::FromString(TEXT("Place ball (B)")))
+#if WITH_ACCESSIBILITY
+                            .AccessibleText(FText::FromString(TEXT("Place ball")))
+#endif
+                            .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->TogglePlacingBall(); })
                         ]
                     ]
                 ]
@@ -68,15 +90,6 @@ void SPlayModeBar::Construct(const FArguments& Args)
                     SNew(SBox).Visibility_Lambda(HoleOnly)
                     [
                         SNew(SVerticalBox)
-                        + SVerticalBox::Slot().AutoHeight().Padding(TileGap)
-                        [
-                            SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Visibility(EVisibility::HitTestInvisible)
-                            [
-                                SNew(STextBlock).Font(HudStyle::Font("Bold", 10)).ColorAndOpacity(HudStyle::TextColor())
-                                .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor)
-                                .Text_Lambda([this] { return HoleText; })
-                            ]
-                        ]
                         // A practice ball counts no strokes or putts, so its tiles are left out.
                         + SVerticalBox::Slot().AutoHeight()
                         [
@@ -134,20 +147,42 @@ void SPlayModeBar::Construct(const FArguments& Args)
     // clang-format on
 }
 
-TSharedRef<SWidget> SPlayModeBar::MakeIconButton(SHudIconButton::EIcon Icon, TAttribute<bool> IsActive, FSimpleDelegate OnClicked, TAttribute<FText> Caption)
+TSharedRef<SWidget> SPlayModeBar::MakeRecordButton()
 {
-    // clang-format off
-    return SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+    auto Color = [this] { return HudStyle::RecordColor(bRecording, FailedCount); };
+    auto Tip = [this]
+    {
+        FString Text = ShotDisplay::RecordTip(bRecording, bSignedIn);
+        if (bRecording)
+            Text += FString::Printf(TEXT("\n%d saved"), RecordedCount);
+        if (FailedCount > 0)
+            Text += FString::Printf(TEXT("\n%d unsaved"), FailedCount);
+        const UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
+        const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
+        if (FailedCount > 0 && Mode)
+            Text += TEXT("\n") + Mode->GetRecordingError() + TEXT(" - retrying");
+        return FText::FromString(Text);
+    };
+    return SNew(SButton).ButtonStyle(&RecordStyle).ContentPadding(FMargin(0)).Tag(TEXT("RecordToggle"))
+        .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
+        .ToolTipText_Lambda(Tip)
+#if WITH_ACCESSIBILITY
+        .AccessibleText_Lambda(Tip)
+#endif
+        .OnClicked_Lambda([this]
+        {
+            if (Controller.IsValid()) Controller->ToggleRecordShots();
+            Refresh();
+            return FReply::Handled();
+        })
         [
-            SNew(SHudIconButton).Icon(Icon).IsActive(IsActive).OnClicked(OnClicked)
-        ]
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0, 3, 0, 0)
-        [
-            SNew(STextBlock).Font(HudStyle::Font("Regular", 8)).ColorAndOpacity(HudStyle::LabelColor())
-            .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor).Text(Caption).Visibility(EVisibility::HitTestInvisible)
+            SNew(SBox).WidthOverride(HudStyle::ToolbarButtonSize).HeightOverride(HudStyle::ToolbarButtonSize)
+            .HAlign(HAlign_Center).VAlign(VAlign_Center)
+            [
+                SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Record)
+                .Color_Lambda(Color).Filled_Lambda([this] { return bRecording; })
+            ]
         ];
-    // clang-format on
 }
 
 TSharedRef<SWidget> SPlayModeBar::MakeTile(TAttribute<FText> Value, const TCHAR* Label)
@@ -189,14 +224,20 @@ void SPlayModeBar::Refresh()
     bPlacementView = false;
     BannerOpacity = 0.0f;
     OverCupText = FText::GetEmpty();
+    bRangeMode = Mode && !bHoleMode;
+    bRecording = Mode && Mode->IsRecordingShots();
+    RecordedCount = Mode ? Mode->GetRecordedShotCount() : 0;
+    FailedCount = Mode ? Mode->GetFailedRecordingCount() : 0;
+    const UGameInstance* Instance = World ? World->GetGameInstance() : nullptr;
+    const UOpenGolfOnlineSubsystem* Online = Instance ? Instance->GetSubsystem<UOpenGolfOnlineSubsystem>() : nullptr;
+    bSignedIn = Online && Online->HasSession();
     if (!bHoleMode || !Ball)
         return;
 
     const FOpenGolfHoleRound& Round = Mode->GetHoleRound();
     const FOpenFairwayShotResult& Result = Ball->GetResult();
-    // Placing a ball makes the hole practice, so the heading says so from the moment B is pressed.
+    // Hide scoring during placement and practice.
     bPlacementView = bPlacing || Round.bPractice;
-    HoleText = FText::FromString(ShotDisplay::HoleHeading(Round.Par, GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM), bPlacementView));
     // The stroke about to be played, or the final count once holed.
     StrokeText = FText::AsNumber(Round.bHoled ? Round.Strokes : Round.Strokes + 1);
     ToPinText = FText::FromString(Ball->IsHoled() ? FString(TEXT("In")) : GolfSettings::RoundDistance(Mode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green));

@@ -74,10 +74,6 @@ bool FShotRecordingTest::RunTest(const FString& Parameters)
     const FString DefaultRoot = DefaultRootDir();
     TestTrue(TEXT("Default root is in the user's documents"), DefaultRoot.StartsWith(FPlatformProcess::UserDir()));
     TestTrue(TEXT("Default root folder"), DefaultRoot.EndsWith(TEXT("UOpenGolf/Saved/ShotRecordings")));
-    TestEqual(TEXT("Record count off"), ShotDisplay::RecordCount(false, 4, 0), FString());
-    TestEqual(TEXT("Record count on"), ShotDisplay::RecordCount(true, 3, 0), FString(TEXT("3")));
-    TestEqual(TEXT("Record count with unsaved shots"), ShotDisplay::RecordCount(true, 3, 2), FString(TEXT("3 · 2 unsaved")));
-    TestEqual(TEXT("Unsaved shots after stopping"), ShotDisplay::RecordCount(false, 3, 2), FString(TEXT("2 unsaved")));
     TestEqual(TEXT("Record accessible name, signed in"), ShotDisplay::RecordTip(true, true),
         FString(TEXT("Recording: shots are saved on this computer and to your online profile. Click or press F9 to stop.")));
     TestEqual(TEXT("Record accessible name, signed out"), ShotDisplay::RecordTip(true, false),

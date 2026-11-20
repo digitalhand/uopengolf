@@ -11,9 +11,9 @@
  */
 namespace HudLayers
 {
-    /** Shot tiles, status box and the wind indicator; only the club picker and the status box's buttons take clicks. */
+    /** Shot tiles, course header and wind indicator. The header menu takes clicks. */
     inline constexpr int32 ShotHud = 5;
-    /** Play buttons and the wind controls, over the shot HUD. */
+    /** Club, game mode, recording and wind controls, over the shot HUD. */
     inline constexpr int32 Controls = 6;
     /** The test-shot panel, which hides the layers below while it is open. */
     inline constexpr int32 TestShotPanel = 10;
