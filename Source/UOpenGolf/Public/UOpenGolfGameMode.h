@@ -10,6 +10,7 @@
 class AOpenFairwayBall;
 class UGolfGimmieIndicator;
 class AUOpenGolfRange;
+class UGolfCourseDefinition;
 struct FLaunchMonitorClubData;
 struct FLaunchMonitorShot;
 
@@ -21,8 +22,9 @@ namespace ShotRecording
 }
 
 /**
- * Runs range practice and hole play, receives launch-monitor shots and records device data.
- * Range mode tees up each shot. Hole mode plays from the current lie and counts strokes and putts.
+ * Runs Training (Range mode) and course rounds (Hole mode), receives launch-monitor shots and records device data.
+ * Range mode tees up each shot. A course round, entered by level travel with ?Course=<definition>, plays from the
+ * current lie, counts strokes and putts, and announces OnRoundComplete once the hole-out banner has been shown.
  * Shot results remain available until the next launch.
  */
 UCLASS(Config = Game)
@@ -33,6 +35,8 @@ class UOPENGOLF_API AUOpenGolfGameMode : public AGameModeBase
 public:
     AUOpenGolfGameMode();
 
+    /** Reads the URL options: ?Course=<definition> starts a course round, anything else is Training. */
+    virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
     virtual void StartPlay() override;
     float GetGimmieRadiusFeet() const { return SessionGimmieFeet; }
 
@@ -49,24 +53,41 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf")
     void ResetBall();
 
+    /** The course being played; null in Training. */
+    const UGolfCourseDefinition* GetCourse() const { return Course; }
+    /** A scored course round (Hole mode), as opposed to Training. */
+    bool IsCourseRound() const { return PlayMode == EOpenGolfPlayMode::Hole; }
+    /** A course round whose ball has dropped: no more shots are taken and the scorecard follows. */
+    bool IsRoundComplete() const { return IsCourseRound() && Round.bHoled; }
+    /** Par for the round: the course's in a course round, the range's in Training. */
+    int32 GetPar() const;
+    /** The hole being played, from 1. Every course is a single hole for now. */
+    int32 GetHoleNumber() const { return 1; }
+
+    DECLARE_MULTICAST_DELEGATE(FOnRoundComplete);
+    /** A course round has ended and its hole-out banner has been shown for HoleOutDelayS. */
+    FOnRoundComplete OnRoundComplete;
+
     bool IsPractice() const { return Round.bPractice; }
     FVector GetPracticeOrigin() const { return PracticeOrigin; }
 
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Play")
     EOpenGolfPlayMode GetPlayMode() const { return PlayMode; }
 
-    /** Switches between the range and playing the hole; either way the ball goes back to the tee. Ignored mid-shot. */
-    UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Play")
-    bool SetPlayMode(EOpenGolfPlayMode Mode);
-
-    UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Play")
-    bool TogglePlayMode();
+#if WITH_DEV_AUTOMATION_TESTS
+    /**
+     * Tests only: switches the running world between Training and a round of InCourse without level travel, as a fresh
+     * session; players enter courses through travel (?Course=). Hole mode without a course counts strokes but keeps
+     * Training's wind. Ignored mid-shot.
+     */
+    bool SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDefinition* InCourse = nullptr);
+#endif
 
     /** The hole being played; strokes are only counted in Hole mode. */
     const FOpenGolfHoleRound& GetHoleRound() const { return Round; }
 
     /**
-     * Places the ball at rest on the ground at Location to practise from there (Hole mode only), aimed at the cup. It
+     * Places the ball at rest on the ground at Location to practise from there (Training only), aimed at the cup. It
      * adds no stroke, but the hole then counts as practice. False while the ball is moving or too close to the cup.
      */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Play")
@@ -114,8 +135,14 @@ public:
     /** Hole mode: seconds a stopped ball's result shows before the view turns to the next shot. */
     static constexpr float AddressDelayS = 2.0f;
 
-    /** Hole mode: seconds after a hole-out before the ball goes back to the tee for a new hole. */
+    /** Hole mode: seconds to show the hole-out banner before OnRoundComplete opens the final scorecard. */
     static constexpr float HoleOutDelayS = 5.0f;
+
+    /** Practice lie: how far (cm) the ball may sit from where it was placed and still be at address. */
+    static constexpr float PracticeAddressToleranceCm = 2.0f;
+
+    /** Range mode: how far (cm) the ball may sit from the tee and still be at address. */
+    static constexpr float TeeAddressToleranceCm = 200.0f;
 
     /** Converts a launch-monitor shot; false when speed or launch angles were not measured. */
     static bool ToLaunch(const FLaunchMonitorShot& Shot, FOpenFairwayLaunch& OutLaunch);
@@ -136,6 +163,8 @@ private:
 
     void ResetAfterShot();
     void ReadyForNextShot();
+    /** After the hole-out banner: tells listeners (the player's menu) that the round is over. */
+    void FinishRound();
     /** Turns the ball (and its aim line) toward the cup. */
     void AimAtCup();
     void PlaceOnTee();
@@ -146,6 +175,10 @@ private:
 
     UPROPERTY()
     TObjectPtr<AOpenFairwayBall> Ball;
+
+    /** Set by InitGame for a course round; kept loaded for the round. */
+    UPROPERTY(Transient)
+    TObjectPtr<const UGolfCourseDefinition> Course;
 
     // Shared, not unique: generated code destroys the mode where the recorder type is incomplete.
     TSharedPtr<ShotRecording::FShotRecorder> Recorder;
@@ -163,7 +196,8 @@ private:
     double HoledTime = -1.0;
     FTimerHandle RecordingTimer;
     float SessionGimmieFeet = 0;
-    float CourseWindMph = 0, CourseWindFrom = 0;
+    /** The wind saved with the map, which Training starts from when the starting-wind preference is "Course default". */
+    float MapWindMph = 0, MapWindFromDeg = 0;
     int32 LastScoredShot = INDEX_NONE;
     UPROPERTY()
     TObjectPtr<UGolfGimmieIndicator> GimmieIndicator;

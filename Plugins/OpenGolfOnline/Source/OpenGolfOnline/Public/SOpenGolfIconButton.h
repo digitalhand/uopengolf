@@ -4,7 +4,7 @@
 #include "OpenGolfAccountStyle.h"
 
 /** Line icons drawn by the account widgets, so header, back and delete controls read as one set. */
-enum class EOpenGolfAccountIcon : uint8 { SignIn, Settings, SignOut, Back, Close, Edit };
+enum class EOpenGolfAccountIcon : uint8 { SignIn, Settings, SignOut, Back, Close, Edit, Refresh };
 
 /**
  * A square button with a drawn icon. Label names it for screen readers; it shows no tooltip. Use the standard

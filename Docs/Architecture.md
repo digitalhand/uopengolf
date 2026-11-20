@@ -4,14 +4,14 @@
 
 The game module is `UOpenGolf`. Its C++ GameMode uses the map's saved range controller
 (`AUOpenGolfRange`) and spawns a game-side `AUOpenGolfBall` on its tee. The terrain owns the ground. The flagstick and lighting are saved actors, selectable before Play. Multiple controllers are rejected to prevent duplicate
-scenes. Range shots start from the tee; hole play uses the current lie and counts strokes and putts.
-In range mode, the GameMode returns a stopped ball to the tee after the configured delay; the ball keeps
+scenes. Training (Range mode) shots start from the tee; a course round (Hole mode) uses the current lie and counts
+strokes and putts. In range mode, the GameMode returns a stopped ball to the tee after the configured delay; the ball keeps
 its last shot result until the next launch. The HUD
 adds a Slate widget (`SRangeHud`) with shot tiles and a course header with a settings button; the player controller
 binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D held
 to turn the aim) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
 actions and one mapping context built in code (no input assets); a HUD panel that holds keyboard
-focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no player pawn. Hole play supports a par 4, practice placement and gimmies. `UOpenGolf`
+focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no player pawn. A course round supports a par 4 and gimmies; Training places practice lies. `UOpenGolf`
 is the saved range map used for editor and game startup, and the project's only map. A world
 without a range controller gets one with daylight and a flag; the ground always comes from a
 terrain area.
@@ -25,6 +25,39 @@ View Yaw Deg to try directions. The default preview is 10 mph from the right. Th
 Canvas sets the top-center position; gameplay embeds this same asset in the Slate HUD.
 The native `UOpenGolfWindIndicator` wraps `SWindIndicator`, sharing the drawing in both views.
 The editor command `uopengolf.CreateWindIndicatorAsset` creates the asset only if missing.
+
+### Courses and rounds
+
+Each installed course is a `UGolfCourseDefinition` data asset (primary asset type `GolfCourse`) in
+`/Game/UOpenGolf/Courses`: its display name, a soft reference to its map, a menu preview texture (asset bundle
+`Menu`), holes, par, length and the round's fixed wind. `Config/DefaultGame.ini` registers the type with the Asset
+Manager and always cooks it. `UGolfCourseSubsystem` (a game-instance subsystem, so it survives level travel) loads every
+definition with its preview when the game starts; the main menu's Courses browser (`SCourseBrowser`) lists them.
+The editor command `uopengolf.CreateCourseAssets` creates the bundled Savanna Range definition and imports its preview
+from `Assets/Images/Courses` only if they are missing.
+
+**Play** travels to the course's map with `?Course=<definition name>`. The GameMode reads the option in `InitGame`;
+with a known course it runs a round (Hole mode) at the course's par, and the range holds the course's wind whatever the
+console or HUD set. There is no ball placement, recording or wind panel in a round. When the ball drops, the GameMode
+waits `HoleOutDelayS` for the banner, then broadcasts `OnRoundComplete`; the player controller listens and opens the
+menu, which shows the final scorecard (**Play again** or **Courses**). Leaving a round opens the game's default map
+(`GameDefaultMap`) with `?Courses`, which reopens the browser, or `?MainMenu`. `UTrainingWindSubsystem` keeps
+Training's wind across this travel, until the Game Defaults starting wind changes.
+
+### Hole map
+
+The HUD's minimap (`SHoleMinimap`) draws a top-down picture of the hole that the range captures itself:
+`AUOpenGolfRange` frames the tee and cup in an `FHoleMapFrame` (map up is tee to cup) and renders an orthographic
+`USceneCaptureComponent2D` once into a 480×768 render target. It captures again only when the grass switch or the
+layout changes, so the capture costs nothing per frame. Each capture waits until the scene is ready: nothing still
+loading and, in editor builds (the editor and `-game` runs of it), no textures, meshes or shaders still compiling.
+After level travel those assets are reloaded and rebuilt, and until then the renderer draws checkerboard placeholders
+that a one-off picture would keep. The minimap stays hidden while the range waits (`Hidden`, not `Collapsed`:
+`SScaleBox` stops updating a collapsed child, so it would never reappear); after
+`AUOpenGolfRange::HoleMapReadyTimeoutS` (10 s) it captures anyway and again once the scene is ready. The ball, its tracer and the gimmie ring set
+`bHiddenInSceneCapture`, so only the course shows; the minimap draws the tee, flag and ball over the picture with
+`FHudPen`. The same frame converts a click on the map back to the world, where `AimToward` turns the aim at address.
+Framing is set on the range actor (**UOpenGolf › Minimap**: end margin, minimum width, side offset).
 
 A shot result includes `TerminationReason` (`None`, `Rest`, or `SafetyStop`). A safety stop
 still ends motion and schedules a re-tee, but the HUD labels it interrupted and does not show
@@ -136,11 +169,11 @@ by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
 
 | Folder | Contents |
 | --- | --- |
-| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, icon button, slider, switch, status glyph, HUD tooltip, page header |
-| `Hud/` | The Training HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
+| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, `FHudPen` (outlined lines for self-drawn widgets), icon button, slider, switch, status glyph, HUD tooltip, page header |
+| `Hud/` | The play HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, the hole minimap (`SHoleMinimap`), shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
 | `Club/` | Club picker and club-face glyph |
 | `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |
-| `Menu/` | `SMainMenu` (home, pause, Settings, Shot history, dialogs) and display-mode options |
+| `Menu/` | `SMainMenu` (home with its launch buttons, pause, Settings, Shot history, dialogs, the final scorecard), the Courses browser (`SCourseBrowser`) and display-mode options |
 
 A widget used by more than one area goes in `Common/`; a new screen or HUD feature gets its
 own folder. Raw-pointer Slate arguments always get a `nullptr` default, which

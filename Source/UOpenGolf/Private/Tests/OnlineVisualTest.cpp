@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // The account in the real menu against a stubbed online service: the top bar's sign-in and logout icons beside the
-// cog, Settings › Player's account, Shot history with local dates, and abbreviated clubs.
+// cog, the home page's QR sign-in, Settings › Player's account, Shot history with local dates, club averages and
+// abbreviated clubs.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Tests/RenderedPlay.h"
@@ -18,6 +19,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
+#include "Widgets/Layout/SScrollBox.h"
 
 namespace OnlineVisualTestDetail
 {
@@ -69,6 +71,14 @@ public:
             // Home page, signed out.
             Test->TestFalse(TEXT("No Settings button on the home page"), RenderedPlay::FindButton(Root, TEXT("Settings")).IsValid());
             ExpectTopBar(TEXT("AccountSignIn"), TEXT("AccountSignOut"), TEXT("signed out"));
+            {
+                // Signed out, the home page offers the QR sign-in under its buttons, without opening Settings.
+                const TSharedPtr<SWidget> Qr = RenderedPlay::WithTag(Root, TEXT("HomeSignInQr")), Exit = RenderedPlay::FindButton(Root, TEXT("Exit"));
+                Test->TestTrue(TEXT("The home page shows the QR sign-in"), IsShownWidget(Qr));
+                if (IsShownWidget(Qr) && Exit.IsValid())
+                    Test->TestTrue(TEXT("The QR sign-in sits under Exit"), RenderedPlay::PointOn(*Qr).Y > RenderedPlay::PointOn(*Exit).Y);
+                Test->TestTrue(TEXT("The home QR shows its short code"), RenderedPlay::HasText(Root, TEXT("Code TEST-CODE")));
+            }
             Test->TestFalse(TEXT("Starting Training does not require sign-in"), Service->HasSession());
             if (!ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("Training")), TEXT("Training while signed out")))
                 return true;
@@ -98,9 +108,10 @@ public:
             Test->TestFalse(TEXT("Signed out, Player has no shot history"), RenderedPlay::HasText(Root, TEXT("Shot history")));
             return Next(true);
         case 2:
-            // The QR code needs no button: it is requested once Settings shows it. The stubbed service approves it at
-            // the first poll, five seconds later.
+            // The QR code needs no button: it is requested once the home page or Settings shows it. The stubbed
+            // service keeps it pending until now, then approves it at the next poll, at most five seconds later.
             Test->TestTrue(TEXT("The QR code's short code shows"), RenderedPlay::HasText(Root, TEXT("Code TEST-CODE")));
+            bApproveQr = true;
             Capture(Window, TEXT("qr"));
             return false;
         case 3:
@@ -121,19 +132,20 @@ public:
         case 5:
             return Next(ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("View")), TEXT("Shot history's View")));
         case 6:
-            if (Service->IsBusy())
+            if (Service->IsBusy() || Service->IsLoadingClubAverages())
                 return false;
             Test->TestTrue(TEXT("Shot history page"), RenderedPlay::HasText(Root, TEXT("Shot history")));
-            for (const TCHAR* Label : {TEXT("7i"), TEXT("150.5 yd average"), TEXT("12 shots")})
-                Test->TestTrue(FString(TEXT("Club row shows ")) + Label, RenderedPlay::HasText(Root, Label));
+            // Every club's shots are the stub's one 7i shot: 105.5 mph, 150.5 yd carry and -2.1 yd roll.
+            for (const TCHAR* Label : {TEXT("Ball speed"), TEXT("Total"), TEXT("7i"), TEXT("105.5 mph"), TEXT("150.5 yd"), TEXT("148.4 yd"), TEXT("12 shots")})
+                Test->TestTrue(FString(TEXT("Club averages show ")) + Label, RenderedPlay::HasText(Root, Label));
             ExpectClubOrder(Root, {TEXT("DR"), TEXT("5W"), TEXT("7I"), TEXT("PW"), TEXT("GW")});
-            if (!ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("Refresh")), TEXT("Refresh club averages")))
+            if (!ClickOn(Window, RenderedPlay::WithTag(Root, TEXT("RefreshHistory")), TEXT("Refresh club averages")))
                 return true;
             Stage = 18;
             Until = GetCurrentRunTime() + 1;
             return false;
         case 18:
-            if (Service->IsBusy())
+            if (Service->IsBusy() || Service->IsLoadingClubAverages())
                 return false;
             ExpectClubOrder(Root, {TEXT("5W"), TEXT("DR"), TEXT("7I"), TEXT("PW"), TEXT("GW")});
             Stage = 6;
@@ -147,7 +159,8 @@ public:
             Test->TestTrue(TEXT("History title names the club"), RenderedPlay::HasText(Root, TEXT("7i — shot history")));
             Test->TestTrue(TEXT("Time column is labeled local"), RenderedPlay::HasText(Root, TEXT("Time (local)")));
             Test->TestTrue(TEXT("Shot time is local"), RenderedPlay::HasText(Root,
-                FText::AsDateTime(FDateTime(2026, 11, 11), EDateTimeStyle::Medium, EDateTimeStyle::Short).ToString()));
+                FText::AsDateTime(FDateTime(2026, 11, 11), TEXT("%b%e")).ToString() + TEXT(" ")
+                + FText::AsDateTime(FDateTime(2026, 11, 11), TEXT("%H%M")).ToString()));
             {
                 FString Csv;
                 ExportFile = Service->ExportHistory();
@@ -158,7 +171,24 @@ public:
             Capture(Window, TEXT("history"));
             return false;
         case 9:
+        {
+            const auto ScrollWidget = RenderedPlay::WithTag(Root, TEXT("ShotTableScroll"));
+            if (!ScrollWidget) { Test->AddError(TEXT("Missing horizontal shot table")); Cleanup(); return true; }
+            auto Scroll = StaticCastSharedPtr<SScrollBox>(ScrollWidget);
+            Test->TestTrue(TEXT("Full table exceeds viewport width"), Scroll->GetScrollOffsetOfEnd() > 0);
+            Scroll->SetScrollOffset(Scroll->GetScrollOffsetOfEnd());
+            Stage = 30;
+            Until = GetCurrentRunTime() + 0.25;
+            return false;
+        }
+        case 30:
+        {
+            auto Scroll = StaticCastSharedPtr<SScrollBox>(RenderedPlay::WithTag(Root, TEXT("ShotTableScroll")));
+            Test->TestTrue(TEXT("Shot table scrolls to the far end"), Scroll && Scroll->GetScrollOffset() > 0 &&
+                FMath::IsNearlyEqual(Scroll->GetScrollOffset(),Scroll->GetScrollOffsetOfEnd(),1.f));
+            Stage = 9;
             return Next(ClickOn(Window, RenderedPlay::WithTag(Root, PageBackTag), TEXT("back from one club")));
+        }
         case 10:
             if (Service->IsBusy())
                 return false;
@@ -172,7 +202,7 @@ public:
             return Next(ClickOn(Window, RenderedPlay::WithTag(Root, TEXT("MenuSettings")), TEXT("the cog from one club's shots")));
         case 12:
             Test->TestTrue(TEXT("The cog returns to Player"), RenderedPlay::HasText(Root, TEXT("Display name")));
-            Test->TestFalse(TEXT("Club averages stay on their own page"), RenderedPlay::HasText(Root, TEXT("CLUB AVERAGES")));
+            Test->TestFalse(TEXT("Club averages stay on their own page"), RenderedPlay::HasText(Root, TEXT("Club averages  /  Last 90 days")));
             return Next(ClickOn(Window, RenderedPlay::FindButton(Root, TEXT("View")), TEXT("Shot history's View again")));
         case 13:
             if (Service->IsBusy())
@@ -209,10 +239,18 @@ private:
         Config.Authority = TEXT("https://login.example.test/"); Config.ClientId = TEXT("test"); Config.Audience = TEXT("https://api.example.test");
         Config.ApiOrigin = TEXT("https://api.example.test"); Config.ApplicationName = TEXT("UOpenGolf"); Config.StorageName = TEXT("OnlineVisualTest");
         Config.CallbackPorts = {47801};
-        Service->SetupForTests(Config, [this](const FString& Url, const FString&, const FString&, const FString&, OpenGolfOnline::FHttpCallback Done)
+        Service->SetupForTests(Config, [this](const FString& Url, const FString&, const FString& Request, const FString&, OpenGolfOnline::FHttpCallback Done)
         {
             FString Body = TEXT("{}");
             if (Url.EndsWith(TEXT("oauth/device/code"))) Body = TEXT("{\"device_code\":\"test-only\",\"user_code\":\"TEST-CODE\",\"verification_uri\":\"https://login.example.test/activate\",\"verification_uri_complete\":\"https://login.example.test/activate?user_code=TEST-CODE\",\"expires_in\":600,\"interval\":5}");
+            else if (Url.EndsWith(TEXT("oauth/token")) && Request.Contains(TEXT("device_code")) && !bApproveQr)
+            {
+                // The home page asks for the QR code before the test reaches Settings, so its poll waits for the test.
+                Done({400, TEXT("{\"error\":\"authorization_pending\"}"), true});
+                auto Pending = MakeShared<OpenGolfOnline::FRequestCancellation, ESPMode::ThreadSafe>();
+                Pending->Finished.store(true);
+                return Pending;
+            }
             else if (Url.EndsWith(TEXT("oauth/token"))) Body = TEXT("{\"access_token\":\"test\",\"refresh_token\":\"test\",\"token_type\":\"Bearer\",\"expires_in\":3600}");
             else if (Url.EndsWith(TEXT("userinfo"))) Body = TEXT("{\"sub\":\"test|visual\"}");
             else if (Url.EndsWith(TEXT("/sync"))) Body = TEXT("{\"id\":\"test-player\",\"display_name\":\"Test Golfer\",\"created_at\":\"2026-11-11T00:00:00Z\"}");
@@ -278,19 +316,18 @@ private:
         }
     }
 
-    /** The account icon for the session shows alone, between the launch-monitor status and the cog. */
+    /** The account icon for the session shows alone, left of the cog; the launch monitor's status is only in Settings. */
     void ExpectTopBar(const TCHAR* ShownTag, const TCHAR* HiddenTag, const FString& Where)
     {
         using namespace OnlineVisualTestDetail;
         const TSharedRef<SWidget> Root = Menu.ToSharedRef();
-        const TSharedPtr<SWidget> Shown = RenderedPlay::WithTag(Root, ShownTag), Monitor = RenderedPlay::WithTag(Root, TEXT("MenuLaunchMonitor"));
-        const TSharedPtr<SWidget> Cog = RenderedPlay::WithTag(Root, TEXT("MenuSettings"));
+        const TSharedPtr<SWidget> Shown = RenderedPlay::WithTag(Root, ShownTag), Cog = RenderedPlay::WithTag(Root, TEXT("MenuSettings"));
         Test->TestTrue(FString(ShownTag) + TEXT(" shows ") + Where, IsShownWidget(Shown));
         Test->TestFalse(FString(HiddenTag) + TEXT(" hides ") + Where, IsShownWidget(RenderedPlay::WithTag(Root, HiddenTag)));
         Test->TestTrue(TEXT("The cog shows ") + Where, IsShownWidget(Cog));
-        if (IsShownWidget(Shown) && IsShownWidget(Monitor) && IsShownWidget(Cog))
-            Test->TestTrue(TEXT("Launch monitor, account icon, cog, in that order, ") + Where,
-                RenderedPlay::PointOn(*Monitor).X < RenderedPlay::PointOn(*Shown).X && RenderedPlay::PointOn(*Shown).X < RenderedPlay::PointOn(*Cog).X);
+        Test->TestFalse(TEXT("No launch-monitor status in the top bar ") + Where, RenderedPlay::WithTag(Root, TEXT("MenuLaunchMonitor")).IsValid());
+        if (IsShownWidget(Shown) && IsShownWidget(Cog))
+            Test->TestTrue(TEXT("Account icon, then cog, ") + Where, RenderedPlay::PointOn(*Shown).X < RenderedPlay::PointOn(*Cog).X);
     }
 
     /**
@@ -352,6 +389,8 @@ private:
     OpenGolfOnline::FHttpCallback DeferredProfileReply;
     int32 Stage = 0, CarryRequests = 0;
     double Until = 0, ProfileReadyAt = 0;
+    /** Until set, the stub answers the QR code's poll with authorization_pending. */
+    bool bApproveQr = false;
     FString File, StorageRoot, ScreenRoot, ProfileBody, ExportFile;
 };
 

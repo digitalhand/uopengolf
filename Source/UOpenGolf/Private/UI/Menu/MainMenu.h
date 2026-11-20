@@ -13,6 +13,7 @@ class UOpenGolfOnlineSubsystem;
 class UGameUpdateSubsystem;
 class SVerticalBox;
 class SBox;
+class SButton;
 class SOverlay;
 
 class SMainMenu : public SCompoundWidget
@@ -27,6 +28,10 @@ public:
     void Construct(const FArguments& Args);
     virtual ~SMainMenu() override;
     void Open();
+    /** Opens the main menu with the Courses browser shown: the way back from a course round. */
+    void OpenCourses();
+    /** Closes the menu at the start of a course round, as choosing Training does. */
+    void EnterSession() { Resume(); }
     void NavigateBack() { Back(); }
     /** Opens the menu, if closed, at Settings › Player. Opened from Training, leaving Settings returns straight there. */
     void OpenGeneralSettings();
@@ -55,15 +60,27 @@ private:
     void RefreshSettings();
     void FocusPage();
     /**
-     * On every page: the title, the launch-monitor status, the account icon (sign in while signed out, sign out while
-     * signed in) and the cog, the only way into Settings.
+     * On every page: the title, the account icon (sign in while signed out, sign out while signed in) and the cog, the
+     * only way into Settings.
      */
     TSharedRef<SWidget> BuildTopBar();
     /** Display confirmation, unsaved changes, return to main menu and exit. */
     void BuildDialog(TSharedRef<SVerticalBox> Body);
     /** Settings › Player › Shot history: club averages, then one club's shots, under this menu's page header. */
     void BuildShots(TSharedRef<SVerticalBox> Body);
-    /** The home page, or the pause menu once Training has started. */
+    /** The home page's Training, Courses and Exit buttons, with icons; the highlighted one shows what is open. */
+    void BuildLaunchButtons(TSharedRef<SVerticalBox> Body);
+    /** The primary style for the highlighted launch button, the plain one otherwise. */
+    const FButtonStyle* LaunchStyle(bool bHighlighted) const;
+    /** Shows or hides the Courses browser beside the launch buttons and moves the highlight to match. */
+    void SetCoursesVisible(bool bVisible);
+    /** SCourseBrowser, shown while bCoursesVisible; its Play starts a round. */
+    TSharedRef<SWidget> BuildCourseBrowser();
+    /** After a course round: the course, strokes against par, Play again and Courses. */
+    void BuildFinalScore(TSharedRef<SVerticalBox> Body);
+    bool bCoursesVisible = false;
+    TWeakPtr<SButton> TrainingButton, CoursesButton;
+    /** The home page (launch buttons, Courses and the QR sign-in), or the pause menu once a session has started. */
     void BuildHome(TSharedRef<SVerticalBox> Body);
     void BuildSettings(TSharedRef<SVerticalBox> Body);
     void AddChoice(TSharedRef<SVerticalBox> Rows, const FString& Label, const FString& Help,
@@ -112,10 +129,9 @@ private:
     /** The update's installer has started: quit so it can replace the game's files. */
     void QuitForUpdate();
     static const TCHAR* const UpdateDialog;
+    static constexpr const TCHAR* ExitDialog = TEXT("Exit to desktop?");
     FDelegateHandle RestartHandle;
-    FString ConnectionSummary() const;
     static constexpr int32 PlayerCategory = 0;
-    static constexpr int32 LaunchMonitorCategory = 1;
     void Back();
     void Apply();
     void Commit();
@@ -134,6 +150,7 @@ private:
     TMap<FString, TWeakPtr<SWidget>> PageFocus;
     FString PageKey;
     ERoute Route = ERoute::Home;
+    ERoute SettingsParent = ERoute::Home;
     bool bReturnToTraining = false, bFocusPending = false;
     double TransitionStart = -1;
     /** Shared with the account widgets; buttons point at its styles, so it lives as long as the menu. */

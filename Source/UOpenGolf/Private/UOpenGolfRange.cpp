@@ -6,6 +6,15 @@
 #include "Components/PostProcessComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/App.h"
+#include "UObject/UObjectGlobals.h"
+#if WITH_EDITOR
+#include "AssetCompilingManager.h"
+#include "ShaderCompiler.h"
+#endif
 #include "Engine/World.h"
 #include "Hole/OpenGolfCupComponent.h"
 #include "HAL/IConsoleManager.h"
@@ -15,6 +24,9 @@
 #include "OpenGolfWindSubsystem.h"
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
+#include "GolfCourseDefinition.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogUOpenGolfRange, Log, All);
 
 namespace
 {
@@ -106,6 +118,8 @@ void AUOpenGolfRange::BeginPlay()
             Flagstick->SetWorldLocation(Ground);
         Cup->PlaceAtFlagstick(Flagstick, Normal);
     }
+    // Captured on the first tick, once the flag stands on the ground and the grass switch is applied.
+    InvalidateHoleMap();
 }
 
 FVector AUOpenGolfRange::GetCupLocation() const
@@ -140,6 +154,7 @@ void AUOpenGolfRange::AlignLayoutToTerrain()
 {
     if (!IsValid(Terrain))
         return;
+    InvalidateHoleMap();
     for (const auto& Actor : LayoutActors)
     {
         if (!IsValid(Actor))
@@ -209,6 +224,12 @@ void AUOpenGolfRange::ApplyWindSettings()
     WindSpeedMph = FMath::IsFinite(WindSpeedMph) ? FMath::Max(0.0f, WindSpeedMph) : 0.0f;
     WindFromDeg = FMath::IsFinite(WindFromDeg) ? FRotator::ClampAxis(WindFromDeg) : 0.0f;
     const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
+    // A course round keeps its course's wind, whatever the console, Details or the HUD set.
+    if (const UGolfCourseDefinition* Course = Mode ? Mode->GetCourse() : nullptr)
+    {
+        WindSpeedMph = Course->WindMph;
+        WindFromDeg = Course->WindFromDeg;
+    }
     AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     if (!Ball)
         return;
@@ -288,6 +309,8 @@ void AUOpenGolfRange::Tick(float DeltaSeconds)
         return;
     }
     UpdateGrass();
+    // After the grass switch, so the picture shows the vegetation as it is drawn.
+    UpdateHoleMap();
     ApplyWindSettings();
     ApplyGreenConsoleVariable();
     SyncWindToScene();
@@ -328,6 +351,89 @@ void AUOpenGolfRange::UpdateGrass()
         for (auto* Component : Instances)
             Component->SetVisibility(bWanted);
     }
+    if (bGrassEnabled != bWanted)
+        InvalidateHoleMap();
     bGrassEnabled = bWanted;
     bTerrainGrassApplied = true;
+}
+
+void AUOpenGolfRange::InvalidateHoleMap()
+{
+    if (bHoleMapDirty)
+        return;
+    bHoleMapDirty = true;
+    bHoleMapInterim = false;
+    HoleMapStaleSince = FPlatformTime::Seconds();
+}
+
+bool AUOpenGolfRange::IsSceneReadyForHoleMap()
+{
+    if (IsAsyncLoading())
+        return false;
+#if WITH_EDITOR
+    // Editor builds (the editor, and -game runs of it) rebuild reloaded textures, meshes and shaders after level
+    // travel; until they finish, the renderer draws checkerboard placeholders, which a one-off capture would keep.
+    if (FAssetCompilingManager::Get().GetNumRemainingAssets() > 0)
+        return false;
+    if (GShaderCompilingManager && GShaderCompilingManager->GetNumRemainingJobs() > 0)
+        return false;
+#endif
+    return true;
+}
+
+void AUOpenGolfRange::UpdateHoleMap()
+{
+    if (!bHoleMapDirty)
+        return;
+    const double Waited = FPlatformTime::Seconds() - HoleMapStaleSince;
+    const bool bReady = IsSceneReadyForHoleMap();
+    // Not ready: wait, up to the time limit, after which one interim picture beats none.
+    if (!bReady && (bHoleMapInterim || Waited < HoleMapReadyTimeoutS))
+        return;
+    CaptureHoleMap();
+    bHoleMapDirty = !bReady;
+    bHoleMapInterim = !bReady;
+    if (bReady)
+    {
+        UE_LOG(LogUOpenGolfRange, Log, TEXT("Hole map captured %.2f s after it went stale."), Waited);
+    }
+    else
+    {
+        UE_LOG(LogUOpenGolfRange, Warning, TEXT("Hole map captured after %.0f s with the scene still loading; it is captured again once ready."), Waited);
+    }
+}
+
+void AUOpenGolfRange::CaptureHoleMap()
+{
+    HoleMapFrame = FHoleMapFrame::FromHole(GetTeeLocation(), GetCupLocation(), MapEndMargin, MapMinimumWidth, MapSideOffset);
+    if (!FApp::CanEverRender())
+        return;
+
+    if (!HoleMapTexture)
+    {
+        HoleMapTexture = NewObject<UTextureRenderTarget2D>(this, TEXT("HoleMap"), RF_Transient);
+        HoleMapTexture->RenderTargetFormat = RTF_RGBA8_SRGB;
+        HoleMapTexture->InitAutoFormat(FHoleMapFrame::TextureWidth, FHoleMapFrame::TextureHeight);
+        HoleMapTexture->UpdateResourceImmediate();
+    }
+    if (!HoleMapCapture)
+    {
+        // Exposure and motion blur come from the range's unbound post-process volume, as in the game view.
+        HoleMapCapture = NewObject<USceneCaptureComponent2D>(this, TEXT("HoleMapCapture"), RF_Transient);
+        HoleMapCapture->bCaptureEveryFrame = false;
+        HoleMapCapture->bCaptureOnMovement = false;
+        HoleMapCapture->ProjectionType = ECameraProjectionMode::Orthographic;
+        HoleMapCapture->CaptureSource = SCS_FinalColorLDR;
+        HoleMapCapture->TextureTarget = HoleMapTexture;
+        // The minimap draws the tee and flag itself; the ball and gimmie ring are hidden in scene captures.
+        HoleMapCapture->HiddenActors.Add(this);
+        if (IsValid(Flagstick))
+            HoleMapCapture->HiddenActors.Add(Flagstick->GetOwner());
+        HoleMapCapture->RegisterComponent();
+    }
+    HoleMapCapture->OrthoWidth = HoleMapFrame.Length * FHoleMapFrame::Aspect;
+    HoleMapCapture->MaxViewDistanceOverride = HoleMapFrame.Length * 3;
+    HoleMapCapture->SetWorldLocationAndRotation(HoleMapFrame.Center + FVector::UpVector * HoleMapFrame.Length,
+        FRotator(-90, FVector(HoleMapFrame.Up, 0).Rotation().Yaw, 0));
+    HoleMapCapture->CaptureScene();
 }

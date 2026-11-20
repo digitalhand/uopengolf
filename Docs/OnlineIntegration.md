@@ -26,8 +26,8 @@ completed Range-mode shots. Local F9 replay recording remains independent.
 
 ## Screens and data
 
-The home and pause menus share a header: **UOPEN GOLF**, the launch-monitor status,
-an account icon and a cog. While signed out the account icon is a login symbol that
+The home and pause menus share a header: **UOPEN GOLF**, an account icon and a cog. The
+launch-monitor status is in Settings › Launch Monitor. While signed out the account icon is a login symbol that
 opens **Settings › Player**; while signed in it is the logout icon. The cog is the only
 way into Settings. Settings › Player holds the account: while signed out, **Sign In**
 and **Create Account** side by side and no profile options; while signed in, the
@@ -36,9 +36,10 @@ account-creation or "Try again" controls. While a saved session is being restore
 the profile is loading, the account block reads "Loading your account…". Auth0's
 hosted page retains the existing OGolf application name.
 
-While signed out, every Settings page also shows a QR code under the last category
-(**Data & system**), captioned **Sign-In** with the short code the phone asks the
-player to compare. It needs no button: the code is requested when Settings shows it,
+While signed out, the home page shows a QR code under **Exit**, and every Settings page
+shows one under the last category (**Data & system**). Each is captioned **Sign-In** with
+the short code the phone asks the player to compare. It needs no button: the code is
+requested when the home page or Settings shows it,
 polled while it is on screen, replaced when it expires or is declined, and removed at
 sign-in. Offline, the square reads "QR code unavailable. Retrying…".
 
@@ -48,7 +49,11 @@ browser is still logged in to Auth0; that is what lets a player sign out and sig
 someone else. A QR sign-in uses the account the phone's browser is logged in to, which
 the game cannot change.
 
-Shot history lists club averages from longest to shortest carry. Club abbreviations
+Shot history lists club averages from longest to shortest carry: ball speed, carry,
+total and shot count per club. Carry is the server's `avg_carry_yd`; the API has no
+speed or total average, so the game computes those from each club's shot history
+(newest 200 shots, carry plus signed roll for total), one club at a time after the
+list loads. A club is fetched again only when its shot count changes. Club abbreviations
 include **DR**, **7i**, and **PW**. Select a club to see its shots, delete a shot with
 confirmation, or export a pipe-delimited CSV. Shot times and member-since dates use
 the computer's local time. CSV exports keep the API's UTC times. Statistics use the existing 90-day window and history limit of
@@ -91,8 +96,7 @@ marker exists, startup never restores a saved session, even if the credential st
 could not delete the token. The next successful explicit sign-in removes it. If the
 marker cannot be written, logout stops and says so, rather than leaving a session that
 would come back at the next start. If it cannot be removed after a sign-in, the session
-works but is not restored automatically, and the page says so. Deletion waits for active uploads and removes the shot from the local queue
-before asking the server to delete it.
+works but is not restored automatically, and the page says so. Deletion is available once active uploads finish. Before the request, the client saves the queue with the selected shots removed. A failed request restores those entries. All three delete actions send shot IDs to `POST /me/range-shots/delete`. Bulk actions first collect IDs from the existing 90-day club history queries.
 
 If the OS credential store is unavailable, the session stays in memory and the UI
 explains that it will not survive exit. Local write failures are surfaced and

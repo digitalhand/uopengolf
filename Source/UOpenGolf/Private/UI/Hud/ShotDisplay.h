@@ -36,7 +36,7 @@ namespace ShotDisplay
     FString ClubLabel(ELaunchMonitorClub Club);
 
     /** Course header details for the hole in play. */
-    FString HoleDetails(int32 Par, const FString& Distance);
+    FString HoleDetails(int32 Hole, int32 Par, const FString& Distance);
 
     /** Record button help, including where shots are saved and how to toggle it. */
     FString RecordTip(bool bRecording, bool bSignedIn);

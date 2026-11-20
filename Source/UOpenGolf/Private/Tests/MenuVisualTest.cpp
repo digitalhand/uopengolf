@@ -29,21 +29,21 @@ namespace
     const TCHAR* BackStep=TEXT("#PageBack");
     bool MenuIconShown(const TSharedPtr<SWidget>& Widget){return Widget.IsValid()&&Widget->GetVisibility().IsVisible();}
     /**
-     * The menu pages have no Settings button: the top bar's cog is the way in. Right of the launch-monitor status sits
-     * one account icon, matching the session, then the cog.
+     * The menu pages have no Settings button: the top bar's cog is the way in. Left of it sits one account icon,
+     * matching the session. The launch monitor's status is in Settings › Launch Monitor, not the top bar.
      */
     void ExpectMenuTopBar(FAutomationTestBase& Test,const TSharedRef<SWindow>& Window,const UOpenGolfOnlineSubsystem* Online,const FString& Where)
     {
         Test.TestFalse(TEXT("No Settings button on ")+Where,RenderedPlay::FindButton(Window,TEXT("Settings")).IsValid());
-        const TSharedPtr<SWidget> Monitor=RenderedPlay::WithTag(Window,TEXT("MenuLaunchMonitor")),SignIn=RenderedPlay::WithTag(Window,TEXT("AccountSignIn"));
+        Test.TestFalse(TEXT("No launch-monitor status in the top bar on ")+Where,RenderedPlay::WithTag(Window,TEXT("MenuLaunchMonitor")).IsValid());
+        const TSharedPtr<SWidget> SignIn=RenderedPlay::WithTag(Window,TEXT("AccountSignIn"));
         const TSharedPtr<SWidget> SignOut=RenderedPlay::WithTag(Window,TEXT("AccountSignOut")),Cog=RenderedPlay::WithTag(Window,TEXT("MenuSettings"));
         const bool bSignedIn=Online&&Online->HasSession();
         const TSharedPtr<SWidget> Account=bSignedIn?SignOut:SignIn;
         Test.TestTrue(TEXT("The account icon matches the session on ")+Where,MenuIconShown(Account)&&!MenuIconShown(bSignedIn?SignIn:SignOut));
         Test.TestTrue(TEXT("The cog shows on ")+Where,MenuIconShown(Cog));
-        if(MenuIconShown(Monitor)&&MenuIconShown(Account)&&MenuIconShown(Cog))
-            Test.TestTrue(TEXT("Launch monitor, then the account icon, then the cog, on ")+Where,
-                RenderedPlay::PointOn(*Monitor).X<RenderedPlay::PointOn(*Account).X&&RenderedPlay::PointOn(*Account).X<RenderedPlay::PointOn(*Cog).X);
+        if(MenuIconShown(Account)&&MenuIconShown(Cog))
+            Test.TestTrue(TEXT("The account icon, then the cog, on ")+Where,RenderedPlay::PointOn(*Account).X<RenderedPlay::PointOn(*Cog).X);
     }
 }
 class FMenuVisualCapture : public IAutomationLatentCommand

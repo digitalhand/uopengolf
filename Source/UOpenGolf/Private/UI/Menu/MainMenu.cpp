@@ -3,6 +3,7 @@
 #include "OpenGolfOnlineSubsystem.h"
 #include "SOpenGolfAccountPanel.h"
 #include "SOpenGolfAccountButton.h"
+#include "SOpenGolfQrSignIn.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Menu/MainMenuInternal.h"
 #include "UI/Menu/SUpdatePanel.h"
@@ -37,7 +38,6 @@ namespace
     UOpenGolfGameUserSettings* RenderSettings() { return Cast<UOpenGolfGameUserSettings>(EngineSettings()); }
     // Confirmation dialogs, identified by their titles.
     const TCHAR* MainMenuDialog = TEXT("Return to the main menu?");
-    const TCHAR* ExitDialog = TEXT("Exit to desktop?");
 }
 const TCHAR* const SMainMenu::UpdateDialog = TEXT("Update");
 bool SMainMenu::FVideo::operator==(const FVideo& Other) const
@@ -136,8 +136,7 @@ void SMainMenu::QuitForUpdate()
 }
 TSharedRef<SWidget> SMainMenu::Text(const FString& Value,int32 Size,bool Muted)
 {
-    return SNew(STextBlock).Text(FText::FromString(Value)).Font_Lambda([Size]{return HudStyle::Font("Regular",Size);})
-        .ColorAndOpacity(Muted?HudStyle::LabelColor():HudStyle::TextColor()).AutoWrapText(true);
+    return MakeText(FText::FromString(Value),Size,Muted);
 }
 TSharedRef<SWidget> SMainMenu::AccentText(const FString& Lead,const FString& Accent,const FString& Tail,int32 Size)
 {
@@ -152,8 +151,7 @@ TSharedRef<SWidget> SMainMenu::AccentText(const FString& Lead,const FString& Acc
 }
 TSharedRef<SWidget> SMainMenu::Button(const FString& Label,TFunction<void()> Action,bool Primary,int32 Size)
 {
-    return SNew(SButton).ButtonStyle(Primary?&Style.PrimaryButton:&Style.Button).OnClicked_Lambda([Action]{Action();return FReply::Handled();})
-        [SNew(STextBlock).Text(FText::FromString(Label)).Font(HudStyle::Font("Regular",Size)).ColorAndOpacity(Primary?Style.PrimaryLabelColor:Style.TextColor)];
+    return MakeButton(Style,FText::FromString(Label),MoveTemp(Action),Primary,Size);
 }
 TSharedRef<SWidget> SMainMenu::NavButton(const FString& Label,TFunction<void()> Action,bool Selected)
 {
@@ -178,10 +176,17 @@ bool SMainMenu::HasProfile() const
 void SMainMenu::Open()
 {
     bOpen=true; Route=bStarted?ERoute::Pause:ERoute::Home; bReturnToTraining=false; Dialog.Empty(); Search.Empty(); SetVisibility(EVisibility::Visible);
+    SetCoursesVisible(false);
     if(Controller.IsValid()) Controller->SetMainMenuOpen(true);
     Rebuild();
     if(FSlateApplication::IsInitialized())FSlateApplication::Get().SetKeyboardFocus(SharedThis(this));
 }
+void SMainMenu::OpenCourses()
+{
+    Open();
+    SetCoursesVisible(true);
+}
+
 void SMainMenu::OpenGeneralSettings()
 {
     const bool bFromTraining=!bOpen;
@@ -194,16 +199,10 @@ UOpenLaunchMonitorSubsystem* SMainMenu::Monitor() const
     const UGameInstance* Instance=Controller.IsValid()?Controller->GetGameInstance():nullptr;
     return Instance?Instance->GetSubsystem<UOpenLaunchMonitorSubsystem>():nullptr;
 }
-FString SMainMenu::ConnectionSummary() const
-{
-    const UOpenLaunchMonitorSubsystem* M=Monitor();
-    if(!M)return TEXT("LAUNCH MONITOR UNAVAILABLE");
-    return (TEXT("LAUNCH MONITOR  ")+StaticEnum<ELaunchMonitorConnectionState>()->GetDisplayNameTextByValue(int64(M->GetConnectionState())).ToString()).ToUpper();
-}
 void SMainMenu::OpenSettings(int32 InCategory,bool bDeferRebuild)
 {
     if(bConfirmDisplay || !Dialog.IsEmpty()) return;
-    if(!InSettings()) { Saved=Draft=GolfSettings::Get(); SavedVideo=Video=ReadVideo(); DisplayNameDraft->Discard(OnlineService()); Pages.Empty(); }
+    if(!InSettings()) { SettingsParent=Route; Saved=Draft=GolfSettings::Get(); SavedVideo=Video=ReadVideo(); DisplayNameDraft->Discard(OnlineService()); Pages.Empty(); }
     Route=ERoute::Settings;Category=InCategory;Search.Empty();Dialog.Empty();
     if(bDeferRebuild)bRebuildPending=true;else Rebuild();
 }
@@ -221,6 +220,11 @@ void SMainMenu::OnSignInIcon()
 }
 void SMainMenu::Resume()
 {
+    if (Controller.IsValid() && Controller->IsRoundComplete())
+    {
+        Open();
+        return;
+    }
     FSlateApplication::Get().DismissAllMenus();
     RevertDisplay(); bOpen=false; bStarted=true; SetVisibility(EVisibility::Collapsed);
     if(Controller.IsValid()) Controller->SetMainMenuOpen(false);
@@ -241,8 +245,14 @@ void SMainMenu::Back()
     if(InShots()){if(ShotsPanel.IsValid()&&ShotsPanel->HandleBack())return;Route=ERoute::Settings;Rebuild();return;}
     if(InSettings())
     {
-        if(Dirty()) Dialog=TEXT("Unsaved changes"); else { if(bReturnToTraining){Resume();return;} Route=bStarted?ERoute::Pause:ERoute::Home; }
+        if(Dirty()) Dialog=TEXT("Unsaved changes"); else { if(bReturnToTraining){Resume();return;} Route=SettingsParent; }
         Rebuild();
+    }
+    else if (Route == ERoute::Home && bCoursesVisible)
+    {
+        SetCoursesVisible(false);
+        if (const auto Button = CoursesButton.Pin())
+            FSlateApplication::Get().SetKeyboardFocus(Button, EFocusCause::Navigation);
     }
     else Resume();
 }
@@ -302,7 +312,8 @@ void SMainMenu::FocusPage()
 }
 void SMainMenu::Rebuild()
 {
-    const FString Next=InShots()?TEXT("shots"):InSettings()?FString::Printf(TEXT("settings:%d:%s"),Category,*Search):bStarted?TEXT("pause"):TEXT("home");
+    const bool bFinished = bStarted && Controller.IsValid() && Controller->IsRoundComplete();
+    const FString Next=InShots()?TEXT("shots"):InSettings()?FString::Printf(TEXT("settings:%d:%s"),Category,*Search):bFinished?TEXT("finished"):bStarted?TEXT("pause"):TEXT("home");
     if(PageKey!=Next && FSlateApplication::IsInitialized())PageFocus.Add(PageKey,FSlateApplication::Get().GetKeyboardFocusedWidget());
     if(bConfirmDisplay || !Dialog.IsEmpty())
     {
@@ -317,7 +328,7 @@ void SMainMenu::Rebuild()
     if(!Cached)
     {
         auto Body=SNew(SVerticalBox);
-        if(InShots())BuildShots(Body);else if(InSettings())BuildSettings(Body);else BuildHome(Body);
+        if(InShots())BuildShots(Body);else if(InSettings())BuildSettings(Body);else if(bFinished)BuildFinalScore(Body);else BuildHome(Body);
         Pages.Add(Next,Body);Cached=Pages.Find(Next);
     }
     const bool Changed=PageKey!=Next || Content->GetChildren()->GetChildAt(0)!=Cached->ToSharedRef();
@@ -331,16 +342,11 @@ TSharedRef<SWidget> SMainMenu::BuildTopBar()
 {
     UOpenGolfOnlineSubsystem* Online=OnlineService();
     const TWeakObjectPtr<UOpenGolfOnlineSubsystem> Service=Online;
-    // The header shows the real launch-monitor state; selecting it opens the connection settings. Right of it, one
-    // account icon (each button shows itself only in its own session state), then the cog.
+    // The title, then one account icon (each button shows itself only in its own session state), then the cog. The
+    // launch monitor's status is in Settings › Launch Monitor.
     return SNew(SHorizontalBox)
         +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[AccentText(TEXT("UOPEN"),TEXT(" GOLF"),FString(),22)]
-        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SButton).ButtonStyle(&Style.Button).Tag(TEXT("MenuLaunchMonitor"))
-            .OnClicked_Lambda([this]{OpenSettings(LaunchMonitorCategory,true);return FReply::Handled();})
-            [SNew(STextBlock).Font(HudStyle::Font("Regular",14))
-                .ColorAndOpacity_Lambda([this]{const UOpenLaunchMonitorSubsystem* M=Monitor();return FSlateColor(M?HudStyle::StateColor(M->GetConnectionState()):HudStyle::LabelColor());})
-                .Text_Lambda([this]{return FText::FromString(ConnectionSummary());})]]
-        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16,0,0,0)
+        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
         [SNew(SOpenGolfAccountButton).Online(Online).Style(Style).OnClicked_Lambda([this]{OnSignInIcon();})]
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16,0,0,0)
         [SNew(SOpenGolfAccountButton).Online(Online).SignOut(true).Style(Style).OnClicked_Lambda([Service]{if(Service.IsValid())Service->SignOut();})]
@@ -369,18 +375,18 @@ void SMainMenu::BuildDialog(TSharedRef<SVerticalBox> Body)
     else if(Dialog==TEXT("Unsaved changes"))
     {
         AddMenuButton(Body,TEXT("Apply"),[this]{Dialog.Empty();Apply();},true);
-        AddMenuButton(Body,TEXT("Discard and go back"),[this]{Draft=Saved;Video=SavedVideo;DisplayNameDraft->Discard(OnlineService());Dialog.Empty();Pages.Empty();if(bReturnToTraining){Resume();return;}Route=bStarted?ERoute::Pause:ERoute::Home;Rebuild();});
+        AddMenuButton(Body,TEXT("Discard and go back"),[this]{Draft=Saved;Video=SavedVideo;DisplayNameDraft->Discard(OnlineService());Dialog.Empty();Pages.Empty();if(bReturnToTraining){Resume();return;}Route=SettingsParent;Rebuild();});
         AddMenuButton(Body,TEXT("Stay in Settings"),[this]{Dialog.Empty();Rebuild();});
     }
     else if(Dialog==MainMenuDialog)
     {
-        Body->AddSlot().AutoHeight().Padding(0,0,0,16)[Text(TEXT("Your training session will end. Recorded shots are saved and the launch monitor stays connected."),MenuStyle::BodySize,true)];
+        Body->AddSlot().AutoHeight().Padding(0,0,0,16)[Text(Controller.IsValid() && Controller->IsCourseRound() ? TEXT("Your course round will end.") : TEXT("Your training session will end. Recorded shots are saved and the launch monitor stays connected."),MenuStyle::BodySize,true)];
         AddMenuButton(Body,TEXT("Yes"),[this]{if(Controller.IsValid())Controller->ReturnToMainMenu();},true);
         AddMenuButton(Body,TEXT("Cancel"),[this]{Dialog.Empty();Rebuild();});
     }
     else
     {
-        if(bStarted)Body->AddSlot().AutoHeight().Padding(0,0,0,16)[Text(TEXT("Your training session will end."),MenuStyle::BodySize,true)];
+        if(bStarted)Body->AddSlot().AutoHeight().Padding(0,0,0,16)[Text(Controller.IsValid() && Controller->IsCourseRound() ? TEXT("Your course round will end.") : TEXT("Your training session will end."),MenuStyle::BodySize,true)];
         AddMenuButton(Body,TEXT("Yes"),[this]{if(Controller.IsValid())Controller->QuitGame();},true);
         AddMenuButton(Body,TEXT("Cancel"),[this]{Dialog.Empty();Rebuild();});
     }
@@ -399,28 +405,40 @@ void SMainMenu::BuildShots(TSharedRef<SVerticalBox> Body)
 }
 void SMainMenu::BuildHome(TSharedRef<SVerticalBox> Body)
 {
+    const bool bCourse = Controller.IsValid() && Controller->IsCourseRound();
     // Once Training has started, Escape opens this page as the pause menu.
-    Body->AddSlot().AutoHeight().Padding(0,100,0,12)[Text(bStarted?TEXT("Paused"):TEXT("Community golf simulation!"),16,true)];
-    Body->AddSlot().AutoHeight().Padding(0,0,0,32)[bStarted?Text(TEXT("Training"),54):AccentText(TEXT("Golf for"),TEXT(" Everyone"),TEXT("."),54)];
+    Body->AddSlot().AutoHeight().Padding(0,100,0,12)[Text(bStarted?TEXT("Paused"):TEXT("Physics, Freedom, Golf!"),16,true)];
+    Body->AddSlot().AutoHeight().Padding(0,0,0,32)[bStarted?Text(bCourse ? TEXT("Course round") : TEXT("Training"),54):AccentText(TEXT("Golf for"),TEXT(" Everyone"),TEXT("."),54)];
+    TSharedRef<SVerticalBox> Buttons = Body;
     if(bStarted)
     {
-        AddMenuButton(Body,TEXT("Resume training"),[this]{Resume();},true);
+        AddMenuButton(Body,bCourse ? TEXT("Resume round") : TEXT("Resume training"),[this]{Resume();},true);
         AddMenuButton(Body,TEXT("Main menu"),[this]{Dialog=MainMenuDialog;Rebuild();});
         AddMenuButton(Body,TEXT("Exit to desktop"),[this]{Dialog=ExitDialog;Rebuild();});
     }
     else
     {
-        AddMenuButton(Body,TEXT("Training"),[this]{Resume();},true);
-        AddMenuButton(Body,TEXT("Exit"),[this]{Dialog=ExitDialog;Rebuild();});
+        Buttons = SNew(SVerticalBox);
+        BuildLaunchButtons(Buttons);
+        Body->AddSlot().FillHeight(1)
+        [SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().AutoWidth()[Buttons]
+            + SHorizontalBox::Slot().FillWidth(1).Padding(24, 0, 0, 0)[BuildCourseBrowser()]];
     }
     // Shown once a check finds a newer version; the page is cached, so it follows the updater.
-    Body->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,MenuStyle::ButtonGap,0,MenuStyle::ButtonGap)
+    Buttons->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,MenuStyle::ButtonGap,0,MenuStyle::ButtonGap)
         [SNew(SBox).WidthOverride(MenuStyle::MenuButtonWidth).Tag(TEXT("MenuUpdate"))
             .Visibility_Lambda([this]{const UGameUpdateSubsystem* U=Updater();return U&&U->IsUpdateAvailable()?EVisibility::Visible:EVisibility::Collapsed;})
             [SNew(SButton).ButtonStyle(&Style.Button).OnClicked_Lambda([this]{OpenUpdate();return FReply::Handled();})
                 [SNew(STextBlock).Font(HudStyle::Font("Regular",18)).ColorAndOpacity(HudStyle::AccentColor())
                     .Text_Lambda([this]{const UGameUpdateSubsystem* U=Updater();return FText::FromString(U?UpdateText::Title(*U):FString());})]]];
-    Body->AddSlot().FillHeight(1);
+    // On the home page, under the menu buttons: the QR sign-in, so a player can sign in without opening Settings. It
+    // shows only while signed out and collapses itself on sign-in, so the cached page needs no rebuild.
+    if(!bStarted)
+        if(UOpenGolfOnlineSubsystem* Online=OnlineService())
+            Buttons->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0,MenuStyle::QrGap,0,0)
+                [SNew(SOpenGolfQrSignIn).Tag(TEXT("HomeSignInQr")).Online(Online).Style(Style).Size(MenuStyle::QrSize)];
+    if (bStarted) Body->AddSlot().FillHeight(1);
 }
 void SMainMenu::Apply()
 {

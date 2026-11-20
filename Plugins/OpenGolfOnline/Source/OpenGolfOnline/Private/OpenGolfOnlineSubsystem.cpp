@@ -326,11 +326,11 @@ void UOpenGolfOnlineSubsystem::AcceptTokens(const FReply& Reply, uint64 Attempt,
             if (AccountKey != Key) OnAccountChanged.Broadcast();
             ++Epoch; ++CredentialWork->Epoch;
             for (auto& R : Requests) R->Cancel();
-            bUploading = false; bLoading = false; bDeleting = false; bRefreshing = false;
+            bUploading = false; bLoading = false; bDeleting = false; bRefreshing = false; bLoadingAverages = false;
             auto Waiters = MoveTemp(RefreshWaiters); for (auto& W : Waiters) W(false);
         }
         if (OutboxOwner != Key) { Outbox.Empty(); OutboxOwner = Key; }
-        if (AccountKey != Key) { Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); }
+        if (AccountKey != Key) { Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); ClearClubAverages(); }
         DisplayNameHint = Text(User,TEXT("name")).Left(40);
         Permissions.Reset();
         TArray<FString> Parts; Access.ParseIntoArray(Parts, TEXT("."), false);
@@ -449,9 +449,9 @@ void UOpenGolfOnlineSubsystem::InvalidateSession(bool bDiscardShots)
     Permissions.Reset(); AccessToken.Empty(); RefreshToken.Empty(); DisplayNameHint.Empty();
     if (bDiscardShots) { AccountKey.Empty(); OutboxOwner.Empty(); Outbox.Empty(); }
     bRestoring = false;
-    Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty();
+    Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); ClearClubAverages();
     ++HistoryRevision; OnHistoryChanged.Broadcast();
-    bUploading = false; bLoading = false; bDeleting = false; bCarryRequested = false; bHistoryRequested = false; PendingDelete.Empty();
+    bUploading = false; bLoading = false; bDeleting = false; bCarryRequested = false; bHistoryRequested = false;
     SaveLocal(); SaveCredentials({}, [](bool){});
     Status = TEXT("Session ended. Sign in again."); Touch();
 }

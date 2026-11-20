@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Tests/RenderedPlay.h"
+#include "Tests/BundledCourse.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Editor.h"
 #include "FileHelpers.h"
@@ -30,9 +31,9 @@
 namespace RangeHudControlsTestDetail
 {
     /** The range HUD's clickable controls, by their Slate tags. */
-    const TCHAR* const HudControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle"), TEXT("HudSettings")};
+    const TCHAR* const HudControls[] = {TEXT("ClubPicker"), TEXT("PlaceBall"), TEXT("RecordToggle"), TEXT("HudSettings")};
     /** The range toolbar's icons, each named by a hover tooltip in the HUD style. */
-    const TCHAR* const HudToolTipControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle")};
+    const TCHAR* const HudToolTipControls[] = {TEXT("ClubPicker"), TEXT("PlaceBall"), TEXT("RecordToggle")};
 
     /** The first tooltip Slate would show under Root: the club picker's sits on its inner combo button. */
     TSharedPtr<IToolTip> ShownToolTip(const TSharedRef<SWidget>& Root)
@@ -78,8 +79,12 @@ namespace RangeHudControlsTestDetail
 
     bool IsShown(const TSharedRef<SWindow>& Window, FName Tag)
     {
-        const TSharedPtr<SWidget> Widget = RenderedPlay::WithTag(Window, Tag);
-        return Widget && Widget->GetVisibility().IsVisible();
+        for (TSharedPtr<SWidget> Widget = RenderedPlay::WithTag(Window, Tag); Widget; Widget = Widget->GetParentWidget())
+        {
+            if (!Widget->GetVisibility().IsVisible()) return false;
+            if (Widget.Get() == &Window.Get()) return true;
+        }
+        return false;
     }
 
     const TCHAR* const PlacingHeading = TEXT("Training · Ball Placement");
@@ -163,18 +168,18 @@ private:
                     Tip.IsValid() && Tip->AsWidget()->GetTag() == HudToolTip::Tag);
             }
             {
-                const TSharedPtr<SWidget> Flag = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("GameModeToggle"));
-                const TSharedPtr<IToolTip> Tip = Flag ? ShownToolTip(Flag.ToSharedRef()) : nullptr;
-                Test->TestEqual(TEXT("The flag's tooltip names Game Mode and its key"),
+                const TSharedPtr<SWidget> Placement = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("PlaceBall"));
+                const TSharedPtr<IToolTip> Tip = Placement ? ShownToolTip(Placement.ToSharedRef()) : nullptr;
+                Test->TestEqual(TEXT("The placement tooltip names its key"),
                     Tip.IsValid() ? StaticCastSharedRef<SToolTip>(Tip->AsWidget())->GetTextTooltip().ToString() : FString(),
-                    FString(TEXT("Game Mode (G)")));
+                    FString(TEXT("Place ball (B)")));
             }
-            Test->TestFalse(TEXT("The flag has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Game Mode")));
+            Test->TestFalse(TEXT("Training omits the course toggle"), RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("GameModeToggle")).IsValid());
             Test->TestFalse(TEXT("The recording icon has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Record")));
             {
                 const FVector2D ClubSize = SizeOf(Window.ToSharedRef(), TEXT("ClubPicker"));
                 Test->TestTrue(TEXT("Toolbar buttons have equal sizes"),
-                    ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("GameModeToggle")), 0.5)
+                    ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("PlaceBall")), 0.5)
                     && ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("RecordToggle")), 0.5));
             }
             Test->TestTrue(TEXT("The ball is at address"), Mode->IsBallAtAddress());
@@ -244,7 +249,7 @@ private:
             Test->TestTrue(TEXT("The record button starts recording"), Mode->IsRecordingShots());
             return Capture(TEXT("hud-recording"));
         case 9:
-            return ClickThen(TEXT("RecordToggle"), 10);
+            return ActivateWithKeyboard(TEXT("RecordToggle"), 10);
         case 10:
             Test->TestFalse(TEXT("The record button stops recording"), Mode->IsRecordingShots());
             return ClickThen(TEXT("HudSettings"), 11);
@@ -266,7 +271,7 @@ private:
                 return Wait(1.0);
             }
             Test->TestEqual(TEXT("Settings preserves the current mode"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
-            return ClickThen(TEXT("HudSettings"), 24);
+            return ActivateWithKeyboard(TEXT("HudSettings"), 24);
         case 24:
             if (!RenderedPlay::ClickLabelled(*Test, GolfSettings::Get().LeftHanded ? TEXT("Left") : TEXT("Right")))
                 return true;
@@ -290,25 +295,21 @@ private:
         case 28:
             Test->TestFalse(TEXT("Discard returns directly to training"), Player->IsMainMenuOpen());
             Test->TestEqual(TEXT("Discard keeps the range session"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
-            return ClickThen(TEXT("GameModeToggle"), 33);
-        case 33:
-            Test->TestEqual(TEXT("The flag switches the session to Game Mode"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
-            Player->TogglePlacingBall();
-            Stage = 13;
-            return Wait(1.5);
+            return ClickThen(TEXT("PlaceBall"), 13);
         case 13:
             Test->TestTrue(TEXT("B starts placing the ball"), Player->IsPlacingBall());
             Test->TestTrue(TEXT("Placing retitles the hole"), ShowsText(Window.ToSharedRef(), PlacingHeading));
             Test->TestFalse(TEXT("The glow hides while placing"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
             Test->TestFalse(TEXT("Stroke, To Pin and Putts hide while placing"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
-            Test->TestFalse(TEXT("The hole has no record toggle"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
+            Test->TestTrue(TEXT("Training keeps its record toggle"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
             return Capture(TEXT("placing"));
         case 14:
             Player->CancelPlacingBall();
+            Mode->SetPlayMode(EOpenGolfPlayMode::Hole, BundledCourse::Load());
             Stage = 15;
             return Wait(1.0);
         case 15:
-            Test->TestTrue(TEXT("Game Mode shows Airways"), ShowsText(Window.ToSharedRef(), TEXT("Airways")));
+            Test->TestTrue(TEXT("Course HUD names the course"), ShowsText(Window.ToSharedRef(), TEXT("Savanna Range")));
             Test->TestTrue(TEXT("Course header shows the hole details"), ShowsText(Window.ToSharedRef(), TEXT("Hole 1  ·  Par 4  ·  400 yd")));
             // A normal hole: the tiles and the glow are back; recording stays a range control, and F9 is ignored.
             Test->TestTrue(TEXT("The hole tiles show on a normal hole"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
@@ -320,6 +321,7 @@ private:
                 Test->TestEqual(TEXT("F9 does not change recording on the hole"), Mode->IsRecordingShots(), bWasRecording);
             }
             {
+                Mode->SetPlayMode(EOpenGolfPlayMode::Range);
                 // A practice hole: a ball placed on the green, as HolePlayTest places one.
                 FVector Ground;
                 FVector Normal;
@@ -334,7 +336,7 @@ private:
             Test->TestTrue(TEXT("The practice hole is titled"), ShowsText(Window.ToSharedRef(), PlacingHeading));
             Test->TestFalse(TEXT("Stroke, To Pin and Putts hide on a practice hole"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
             Test->TestFalse(TEXT("No glow on a practice hole"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
-            Test->TestFalse(TEXT("No record toggle on a practice hole"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
+            Test->TestTrue(TEXT("Training recording is available"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
             return Capture(TEXT("practice"));
         case 17:
             Mode->SetPlayMode(EOpenGolfPlayMode::Range);
@@ -410,6 +412,20 @@ private:
     {
         WaitUntil = GetCurrentRunTime() + Seconds;
         return false;
+    }
+
+    bool ActivateWithKeyboard(const TCHAR* Tag, int32 NextStage)
+    {
+        const auto Control = RenderedPlay::WithTag(Window.ToSharedRef(), Tag);
+        if (!Test->TestTrue(FString(TEXT("Focusable HUD control: ")) + Tag, Control && Control->SupportsKeyboardFocus()))
+            return true;
+        auto& App = FSlateApplication::Get();
+        App.SetKeyboardFocus(Control, EFocusCause::Navigation);
+        const FKeyEvent Enter(EKeys::Enter, FModifierKeysState(), 0, false, 0, 0);
+        App.ProcessKeyDownEvent(Enter);
+        App.ProcessKeyUpEvent(Enter);
+        Stage = NextStage;
+        return Wait(1.0);
     }
 
     bool ClickThen(const TCHAR* Tag, int32 NextStage)

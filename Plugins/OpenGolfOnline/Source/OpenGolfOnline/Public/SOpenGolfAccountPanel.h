@@ -67,7 +67,13 @@ private:
     void BuildClubs(const TSharedRef<SVerticalBox>& Page, UOpenGolfOnlineSubsystem& Service);
     void BuildHistory(const TSharedRef<SVerticalBox>& Page, UOpenGolfOnlineSubsystem& Service);
     TSharedRef<SWidget> ClubRow(UOpenGolfOnlineSubsystem& Service, const TSharedPtr<FJsonObject>& Row);
-    TSharedRef<SWidget> HistoryLine(UOpenGolfOnlineSubsystem& Service, const TSharedPtr<FJsonObject>& Row);
+    TSharedRef<SWidget> HistoryLine(const TSharedPtr<FJsonObject>& Row);
+    void ShowShotDetails(TSharedPtr<FJsonObject> Row);
+    void ConfirmDeletion(FString Prompt, FString Label, TFunction<void()> Action);
+    TSharedPtr<SBox> Details;
+    TSharedPtr<SWidget> CancelButton;
+    FString SelectedId, DeletePrompt, DeleteLabel;
+    TFunction<void()> DeleteAction;
     /** A grouped block of the page with an optional caption; returns the box its rows go in. */
     TSharedRef<SVerticalBox> AddSection(const TSharedRef<SVerticalBox>& Page, const FString& Caption);
     /** Size 0 is the body size; muted text uses the label color. */
@@ -78,14 +84,15 @@ private:
     FOpenGolfAccountStyle Style;
     TSharedPtr<SBox> Content;
     TSharedPtr<SBox> PageContent;
-    TSharedPtr<SScrollBox> Scroll;
+    FButtonStyle ClubRowStyle;
+    TSharedPtr<SScrollBox> Scroll, ShotScroll;
     TSharedPtr<FOpenGolfDisplayNameDraft> DisplayNameDraft;
     TSharedPtr<SEditableTextBox> NameField;
     TSharedPtr<SListView<TSharedPtr<FJsonObject>>> HistoryList;
     TArray<TSharedPtr<FJsonObject>> HistoryRows;
     int32 SeenShape = -1;
     uint64 SeenHistoryRevision = MAX_uint64;
-    FString ConfirmDeleteId, LastAccountKey;
+    FString LastAccountKey;
     EOpenGolfAccountPage PageType = EOpenGolfAccountPage::Account;
     bool bShowHeading = true, bLoadedCarry = false, bWasSignedIn = false, bHistory = false, bRebuild = false;
 };

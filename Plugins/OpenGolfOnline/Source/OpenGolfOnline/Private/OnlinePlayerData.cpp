@@ -9,6 +9,48 @@
 
 using namespace OpenGolfOnline;
 
+namespace OnlinePlayerDataDetail
+{
+    /** Clubs the server keeps range statistics for; lob wedge and putter are not among them. */
+    bool IsTrackedClub(const FString& Club)
+    {
+        static const TSet<FString> Clubs = {TEXT("DR"),TEXT("3W"),TEXT("5W"),TEXT("7W"),TEXT("4I"),TEXT("5I"),TEXT("6I"),TEXT("7I"),TEXT("8I"),TEXT("9I"),TEXT("PW"),TEXT("GW"),TEXT("SW")};
+        return Clubs.Contains(Club);
+    }
+    /** One club's newest 200 shots of the last 90 days, the only shot query the transport allows. */
+    FString ClubShotsPath(const FString& Club) { return TEXT("/clubs/") + Club.ToLower() + TEXT("/shots?days=90&limit=200"); }
+    /** Mean ball speed over the shots that measured it, and mean carry plus signed roll over the shots with both. */
+    FOpenGolfClubShotAverages AverageShots(const TArray<TSharedPtr<FJsonValue>>& Rows)
+    {
+        double Speed = 0, Total = 0;
+        int32 Speeds = 0, Totals = 0;
+        for (const TSharedPtr<FJsonValue>& Value : Rows)
+        {
+            const TSharedPtr<FJsonObject> Row = Value.IsValid() && Value->Type == EJson::Object ? Value->AsObject() : nullptr;
+            if (!Row) continue;
+            double V, Carry, Roll;
+            if (Row->TryGetNumberField(TEXT("ball_speed_mph"), V) && FMath::IsFinite(V)) { Speed += V; ++Speeds; }
+            if (Row->TryGetNumberField(TEXT("carry_yd"), Carry) && Row->TryGetNumberField(TEXT("roll_yd"), Roll)
+                && FMath::IsFinite(Carry) && FMath::IsFinite(Roll)) { Total += Carry + Roll; ++Totals; }
+        }
+        FOpenGolfClubShotAverages Result;
+        if (Speeds) Result.BallSpeedMph = Speed / Speeds;
+        if (Totals) Result.TotalYd = Total / Totals;
+        return Result;
+    }
+    /** The shot count Carry lists for Club, or -1 when it is not listed. */
+    int64 CarryShots(const TArray<TSharedPtr<FJsonValue>>& Carry, const FString& Club)
+    {
+        for (const TSharedPtr<FJsonValue>& Value : Carry)
+        {
+            const TSharedPtr<FJsonObject> Row = Value.IsValid() && Value->Type == EJson::Object ? Value->AsObject() : nullptr;
+            if (Row && Text(Row, TEXT("club")) == Club) return int64(Number(Row, TEXT("shots"), -1));
+        }
+        return -1;
+    }
+} // namespace OnlinePlayerDataDetail
+using namespace OnlinePlayerDataDetail;
+
 FString UOpenGolfOnlineSubsystem::LocalPath() const
 {
 #if WITH_DEV_AUTOMATION_TESTS
@@ -126,15 +168,44 @@ void UOpenGolfOnlineSubsystem::LoadCarry()
         bLoading = false;
         TArray<TSharedPtr<FJsonValue>> Rows;
         if (SuccessReply(Reply) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Reply.Body),Rows))
-        { Carry = MoveTemp(Rows); ++HistoryRevision; OnHistoryChanged.Broadcast(); Status = TEXT("Profile updated."); }
+        {
+            Carry = MoveTemp(Rows); QueueClubAverages();
+            ++HistoryRevision; OnHistoryChanged.Broadcast(); Status = TEXT("Profile updated.");
+        }
         else Status = TEXT("Could not load club averages. Try again.");
         Touch();
     });
 }
+void UOpenGolfOnlineSubsystem::QueueClubAverages()
+{
+    TSet<FString> Listed;
+    for (const TSharedPtr<FJsonValue>& Value : Carry)
+    {
+        const TSharedPtr<FJsonObject> Row = Value.IsValid() && Value->Type == EJson::Object ? Value->AsObject() : nullptr;
+        const FString Club = Text(Row, TEXT("club"));
+        if (!IsTrackedClub(Club)) continue;
+        Listed.Add(Club);
+        const FOpenGolfClubShotAverages* Known = ClubAverages.Find(Club);
+        if ((!Known || Known->Shots != int64(Number(Row, TEXT("shots"), -1))) && !AveragesQueue.Contains(Club)) AveragesQueue.Add(Club);
+    }
+    for (auto It = ClubAverages.CreateIterator(); It; ++It) if (!Listed.Contains(It.Key())) { It.RemoveCurrent(); ++AveragesRevision; }
+    AveragesQueue.RemoveAll([&Listed](const FString& Club) { return !Listed.Contains(Club); });
+}
+void UOpenGolfOnlineSubsystem::StoreClubAverages(const FString& Club, const TArray<TSharedPtr<FJsonValue>>& Rows)
+{
+    FOpenGolfClubShotAverages Averages = AverageShots(Rows);
+    Averages.Shots = CarryShots(Carry, Club);
+    ClubAverages.Add(Club, Averages);
+    AveragesQueue.Remove(Club);
+    ++AveragesRevision;
+}
+void UOpenGolfOnlineSubsystem::ClearClubAverages()
+{
+    ClubAverages.Empty(); AveragesQueue.Empty(); bLoadingAverages = false; ++AveragesRequest; ++AveragesRevision;
+}
 void UOpenGolfOnlineSubsystem::LoadHistory(const FString& Club)
 {
-    static const TSet<FString> Clubs = {TEXT("DR"),TEXT("3W"),TEXT("5W"),TEXT("7W"),TEXT("4I"),TEXT("5I"),TEXT("6I"),TEXT("7I"),TEXT("8I"),TEXT("9I"),TEXT("PW"),TEXT("GW"),TEXT("SW")};
-    if (!Clubs.Contains(Club)) return;
+    if (!IsTrackedClub(Club)) return;
     OnBeforeReadProfile.Broadcast();
     if (HistoryClub != Club) History.Empty();
     HistoryClub = Club; ++HistoryRequest; bHistoryRequested = true; Touch();
@@ -161,8 +232,132 @@ void UOpenGolfOnlineSubsystem::UpdateDisplayName(const FString& Name, TFunction<
 void UOpenGolfOnlineSubsystem::DeleteShot(const FString& Id)
 {
     FGuid Parsed;
-    if (!FGuid::Parse(Id,Parsed) || bDeleting) return;
-    PendingDelete = Id; bDeleting = true; Touch();
+    if (!FGuid::Parse(Id, Parsed) || !HasSession() || IsBusy()) return;
+    bDeleting = true;
+    DeleteHistoryIds({Id});
+}
+
+void UOpenGolfOnlineSubsystem::ClearClubHistory(const FString& Club)
+{
+    if (IsTrackedClub(Club)) CollectHistoryIds(Club);
+}
+
+void UOpenGolfOnlineSubsystem::ClearAllHistory()
+{
+    CollectHistoryIds({});
+}
+
+void UOpenGolfOnlineSubsystem::CollectHistoryIds(const FString& Club)
+{
+    if (!HasSession() || IsBusy()) return;
+    bDeleting = true;
+    OnBeforeReadProfile.Broadcast();
+    TSet<FString> Ids;
+    for (const auto& Row : Outbox)
+        if (Club.IsEmpty() || Text(Row->AsObject(), TEXT("club")) == Club)
+            Ids.Add(Text(Row->AsObject(), TEXT("id")));
+    Status = TEXT("Collecting shots...");
+    Touch();
+    if (!Club.IsEmpty())
+    {
+        CollectClubHistoryIds({Club}, MoveTemp(Ids));
+        return;
+    }
+    Api(TEXT("/clubs/carry?days=90"), TEXT("GET"), {}, [this, Ids = MoveTemp(Ids)](FReply Reply) mutable
+    {
+        TArray<TSharedPtr<FJsonValue>> Rows;
+        TArray<FString> Clubs;
+        if (SuccessReply(Reply) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Reply.Body), Rows))
+        {
+            for (const auto& Row : Rows)
+            {
+                const FString Code = Row && Row->Type == EJson::Object ? Text(Row->AsObject(), TEXT("club")) : FString();
+                if (!IsTrackedClub(Code)) { FailHistoryRead(); return; }
+                Clubs.AddUnique(Code);
+            }
+            CollectClubHistoryIds(MoveTemp(Clubs), MoveTemp(Ids));
+        }
+        else FailHistoryRead();
+    });
+}
+
+void UOpenGolfOnlineSubsystem::FailHistoryRead()
+{
+    bDeleting = false;
+    Status = TEXT("Could not read the complete shot list. Retry the delete action.");
+    Touch();
+}
+
+void UOpenGolfOnlineSubsystem::CollectClubHistoryIds(TArray<FString> Clubs, TSet<FString> Ids)
+{
+    if (Clubs.IsEmpty()) { DeleteHistoryIds(MoveTemp(Ids)); return; }
+    const FString Path = ClubShotsPath(Clubs.Pop());
+    Api(Path, TEXT("GET"), {}, [this, Clubs = MoveTemp(Clubs), Ids = MoveTemp(Ids)](FReply Reply) mutable
+    {
+        TArray<TSharedPtr<FJsonValue>> Rows;
+        if (!SuccessReply(Reply) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Reply.Body), Rows))
+        { FailHistoryRead(); return; }
+        for (const auto& Row : Rows)
+        {
+            FGuid Parsed;
+            const FString Id = Row && Row->Type == EJson::Object ? Text(Row->AsObject(), TEXT("id")) : FString();
+            if (!FGuid::Parse(Id, Parsed)) { FailHistoryRead(); return; }
+            Ids.Add(Id);
+        }
+        CollectClubHistoryIds(MoveTemp(Clubs), MoveTemp(Ids));
+    });
+}
+
+void UOpenGolfOnlineSubsystem::DeleteHistoryIds(TSet<FString> Ids)
+{
+    if (Ids.IsEmpty() || Ids.Num() > 500)
+    {
+        bDeleting = false;
+        Status = Ids.IsEmpty() ? TEXT("No shots to delete.") : TEXT("More than 500 shots selected. Clear one club at a time.");
+        Touch();
+        return;
+    }
+    TArray<TSharedPtr<FJsonValue>> Values;
+    for (const FString& Id : Ids) Values.Add(MakeShared<FJsonValueString>(Id));
+    auto Body = MakeShared<FJsonObject>();
+    Body->SetArrayField(TEXT("ids"), Values);
+    // Persist the queue before sending. A final upload during logout or a restart must
+    // never reintroduce shots covered by an accepted deletion.
+    TArray<TSharedPtr<FJsonValue>> Removed;
+    Outbox.RemoveAll([&](const auto& Row)
+    {
+        if (!Ids.Contains(Text(Row->AsObject(), TEXT("id")))) return false;
+        Removed.Add(Row);
+        return true;
+    });
+    if (!Removed.IsEmpty() && !SaveLocal())
+    {
+        Outbox.Insert(Removed, 0);
+        bDeleting = false;
+        Status = TEXT("Could not save the pending-shot queue. Retry the deletion.");
+        Touch();
+        return;
+    }
+    Status = TEXT("Deleting shot history...");
+    Touch();
+    Api(TEXT("/range-shots/delete"), TEXT("POST"), Json(Body), [this, Removed = MoveTemp(Removed)](FReply Reply)
+    {
+        bDeleting = false;
+        const auto Result = Object(Reply.Body);
+        if (SuccessReply(Reply) && Number(Result,TEXT("deleted"),-1) >= 0)
+        {
+            ClearClubAverages();
+            bCarryRequested = true;
+            bHistoryRequested = !HistoryClub.IsEmpty();
+            Status = TEXT("Shot history deleted.");
+        }
+        else
+        {
+            if (!Removed.IsEmpty()) { Outbox.Insert(Removed, 0); SaveLocal(); }
+            Status = TEXT("Could not confirm deletion. Retry the delete action.");
+        }
+        Touch();
+    });
 }
 FString UOpenGolfOnlineSubsystem::ExportHistory()
 {
@@ -204,38 +399,42 @@ FString UOpenGolfOnlineSubsystem::ExportHistory()
 void UOpenGolfOnlineSubsystem::ProcessPlayerRequests()
 {
     if (!HasSession() || bLoading || bUploading) return;
-    if (bDeleting)
-    {
-        if (PendingDelete.IsEmpty()) return;
-        const FString Id = MoveTemp(PendingDelete); PendingDelete.Empty();
-        const auto Previous = Outbox;
-        Outbox.RemoveAll([&Id](const auto& Row){return Text(Row->AsObject(),TEXT("id"))==Id;});
-        if (!SaveLocal()) { Outbox=Previous; bDeleting=false; Status=TEXT("Could not save the deletion. Try again."); Touch(); return; }
-        auto Body = MakeShared<FJsonObject>(); Body->SetArrayField(TEXT("ids"),{MakeShared<FJsonValueString>(Id)});
-        Api(TEXT("/range-shots/delete"),TEXT("POST"),Json(Body),[this](FReply Reply)
-        {
-            bDeleting=false;
-            if (SuccessReply(Reply)) { bCarryRequested=true; bHistoryRequested=!HistoryClub.IsEmpty(); Status=TEXT("Shot deleted."); }
-            else Status=TEXT("Could not delete the shot. Refresh and try again.");
-            Touch();
-        });
-        return;
-    }
+    if (bDeleting) return;
     if (bHistoryRequested)
     {
         bHistoryRequested=false; bLoading=true;
         const uint64 Version=HistoryRequest;
-        const FString Path=TEXT("/clubs/")+HistoryClub.ToLower()+TEXT("/shots?days=90&limit=200");
-        Api(Path,TEXT("GET"),{},[this,Version](FReply Reply)
+        Api(ClubShotsPath(HistoryClub),TEXT("GET"),{},[this,Version](FReply Reply)
         {
             bLoading=false;
             if (Version!=HistoryRequest) return;
             TArray<TSharedPtr<FJsonValue>> Rows;
             if (SuccessReply(Reply) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Reply.Body),Rows))
-            { History=MoveTemp(Rows); ++HistoryRevision; OnHistoryChanged.Broadcast(); Status=TEXT("Shot history updated."); }
+            {
+                // The same rows the club averages are computed from, so that club's averages are refreshed for free.
+                StoreClubAverages(HistoryClub,Rows);
+                History=MoveTemp(Rows); ++HistoryRevision; OnHistoryChanged.Broadcast(); Status=TEXT("Shot history updated.");
+            }
             else Status=TEXT("Could not load shot history. Try again.");
             Touch();
         });
     }
     else if (bCarryRequested) { bCarryRequested=false; LoadCarry(); }
+    else if (!bLoadingAverages && !AveragesQueue.IsEmpty())
+    {
+        // Lowest priority and not part of IsBusy: club rows stay clickable, and a club's shots go first.
+        const FString Club=AveragesQueue[0]; AveragesQueue.RemoveAt(0);
+        bLoadingAverages=true;
+        const uint64 Version=AveragesRequest;
+        Api(ClubShotsPath(Club),TEXT("GET"),{},[this,Version,Club](FReply Reply)
+        {
+            if (Version!=AveragesRequest) return;
+            bLoadingAverages=false;
+            TArray<TSharedPtr<FJsonValue>> Rows;
+            // A failed load stores nothing, so the next club averages load asks again.
+            if (SuccessReply(Reply) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Reply.Body),Rows))
+                StoreClubAverages(Club,Rows);
+            Touch();
+        });
+    }
 }

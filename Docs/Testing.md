@@ -35,6 +35,8 @@ matching completed tests; an empty or failed run is not a pass.
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
+| Course definitions, round scoring or travel | `UOpenGolf.Course` (its `Catalog` test checks the bundled course against the range) and `UOpenGolf.Range.HolePlay`; with rendering (`-Rendered`), `UOpenGolf.Visual.CourseBrowser` |
+| Hole minimap | `UOpenGolf.Minimap`; its `RenderedClick` test needs rendering (`-Rendered`) |
 | In-game updates | `OpenGameUpdate` (run with `-Filter OpenGameUpdate`); the installer by hand, see [In-game updates](Releases.md#in-game-updates) |
 | Ubuntu packaging | `python3 -B -m unittest Assets.Scripts.test_build_deb Assets.Scripts.test_check_package_runner`; requires `dpkg-deb` |
 

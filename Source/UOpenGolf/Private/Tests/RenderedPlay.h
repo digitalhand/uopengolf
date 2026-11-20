@@ -6,11 +6,15 @@
 
 #include "Editor.h"
 #include "Framework/Application/SlateApplication.h"
+#include "HAL/FileManager.h"
+#include "ImageUtils.h"
 #include "Input/HittestGrid.h"
 #include "Layout/WidgetPath.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
+#include "Misc/Paths.h"
 #include "PlayInEditorDataTypes.h"
 #include "UI/Common/HudToolTip.h"
 #include "Widgets/SToolTip.h"
@@ -222,6 +226,26 @@ namespace RenderedPlay
         }
         Test.AddError(TEXT("Missing button: ") + Label);
         return false;
+    }
+
+    /** Saves Pixels as a PNG at Saved/Screenshots/RelativePath, for checking a rendered run by eye. */
+    inline bool SavePng(FAutomationTestBase& Test, FIntPoint Size, const TArray<FColor>& Pixels, const FString& RelativePath)
+    {
+        TArray64<uint8> Png;
+        FImageUtils::PNGCompressImageArray(Size.X, Size.Y, Pixels, Png);
+        const FString Path = FPaths::ProjectSavedDir() / TEXT("Screenshots") / RelativePath;
+        IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path), true);
+        return Test.TestTrue(TEXT("Save screenshot ") + RelativePath, FFileHelper::SaveArrayToFile(Png, *Path));
+    }
+
+    /** Screenshots Window, Slate included, to Saved/Screenshots/RelativePath. */
+    inline bool SaveWindowPng(FAutomationTestBase& Test, const TSharedRef<SWindow>& Window, const FString& RelativePath)
+    {
+        TArray<FColor> Pixels;
+        FIntVector Size;
+        if (!Test.TestTrue(TEXT("Read window pixels for ") + RelativePath, FSlateApplication::Get().TakeScreenshot(Window, Pixels, Size)))
+            return false;
+        return SavePng(Test, FIntPoint(Size.X, Size.Y), Pixels, RelativePath);
     }
 } // namespace RenderedPlay
 

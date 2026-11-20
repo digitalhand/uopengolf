@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Hud/RangeHud.h"
+#include "GolfCourseDefinition.h"
 #include "UI/Hud/BallReadyGlow.h"
+#include "UI/Hud/HoleMinimap.h"
 #include "UI/Common/HudStatusGlyph.h"
 #include "Widgets/Input/SButton.h"
 #include "RangePerformance.h"
@@ -42,6 +44,10 @@ namespace
     constexpr float HudEdge = HudStyle::Edge;
     /** Version label distance from the bottom edge, inside HudScale::BottomPanelGap. */
     constexpr float HudVersionBottom = 6.0f;
+    /** The hole map stays below the play toolbar and its hole tiles, shrinking to fit a short viewport... */
+    constexpr float HudMapTop = 150.0f;
+    /** ...and above the Test shots button and the version label under it. */
+    constexpr float HudMapBottom = 72.0f;
     /** Shot and status text is rebuilt this often; the wind arrow still turns with the camera every frame. */
     constexpr double HudTextRefreshSeconds = 0.1;
     const FLinearColor HudShadowColor = HudStyle::ShadowColor;
@@ -91,6 +97,12 @@ void SRangeHud::Construct(const FArguments& Args)
                     SNew(SBox).Visibility(EVisibility::SelfHitTestInvisible).WidthOverride(HudColumnWidth)
                     [ MakeColumn() ]
                 ]
+            ]
+            // Bottom left: the hole map, which takes clicks to aim.
+            + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, HudMapTop, 0, HudMapBottom)
+            [
+                SNew(SScaleBox).Visibility(EVisibility::SelfHitTestInvisible).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+                [ SNew(SHoleMinimap).Controller(Controller) ]
             ]
             // Game version in the bottom-left corner, under the Test shots button.
             + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, 0, 0, HudVersionBottom)
@@ -206,15 +218,18 @@ void SRangeHud::Refresh(bool bText)
         if(TileLabels[I].ToString()!=Tiles[I].Label)TileLabels[I]=FText::FromString(Tiles[I].Label);
     }
     bBallReady = LaunchMonitor && LaunchMonitor->IsBallReady();
-    const bool bHole = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
-    const bool bBallPlacement = bHole && (PlayerController->IsPlacingBall() || Mode->GetHoleRound().bPractice);
-    // Fixed headings are shared texts; the hole details are rebuilt only when they change, as the tiles are.
+    const bool bHole = Mode && Mode->IsCourseRound();
+    const bool bBallPlacement = !bHole && Mode && (PlayerController->IsPlacingBall() || Mode->GetHoleRound().bPractice);
+    const UGolfCourseDefinition* Course = Mode ? Mode->GetCourse() : nullptr;
+    // Headings are shared texts (the course's name is its asset's FText); the hole details are rebuilt only when they
+    // change, as the tiles are.
     static const FText TrainingHeading = FText::FromString(TEXT("Training"));
     static const FText PlacementHeading = FText::FromString(TEXT("Training · Ball Placement"));
-    static const FText HoleHeading = FText::FromString(TEXT("Airways"));
-    Heading = bBallPlacement ? PlacementHeading : bHole ? HoleHeading : TrainingHeading;
-    const FString Details = bHole && !bBallPlacement
-        ? ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM))
+    static const FText RoundHeading = FText::FromString(TEXT("Course round"));
+    Heading = bBallPlacement ? PlacementHeading : Course ? Course->DisplayName : bHole ? RoundHeading : TrainingHeading;
+    const FString Details = bHole
+        ? ShotDisplay::HoleDetails(Mode->GetHoleNumber(), Mode->GetHoleRound().Par,
+            GolfSettings::RoundDistance(Course ? Course->LengthM : AUOpenGolfRange::HoleDistanceM))
         : FString();
     if (HoleDetails.ToString() != Details)
         HoleDetails = FText::FromString(Details);

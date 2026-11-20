@@ -11,6 +11,7 @@ UGolfGimmieIndicator::UGolfGimmieIndicator(const FObjectInitializer& ObjectIniti
     SetGenerateOverlapEvents(false);
     SetCanEverAffectNavigation(false);
     CastShadow = false;
+    SetHiddenInSceneCapture(true);
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail"));
     RingMaterial = Material.Object;
 }

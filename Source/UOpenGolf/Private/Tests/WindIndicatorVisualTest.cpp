@@ -8,9 +8,7 @@
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
-#include "ImageUtils.h"
 #include "Misc/AutomationTest.h"
-#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UI/Hud/RangeHud.h"
 #include "OpenGolfWindIndicator.h"
@@ -142,12 +140,9 @@ bool FWindIndicatorVisualTest::RunTest(const FString& Parameters)
     const bool bRead = Target && Target->GameThread_GetRenderTargetResource()->ReadPixels(Pixels);
     if (TestTrue(TEXT("Designer preview renders without Play"), bRead))
     {
-        TArray64<uint8> Png;
-        FImageUtils::PNGCompressImageArray(Width, Height, Pixels, Png);
-        const FString Filename = FPaths::ProjectSavedDir() / FString::Printf(TEXT("Screenshots/WindIndicator/designer-%dx%d.png"), Width, Height);
-        IFileManager::Get().MakeDirectory(*FPaths::GetPath(Filename), true);
-        TestTrue(TEXT("Designer screenshot saved"), FFileHelper::SaveArrayToFile(Png, *Filename));
-        AddInfo(FString::Printf(TEXT("Designer capture: %s"), *Filename));
+        const FString Name = FString::Printf(TEXT("WindIndicator/designer-%dx%d.png"), Width, Height);
+        if (RenderedPlay::SavePng(*this, FIntPoint(Width, Height), Pixels, Name))
+            AddInfo(TEXT("Designer capture: Saved/Screenshots/") + Name);
     }
     BeginCleanup(Renderer);
     if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))

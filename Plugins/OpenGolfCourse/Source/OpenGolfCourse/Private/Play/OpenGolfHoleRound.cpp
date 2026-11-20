@@ -23,6 +23,12 @@ FString FOpenGolfHoleRound::ResultName() const
     return bHoled ? ScoreName(Strokes, Par) : FString();
 }
 
+FString FOpenGolfHoleRound::ScoreToPar(int32 Strokes, int32 Par)
+{
+    const int32 Relative = Strokes - Par;
+    return Relative == 0 ? FString(TEXT("E")) : FString::Printf(TEXT("%+d"), Relative);
+}
+
 FString FOpenGolfHoleRound::ScoreName(int32 Strokes, int32 Par)
 {
     if (Strokes == 1)

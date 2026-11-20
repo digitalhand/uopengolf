@@ -32,8 +32,7 @@ bash Assets/Scripts/ue.sh editor
 
 Press **Play**, then choose **Training**. Press **H** for a replay shot and **P** to
 choose another. **C** connects a Square Home, **T** disconnects, **Tab** changes club,
-and **F9** toggles recording while connected. **G** switches between range and hole
-play. **Escape** closes an active panel or opens the pause menu.
+and **F9** toggles recording while connected. For a scored round, open **Courses** from the main menu, select **Savanna Range**, and choose **Play**. **Escape** closes an active panel or opens the pause menu.
 
 For toolchain and graphics requirements, see [Development](Docs/Development.md).
 

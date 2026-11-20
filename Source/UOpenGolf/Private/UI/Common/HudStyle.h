@@ -67,6 +67,12 @@ namespace HudStyle
 
     inline const FLinearColor ShadowColor(0.0f, 0.0f, 0.0f, 0.6f);
 
+    /** Hole minimap: the dark outline under every mark, so white marks read on fairway and sand alike. */
+    inline FLinearColor MapInkColor() { return FLinearColor(0.012f, 0.025f, 0.022f); }
+
+    /** Hole minimap: the pin flag. */
+    inline FLinearColor MapFlagColor() { return FLinearColor(1.0f, 0.74f, 0.24f); }
+
     constexpr float TileRadius = 4.0f;
     constexpr float ToolbarButtonSize = 44.0f;
     /** No background until hovered. Every state is set: a default FSlateBrush would draw a white box. */

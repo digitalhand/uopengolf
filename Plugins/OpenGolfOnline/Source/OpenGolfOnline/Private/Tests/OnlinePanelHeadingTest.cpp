@@ -57,13 +57,13 @@ bool FOpenGolfPanelHeadingTest::RunTest(const FString&)
     Config.Authority = TEXT("https://login.example.test/"); Config.ClientId = TEXT("test-client");
     Config.Audience = TEXT("https://api.example.test"); Config.ApiOrigin = TEXT("https://api.example.test");
     Config.ApplicationName = TEXT("Test golf"); Config.StorageName = TEXT("OpenGolfOnlinePanelTests"); Config.CallbackPorts = {47801};
-    struct FPending { FString Url; FHttpCallback Done; };
+    struct FPending { FString Url; FHttpCallback Done; FString Body; };
     TArray<FPending> Pending;
     auto* Session = NewObject<UOpenGolfOnlineSubsystem>(NewObject<UGameInstance>());
     const FString Root = FPaths::ProjectSavedDir() / TEXT("Automation") / FGuid::NewGuid().ToString(EGuidFormats::Digits);
-    Session->SetupForTests(Config, [&Pending](const FString& Url, const FString&, const FString&, const FString&, FHttpCallback Done)
+    Session->SetupForTests(Config, [&Pending](const FString& Url, const FString&, const FString& Body, const FString&, FHttpCallback Done)
     {
-        Pending.Add({Url, MoveTemp(Done)});
+        Pending.Add({Url, MoveTemp(Done), Body});
         auto Cancel = MakeShared<FRequestCancellation, ESPMode::ThreadSafe>(); Cancel->Finished.store(true); return Cancel;
     }, Root);
     // Answers every pending request whose URL contains Part (the service and the panel can both ask for club
@@ -107,6 +107,22 @@ bool FOpenGolfPanelHeadingTest::RunTest(const FString&)
     TestFalse(TEXT("No back icon on the club list"), IsShown(FindTag(Panel, TEXT("PageBack"))));
     TestTrue(TEXT("Logout icon while signed in"), IsShown(FindTag(Panel, TEXT("AccountSignOut"))));
 
+    // Ball speed and total are averaged from the club's shots, loaded after the list without making the service busy.
+    for (const TCHAR* Caption : {TEXT("Club"), TEXT("Ball speed"), TEXT("Carry"), TEXT("Total"), TEXT("Shots")})
+        TestTrue(FString(TEXT("Column caption ")) + Caption, ShowsText(Panel, Caption));
+    TestTrue(TEXT("Carry is the server's average"), ShowsText(Panel, TEXT("150.5 yd")));
+    TestTrue(TEXT("Averages show pending while they load"), Session->IsLoadingClubAverages() && ShowsText(Panel, TEXT("…")));
+    TestFalse(TEXT("Loading averages does not make the service busy"), Session->IsBusy());
+    const uint64 PendingRevision = Session->GetAveragesRevision();
+    // Speeds 100 and 110; totals 150 + 5 and 152 - 1; the third shot measured neither.
+    Respond(TEXT("/clubs/7i/shots?"), TEXT("[{\"carry_yd\":150,\"roll_yd\":5,\"ball_speed_mph\":100},"
+        "{\"carry_yd\":152,\"roll_yd\":-1,\"ball_speed_mph\":110},{\"carry_yd\":149}]"));
+    Refresh();
+    TestFalse(TEXT("Averages finished loading"), Session->IsLoadingClubAverages());
+    TestNotEqual(TEXT("Stored averages change the revision the cells follow"), Session->GetAveragesRevision(), PendingRevision);
+    TestTrue(TEXT("Average ball speed"), ShowsText(Panel, TEXT("105.0 mph")));
+    TestTrue(TEXT("Average total is carry plus signed roll"), ShowsText(Panel, TEXT("153.0 yd")));
+
     const TSharedPtr<SWidget> Row = FindTag(Panel, TEXT("ClubRow:7I"));
     TestTrue(TEXT("The 7i row is a button"), Row.IsValid() && Row->GetTypeAsString() == TEXT("SButton"));
     if (Row.IsValid() && Row->GetTypeAsString() == TEXT("SButton"))
@@ -120,9 +136,59 @@ bool FOpenGolfPanelHeadingTest::RunTest(const FString&)
     TestTrue(TEXT("Back leaves one club's shots"), Panel->HandleBack());
     Session->Tick(0);
     Respond(TEXT("/clubs/carry"), TEXT("[{\"club\":\"7I\",\"shots\":12,\"avg_carry_yd\":150.5}]"));
+    Session->Tick(0);
     Refresh();
+    TestFalse(TEXT("An unchanged shot count does not reload the club's averages"),
+        Pending.ContainsByPredicate([](const FPending& Request) { return Request.Url.Contains(TEXT("/shots?")); }));
     TestTrue(TEXT("Club list title again"), ShowsText(Panel, TEXT("Shot history")));
     TestFalse(TEXT("No back icon after Back"), IsShown(FindTag(Panel, TEXT("PageBack"))));
+
+    TestTrue(TEXT("Whole history action on overview"), ShowsText(Panel, TEXT("Clear all")));
+    auto Queue = [&](const TCHAR* Club)
+    {
+        auto Shot = MakeShared<FJsonObject>();
+        Shot->SetStringField(TEXT("club"), Club);
+        Shot->SetStringField(TEXT("id"), FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens));
+        return Session->QueueShot(Shot, Session->GetAccountKey());
+    };
+    Queue(TEXT("7I"));
+    Queue(TEXT("DR"));
+    Session->ClearClubHistory(TEXT("7I"));
+    Session->ClearAllHistory();
+    const FString SingleId = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+    const FString Single = FString::Printf(TEXT("[{\"id\":\"%s\"}]"), *SingleId);
+    Respond(TEXT("/clubs/7i/shots?"), Single);
+    auto DeleteBodies = [&]
+    {
+        return Pending.FilterByPredicate([](const FPending& Request) { return Request.Url.EndsWith(TEXT("/range-shots/delete")); });
+    };
+    const auto ClubDeletes = DeleteBodies();
+    TestEqual(TEXT("Only one deletion in flight"), ClubDeletes.Num(), 1);
+    if (!ClubDeletes.IsEmpty()) TestTrue(TEXT("Delete includes selected club shot"), ClubDeletes[0].Body.Contains(SingleId));
+    Queue(TEXT("7I"));
+    Respond(TEXT("/range-shots/delete"), TEXT("{\"deleted\":1}"));
+    TestEqual(TEXT("Clear club keeps another club and the newer shot"), Session->GetPendingCount(), 2);
+    Session->ClearAllHistory();
+    Respond(TEXT("/clubs/carry"), TEXT("[{\"club\":\"7I\"},{\"club\":\"DR\"}]"));
+    TArray<FString> DriverIds, DriverRows;
+    for (int32 I = 0; I < 24; ++I)
+    {
+        const FString Id = FGuid::NewGuid().ToString(EGuidFormats::DigitsWithHyphens);
+        DriverIds.Add(Id);
+        DriverRows.Add(FString::Printf(TEXT("{\"id\":\"%s\"}"), *Id));
+    }
+    Respond(TEXT("/clubs/dr/shots?"), TEXT("[") + FString::Join(DriverRows, TEXT(",")) + TEXT("]"));
+    Respond(TEXT("/clubs/7i/shots?"), Single);
+    const auto AllDeletes = DeleteBodies();
+    TestEqual(TEXT("All 25 stored shots use one POST"), AllDeletes.Num(), 1);
+    if (!AllDeletes.IsEmpty())
+    {
+        TestTrue(TEXT("Includes iron"), AllDeletes[0].Body.Contains(SingleId));
+        for (const FString& Id : DriverIds) TestTrue(TEXT("Includes driver shot"), AllDeletes[0].Body.Contains(Id));
+    }
+    Queue(TEXT("DR"));
+    Respond(TEXT("/range-shots/delete"), TEXT("{\"deleted\":25}"));
+    TestEqual(TEXT("Clear all keeps shots recorded after confirmation"), Session->GetPendingCount(), 1);
 
     Session->SignOut();
     Pending.Empty();

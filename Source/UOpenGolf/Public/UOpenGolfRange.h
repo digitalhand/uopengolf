@@ -2,9 +2,13 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
+#include "HoleMapFrame.h"
+
 #include "UOpenGolfRange.generated.h"
 
 class UPostProcessComponent;
+class USceneCaptureComponent2D;
+class UTextureRenderTarget2D;
 class UOpenGolfCupComponent;
 class UOpenGolfFlagstickComponent;
 class AOpenFairwayBall;
@@ -62,6 +66,38 @@ public:
     UFUNCTION(CallInEditor, BlueprintCallable, Category = "UOpenGolf|Terrain")
     void AlignLayoutToTerrain();
 
+    /** Hole map framing: ground shown beyond the tee and behind the cup. The tee-to-cup direction is map up. */
+    UPROPERTY(EditAnywhere, Category = "UOpenGolf|Minimap", meta = (ClampMin = "0", Units = "cm"))
+    float MapEndMargin = 3200;
+
+    /** Hole map framing: the narrowest ground shown across the hole. */
+    UPROPERTY(EditAnywhere, Category = "UOpenGolf|Minimap", meta = (ClampMin = "100", Units = "cm"))
+    float MapMinimumWidth = 18000;
+
+    /** Hole map framing: shifts the picture right (positive) or left of the tee-to-cup line. */
+    UPROPERTY(EditAnywhere, Category = "UOpenGolf|Minimap", meta = (Units = "cm"))
+    float MapSideOffset = 0;
+
+    /**
+     * The top-down picture of the hole that the HUD minimap draws; null before the first capture and without a renderer
+     * (NullRHI). Captured once the scene has finished loading (and, in editor builds, compiling its textures, meshes and
+     * shaders), so a picture taken just after level travel never shows placeholder textures; again after
+     * InvalidateHoleMap.
+     */
+    UTextureRenderTarget2D* GetHoleMapTexture() const { return HoleMapTexture; }
+
+    /** The frame the hole map was captured in: maps world positions to the picture's UV and back. */
+    const FHoleMapFrame& GetHoleMapFrame() const { return HoleMapFrame; }
+
+    /** Recaptures the hole map once the scene is ready, after a change to what it shows (grass, layout). */
+    void InvalidateHoleMap();
+
+    /**
+     * Longest wait (seconds) for the scene to be ready before the hole map is captured anyway, so the minimap is never
+     * missing for long; it is captured again once the scene is ready.
+     */
+    static constexpr double HoleMapReadyTimeoutS = 10.0;
+
     /** Distance from the tee to the pin (400 yards), where a new layout places the flag. */
     static constexpr float HoleDistanceM = 365.76f;
 
@@ -106,6 +142,30 @@ private:
     template <typename T>
     T* AddLayoutComponent(FName Name, const TCHAR* Folder);
     void UpdateGrass();
+
+    /** Captures a stale hole map when the scene is ready, or an interim one when it has waited too long. */
+    void UpdateHoleMap();
+
+    /** Frames the hole and renders it top-down into HoleMapTexture, once; the scene is static during Play. */
+    void CaptureHoleMap();
+
+    /** Nothing the capture draws is still loading or, in editor builds, compiling (placeholders would be captured). */
+    static bool IsSceneReadyForHoleMap();
+
+    /** Created on the first capture; it never captures on its own (no per-frame cost). */
+    UPROPERTY(Transient)
+    TObjectPtr<USceneCaptureComponent2D> HoleMapCapture;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UTextureRenderTarget2D> HoleMapTexture;
+
+    FHoleMapFrame HoleMapFrame;
+    /** The picture is missing or out of date; captured by UpdateHoleMap. */
+    bool bHoleMapDirty = false;
+    /** The current picture was taken at the time limit, before the scene was ready. */
+    bool bHoleMapInterim = false;
+    /** Platform time when the picture went stale. */
+    double HoleMapStaleSince = 0.0;
 
     UPROPERTY(VisibleInstanceOnly, Category = "UOpenGolf|Layout")
     TArray<TObjectPtr<AActor>> LayoutActors;

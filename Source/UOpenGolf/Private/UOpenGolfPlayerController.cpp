@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfPlayerController.h"
+#include "Course/GolfCourseSubsystem.h"
+#include "GameMapsSettings.h"
+#include "GolfCourseDefinition.h"
+#include "TrainingWindSubsystem.h"
 #include "OpenGolfSettings.h"
 #include "OpenGolfOnlineSubsystem.h"
 #include "GameFramework/PlayerInput.h"
@@ -39,6 +43,12 @@ namespace
 {
     /** Level URL option: the map was reloaded by "Main menu", so open the main menu. */
     const TCHAR* ReturnToMainMenuOption = TEXT("MainMenu");
+
+    UTrainingWindSubsystem* GetTrainingWind(const APlayerController& Controller)
+    {
+        const UGameInstance* GameInstance = Controller.GetGameInstance();
+        return GameInstance ? GameInstance->GetSubsystem<UTrainingWindSubsystem>() : nullptr;
+    }
 
     UOpenLaunchMonitorSubsystem* GetLaunchMonitor(const APlayerController& Controller)
     {
@@ -85,7 +95,7 @@ namespace
     // The aim turns around the target line on the range, and around the line to the cup on the hole.
     float AimCenterDeg(const AUOpenGolfGameMode& Mode, const AOpenFairwayBall& Ball)
     {
-        return Mode.GetPlayMode() == EOpenGolfPlayMode::Hole ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
+        return (Mode.GetPlayMode() == EOpenGolfPlayMode::Hole || Mode.IsPractice()) ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
     }
 } // namespace
 
@@ -103,9 +113,11 @@ void AUOpenGolfPlayerController::BeginPlay()
     }
 
     // The camera follows the ball, so it reads the ball's position only after the ball has moved this frame.
-    if (const AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->GetBall())
+    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
-        AddTickPrerequisiteActor(Mode->GetBall());
+        if (Mode->GetBall())
+            AddTickPrerequisiteActor(Mode->GetBall());
+        RoundCompleteHandle = Mode->OnRoundComplete.AddUObject(this, &ThisClass::ShowFinishedRound);
     }
 
     FActorSpawnParameters Params;
@@ -135,12 +147,28 @@ void AUOpenGolfPlayerController::BeginPlay()
         Viewport->AddViewportWidgetContent(MainMenu.ToSharedRef(), 100);
         const AGameModeBase* Mode = GetWorld()->GetAuthGameMode();
         const bool bReturnedToMenu = Mode && UGameplayStatics::HasOption(Mode->OptionsString, ReturnToMainMenuOption);
-        if (!GolfSettings::BypassStartupMenu() || bReturnedToMenu) MainMenu->Open();
+        if (IsCourseRound())
+            MainMenu->EnterSession();
+        else
+        {
+            // Training picks up the wind the player left it with, unless the starting-wind preference changed.
+            if (UTrainingWindSubsystem* Session = GetTrainingWind(*this))
+                if (const TOptional<OpenGolfPlay::FOpenGolfWindSetting> Saved = Session->Restore(GolfSettings::Get().WindMph))
+                {
+                    Wind = Saved.GetValue();
+                    ApplyWind();
+                }
+            if (Mode && UGameplayStatics::HasOption(Mode->OptionsString, UGolfCourseSubsystem::BrowserOption))
+                MainMenu->OpenCourses();
+            else if (!GolfSettings::BypassStartupMenu() || bReturnedToMenu) MainMenu->Open();
+        }
     }
 }
 
 void AUOpenGolfPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
+        Mode->OnRoundComplete.Remove(RoundCompleteHandle);
     if(HudNavigation && FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(HudNavigation);
     HudNavigation.Reset();
     if (MainMenu.IsValid())
@@ -188,7 +216,6 @@ void AUOpenGolfPlayerController::SetupInputComponent()
         {TEXT("IA_TestShots"), EKeys::P, &ThisClass::ToggleReplayPanel},
         {TEXT("IA_NextClub"), EKeys::Tab, &ThisClass::SelectNextClub},
         {TEXT("IA_TeeUp"), EKeys::R, &ThisClass::ResetBallToTee},
-        {TEXT("IA_PlayMode"), EKeys::G, &ThisClass::TogglePlayMode},
         {TEXT("IA_PlaceBall"), EKeys::B, &ThisClass::TogglePlacingBall},
         {TEXT("IA_Wind"), EKeys::W, &ThisClass::ToggleWindPanel},
         {TEXT("IA_Click"), EKeys::LeftMouseButton, &ThisClass::HandleLeftClick},
@@ -251,22 +278,44 @@ void AUOpenGolfPlayerController::HandleEscape()
         OpenMainMenu();
 }
 
-void AUOpenGolfPlayerController::TogglePlayMode()
+bool AUOpenGolfPlayerController::IsCourseRound() const
 {
-    if (bMainMenuOpen) return;
-    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->TogglePlayMode())
-    {
-        SetPlacingBall(false);
-        // A new hole or range session starts with a clean view of the tee.
-        if (auto* PresentedBall = Cast<AUOpenGolfBall>(Mode->GetBall()))
-            PresentedBall->ClearShotTrailHistory();
-    }
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    return Mode && Mode->IsCourseRound();
+}
+
+bool AUOpenGolfPlayerController::IsRoundComplete() const
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    return Mode && Mode->IsRoundComplete();
+}
+
+void AUOpenGolfPlayerController::StartCourse(const UGolfCourseDefinition& Course)
+{
+    UGameplayStatics::OpenLevelBySoftObjectPtr(this, Course.Map, true, UGolfCourseSubsystem::TravelOptions(Course));
+}
+
+void AUOpenGolfPlayerController::ShowFinishedRound()
+{
+    if (IsRoundComplete() && !bMainMenuOpen)
+        OpenMainMenu();
+}
+
+void AUOpenGolfPlayerController::ReturnToCourses()
+{
+    TravelToMenu(UGolfCourseSubsystem::BrowserOption);
+}
+
+void AUOpenGolfPlayerController::TravelToMenu(const TCHAR* Option)
+{
+    const TSoftObjectPtr<UWorld> MenuMap{FSoftObjectPath(UGameMapsSettings::GetGameDefaultMap())};
+    UGameplayStatics::OpenLevelBySoftObjectPtr(this, MenuMap, true, Option);
 }
 
 void AUOpenGolfPlayerController::SetPlacingBall(bool bPlacing)
 {
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
-    bPlacingBall = bPlacing && Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
+    bPlacingBall = bPlacing && !bMainMenuOpen && Mode && !Mode->IsCourseRound();
     CurrentMouseCursor = bPlacingBall ? EMouseCursor::Crosshairs : EMouseCursor::Default;
 }
 
@@ -297,7 +346,7 @@ bool AUOpenGolfPlayerController::IsShortGameView() const
 {
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
     const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
-    if (!Ball || Mode->GetPlayMode() != EOpenGolfPlayMode::Hole)
+    if (!Ball || (!Mode->IsCourseRound() && !Mode->IsPractice()))
         return false;
     return OpenGolfPlay::IsShortGame(Mode->GetDistanceToCupM(), Ball->GetResult().Surface == EOpenFairwaySurface::Green);
 }
@@ -506,7 +555,7 @@ void AUOpenGolfPlayerController::SelectNextClub()
 
 void AUOpenGolfPlayerController::ResetBallToTee()
 {
-    if (bMainMenuOpen) return;
+    if (bMainMenuOpen || IsCourseRound()) return;
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
         // Only the player's tee-up clears the history tracers; the automatic re-tee keeps them.
@@ -538,6 +587,17 @@ bool AUOpenGolfPlayerController::NudgeAim(int32 Direction)
     return SetAimYaw(GetAimYaw() + FMath::Sign(Direction) * (IsFineAim() ? OpenGolfPlay::FineAimTapStepDeg : OpenGolfPlay::AimTapStepDeg));
 }
 
+bool AUOpenGolfPlayerController::AimToward(const FVector2D& WorldPoint, double MinDistanceCm)
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    // While placing, a click chooses the lie; SetAimYaw refuses the rest (menu open, ball not at address).
+    if (!Ball || bPlacingBall)
+        return false;
+    const FVector2D Delta = WorldPoint - FVector2D(Ball->GetActorLocation());
+    return Delta.Size() > MinDistanceCm && SetAimYaw(FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X)));
+}
+
 float AUOpenGolfPlayerController::GetAimOffsetDeg() const
 {
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
@@ -554,6 +614,7 @@ float AUOpenGolfPlayerController::GetAimYaw() const
 
 void AUOpenGolfPlayerController::SetWindOn(bool bOn)
 {
+    if (IsCourseRound()) return;
     AdoptRangeWind();
     Wind.bOn = bOn;
     ApplyWind();
@@ -561,6 +622,7 @@ void AUOpenGolfPlayerController::SetWindOn(bool bOn)
 
 void AUOpenGolfPlayerController::SetWindSpeedMph(float Mph)
 {
+    if (IsCourseRound()) return;
     AdoptRangeWind();
     Wind.SetSpeedMph(Mph);
     ApplyWind();
@@ -568,6 +630,7 @@ void AUOpenGolfPlayerController::SetWindSpeedMph(float Mph)
 
 void AUOpenGolfPlayerController::SetWindFromDeg(float FromDeg)
 {
+    if (IsCourseRound()) return;
     AdoptRangeWind();
     Wind.SetFromDeg(FromDeg);
     ApplyWind();
@@ -580,6 +643,8 @@ void AUOpenGolfPlayerController::ApplyWind()
     if (!Range)
         return;
     // The same controls as Details; the range passes them to the ball, flag and vegetation straight away.
+    if (UTrainingWindSubsystem* Session = GetTrainingWind(*this))
+        Session->Save(Wind, GolfSettings::Get().WindMph);
     Range->SetWind(Wind.AppliedMph(), Wind.FromDeg);
     AppliedWindMph = Range->WindSpeedMph;
     AppliedWindFromDeg = Range->WindFromDeg;
@@ -625,7 +690,7 @@ bool AUOpenGolfPlayerController::IsPauseMenu() const
 void AUOpenGolfPlayerController::ReturnToMainMenu()
 {
     // The MainMenu option makes the reloaded controller open the menu, even under -NoMainMenu (automation).
-    UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, ReturnToMainMenuOption);
+    TravelToMenu(ReturnToMainMenuOption);
 }
 
 void AUOpenGolfPlayerController::SetMainMenuOpen(bool bOpen)

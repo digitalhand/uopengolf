@@ -135,7 +135,7 @@ bool FShotDisplayTest::RunTest(const FString& Parameters)
         TestTrue(FString::Printf(TEXT("Club %d has a short label"), Index), Label.Len() >= 2 && Label.Len() <= 3);
     }
 
-    TestEqual(TEXT("Hole heading"), ShotDisplay::HoleDetails(4, TEXT("400 yd")), FString(TEXT("Hole 1  ·  Par 4  ·  400 yd")));
+    TestEqual(TEXT("Hole heading"), ShotDisplay::HoleDetails(1, 4, TEXT("400 yd")), FString(TEXT("Hole 1  ·  Par 4  ·  400 yd")));
 
     const FLinearColor Ready = HudStyle::BallReadyColor(true);
     const FLinearColor NotReady = HudStyle::BallReadyColor(false);

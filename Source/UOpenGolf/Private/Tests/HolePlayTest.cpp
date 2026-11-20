@@ -4,6 +4,7 @@
 
 #include "Editor.h"
 #include "Tests/PermissionTestAccess.h"
+#include "Tests/BundledCourse.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Hole/OpenGolfCupComponent.h"
@@ -69,12 +70,25 @@ public:
         }
             Test->TestEqual(TEXT("Play starts on the range"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
             Test->TestTrue(TEXT("The ball can drop into the flag's cup"), Ball->GetCupLocations().Num() == 1 && Ball->GetCupLocations()[0].Equals(Cup, 0.1));
-            Test->TestFalse(TEXT("Range mode places no ball"), Mode->PlaceBallAt(GreenSpot(300, 0)));
-            Controller->TogglePlayMode();
-            Test->TestEqual(TEXT("G plays the hole"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
-            Test->TestTrue(TEXT("The hole starts at the tee"), Mode->IsBallAtAddress() &&
-                FVector::Dist2D(Ball->GetActorLocation(), Mode->GetRange()->GetTeeLocation()) < 50.0);
-            Test->TestEqual(TEXT("A new hole has no strokes"), Mode->GetHoleRound().Strokes, 0);
+            {
+                // A round of the bundled course, as Courses › Play starts one, but without level travel.
+                const UGolfCourseDefinition* Course = BundledCourse::Load();
+                if (!Test->TestNotNull(TEXT("The bundled course loads"), Course))
+                    return true;
+                Mode->SetPlayMode(EOpenGolfPlayMode::Hole, Course);
+                Test->TestFalse(TEXT("Course play rejects free placement"), Mode->PlaceBallAt(GreenSpot(300, 0)));
+                Test->TestEqual(TEXT("Course starts hole play"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
+                Test->TestTrue(TEXT("The hole starts at the tee"), Mode->IsBallAtAddress() &&
+                    FVector::Dist2D(Ball->GetActorLocation(), Mode->GetRange()->GetTeeLocation()) < 50.0);
+                Test->TestEqual(TEXT("A new hole has no strokes"), Mode->GetHoleRound().Strokes, 0);
+                Controller->SetWindSpeedMph(20);
+                Controller->SetWindFromDeg(180);
+                Controller->ToggleWindPanel();
+                Test->TestFalse(TEXT("Course wind controls are locked"), Controller->IsWindPanelOpen());
+                Test->TestEqual(TEXT("Course wind speed"), Mode->GetRange()->WindSpeedMph, Course->WindMph);
+                Test->TestEqual(TEXT("Course wind direction"), Mode->GetRange()->WindFromDeg, Course->WindFromDeg);
+            }
+            Mode->SetPlayMode(EOpenGolfPlayMode::Range);
             Test->TestFalse(TEXT("No ball on the cup"), Mode->PlaceBallAt(Cup + FVector(3, 0, 0)));
             // A firm putt straight over the cup lips out over its far side, slower.
             Test->TestTrue(TEXT("The ball is placed on the green"), Mode->PlaceBallAt(GreenSpot(100, 0)));
@@ -176,8 +190,7 @@ public:
                 // The mode only switches with the ball still.
                 Ball->PlaceAt(Ball->GetActorLocation());
             }
-            Controller->TogglePlayMode();
-            Test->TestEqual(TEXT("G goes back to the range"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
+            Test->TestEqual(TEXT("Placement stays in Training"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
             return true;
         default:
             return true;
