@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=UOpenGolf
+Comment=Community Golf Simulation for Everyone
+Exec=uopengolf
+Icon=uopengolf
+Terminal=false
+Categories=Game;SportsGame;
+Keywords=golf;practice;simulator;

@@ -40,6 +40,8 @@ OutputBaseFilename={#OutputBaseFilename}
 Compression=lzma2/fast
 SolidCompression=no
 WizardStyle=modern
+; The same icon UnrealBuildTool embeds in the game executable.
+SetupIconFile={#SourcePath}..\..\Build\Windows\Application.ico
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
 SetupLogging=yes

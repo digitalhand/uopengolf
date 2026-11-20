@@ -1,0 +1,5 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+set -eu
+cd "/opt/uopengolf"
+exec ./UOpenGolf/Binaries/Linux/UOpenGolf UOpenGolf -SaveToUserDir "$@"
