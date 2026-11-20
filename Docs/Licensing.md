@@ -1,14 +1,65 @@
 # Licensing and asset policy
 
-## Original contributions
+## Contributions
 
 The root [MIT license](../LICENSE) covers original uopengolf code, documentation,
 and original assets contributed under that license. Copyright attribution is
 `2026 uopengolf contributors`. Keep source SPDX identifiers and applicable notices.
 
-Contributors must have permission to release their work under MIT. Referencing a
-project, paying for an asset, or modifying an asset does not automatically grant
-the right to redistribute or relicense it.
+### Contributions are MIT-licensed
+
+uopengolf follows the open-source convention known as *inbound = outbound*: you
+contribute under the same license the project is released under. Section D.6 of
+[GitHub's Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)
+applies the same rule to repositories hosted there.
+
+Any contribution you intentionally submit for inclusion in uopengolf is licensed under the
+MIT license, without additional terms or conditions, as soon as you submit it. A
+contribution is any work of authorship you submit by pull request, patch, issue, comment
+or any other means, including code, scripts, tests, documentation, assets and their
+editable sources, maps, configuration, designs, data and translations, and later changes
+to any of them. Ideas, suggestions and feedback given in issues, discussions or reviews
+may be used by the project freely, with no obligation to the person who gave them.
+
+If you have a separate written agreement with the maintainers that covers a
+contribution, that agreement takes precedence.
+
+### What contributing means
+
+- **You keep your copyright.** Contributing doesn't transfer ownership. It grants
+  everyone, including the maintainers, the permissions in the MIT license for your
+  contribution. No contributor license agreement (CLA) or copyright assignment is required.
+- **It is public and permanent.** Your contribution and its record in Git, including the
+  name and email address in your commits, are public, are kept indefinitely and may be
+  redistributed under the project's licenses. To keep your email address private, use
+  GitHub's `noreply` address for your commits.
+- **It is voluntary.** Contributing creates no employment, partnership or agency
+  relationship, and gives no right to payment, royalties or control over the project.
+  Credit comes from the Git history and the `uopengolf contributors` copyright notice. You
+  aren't expected to support your contribution after it is merged, unless you choose to.
+- **Maintainers decide.** Maintainers may accept, change or decline any contribution,
+  and may later modify or remove contributed work.
+
+### What you confirm
+
+By submitting a contribution, you confirm that:
+
+1. You created it, or you otherwise have the right to submit it under the MIT license.
+2. If an employer, client or school may hold rights in work you create, you have its
+   permission to contribute this work under MIT.
+3. Any third-party material in it is under a license that allows redistribution, is
+   identified in your pull request and is recorded in
+   [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). Third-party material keeps its own
+   license and is not relicensed as MIT. Referencing a project, paying for an asset, or
+   modifying an asset does not automatically grant the right to redistribute or relicense it.
+4. It contains no confidential information, trade secrets or material whose terms forbid
+   releasing it under MIT. Output from code-generation or AI tools counts as your
+   submission: you must be able to release it under MIT.
+
+These confirmations are modeled on the
+[Developer Certificate of Origin](https://developercertificate.org/), which many open-source
+projects use. If you can't confirm them, don't submit the work; open an issue describing
+what you would like to add instead.
 
 ## Unreal Engine
 

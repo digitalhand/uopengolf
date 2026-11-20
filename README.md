@@ -50,11 +50,10 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 
 ## Contributing
 
-Keep changes focused, use plain English, and run checks appropriate to the change.
-Use the repository's `.clang-format` for C++. Update the relevant guide when behavior
-changes, and record validation with its engine version and platform. Keep the physics
-pins (`UOpenGolf.Physics.GameplayPins`) unchanged unless the physics is meant to change, and
-preserve existing asset licences.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branches, code style, tests, asset rules and
+the pull request checklist. In short: keep changes focused, run the checks for what you
+changed, update the relevant guide, leave the physics pins (`UOpenGolf.Physics.GameplayPins`)
+unchanged unless the physics is meant to change, and preserve existing asset licences.
 
 ## Licence
 
