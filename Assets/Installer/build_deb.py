@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Build an Ubuntu amd64 package from an already cooked Linux game, without root."""
 import argparse
+from datetime import date, datetime, timezone
 import hashlib
 import os
 from pathlib import Path
@@ -8,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from xml.etree import ElementTree
 
 # Also allow direct execution from outside the repository.
 PROJECT = Path(__file__).resolve().parents[2]
@@ -19,6 +21,9 @@ INSTALLER = Path(__file__).resolve().parent
 ICONS = PROJECT / "Assets/Images/Icons/png"
 # Sizes installed into the hicolor theme for uopengolf.desktop's Icon=uopengolf.
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256, 512)
+# AppStream component ID: software centres read /usr/share/metainfo/<ID>.metainfo.xml.
+METAINFO_ID = "io.github.digitalhand.uopengolf"
+METAINFO_TOKENS = ("@VERSION@", "@DATE@", "@TYPE@")
 BINARY = Path("UOpenGolf/Binaries/Linux/UOpenGolf")
 # ELF dependencies, plus SDL's dynamically loaded desktop/audio libraries.
 # Ubuntu 24.04 uses the t64 ALSA package name.
@@ -34,6 +39,47 @@ def debian_version(version: str) -> str:
     if not VERSION.fullmatch(version):
         raise ValueError("Version must be MAJOR.MINOR.PATCH[-prerelease].")
     return version.replace("-", "~", 1)
+
+
+def release_date() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def appstream_metadata(version: str) -> str:
+    """Return the AppStream metainfo with this build's release filled in."""
+    debian_version(version)  # Validates the version before it goes into XML.
+    text = (INSTALLER / "uopengolf.metainfo.xml").read_text(encoding="utf-8")
+    values = (version, release_date().isoformat(), "development" if "-" in version else "stable")
+    for token, value in zip(METAINFO_TOKENS, values):
+        if token not in text:
+            raise ValueError(f"uopengolf.metainfo.xml has no {token} placeholder.")
+        text = text.replace(token, value)
+    try:
+        ElementTree.fromstring(text)
+    except ElementTree.ParseError as error:
+        raise ValueError(f"uopengolf.metainfo.xml is not valid XML: {error}") from error
+    return text
+
+
+def stage_desktop_files(stage: Path, metadata: str) -> Path:
+    """Add the launcher, menu entry, icons, AppStream metadata and copyright; return the launcher."""
+    launcher = stage / "usr/bin/uopengolf"
+    launcher.parent.mkdir(parents=True)
+    shutil.copyfile(INSTALLER / "uopengolf", launcher)
+    desktop = stage / "usr/share/applications/uopengolf.desktop"
+    desktop.parent.mkdir(parents=True)
+    shutil.copyfile(INSTALLER / "uopengolf.desktop", desktop)
+    for icon_size in ICON_SIZES:
+        icon = stage / f"usr/share/icons/hicolor/{icon_size}x{icon_size}/apps/uopengolf.png"
+        icon.parent.mkdir(parents=True)
+        shutil.copyfile(ICONS / f"UOpenGolf_{icon_size}.png", icon)
+    metainfo = stage / f"usr/share/metainfo/{METAINFO_ID}.metainfo.xml"
+    metainfo.parent.mkdir(parents=True)
+    metainfo.write_text(metadata, encoding="utf-8")
+    docs = stage / "usr/share/doc/uopengolf"
+    docs.mkdir(parents=True)
+    shutil.copyfile(PROJECT / "LICENSE", docs / "copyright")
+    return launcher
 
 
 def copy_payload(source: Path, destination: Path) -> None:
@@ -69,6 +115,8 @@ def build_package(package_dir: Path, version: str, output_dir: Path) -> Path:
         raise ValueError("UOpenGolf must be a Linux x86-64 ELF executable.")
     if not shutil.which("dpkg-deb"):
         raise ValueError("Install dpkg on the build machine; dpkg-deb is required.")
+    # Before copying the game, so a broken template fails fast.
+    metadata = appstream_metadata(version)
 
     output.mkdir(parents=True, exist_ok=True)
     name = f"UOpenGolf-{version}-Linux-amd64.deb"
@@ -76,19 +124,7 @@ def build_package(package_dir: Path, version: str, output_dir: Path) -> Path:
         stage = Path(temporary) / "root"
         app = stage / "opt/uopengolf"
         copy_payload(source, app)
-        launcher = stage / "usr/bin/uopengolf"
-        launcher.parent.mkdir(parents=True)
-        shutil.copyfile(INSTALLER / "uopengolf", launcher)
-        desktop = stage / "usr/share/applications/uopengolf.desktop"
-        desktop.parent.mkdir(parents=True)
-        shutil.copyfile(INSTALLER / "uopengolf.desktop", desktop)
-        for icon_size in ICON_SIZES:
-            icon = stage / f"usr/share/icons/hicolor/{icon_size}x{icon_size}/apps/uopengolf.png"
-            icon.parent.mkdir(parents=True)
-            shutil.copyfile(ICONS / f"UOpenGolf_{icon_size}.png", icon)
-        docs = stage / "usr/share/doc/uopengolf"
-        docs.mkdir(parents=True)
-        shutil.copyfile(PROJECT / "LICENSE", docs / "copyright")
+        launcher = stage_desktop_files(stage, metadata)
 
         size = 0
         for path in stage.rglob("*"):

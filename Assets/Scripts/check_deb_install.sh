@@ -8,7 +8,8 @@ set -euo pipefail
 package=$(readlink -f "${1:?Supply the real .deb to test}")
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y --no-install-recommends python3 desktop-file-utils binutils
+apt-get install -y --no-install-recommends python3 desktop-file-utils binutils appstream
+metainfo=/usr/share/metainfo/io.github.digitalhand.uopengolf.metainfo.xml
 useradd --create-home --non-unique --uid 1000 player
 mkdir -p /reports
 chown player:player /reports
@@ -43,6 +44,7 @@ test -f /opt/uopengolf/UOpenGolf/Content/Paks/current.pak
 apt-get remove -y uopengolf
 test ! -e /usr/bin/uopengolf
 test ! -e /usr/share/applications/uopengolf.desktop
+test ! -e "$metainfo"
 test -f /home/player/.config/Epic/UOpenGolf/Saved/settings-test
 # With no conffiles, remove forgets the local package completely. Reinstall it
 # before checking purge as a separate operation.
@@ -52,6 +54,11 @@ test -f /home/player/.config/Epic/UOpenGolf/Saved/settings-test
 
 apt-get install -y --no-install-recommends "$package"
 desktop-file-validate /usr/share/applications/uopengolf.desktop
+# Software centres read this; Discover also needs it to name the package.
+appstreamcli validate --no-net "$metainfo"
+appstreamcli refresh-cache --force >/dev/null
+# grep without -q reads all output, so pipefail can't see a broken pipe from appstreamcli.
+appstreamcli get io.github.digitalhand.uopengolf --details | grep -x 'Package: uopengolf' >/dev/null
 test -z "$(find /opt/uopengolf -type f -perm /022 -print -quit)"
 runuser -u player -- test ! -w /opt/uopengolf
 # Resolve every shipped ELF library against Ubuntu 24.04, not the build host.

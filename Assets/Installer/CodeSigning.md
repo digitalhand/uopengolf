@@ -32,10 +32,10 @@ Fill this in once the key exists.
 
 | | |
 | --- | --- |
-| Fingerprint | Not created yet |
-| Public key | `Assets/Installer/release-signing-key.asc` (not committed yet) |
+| Fingerprint | `4B89 8D0D 1715 3A4E 15F1  4B6F 2548 F3B1 E1C1 6B5D` |
+| Public key | [`Assets/Installer/release-signing-key.asc`](release-signing-key.asc) |
 | Keyserver | [keys.openpgp.org](https://keys.openpgp.org) |
-| Expires | Primary key: —. Signing subkey: — |
+| Expires | Primary key: 2029-11-19. Signing subkey: 2027-11-20 |
 
 ## One-time setup
 
@@ -45,10 +45,12 @@ or later works.
 ### 1. Create the key
 
 Choose an email address you're happy to publish. It goes into the key and onto the keyserver.
+Replace only `you@example.com` and keep the angle brackets. Without them, keys.openpgp.org
+finds no address in the key and has nothing to confirm.
 
 ```bash
 # Primary key. It only certifies its own subkeys. gpg asks for a passphrase.
-gpg --quick-generate-key "UOpenGolf Release Signing <ADDRESS>" ed25519 cert 3y
+gpg --quick-generate-key "UOpenGolf Release Signing <you@example.com>" ed25519 cert 3y
 
 # Its fingerprint, used by the commands below.
 FPR=$(gpg --list-keys --with-colons 'UOpenGolf Release Signing' | awk -F: '$1 == "fpr" { print $10; exit }')
@@ -108,9 +110,11 @@ gpg --fingerprint "$FPR"
 
 1. Commit `Assets/Installer/release-signing-key.asc`. Players download it from
    `https://raw.githubusercontent.com/digitalhand/uopengolf/main/Assets/Installer/release-signing-key.asc`.
-2. Upload the same file at <https://keys.openpgp.org/upload>, then open the confirmation
-   link it emails you. Until you confirm, keys.openpgp.org serves the key without its name
-   and address.
+2. Upload the same file at <https://keys.openpgp.org/upload>. Uploading doesn't send an
+   email by itself: on the results page, choose **Send Verification Email** next to the
+   address, then open the link it emails you. Until you confirm, keys.openpgp.org serves
+   the key without its name and address. If the page shows no address, the user ID is
+   missing its `<…>` brackets; see [Fixing the user ID](#fixing-the-user-id).
 3. Fill in the [Release key](#release-key) table. Use the fingerprint in the spaced form
    that `gpg --fingerprint` prints, and add the expiry dates.
 4. Put the fingerprint in every release's notes as well; the
@@ -247,6 +251,22 @@ gpg --import release-signing-key.asc     # your everyday keyring picks up the ne
 Then replace `Assets/Installer/release-signing-key.asc` with the new export and commit it.
 Upload it to keys.openpgp.org again, store the refreshed backup offline, and update the
 **Expires** row. The fingerprint doesn't change.
+
+### Fixing the user ID
+
+If the user ID lacks the `<…>` around the address, add a corrected one and revoke the old
+one. The fingerprint doesn't change. This needs the primary secret key.
+
+```bash
+gpg --quick-add-uid "$FPR" "UOpenGolf Release Signing <you@example.com>"
+gpg --quick-revoke-uid "$FPR" "UOpenGolf Release Signing you@example.com"
+gpg --armor --export "$FPR" > Assets/Installer/release-signing-key.asc
+```
+
+Upload the new export to keys.openpgp.org and send the verification email as in
+[step 4](#4-publish-the-public-key).
+
+### Replacing or revoking keys
 
 **If only the signing subkey is exposed** (the primary key was offline), revoke that subkey
 and add a new one. Players keep checking the same fingerprint. In the keyring that has the

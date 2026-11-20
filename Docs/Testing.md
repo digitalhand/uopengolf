@@ -44,7 +44,8 @@ directory containing the `.deb` read-only at `/packages`, and a report directory
 Run `bash /src/Assets/Scripts/check_deb_install.sh /packages/UOpenGolf-<version>-Linux-amd64.deb`.
 The check installs dependencies inside the container, tests upgrades and removal with small
 fixtures, then installs the real game and starts it as an ordinary user for 60 seconds with
-NullRHI. It checks all shipped ELF dependencies and preserves sample user settings through
+NullRHI. It checks all shipped ELF dependencies, validates the AppStream metadata and checks
+that AppStream links it to the package. It also preserves sample user settings through
 removal and purge. Graphical installation and menu launch require a separate desktop check.
 
 Install the script-test dependencies into your Python environment, then discover each
