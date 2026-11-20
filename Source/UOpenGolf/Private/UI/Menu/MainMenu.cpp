@@ -182,12 +182,12 @@ void SMainMenu::Open()
     Rebuild();
     if(FSlateApplication::IsInitialized())FSlateApplication::Get().SetKeyboardFocus(SharedThis(this));
 }
-void SMainMenu::OpenLaunchMonitorSettings()
+void SMainMenu::OpenGeneralSettings()
 {
     const bool bFromTraining=!bOpen;
     if(!bOpen) Open();
     bReturnToTraining=bFromTraining;
-    OpenSettings(LaunchMonitorCategory);
+    OpenSettings(PlayerCategory);
 }
 UOpenLaunchMonitorSubsystem* SMainMenu::Monitor() const
 {
@@ -388,10 +388,8 @@ void SMainMenu::BuildDialog(TSharedRef<SVerticalBox> Body)
 }
 void SMainMenu::BuildShots(TSharedRef<SVerticalBox> Body)
 {
-    // The time zone applies at once in Settings › Player, so the saved choice is the one shown there.
-    const GolfSettings::FTimeZoneChoice& Zone=GolfSettings::ChosenTimeZone();
     SAssignNew(ShotsPanel,SOpenGolfAccountPanel).Online(OnlineService()).Style(Style).ShowHeading(false)
-        .Page(EOpenGolfAccountPage::Shots).TimeZone(Zone.Id).TimeZoneName(Zone.Short);
+        .Page(EOpenGolfAccountPage::Shots);
     // The panel changes between the club list and one club's shots without a menu rebuild, so the title follows it.
     const TWeakPtr<SOpenGolfAccountPanel> Panel=ShotsPanel;
     const TAttribute<FText> Title=TAttribute<FText>::CreateLambda([Panel]

@@ -91,10 +91,8 @@ It shows only while signed out, collapses itself otherwise, and keeps the code r
 from its own tick, so a host adds no other wiring. The account panel does not draw a
 QR code.
 
-`.TimeZone(...)` takes an IANA zone ID such as `America/Los_Angeles` for shot times and
-the member-since date (empty is the computer's zone; ICU applies daylight saving), and
-`.TimeZoneName(...)` the short name in the time column's caption, such as `PT`. CSV
-export keeps the API's UTC times.
+The account panel displays shot times and the member-since date in the computer's local time.
+Club averages are ordered by carry, longest first. CSV export keeps the API's UTC times.
 
 These widgets take an optional `FOpenGolfAccountStyle` (`.Style(...)`): a font
 factory, text, label, accent and icon colors, text sizes, button styles and the

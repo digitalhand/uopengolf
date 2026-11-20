@@ -5,12 +5,7 @@
 
 namespace HudStatusGlyphDetail
 {
-    constexpr float Height = 16.0f;
-    constexpr float LaunchMonitorWidth = 22.0f;
-    constexpr float BatteryWidth = 22.0f;
-    constexpr float RecordWidth = 16.0f;
     constexpr float Stroke = 1.5f;
-    constexpr float DisabledAlpha = 0.4f;
 
     /** Draws a tinted polyline in the glyph's local units. */
     struct FPen
@@ -23,10 +18,6 @@ namespace HudStatusGlyphDetail
         void Line(const TArray<FVector2f>& Points) const
         {
             FSlateDrawElement::MakeLines(Elements, Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Tint, true, Stroke);
-        }
-        void Rect(float X, float Y, float W, float H) const
-        {
-            Line({{X, Y}, {X + W, Y}, {X + W, Y + H}, {X, Y + H}, {X, Y}});
         }
         /** Part of a circle, from one angle to another in degrees (0 points right, clockwise on screen). */
         void Arc(FVector2f Center, float Radius, float FromDeg, float ToDeg) const
@@ -52,58 +43,71 @@ void SHudStatusGlyph::Construct(const FArguments& Args)
 {
     Kind = Args._Kind;
     Color = Args._Color;
-    Level = Args._Level;
     Filled = Args._Filled;
 }
 
 FVector2D SHudStatusGlyph::ComputeDesiredSize(float) const
 {
-    using namespace HudStatusGlyphDetail;
-    const float Width = Kind == EKind::LaunchMonitor ? LaunchMonitorWidth : Kind == EKind::Battery ? BatteryWidth : RecordWidth;
-    return FVector2D(Width, Height);
+    return FVector2D(Size, Size);
 }
 
 int32 SHudStatusGlyph::OnPaint(const FPaintArgs&, const FGeometry& Geometry, const FSlateRect&, FSlateWindowElementList& OutDrawElements,
     int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
     FLinearColor Tint = Color.Get(FLinearColor::White) * WidgetStyle.GetColorAndOpacityTint();
-    Tint.A *= bParentEnabled ? 1.0f : HudStatusGlyphDetail::DisabledAlpha;
-    switch (Kind)
-    {
-    case EKind::LaunchMonitor: PaintLaunchMonitor(Geometry, OutDrawElements, LayerId, Tint); break;
-    case EKind::Battery: PaintBattery(Geometry, OutDrawElements, LayerId, Tint); break;
-    default: PaintRecord(Geometry, OutDrawElements, LayerId, Tint); break;
-    }
+    Tint.A *= bParentEnabled ? 1.0f : DisabledAlpha;
+    Paint(Kind, Geometry, OutDrawElements, LayerId, Tint, Filled.Get(false));
     return LayerId + 1;
 }
 
-void SHudStatusGlyph::PaintLaunchMonitor(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FLinearColor& Tint) const
+void SHudStatusGlyph::Paint(EKind Kind, const FGeometry& Geometry, FSlateWindowElementList& Elements, int32 Layer,
+    const FLinearColor& Tint, bool bFilled)
 {
-    // A launch monitor from the front: its case and camera lens, with a signal arc beside it.
-    const HudStatusGlyphDetail::FPen Pen{Geometry, OutDrawElements, LayerId, Tint};
-    Pen.Rect(1, 5, 14, 9);
-    Pen.Arc(FVector2f(6.5f, 9.5f), 2.5f, 0, 360);
-    Pen.Arc(FVector2f(15, 5), 5, -80, -10);
-    Pen.Arc(FVector2f(15, 5), 2.5f, -80, -10);
-}
-
-void SHudStatusGlyph::PaintBattery(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FLinearColor& Tint) const
-{
-    // The case, its terminal and a charge bar as long as the level; no bar when the level is unknown.
-    const HudStatusGlyphDetail::FPen Pen{Geometry, OutDrawElements, LayerId, Tint};
-    Pen.Rect(1, 3.5f, 17, 9);
-    Pen.Box(Fill, 18.75f, 6, 2.5f, 4);
-    const float Charge = Level.Get(-1.0f);
-    if (Charge > 0.0f)
-        Pen.Box(Fill, 3, 5.5f, 13 * FMath::Min(Charge, 1.0f), 5);
-}
-
-void SHudStatusGlyph::PaintRecord(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FLinearColor& Tint) const
-{
-    // Filled while recording, a ring otherwise.
-    const HudStatusGlyphDetail::FPen Pen{Geometry, OutDrawElements, LayerId, Tint};
-    if (Filled.Get(false))
-        Pen.Box(Dot, 2, 2, 12, 12);
-    else
-        Pen.Arc(FVector2f(8, 8), 5.5f, 0, 360);
+    const HudStatusGlyphDetail::FPen Pen{Geometry, Elements, Layer, Tint};
+    switch (Kind)
+    {
+    case EKind::Settings:
+    {
+        static const TArray<FVector2f> Outline = []
+        {
+            TArray<FVector2f> Points;
+            constexpr int32 Steps = 32;
+            Points.SetNumUninitialized(Steps + 1);
+            for (int32 Index = 0; Index < Steps; ++Index)
+            {
+                const float Angle = Index * (2.0f * UE_PI / Steps);
+                const float Radius = Index % 4 < 2 ? 7.0f : 5.5f;
+                Points[Index] = FVector2f(8, 8) + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius;
+            }
+            // Close the outline without appending a reference into the same array.
+            Points.Last() = Points[0];
+            return Points;
+        }();
+        Pen.Line(Outline);
+        Pen.Arc({8, 8}, 2.3f, 0, 360);
+        break;
+    }
+    case EKind::Club:
+        Pen.Line({{13, 1.5f}, {8, 11}, {4, 11}, {2, 12.5f}, {2, 14}, {7.5f, 14}, {9, 12.5f}});
+        break;
+    case EKind::Flag:
+        Pen.Line({{5, 13.5f}, {5, 2}, {13, 5}, {5, 8}});
+        Pen.Line({{2, 14}, {9, 14}});
+        break;
+    case EKind::Ball:
+        Pen.Arc({8, 8}, 5.5f, 0, 360);
+        Pen.Line({{6, 6}, {7, 6}});
+        Pen.Line({{9, 8}, {10, 8}});
+        Pen.Line({{6, 10}, {7, 10}});
+        break;
+    case EKind::Record:
+        if (bFilled)
+        {
+            static const FSlateRoundedBoxBrush Dot{FLinearColor::White, 6.0f};
+            Pen.Box(Dot, 2, 2, 12, 12);
+        }
+        else
+            Pen.Arc({8, 8}, 5.5f, 0, 360);
+        break;
+    }
 }

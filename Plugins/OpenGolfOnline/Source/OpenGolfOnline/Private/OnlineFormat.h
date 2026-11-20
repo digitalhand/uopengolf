@@ -24,21 +24,17 @@ namespace OpenGolfOnline
         return Club.Left(1) + (Club.EndsWith(TEXT("I")) ? TEXT(" iron") : TEXT(" wood"));
     }
 
-    /**
-     * A UTC ISO-8601 time from the API as a medium date and short time in TimeZone, an IANA ID such as
-     * "America/Los_Angeles" (empty is this computer's zone). ICU applies daylight saving. Text that is not
-     * ISO-8601 is returned as sent.
-     */
-    inline FString ShotTime(const FString& Iso, const FString& TimeZone)
+    /** Format an API timestamp in the computer's local time. */
+    inline FString ShotTime(const FString& Iso)
     {
         FDateTime Utc;
-        return FDateTime::ParseIso8601(*Iso, Utc) ? FText::AsDateTime(Utc, EDateTimeStyle::Medium, EDateTimeStyle::Short, TimeZone).ToString() : Iso;
+        return FDateTime::ParseIso8601(*Iso, Utc) ? FText::AsDateTime(Utc, EDateTimeStyle::Medium, EDateTimeStyle::Short).ToString() : Iso;
     }
 
     /** As ShotTime, the date only. */
-    inline FString ShotDate(const FString& Iso, const FString& TimeZone)
+    inline FString ShotDate(const FString& Iso)
     {
         FDateTime Utc;
-        return FDateTime::ParseIso8601(*Iso, Utc) ? FText::AsDate(Utc, EDateTimeStyle::Medium, TimeZone).ToString() : Iso.Left(10);
+        return FDateTime::ParseIso8601(*Iso, Utc) ? FText::AsDate(Utc, EDateTimeStyle::Medium).ToString() : Iso.Left(10);
     }
 } // namespace OpenGolfOnline

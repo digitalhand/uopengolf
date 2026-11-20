@@ -83,13 +83,6 @@ void SReplayShotPanel::Construct(const FArguments& Args)
                 .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->SetReplayPanelOpen(true); return FReply::Handled(); })
                 [ SNew(STextBlock).Font(BodyFont).Text(FText::FromString(TEXT("Test shots [P]   |   Hit [H]"))) ]
             ]
-            + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(20, 0, 20, HudScale::BottomPanelGap)
-            [
-                SNew(SButton).ButtonStyle(&Style.Button)
-                .Visibility_Lambda([this] { return Controller.IsValid() && !Controller->CanUseManualShots() && !IsLaunchMonitorConnected() ? EVisibility::Visible : EVisibility::Collapsed; })
-                .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->OpenLaunchMonitorSettings(); return FReply::Handled(); })
-                [ SNew(STextBlock).Font(BodyFont).Text(FText::FromString(TEXT("Connect a launch monitor to hit shots"))) ]
-            ]
             + SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
             [
                 SNew(SBox).WidthOverride(520)

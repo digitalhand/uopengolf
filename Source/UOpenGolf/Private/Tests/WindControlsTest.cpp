@@ -87,11 +87,12 @@ public:
         {
             Test->TestEqual(TEXT("The HUD starts with the map's wind on or off"), Wind.bOn, Range->WindSpeedMph > 0.0f);
             Test->TestEqual(TEXT("The HUD starts with the map's direction"), Wind.FromDeg, Range->WindFromDeg);
-            // The test-shot layer spans the viewport over the play controls: only its button may take clicks.
+            // The test-shot layer spans the viewport over the play controls: only its button may take clicks, and that
+            // button shows only while manual shots are allowed (no launch monitor is connected here).
             Test->TestEqual(TEXT("The closed test-shot layer only takes clicks on its button"),
-                ClickTargets(SNew(SReplayShotPanel).Controller(Controller)), FString(TEXT("SButton")));
-            Test->TestEqual(TEXT("The range's play bar only takes clicks on the flag button"),
-                ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SHudIconButton")));
+                ClickTargets(SNew(SReplayShotPanel).Controller(Controller)), FString(Controller->CanUseManualShots() ? TEXT("SButton") : TEXT("")));
+            Test->TestEqual(TEXT("The range's play bar takes clicks only on its three controls"),
+                ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SClubPicker, SHudIconButton, SButton")));
             const TSharedRef<SWindControl> Control = SNew(SWindControl).Controller(Controller);
             Test->TestEqual(TEXT("Closed, the wind controls only take clicks on the indicator"), ClickTargets(Control), FString(TEXT("SButton")));
 

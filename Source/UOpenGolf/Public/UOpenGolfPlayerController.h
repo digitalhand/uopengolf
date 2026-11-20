@@ -51,8 +51,8 @@ public:
     bool IsPauseMenu() const;
     void SetMainMenuOpen(bool bOpen);
     void OpenMainMenu();
-    /** Opens the menu at Settings › Launch Monitor: the HUD's launch-monitor status does this when clicked. */
-    void OpenLaunchMonitorSettings();
+    /** Opens the menu at Settings › Player: the HUD's settings cog does this when clicked. */
+    void OpenGeneralSettings();
     bool CanUseManualShots() const;
     /**
      * Ends the training session and shows the main menu: reloads the map, so the ball, round and session

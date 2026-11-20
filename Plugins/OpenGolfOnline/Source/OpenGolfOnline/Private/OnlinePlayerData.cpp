@@ -191,7 +191,10 @@ FString UOpenGolfOnlineSubsystem::ExportHistory()
         }
         Csv += TEXT("\r\n");
     }
-    const FString Directory = FPaths::Combine(FPlatformProcess::UserSettingsDir(),Config.StorageName,TEXT("Exports"));
+    FString Directory = FPaths::Combine(FPlatformProcess::UserSettingsDir(),Config.StorageName,TEXT("Exports"));
+#if WITH_DEV_AUTOMATION_TESTS
+    if (!TestLocalRoot.IsEmpty()) Directory = TestLocalRoot / TEXT("Exports");
+#endif
     IFileManager::Get().MakeDirectory(*Directory,true);
     const FString Path = Directory / (HistoryClub + TEXT("-") + FDateTime::UtcNow().ToString(TEXT("%Y%m%d-%H%M%S")) + TEXT(".csv"));
     if (!FFileHelper::SaveStringToFile(Csv,*Path,FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM)) { Status=TEXT("Could not export shot history."); Touch(); return {}; }

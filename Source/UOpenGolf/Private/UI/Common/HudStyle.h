@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Math/Color.h"
 #include "LaunchMonitorTypes.h"
 #include "OpenGolfSettings.h"
@@ -51,11 +52,11 @@ namespace HudStyle
         }
     }
 
-    /** Shot recording: red while recording, gray when off, amber while saves are failing. */
+    /** Shot recording: red while recording, white when off, amber while saves are failing. */
     inline FLinearColor RecordColor(bool bRecording, int32 FailedRecordings)
     {
         if (FailedRecordings > 0) return FLinearColor(1.0f, 0.6f, 0.15f);
-        return bRecording ? FLinearColor(1.0f, 0.25f, 0.2f) : FLinearColor(0.65f, 0.65f, 0.65f);
+        return bRecording ? FLinearColor(1.0f, 0.25f, 0.2f) : FLinearColor::White;
     }
 
     /** The glow around the ball at address: green once the launch monitor detects the ball, red until then. */
@@ -67,6 +68,17 @@ namespace HudStyle
     inline const FLinearColor ShadowColor(0.0f, 0.0f, 0.0f, 0.6f);
 
     constexpr float TileRadius = 4.0f;
+    constexpr float ToolbarButtonSize = 44.0f;
+    /** No background until hovered. Every state is set: a default FSlateBrush would draw a white box. */
+    inline FButtonStyle ToolbarButton()
+    {
+        return FButtonStyle()
+            .SetNormal(FSlateNoResource())
+            .SetHovered(FSlateRoundedBoxBrush(HoverTileColor(), TileRadius))
+            .SetPressed(FSlateRoundedBoxBrush(LaunchTileColor(), TileRadius))
+            .SetDisabled(FSlateNoResource());
+    }
+
     /** Distance of corner panels from the viewport edge, in Slate units before the readable-DPI scale. */
     constexpr float Edge = 20.0f;
 } // namespace HudStyle
