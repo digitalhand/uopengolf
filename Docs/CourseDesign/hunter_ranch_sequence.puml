@@ -1,0 +1,44 @@
+@startuml
+title Hunter Ranch recreation: prove one hole, then expand
+autonumber
+actor Designer as D
+participant "Official Course References" as R
+participant "USGS Data Sources" as S
+participant QGIS as Q
+participant Blender as B
+participant "Unreal Open Golf" as U
+
+D -> R: Check scorecard, routing, photographs and drone tour
+R --> D: Course references and hole identities
+D -> S: Locate property; inspect DEM and imagery coverage
+S --> D: Selected data, metadata and source terms
+D -> Q: Load data; establish CRS, boundary and source records
+Q -> Q: Reproject, crop and inspect terrain
+D -> Q: Trace surfaces, routes and tee/green markers
+Q --> D: Geographic master and Hole 1 export package
+D -> B: Build terrain from height data; align reference overlay
+D -> B: Refine green, bunkers and surface boundaries
+B --> D: Terrain mesh, material slots and coordinate notes
+D -> U: Import mesh; configure surfaces, collision, tee and cup
+U --> D: Visual, dimensional and gameplay checks
+loop Until first-hole checks pass
+  alt Geographic alignment or source terrain problem
+    D -> Q: Correct source preparation or layout
+    Q --> D: Updated export with the same origin
+    D -> B: Update terrain and aligned references
+  else Local shape or boundary problem
+    D -> B: Correct geometry or surface assignments
+  end
+  B --> D: Revised mesh
+  D -> U: Reimport and repeat checks
+  D -> U: Adjust gameplay setup if required
+  U --> D: Validation results
+end
+loop Remaining holes, in manageable groups
+  D -> Q: Verify routing and trace features
+  Q --> D: Aligned source exports
+  D -> B: Refine terrain and scenery
+  B --> D: Course assets
+  D -> U: Integrate and validate each hole
+end
+@enduml

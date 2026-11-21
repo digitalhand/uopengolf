@@ -1,0 +1,27 @@
+@startuml
+title Hunter Ranch source files and derived handoffs
+top to bottom direction
+skinparam componentStyle rectangle
+file "Original DEM / LiDAR\nand acquisition metadata" as source
+file "Original imagery\nand course references" as imagery
+database "QGIS geographic masters\nGeoTIFF + GeoPackage" as gis
+file "Hole export package\nHeight PNG + overlay\nMarkers + coordinate record" as package
+file "Blender master\nSource + working geometry" as blender
+file "FBX mesh\nStable material slots" as fbx
+component "Unreal test map\nMaterials + collision" as unreal
+component "Course gameplay adapter\nTee + cup + scoring\nIntegration work required" as adapter
+file "Validation record\nMeasured results + corrections" as checks
+
+source --> gis : inspect / prepare ground
+imagery --> gis : verify / trace layout
+gis --> package : aligned export
+package --> blender : map / shape / calibrate
+blender --> fbx : export copy
+fbx --> unreal : import / configure
+package --> adapter : manual marker handoff
+adapter --> unreal : connect play
+unreal --> checks : measure / test
+checks ..> gis : correct geography
+checks ..> blender : correct geometry
+checks ..> adapter : correct gameplay
+@enduml
