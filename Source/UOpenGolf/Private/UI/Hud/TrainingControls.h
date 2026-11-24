@@ -21,10 +21,10 @@ public:
 
 private:
     TSharedRef<SWidget> MakeMenu();
-    TSharedRef<SButton> MakeOption(FName Tag, const FText& Label, TAttribute<bool> Selected, FOnClicked OnClick);
+    TSharedRef<SButton> MakeOption(FName WidgetTag, const FText& Label, TAttribute<bool> Selected, FOnClicked OnClick);
     /** An option that sets Choice.*Field to Value, checked while it holds that value. */
     template <typename T>
-    TSharedRef<SButton> MakeChoice(FName Tag, const FText& Label, T FDrillChoice::*Field, T Value);
+    TSharedRef<SButton> MakeChoice(FName WidgetTag, const FText& Label, T FDrillChoice::*Field, T Value);
     FReply StartDrill();
     FDrillChoice Choice;
     FSlateRoundedBoxBrush OptionBrush{HudStyle::TileColor(), HudStyle::TileRadius, HudStyle::MapEdgeColor(), 1.f};

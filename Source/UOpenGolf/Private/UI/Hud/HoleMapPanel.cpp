@@ -55,10 +55,10 @@ void SHoleMapPanel::Construct(const FArguments& Args)
     // clang-format on
 }
 
-TSharedRef<SWidget> SHoleMapPanel::MakeBar(FName Tag, float Height, const TSharedRef<SWidget>& Left, const TSharedRef<SWidget>& Right)
+TSharedRef<SWidget> SHoleMapPanel::MakeBar(FName WidgetTag, float Height, const TSharedRef<SWidget>& Left, const TSharedRef<SWidget>& Right)
 {
     // clang-format off
-    return SNew(SBox).Tag(Tag).HeightOverride(Height).Padding(FMargin(9, 0))
+    return SNew(SBox).Tag(WidgetTag).HeightOverride(Height).Padding(FMargin(9, 0))
         [
             SNew(SHorizontalBox).Visibility(EVisibility::HitTestInvisible)
             + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[ Left ]

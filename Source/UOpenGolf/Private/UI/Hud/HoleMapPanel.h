@@ -29,7 +29,7 @@ public:
 private:
     EVisibility GetPanelVisibility() const;
     /** A fixed-height row of the panel, tagged for tests: Left fills, Right takes its own width. */
-    static TSharedRef<SWidget> MakeBar(FName Tag, float Height, const TSharedRef<SWidget>& Left, const TSharedRef<SWidget>& Right);
+    static TSharedRef<SWidget> MakeBar(FName WidgetTag, float Height, const TSharedRef<SWidget>& Left, const TSharedRef<SWidget>& Right);
     TSharedRef<SWidget> MakeHeader();
     TSharedRef<SWidget> MakeFooter();
     /** Rebuilds the header and footer text when what it shows has changed. */

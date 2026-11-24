@@ -54,10 +54,10 @@ bool STrainingPicker::IsOpen() const
     return Combo && Combo->IsOpen();
 }
 
-TSharedRef<SButton> STrainingPicker::MakeOption(FName Tag, const FText& Label, TAttribute<bool> Selected, FOnClicked OnClick)
+TSharedRef<SButton> STrainingPicker::MakeOption(FName WidgetTag, const FText& Label, TAttribute<bool> Selected, FOnClicked OnClick)
 {
     // clang-format off
-    return SNew(SButton).Tag(Tag).ButtonStyle(&Style).ContentPadding(FMargin(3, 4)).HAlign(HAlign_Fill)
+    return SNew(SButton).Tag(WidgetTag).ButtonStyle(&Style).ContentPadding(FMargin(3, 4)).HAlign(HAlign_Fill)
 #if WITH_ACCESSIBILITY
         .AccessibleText(TAttribute<FText>::CreateLambda([Selected, Label] {
             return Selected.Get() ? FText::Format(NSLOCTEXT("Training", "SelectedOption", "{0}, selected"), Label) : Label;
@@ -90,9 +90,9 @@ TSharedRef<SButton> STrainingPicker::MakeOption(FName Tag, const FText& Label, T
 }
 
 template <typename T>
-TSharedRef<SButton> STrainingPicker::MakeChoice(FName Tag, const FText& Label, T FDrillChoice::*Field, T Value)
+TSharedRef<SButton> STrainingPicker::MakeChoice(FName WidgetTag, const FText& Label, T FDrillChoice::*Field, T Value)
 {
-    return MakeOption(Tag, Label, TAttribute<bool>::CreateSPLambda(this, [this, Field, Value] { return Choice.*Field == Value; }),
+    return MakeOption(WidgetTag, Label, TAttribute<bool>::CreateSPLambda(this, [this, Field, Value] { return Choice.*Field == Value; }),
         FOnClicked::CreateSPLambda(this, [this, Field, Value] {
             Choice.*Field = Value;
             return FReply::Handled();

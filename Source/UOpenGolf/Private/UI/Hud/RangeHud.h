@@ -31,7 +31,7 @@ private:
     TSharedRef<SWidget> MakeColumn();
     TSharedRef<SWidget> MakeTile(int32 Index);
     /** One large course-heading line bound to Line, a member of this HUD; collapsed while it is empty. */
-    TSharedRef<SWidget> MakeHoleLine(FName Tag, const FText& Line);
+    TSharedRef<SWidget> MakeHoleLine(FName WidgetTag, const FText& Line);
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
     TWeakObjectPtr<UOpenGolfWindIndicator> WindIndicator;
     TArray<ShotDisplay::FTile> Tiles;

@@ -179,10 +179,10 @@ TSharedRef<SWidget> SRangeHud::MakeColumn()
     return Column;
 }
 
-TSharedRef<SWidget> SRangeHud::MakeHoleLine(FName Tag, const FText& Line)
+TSharedRef<SWidget> SRangeHud::MakeHoleLine(FName WidgetTag, const FText& Line)
 {
     // Line is a member the text refresh updates; the bindings read it each frame.
-    return SNew(STextBlock).Tag(Tag).Font(HudStyle::Font("Bold", HudHoleFontSize)).ColorAndOpacity(HudStyle::TextColor())
+    return SNew(STextBlock).Tag(WidgetTag).Font(HudStyle::Font("Bold", HudHoleFontSize)).ColorAndOpacity(HudStyle::TextColor())
         .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
         .Visibility_Lambda([&Line] { return Line.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
         .Text_Lambda([&Line] { return Line; });
