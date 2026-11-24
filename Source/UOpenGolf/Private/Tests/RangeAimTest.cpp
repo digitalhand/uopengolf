@@ -14,7 +14,7 @@
 #include "UOpenGolfRange.h"
 
 // The aim turns the teed ball and the tee camera, is limited, cannot change during or after a
-// shot, turns the launch itself and stays set after the automatic re-tee.
+// shot, turns the launch itself and stays set after the automatic re-tee, as does the hole map's target.
 class FVerifyRangeAim : public IAutomationLatentCommand
 {
 public:
@@ -45,10 +45,21 @@ public:
         switch (Stage)
         {
         case 0:
+        {
+            // The hole map's target ring: at the cup's distance until the map is clicked, then where it was clicked.
+            Test->TestEqual(TEXT("The aim target starts at the cup's distance"), Controller->GetAimTargetDistanceCm(),
+                Mode->GetDistanceToCupM() * 100.0, 1.0);
+            const FVector2D Clicked = FVector2D(Ball->GetActorLocation()) + FVector2D(15000, 3000);
+            Test->TestTrue(TEXT("Aiming at a map point turns on the tee"), Controller->AimToward(Clicked));
+            Test->TestEqual(TEXT("Aiming at a map point sets the target's distance"), Controller->GetAimTargetDistanceCm(),
+                FVector2D(15000, 3000).Size(), 1.0);
             Test->TestTrue(TEXT("Aim turns on the tee"), Controller->SetAimYaw(30.0f));
+            Test->TestEqual(TEXT("Turning the aim keeps the target's distance"), Controller->GetAimTargetDistanceCm(),
+                FVector2D(15000, 3000).Size(), 1.0);
             TurnFrame = GFrameCounter;
             CameraYawBeforeTurn = Controller->GetViewTarget()->GetActorRotation().Yaw;
             break;
+        }
         case 1:
             // In the editor's first Play session the controller can miss the frame after the turn, so wait
             // for the camera's first update (a few frames at most). That update must already be the full turn.
@@ -107,6 +118,9 @@ public:
                 return false;
             Test->TestEqual(TEXT("Aim kept after the automatic re-tee"), Controller->GetAimYaw(), 20.0f);
             Test->TestEqual(TEXT("Re-teed ball faces the aim"), Ball->GetActorRotation().Yaw, 20.0, 0.01);
+            // The re-tee is the same lie, so the target stays where it was set, as the aim does.
+            Test->TestEqual(TEXT("Target kept after the automatic re-tee"), Controller->GetAimTargetDistanceCm(),
+                FVector2D(15000, 3000).Size(), 1.0);
             return true;
         }
         ++Stage;

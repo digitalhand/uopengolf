@@ -8,6 +8,7 @@
 #include "UOpenGolfGameMode.generated.h"
 
 class AOpenFairwayBall;
+class ATrainingSession;
 class UGolfGimmieIndicator;
 class AUOpenGolfRange;
 class UGolfCourseDefinition;
@@ -67,6 +68,10 @@ public:
     DECLARE_MULTICAST_DELEGATE(FOnRoundComplete);
     /** A course round has ended and its hole-out banner has been shown for HoleOutDelayS. */
     FOnRoundComplete OnRoundComplete;
+
+    ATrainingSession* GetTrainingSession() const { return Training; }
+    bool IsDrillActive() const;
+    bool CanPlaceTrainingBall() const;
 
     bool IsPractice() const { return Round.bPractice; }
     FVector GetPracticeOrigin() const { return PracticeOrigin; }
@@ -155,6 +160,12 @@ protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+    friend class ATrainingSession;
+    void CreateTrainingSession();
+    void ResetToTeeForPlay();
+    void ResetForPlay();
+    UPROPERTY(Transient) TObjectPtr<ATrainingSession> Training;
+
     void HandleShot(const FLaunchMonitorShot& Shot);
     void HandleClubData(const FLaunchMonitorClubData& ClubData);
 

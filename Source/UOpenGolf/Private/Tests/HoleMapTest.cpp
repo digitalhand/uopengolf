@@ -4,6 +4,7 @@
 #include "Tests/HoleMapContent.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -12,6 +13,7 @@
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfRange.h"
 #include "Tests/PermissionTestAccess.h"
+#include "UI/Hud/HoleMinimap.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoleMapFrameTest, "UOpenGolf.Minimap.Projection",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -71,10 +73,16 @@ namespace
             {
             case 0:
             {
-                const UTextureRenderTarget2D* Picture = Mode->GetRange()->GetHoleMapTexture();
-                Test.TestTrue(TEXT("The hole map is captured at the frame's size"), Picture && Picture->SizeX == FHoleMapFrame::TextureWidth
-                    && Picture->SizeY == FHoleMapFrame::TextureHeight);
-                HoleMapContent::ShowsTurf(Test, Mode->GetRange()->GetHoleMapTexture(), TEXT("Training"));
+                const AUOpenGolfRange* Range = Mode->GetRange();
+                const UTextureRenderTarget2D* Capture = Range->GetHoleMapCaptureTarget();
+                Test.TestTrue(TEXT("The hole map is captured at the frame's size"), Capture && Capture->SizeX == FHoleMapFrame::TextureWidth
+                    && Capture->SizeY == FHoleMapFrame::TextureHeight);
+                HoleMapContent::ShowsTurf(Test, Range->GetHoleMapCaptureTarget(), TEXT("Training"));
+                const UTexture2D* Picture = Range->GetHoleMapTexture();
+                Test.TestTrue(TEXT("The finished picture has mips for the zoomed-out view"), Picture && Picture->GetNumMips() > 1);
+                Test.TestTrue(TEXT("The hole map samples the ground's height"), Range->GetHoleMapHeights().IsValid());
+                Test.TestTrue(TEXT("The hole map has its header and elevation footer"), RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("HoleMapHeader")).IsValid()
+                    && RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("HoleMapFooter")).IsValid());
                 Click();
                 Test.TestTrue(TEXT("Click turns range aim right"), Player->GetAimYaw() > 5);
                 const FVector Lie = Mode->GetRange()->GetTeeLocation() + FVector(6500, 1000, 0);
@@ -101,8 +109,22 @@ namespace
                     return Wait(TEXT("the right click to cancel placing"));
                 Test.TestFalse(TEXT("A right click on the map cancels placing"), Player->IsPlacingBall());
                 Player->CancelPlacingBall();
-                Click();
-                Test.TestTrue(TEXT("Click aims from new lie"), Player->GetAimYaw() > PreviousYaw + 5);
+                {
+                    // Away from the tee the map zooms toward the ball and the cup; a click aims at the point it shows.
+                    const FHoleMapFrame View = StaticCastSharedPtr<SHoleMinimap>(Map)->GetView();
+                    const FVector2D Target = View.ToWorld({.9, .65});
+                    const FVector2D FromBall = Target - FVector2D(Mode->GetBall()->GetActorLocation());
+                    Click();
+                    Test.TestTrue(TEXT("Click aims from new lie"), Player->GetAimYaw() > PreviousYaw + 5);
+                    // The aim is limited either side of the line to the cup, which a practice lie aims along.
+                    const FVector2D ToCup = FVector2D(Mode->GetCupLocation() - Mode->GetBall()->GetActorLocation());
+                    const double CupDeg = FMath::RadiansToDegrees(FMath::Atan2(ToCup.Y, ToCup.X));
+                    const double ClickDeg = FMath::RadiansToDegrees(FMath::Atan2(FromBall.Y, FromBall.X));
+                    const double Limit = AUOpenGolfPlayerController::MaxAimYawDeg;
+                    Test.TestEqual(TEXT("Click aims at the point the zoomed map shows"), double(Player->GetAimYaw()),
+                        CupDeg + FMath::Clamp(FRotator::NormalizeAxis(ClickDeg - CupDeg), -Limit, Limit), 0.5);
+                    Test.TestEqual(TEXT("Click sets the target at that point"), Player->GetAimTargetDistanceCm(), FromBall.Size(), 50.0);
+                }
                 ShotOrigin = Mode->GetBall()->GetActorLocation();
                 CaptureAt = GetCurrentRunTime() + 1;
                 ++Stage;

@@ -88,11 +88,12 @@ public:
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.WindFromDeg"))->Set(90.0f, ECVF_SetByTemp, TEXT("RangePresentation"));
             IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.GreenStimp"))->Set(13.0f, ECVF_SetByTemp, TEXT("RangePresentation"));
             GrassVar->Set(1, ECVF_SetByConsole, TEXT("RangePresentation"));
-            ReadyAt = GetCurrentRunTime() + 0.5;
+            SettingsReadyAt = World->GetTimeSeconds() + 0.5;
             Stage = 1;
             return false;
         }
-        if (GetCurrentRunTime() < ReadyAt)
+        // Range settings are polled on a game-time tick. Shader warmup can stall Play while the editor clock advances.
+        if (World->GetTimeSeconds() < SettingsReadyAt || GetCurrentRunTime() < ReadyAt)
             return false;
         if (Stage == 1)
         {
@@ -110,7 +111,7 @@ public:
             InitialCount = Range->GetGrassInstanceCount();
             Test->TestTrue(TEXT("Grass is instantiated"), InitialCount > 1000);
             GrassVar->Set(0, ECVF_SetByConsole, TEXT("RangePresentation"));
-            ReadyAt = GetCurrentRunTime() + 0.5;
+            SettingsReadyAt = World->GetTimeSeconds() + 0.5;
             Stage = 2;
             return false;
         }
@@ -118,7 +119,7 @@ public:
         {
             Test->TestEqual(TEXT("Disabling grass hides its instances"), Range->GetGrassInstanceCount(), 0);
             GrassVar->Set(1, ECVF_SetByConsole, TEXT("RangePresentation"));
-            ReadyAt = GetCurrentRunTime() + 0.5;
+            SettingsReadyAt = World->GetTimeSeconds() + 0.5;
             Stage = 3;
             return false;
         }
@@ -225,7 +226,7 @@ private:
     FScopedCVar<float> GreenSpeedSetting{TEXT("uopengolf.GreenStimp"), 10.0f, TEXT("RangePresentation")};
     int32 InitialCount = 0, Stage = 0, View = 0, Frames = 0;
     bool bCapture;
-    double ReadyAt = 0, SampleStart = 0;
+    double SettingsReadyAt = 0, ReadyAt = 0, SampleStart = 0;
     ACameraActor* Camera = nullptr;
     FString Filename;
     int32 SequenceFrame = 0;

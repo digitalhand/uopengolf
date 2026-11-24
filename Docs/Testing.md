@@ -32,11 +32,12 @@ matching completed tests; an empty or failed run is not a pass.
 | Startup | `UOpenGolf.Smoke` |
 | Flight, bounce, roll, stimp or contact | `UOpenGolf.Physics` (its `GameplayPins` must not move unless the physics is meant to change) and the affected range integration tests |
 | Turf roll or flight accuracy against reference shots | Needs the local reference data ([Assets/Data](../Assets/Data/README.md#where-the-data-lives)): `python Assets/Scripts/shot_compare.py --build --check-baseline <local data>/baselines/pre_contact_20261116.csv`, then `python Assets/Scripts/carry_audit.py --before <earlier results.csv>`; see [physics accuracy scripts](Development.md#physics-accuracy-scripts) |
+| Training games and finished balls | `UOpenGolf.Range.TrainingGames`. In rendered Play, `UOpenGolf.Visual.RangeHudControls` opens the game picker and drill dialog, and `UOpenGolf.Visual.TrainingTarget` captures tee, target and moving-camera views. |
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
 | Course definitions, round scoring or travel | `UOpenGolf.Course` (its `Catalog` test checks the bundled course against the range) and `UOpenGolf.Range.HolePlay`; with rendering (`-Rendered`), `UOpenGolf.Visual.CourseBrowser` |
-| Hole minimap | `UOpenGolf.Minimap`; its `RenderedClick` test needs rendering (`-Rendered`) |
+| Hole minimap | `UOpenGolf.Minimap` (framing, ground fields, compositing and labels run headless; `RenderedClick` needs rendering, `-Rendered`) and `UOpenGolf.Range.Aim` for the map's target |
 | In-game updates | `OpenGameUpdate` (run with `-Filter OpenGameUpdate`); the installer by hand, see [In-game updates](Releases.md#in-game-updates) |
 | Ubuntu packaging | `python3 -B -m unittest Assets.Scripts.test_build_deb Assets.Scripts.test_check_package_runner`; requires `dpkg-deb` |
 

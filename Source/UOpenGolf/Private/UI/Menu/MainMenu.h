@@ -82,6 +82,7 @@ private:
     TWeakPtr<SButton> TrainingButton, CoursesButton;
     /** The home page (launch buttons, Courses and the QR sign-in), or the pause menu once a session has started. */
     void BuildHome(TSharedRef<SVerticalBox> Body);
+    void BuildEnvironment(TSharedRef<SVerticalBox> Rows);
     void BuildSettings(TSharedRef<SVerticalBox> Body);
     void AddChoice(TSharedRef<SVerticalBox> Rows, const FString& Label, const FString& Help,
         TArray<FString> Labels, TArray<int32> Values, TFunction<int32()> Get, TFunction<void(int32)> Set, bool Enabled = true);

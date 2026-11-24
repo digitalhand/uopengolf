@@ -7,7 +7,8 @@ Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. The script backs up the m
 
 1. lays out the hole in DA_SavannaRange: the green 400 yards out with its contour, the fairway bunker on the left of
    the landing area, a greenside bunker right of the green, and the backdrop hill moved behind the new green;
-2. rebuilds the ground meshes (the Landscape outside the detailed area is unchanged) and stands the flag at the pin;
+2. rebuilds the ground meshes (the Landscape outside the detailed area is unchanged), re-bakes the savanna ground's
+   rough mask (T_SavannaRoughMask) from the new outlines and stands the flag at the pin;
 3. exports and bakes the course field (turf_mask.py needs NumPy: set OPEN_GOLF_NUMPY_PYTHON to a Python that has it,
    otherwise "python" runs it), imports it and points the cut-turf materials at it (their turf profiles are kept);
 4. places the course grass along the new outlines, then rebuilds the trees and understory away from them.
@@ -67,7 +68,7 @@ def bake_course_field(area):
     subprocess.run([numpy_python(), str(HERE / "turf_mask.py"), str(apply_turf.FIELD_SPEC), str(apply_turf.FIELD_SOURCE)], check=True)
     with s.course_helpers("/OpenGolfSavanna", turf.CONTENT, turf.OWNER):
         apply_turf.import_field(area.definition)
-        shading.configure_field_all(area, turf.SOURCE, turf.first_cut_width())
+        shading.configure_field_all(area, turf.SOURCE)
 
 
 def build():
@@ -76,6 +77,7 @@ def build():
         raise RuntimeError("Stop Play before building the hole")
     numpy_python()
     area = course.terrain_area(apply_turf.MAP)
+    savanna.check_mask_bounds(area.definition)
     ranges = [a for a in ue.get_editor_subsystem(ue.EditorActorSubsystem).get_all_level_actors() if isinstance(a, ue.UOpenGolfRange)]
     if len(ranges) != 1:
         raise RuntimeError("Expected one range controller")
@@ -88,6 +90,8 @@ def build():
         raise RuntimeError(f"Ground rebuild failed (see LogTemp); nothing was saved. Backup: {backup}")
     if not ue.EditorAssetLibrary.save_loaded_asset(definition):
         raise RuntimeError("Could not save the terrain definition")
+    # Without this the ground beside a moved green keeps the old layout's desert (see RefreshRoughMask.py).
+    savanna.refresh_rough_mask(definition)
     course_hole.place_flag(ranges[0], area, hole_spec.PIN)
     bake_course_field(area)
     if not ue.get_editor_subsystem(ue.LevelEditorSubsystem).save_current_level():

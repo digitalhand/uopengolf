@@ -228,6 +228,20 @@ namespace RenderedPlay
         return false;
     }
 
+    /** Clicks the widget tagged Tag in the front-most visible window that has one, such as an open drop-down. */
+    inline bool ClickTagged(FAutomationTestBase& Test, FName Tag)
+    {
+        TArray<TSharedRef<SWindow>> Windows;
+        FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+        for (int32 Index = Windows.Num() - 1; Index >= 0; --Index)
+        {
+            if (const TSharedPtr<SWidget> Widget = WithTag(Windows[Index], Tag))
+                return ClickOn(Test, Windows[Index], Widget, Tag.ToString());
+        }
+        Test.AddError(TEXT("Missing control: ") + Tag.ToString());
+        return false;
+    }
+
     /** Saves Pixels as a PNG at Saved/Screenshots/RelativePath, for checking a rendered run by eye. */
     inline bool SavePng(FAutomationTestBase& Test, FIntPoint Size, const TArray<FColor>& Pixels, const FString& RelativePath)
     {

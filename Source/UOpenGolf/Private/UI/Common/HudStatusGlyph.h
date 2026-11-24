@@ -16,7 +16,9 @@ public:
         Flag,
         Ball,
         Tee,
-        Exit
+        Exit,
+        Close,
+        Games
     };
 
     SLATE_BEGIN_ARGS(SHudStatusGlyph) : _Kind(EKind::Record), _Color(FLinearColor::White), _Filled(false) {}

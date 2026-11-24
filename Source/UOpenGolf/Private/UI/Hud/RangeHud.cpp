@@ -2,7 +2,7 @@
 #include "UI/Hud/RangeHud.h"
 #include "GolfCourseDefinition.h"
 #include "UI/Hud/BallReadyGlow.h"
-#include "UI/Hud/HoleMinimap.h"
+#include "UI/Hud/HoleMapPanel.h"
 #include "UI/Common/HudStatusGlyph.h"
 #include "Widgets/Input/SButton.h"
 #include "RangePerformance.h"
@@ -102,7 +102,7 @@ void SRangeHud::Construct(const FArguments& Args)
             + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, HudMapTop, 0, HudMapBottom)
             [
                 SNew(SScaleBox).Visibility(EVisibility::SelfHitTestInvisible).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
-                [ SNew(SHoleMinimap).Controller(Controller) ]
+                [ SNew(SHoleMapPanel).Controller(Controller) ]
             ]
             // Game version in the bottom-left corner, under the Test shots button.
             + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, 0, 0, HudVersionBottom)

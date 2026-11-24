@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfRange.h"
+#include "OpenGolfEnvironment.h"
 
 #include "Components/DirectionalLightComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
-#include "Components/SceneCaptureComponent2D.h"
-#include "Engine/TextureRenderTarget2D.h"
-#include "HAL/PlatformTime.h"
-#include "Misc/App.h"
 #include "UObject/UObjectGlobals.h"
-#if WITH_EDITOR
-#include "AssetCompilingManager.h"
-#include "ShaderCompiler.h"
-#endif
 #include "Engine/World.h"
 #include "Hole/OpenGolfCupComponent.h"
 #include "HAL/IConsoleManager.h"
@@ -25,8 +18,6 @@
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
 #include "GolfCourseDefinition.h"
-
-DEFINE_LOG_CATEGORY_STATIC(LogUOpenGolfRange, Log, All);
 
 namespace
 {
@@ -88,15 +79,8 @@ void AUOpenGolfRange::BuildDefaultLayout()
     // Like the rest of the range, it is movable; its cloth child moves every frame.
     Flagstick->SetMobility(EComponentMobility::Movable);
 
-    UDirectionalLightComponent* Sun = AddLayoutComponent<UDirectionalLightComponent>(TEXT("Sun"), TEXT("Range/Lighting"));
-    Sun->SetMobility(EComponentMobility::Movable);
-    Sun->SetRelativeRotation(FRotator(-40.0f, 35.0f, 0.0f));
-    Sun->SetAtmosphereSunLight(true);
-
-    AddLayoutComponent<USkyAtmosphereComponent>(TEXT("Sky"), TEXT("Range/Lighting"));
-    USkyLightComponent* SkyLight = AddLayoutComponent<USkyLightComponent>(TEXT("SkyLight"), TEXT("Range/Lighting"));
-    SkyLight->SetMobility(EComponentMobility::Movable);
-    SkyLight->SetRealTimeCaptureEnabled(false);
+    if (!AOpenGolfEnvironment::Find(GetWorld()))
+        GetWorld()->SpawnActor<AOpenGolfEnvironment>();
     for (const auto& Actor : LayoutActors)
         Actor->RegisterAllComponents();
     RefreshPresentation();
@@ -110,6 +94,8 @@ void AUOpenGolfRange::BeginPlay()
     AppliedWindBall.Reset();
     ApplyWindSettings();
     BuildDefaultLayout();
+    if (auto* Environment = AOpenGolfEnvironment::Find(GetWorld()))
+        Environment->OnSettingsChanged.AddUObject(this, &AUOpenGolfRange::InvalidateHoleMap);
     RefreshPresentation();
     if (IsValid(Flagstick))
     {
@@ -118,6 +104,7 @@ void AUOpenGolfRange::BeginPlay()
             Flagstick->SetWorldLocation(Ground);
         Cup->PlaceAtFlagstick(Flagstick, Normal);
     }
+    OriginalCup = Cup->GetFlagstick() ? Cup->GetCupDescriptor() : FOpenFairwayCup{GetTeeLocation(), FVector::UpVector};
     // Captured on the first tick, once the flag stands on the ground and the grass switch is applied.
     InvalidateHoleMap();
 }
@@ -355,85 +342,4 @@ void AUOpenGolfRange::UpdateGrass()
         InvalidateHoleMap();
     bGrassEnabled = bWanted;
     bTerrainGrassApplied = true;
-}
-
-void AUOpenGolfRange::InvalidateHoleMap()
-{
-    if (bHoleMapDirty)
-        return;
-    bHoleMapDirty = true;
-    bHoleMapInterim = false;
-    HoleMapStaleSince = FPlatformTime::Seconds();
-}
-
-bool AUOpenGolfRange::IsSceneReadyForHoleMap()
-{
-    if (IsAsyncLoading())
-        return false;
-#if WITH_EDITOR
-    // Editor builds (the editor, and -game runs of it) rebuild reloaded textures, meshes and shaders after level
-    // travel; until they finish, the renderer draws checkerboard placeholders, which a one-off capture would keep.
-    if (FAssetCompilingManager::Get().GetNumRemainingAssets() > 0)
-        return false;
-    if (GShaderCompilingManager && GShaderCompilingManager->GetNumRemainingJobs() > 0)
-        return false;
-#endif
-    return true;
-}
-
-void AUOpenGolfRange::UpdateHoleMap()
-{
-    if (!bHoleMapDirty)
-        return;
-    const double Waited = FPlatformTime::Seconds() - HoleMapStaleSince;
-    const bool bReady = IsSceneReadyForHoleMap();
-    // Not ready: wait, up to the time limit, after which one interim picture beats none.
-    if (!bReady && (bHoleMapInterim || Waited < HoleMapReadyTimeoutS))
-        return;
-    CaptureHoleMap();
-    bHoleMapDirty = !bReady;
-    bHoleMapInterim = !bReady;
-    if (bReady)
-    {
-        UE_LOG(LogUOpenGolfRange, Log, TEXT("Hole map captured %.2f s after it went stale."), Waited);
-    }
-    else
-    {
-        UE_LOG(LogUOpenGolfRange, Warning, TEXT("Hole map captured after %.0f s with the scene still loading; it is captured again once ready."), Waited);
-    }
-}
-
-void AUOpenGolfRange::CaptureHoleMap()
-{
-    HoleMapFrame = FHoleMapFrame::FromHole(GetTeeLocation(), GetCupLocation(), MapEndMargin, MapMinimumWidth, MapSideOffset);
-    if (!FApp::CanEverRender())
-        return;
-
-    if (!HoleMapTexture)
-    {
-        HoleMapTexture = NewObject<UTextureRenderTarget2D>(this, TEXT("HoleMap"), RF_Transient);
-        HoleMapTexture->RenderTargetFormat = RTF_RGBA8_SRGB;
-        HoleMapTexture->InitAutoFormat(FHoleMapFrame::TextureWidth, FHoleMapFrame::TextureHeight);
-        HoleMapTexture->UpdateResourceImmediate();
-    }
-    if (!HoleMapCapture)
-    {
-        // Exposure and motion blur come from the range's unbound post-process volume, as in the game view.
-        HoleMapCapture = NewObject<USceneCaptureComponent2D>(this, TEXT("HoleMapCapture"), RF_Transient);
-        HoleMapCapture->bCaptureEveryFrame = false;
-        HoleMapCapture->bCaptureOnMovement = false;
-        HoleMapCapture->ProjectionType = ECameraProjectionMode::Orthographic;
-        HoleMapCapture->CaptureSource = SCS_FinalColorLDR;
-        HoleMapCapture->TextureTarget = HoleMapTexture;
-        // The minimap draws the tee and flag itself; the ball and gimmie ring are hidden in scene captures.
-        HoleMapCapture->HiddenActors.Add(this);
-        if (IsValid(Flagstick))
-            HoleMapCapture->HiddenActors.Add(Flagstick->GetOwner());
-        HoleMapCapture->RegisterComponent();
-    }
-    HoleMapCapture->OrthoWidth = HoleMapFrame.Length * FHoleMapFrame::Aspect;
-    HoleMapCapture->MaxViewDistanceOverride = HoleMapFrame.Length * 3;
-    HoleMapCapture->SetWorldLocationAndRotation(HoleMapFrame.Center + FVector::UpVector * HoleMapFrame.Length,
-        FRotator(-90, FVector(HoleMapFrame.Up, 0).Rotation().Yaw, 0));
-    HoleMapCapture->CaptureScene();
 }

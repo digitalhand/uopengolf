@@ -1,0 +1,10 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0",
+  "FriendlyName": "Open Golf Environment",
+  "Description": "Reusable daylight, clouds and morning mist.",
+  "Category": "Environment",
+  "CanContainContent": true,
+  "Modules": [{"Name": "OpenGolfEnvironment", "Type": "Runtime", "LoadingPhase": "Default"}]
+}

@@ -12,6 +12,11 @@ downloaded originals live outside the repository under the Blender art root
 
 ## Rough grass tiles
 
+Since 2026-11-20 the range's rough band is the 50 mm cut-turf rough (`DA_TurfRoughGrass`; see
+[Maintained turf](#maintained-turf)). These Grass Medium tiles and the presets below are no longer
+placed on the range. They remain for the savanna generator (`BuildSavannaRange.py`) and as a rollback
+(`DA_TurfTallRough`, `DA_TurfRoughEdge`).
+
 Grass Medium 01 (Poly Haven, CC0) becomes a family of dense tiles, like a commercial grass
 pack's `Dense` meshes, which fit edge to edge without gaps:
 
@@ -187,7 +192,7 @@ whose presets predate the canopy.
 
 ## Wind
 
-The jacarandas, the Grass Medium rough and the Nature Essentials grasses move in the range's wind
+The jacarandas, the Grass Medium rough (when placed) and the Nature Essentials grasses move in the range's wind
 through the course kit's [vegetation wind](../../OpenGolfCourse/Docs/Reference.md#vegetation-wind). The savanna
 parents (`M_SavannaCard`, `M_SavannaSolid`, `M_SavannaGrass`, `M_SavannaUnderstoryGrass`) carry its
 hook, switched off. `Scripts/vegetation_wind_assignments.py` lists which material instances turn it
@@ -208,5 +213,6 @@ the list (`python3 -m unittest test_vegetation_wind_assignments` checks it) and 
 ## Maintained turf
 
 The original short-grass pipeline and its scoped import/apply commands are described in
-[Maintained turf workflow](../../../Docs/TurfWorkflow.md). Validation status is in
-[Phase status](../../../Docs/PhasesStatus.md).
+[Maintained turf workflow](../../../Docs/TurfWorkflow.md), which also records validation status.
+It includes the 50 mm rough: `Meshes/CutTurf/Rough/SM_TurfRough_{1m,50cm,25cm,125mm}_{A-D}`,
+`MI_TurfRoughBlades` and `Terrain/CutTurf/DA_TurfRoughGrass`, installed by `Scripts/ApplyCutTurfRough.py`.

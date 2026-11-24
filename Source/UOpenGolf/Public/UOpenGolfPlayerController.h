@@ -149,6 +149,12 @@ public:
      */
     bool AimToward(const FVector2D& WorldPoint, double MinDistanceCm = 1.0);
 
+    /**
+     * How far along the aim (cm) the hole map draws its target: where the map was last clicked from this lie, else the
+     * distance to the cup. Turning the aim keeps it; a new lie (not the re-tee to the same spot) starts at the cup.
+     */
+    double GetAimTargetDistanceCm() const;
+
     /** The aim off the target line in degrees, positive to the right: the range's line, or the line to the cup. */
     float GetAimOffsetDeg() const;
 
@@ -178,6 +184,11 @@ public:
 
     /** Escape: cancels the current tool, otherwise opens the menu. */
     void HandleEscape();
+    bool IsDrillDialogOpen() const { return DrillDialog.IsValid(); }
+    /** The Exit/Restart dialog of the active drill, which also reports a finished drill's result. */
+    void OpenDrillDialog();
+    void CloseDrillDialog();
+    void ClearMapAim() { AimTargetLie.Reset(); }
     void HandleMenuBack();
 
     /**
@@ -234,6 +245,7 @@ private:
 
     TSharedPtr<class FHudNavigation> HudNavigation;
     TSharedPtr<SMainMenu> MainMenu;
+    TSharedPtr<SWidget> DrillDialog;
     bool bMainMenuOpen = false;
     TSharedPtr<SWidget> ReplayPanel;
     int32 SelectedReplayIndex = 0;
@@ -241,6 +253,9 @@ private:
     bool bCustomShotSelected = false;
     bool bReplayPanelOpen = false;
     bool bPlacingBall = false;
+    // The hole map's target distance (cm), set by AimToward, and the lie it was set from.
+    double AimTargetDistanceCm = 0.0;
+    TOptional<FVector2D> AimTargetLie;
     // How long A or D has been held, for the turn-rate ramp.
     float AimHeldSeconds = 0.0f;
     // -1 while A is held, +1 while D is held, 0 otherwise.

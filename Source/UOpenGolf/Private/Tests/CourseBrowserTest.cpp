@@ -118,7 +118,7 @@ namespace
                     return false;
                 if (Step == EStep::FirstRound)
                 {
-                    HoleMapContent::ShowsTurf(Test, Mode->GetRange()->GetHoleMapTexture(), TEXT("Course round"));
+                    HoleMapContent::ShowsTurf(Test, Mode->GetRange()->GetHoleMapCaptureTarget(), TEXT("Course round"));
                     RenderedPlay::SaveWindowPng(Test, Root, TEXT("Minimap-course.png"));
                 }
                 Test.TestTrue(TEXT("The round plays the chosen course"),

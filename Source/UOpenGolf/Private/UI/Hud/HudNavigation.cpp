@@ -3,6 +3,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "UOpenGolfGameMode.h"
 #include "GameFramework/PlayerInput.h"
 #include "Widgets/SWindow.h"
 
@@ -49,6 +50,16 @@ bool FHudNavigation::HandleKeyDownEvent(FSlateApplication& App,const FKeyEvent& 
 {
     if(!Active(App))return false;
     const FKey Key=Event.GetKey();
+    if (Player->IsDrillDialogOpen())
+    {
+        bFocused = false;
+        if (Key == EKeys::Escape || Key == EKeys::Gamepad_FaceButton_Right)
+        {
+            if (!Event.IsRepeat()) Player->CloseDrillDialog();
+            return true;
+        }
+        return false;
+    }
     if(Key==EKeys::Gamepad_Special_Right)
     {
         if(!Event.IsRepeat()){if(Player->IsMainMenuOpen())Player->HandleMenuBack();else Player->OpenMainMenu();}
@@ -62,6 +73,13 @@ bool FHudNavigation::HandleKeyDownEvent(FSlateApplication& App,const FKeyEvent& 
     if(Key==EKeys::Escape||Key==EKeys::Gamepad_FaceButton_Right)
     {
         if(Event.IsRepeat())return true;
+        const auto* Mode = Player->GetWorld()->GetAuthGameMode<AUOpenGolfGameMode>();
+        if (Mode && Mode->IsDrillActive())
+        {
+            bFocused = false;
+            Player->HandleEscape();
+            return true;
+        }
         if(App.AnyMenusVisible()){App.DismissAllMenus();return true;}
         if(Player->IsPlacingBall()||Player->IsWindPanelOpen()||Player->IsReplayPanelOpen())
         {Player->HandleEscape();if(bFocused)FocusHud(App);return true;}

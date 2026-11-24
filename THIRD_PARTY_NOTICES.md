@@ -41,6 +41,9 @@ used to check and fit the physics (launch-monitor exports, published averages, c
 and research papers are kept outside the repository and are not distributed with it (see
 [Assets/Data](Assets/Data/README.md#where-the-data-lives)); the physics docs cite the papers.
 
+The OpenGolfEnvironment cloud material references Epic’s `T_VolumeNoiseShape128` and
+`T_VolumeNoiseErosion32` in the engine’s EngineSky content.
+
 Unreal Engine must be obtained separately and is governed by the
 [Unreal Engine EULA](https://www.unrealengine.com/eula/unreal), not this repository's MIT license.
 The greeting uses Unreal's built-in font at runtime; no engine font or engine source is copied into this repository.

@@ -26,6 +26,29 @@ Canvas sets the top-center position; gameplay embeds this same asset in the Slat
 The native `UOpenGolfWindIndicator` wraps `SWindIndicator`, sharing the drawing in both views.
 The editor command `uopengolf.CreateWindIndicatorAsset` creates the asset only if missing.
 
+### Training games
+
+The GameMode creates one `ATrainingSession` per Training world. It keeps the active drill and the
+finished balls. When a shot stops, the session remembers its final transform. When the live ball
+moves to its next lie, a collision-free copy takes its place. The session records where each drill
+run starts in that list so restarting can clear just that run. Leaving the map clears the session.
+
+To add a game, derive from `UTrainingDrill`, give it a display name, implement its start and finish
+behavior, and return its controls from `MakeSettings`. Add its class to `ATrainingSession::Games()`.
+The Training toolbar lists the class with a button for each choice in `TrainingScoring::TryChoices`
+(3 or 5 tries) and hosts its controls. The session forwards each ball at rest to the drill, asks it
+whether a launch-monitor shot may be played (`RejectReason`), and lets it finish a delayed change
+before the shot (`BeforeShot`).
+
+The target games derive from `UTargetDrill`. It moves the active cup through `PlaceOnSurface`,
+supplies that same cup to the ball, and draws `UTargetRings`: white 3 ft and 6 ft rings with flat
+text labels, 6 cm above the ground so the tallest cut-turf blades (55 mm rough) cannot cover them.
+Each ball is scored where it stops with the pure rules in `Training/TrainingScoring.h`, which Distance
+Practice (one set at a chosen yardage) and Distance Ladder (15 to 150 yd) apply. A pin move or a
+finished game's result waits `AUOpenGolfGameMode::AddressDelayS`, so the player sees where the ball
+stopped. The overhead map always captures the full hole using the original cup. Its live pin and
+elevation use the active cup.
+
 ### Courses and rounds
 
 Each installed course is a `UGolfCourseDefinition` data asset (primary asset type `GolfCourse`) in
@@ -46,18 +69,57 @@ Training's wind across this travel, until the Game Defaults starting wind change
 
 ### Hole map
 
-The HUD's minimap (`SHoleMinimap`) draws a top-down picture of the hole that the range captures itself:
-`AUOpenGolfRange` frames the tee and cup in an `FHoleMapFrame` (map up is tee to cup) and renders an orthographic
-`USceneCaptureComponent2D` once into a 480×768 render target. It captures again only when the grass switch or the
-layout changes, so the capture costs nothing per frame. Each capture waits until the scene is ready: nothing still
-loading and, in editor builds (the editor and `-game` runs of it), no textures, meshes or shaders still compiling.
-After level travel those assets are reloaded and rebuilt, and until then the renderer draws checkerboard placeholders
-that a one-off picture would keep. The minimap stays hidden while the range waits (`Hidden`, not `Collapsed`:
-`SScaleBox` stops updating a collapsed child, so it would never reappear); after
-`AUOpenGolfRange::HoleMapReadyTimeoutS` (10 s) it captures anyway and again once the scene is ready. The ball, its tracer and the gimmie ring set
-`bHiddenInSceneCapture`, so only the course shows; the minimap draws the tee, flag and ball over the picture with
-`FHudPen`. The same frame converts a click on the map back to the world, where `AimToward` turns the aim at address.
-Framing is set on the range actor (**UOpenGolf › Minimap**: end margin, minimum width, side offset).
+The HUD's hole map (`SHoleMapPanel`, bottom left) shows a top-down picture of the hole that the range captures
+itself. `AUOpenGolfRange` frames the tee and cup in an `FHoleMapFrame`, with map up from tee to cup. It renders an
+orthographic `USceneCaptureComponent2D` once into a 1280×2048 render target, which leaves room to zoom.
+
+The capture is set up as a map, not the game view: no fog, clouds or cloud shadows, and no motion blur, depth of
+field, bloom, lens flares, vignette or grain. It adds a slight saturation and contrast lift. Exposure still comes from
+the range's post-process volume.
+
+`UOpenGolfRangeHoleMap.cpp` finishes the picture on the CPU, once per capture. It reads the capture back and uses two
+`FHoleMapField` grids sampled every 3 m over the frame:
+
+- **Ground height:** read from the terrain definition's `HeightAt`, the analytic ground that the Landscape and
+  detail mesh are built from. It is sampled in parallel. A course without a definition falls back to
+  `AOpenGolfTerrainArea::GroundAt` traces on the ball's contact channel, on the game thread. The field drives the
+  hillshade (lit from the map's top left), the contour lines (1 m apart, wider on steep ground, every fifth darker)
+  and the elevation labels.
+- **Distance from play:** taken from the terrain definition, also in parallel. Ground farther than about 25 m from
+  play is desaturated and darkened, so the hole stands out.
+
+`HoleMapCompositor` builds a mip chain averaged in linear light and uploads it as a transient trilinear `UTexture2D`,
+so zoomed-out views do not alias. The ground is sampled again only when the frame changes. Look constants are in
+`HoleMap/HoleMapLook.h`.
+
+The range captures again only when the grass switch, the layout or the environment settings change, so the capture
+costs nothing per frame. Each capture waits until the scene is ready: nothing still loading and, in editor builds (the
+editor and `-game` runs of it), no textures, meshes or shaders still compiling. After level travel, those assets are
+reloaded and rebuilt; until then the renderer draws checkerboard placeholders, which a one-off picture would keep.
+
+The panel stays hidden while the range waits. It uses `Hidden`, not `Collapsed`, because `SScaleBox` stops updating a
+collapsed child, so it would never reappear. After `AUOpenGolfRange::HoleMapReadyTimeoutS` (10 s) the range captures
+anyway, then again once the scene is ready. The ball, its tracer and the gimmie ring set `bHiddenInSceneCapture`, so
+only the course shows.
+
+The map (`SHoleMinimap`) shows part of the picture through the brush's UV region:
+
+- **View:** `FHoleMapFrame::Fit` frames the ball and the cup with a 25 m margin, at least
+  `MapMinimumViewLength` long. The view eases to a new framing in about 0.4 s and holds still during flight. Reduced
+  motion snaps it instead.
+- **Overlays**, drawn over the picture with `FHudPen` and `HoleMapOverlay`:
+  - the tee;
+  - the pin, with a chip showing its distance;
+  - the ball;
+  - at address, the aim line to a target ring with its own chip, and a thin line on to the pin.
+- **Clicks:** the same view converts a click back to the world. There, `AimToward` turns the aim and puts the target
+  at the clicked distance. The target keeps that distance while the ball stays on the same lie, re-tees included.
+  Otherwise it sits at the cup's distance.
+
+The panel's header names the lie (or In flight and Rolling while the ball moves) and the hole. Its footer shows the pin's elevation above or below the ball in feet
+and inches (`▲ 3"`, `▼ 5' 1"`, or Level). Elevations are measured on the height field at both ends, so a level target
+reads level. Framing is set on the range actor (**UOpenGolf › Minimap**: end margin,
+minimum width, side offset, minimum view length).
 
 A shot result includes `TerminationReason` (`None`, `Rest`, or `SafetyStop`). A safety stop
 still ends motion and schedules a re-tee, but the HUD labels it interrupted and does not show
@@ -170,7 +232,7 @@ by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
 | Folder | Contents |
 | --- | --- |
 | `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, `FHudPen` (outlined lines for self-drawn widgets), icon button, slider, switch, status glyph, HUD tooltip, page header |
-| `Hud/` | The play HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, the hole minimap (`SHoleMinimap`), shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
+| `Hud/` | The play HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, the hole map (`SHoleMapPanel`, `SHoleMinimap`, `HoleMapOverlay`), shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
 | `Club/` | Club picker and club-face glyph |
 | `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |
 | `Menu/` | `SMainMenu` (home with its launch buttons, pause, Settings, Shot history, dialogs, the final scorecard), the Courses browser (`SCourseBrowser`) and display-mode options |
@@ -284,3 +346,9 @@ The repository is public, so machine and account details stay out of it:
   account's home folder. Existing assets carry such paths; they grant no access.
 - No credential belongs in the tree. The Auth0 client ID in `Config/DefaultGame.ini` is a
   public native-application identifier, and there is no client secret.
+
+### Course atmosphere
+
+`OpenGolfEnvironment` owns the sun, sky atmosphere, skylight, clouds and morning height fog. It depends only on Unreal Engine. A map places one `AOpenGolfEnvironment` and references a reusable `UOpenGolfEnvironmentProfile`; per-map starting settings can override the profile. The range retains its view settings, wind and gameplay responsibilities. New fallback layouts create an environment only when the world has none.
+
+The Environment settings page uses the plugin's shared settings API. Changes affect only the current world and never write back to the profile or map. Automatic daylight stops at sunset; clouds have their own motion speed. The range listens for committed manual changes to refresh the minimap, without recapturing it every animation frame. See the [plugin setup guide](../Plugins/OpenGolfEnvironment/README.md).

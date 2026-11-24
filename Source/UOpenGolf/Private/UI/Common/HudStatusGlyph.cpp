@@ -63,6 +63,14 @@ void SHudStatusGlyph::Paint(EKind Kind, const FGeometry& Geometry, FSlateWindowE
         Pen.Line({{4, 10}, {8, 12}, {12, 10}});
         Pen.Line({{8, 12}, {8, 15}});
         break;
+    case EKind::Close:
+        Pen.Line({{3, 3}, {13, 13}});
+        Pen.Line({{13, 3}, {3, 13}});
+        break;
+    case EKind::Games:
+        Pen.Arc({8, 8}, 6.5f, 0, 360);
+        Pen.Arc({8, 8}, 3.f, 0, 360);
+        break;
     case EKind::Exit:
         Pen.Line({{7, 2}, {2, 2}, {2, 14}, {7, 14}});
         Pen.Line({{6, 8}, {14, 8}, {10, 4}});

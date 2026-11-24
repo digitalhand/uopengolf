@@ -2,12 +2,15 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
+#include "HoleMapField.h"
+#include "OpenFairwayTypes.h"
 #include "HoleMapFrame.h"
 
 #include "UOpenGolfRange.generated.h"
 
 class UPostProcessComponent;
 class USceneCaptureComponent2D;
+class UTexture2D;
 class UTextureRenderTarget2D;
 class UOpenGolfCupComponent;
 class UOpenGolfFlagstickComponent;
@@ -78,13 +81,26 @@ public:
     UPROPERTY(EditAnywhere, Category = "UOpenGolf|Minimap", meta = (Units = "cm"))
     float MapSideOffset = 0;
 
+    /** Hole map view: the shortest stretch of the hole the minimap zooms to around the ball and the cup. */
+    UPROPERTY(EditAnywhere, Category = "UOpenGolf|Minimap", meta = (ClampMin = "1000", Units = "cm"))
+    float MapMinimumViewLength = 14000;
+
     /**
-     * The top-down picture of the hole that the HUD minimap draws; null before the first capture and without a renderer
-     * (NullRHI). Captured once the scene has finished loading (and, in editor builds, compiling its textures, meshes and
-     * shaders), so a picture taken just after level travel never shows placeholder textures; again after
-     * InvalidateHoleMap.
+     * The finished top-down picture of the hole that the HUD minimap draws: the capture with relief, contours and a
+     * dimmed surround, and mips for zooming. Null before the first capture and without a renderer (NullRHI). Captured
+     * once the scene has finished loading (and, in editor builds, compiling its textures, meshes and shaders), so a
+     * picture taken just after level travel never shows placeholder textures; again after InvalidateHoleMap.
      */
-    UTextureRenderTarget2D* GetHoleMapTexture() const { return HoleMapTexture; }
+    UTexture2D* GetHoleMapTexture() const { return HoleMapPicture; }
+
+    /** The raw scene capture the picture is finished from, as rendered. */
+    UTextureRenderTarget2D* GetHoleMapCaptureTarget() const { return HoleMapCaptureTarget; }
+
+    /**
+     * Ground height (cm) over the hole map's frame: the terrain definition's ground, or traces of the ground the ball
+     * lands on for terrain without one. Invalid without terrain.
+     */
+    const FHoleMapField& GetHoleMapHeights() const { return HoleMapHeights; }
 
     /** The frame the hole map was captured in: maps world positions to the picture's UV and back. */
     const FHoleMapFrame& GetHoleMapFrame() const { return HoleMapFrame; }
@@ -113,6 +129,8 @@ public:
     /** The cup on the green's surface; the flag's foot before Play, the tee when there is no flag. */
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Range")
     FVector GetCupLocation() const;
+
+    const FOpenFairwayCup& GetOriginalCup() const { return OriginalCup; }
 
     /** Saved wind at 10 m for the ball, flag and vegetation. Zero is calm. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UOpenGolf|Wind", meta = (DisplayName = "Wind Speed (mph)", ClampMin = "0", UIMax = "40"))
@@ -146,8 +164,17 @@ private:
     /** Captures a stale hole map when the scene is ready, or an interim one when it has waited too long. */
     void UpdateHoleMap();
 
-    /** Frames the hole and renders it top-down into HoleMapTexture, once; the scene is static during Play. */
+    /**
+     * Frames the hole, renders it top-down into HoleMapCaptureTarget and finishes that into HoleMapPicture, once; the
+     * scene is static during Play.
+     */
     void CaptureHoleMap();
+
+    /** Samples the ground's height and distance from play over HoleMapFrame; again only when the frame changes. */
+    void SampleHoleMapFields();
+
+    /** Reads HoleMapCaptureTarget back and finishes it into HoleMapPicture. */
+    void FinishHoleMapPicture();
 
     /** Nothing the capture draws is still loading or, in editor builds, compiling (placeholders would be captured). */
     static bool IsSceneReadyForHoleMap();
@@ -157,9 +184,16 @@ private:
     TObjectPtr<USceneCaptureComponent2D> HoleMapCapture;
 
     UPROPERTY(Transient)
-    TObjectPtr<UTextureRenderTarget2D> HoleMapTexture;
+    TObjectPtr<UTextureRenderTarget2D> HoleMapCaptureTarget;
+
+    /** HoleMapCaptureTarget finished on the CPU; replaced on each capture. */
+    UPROPERTY(Transient)
+    TObjectPtr<UTexture2D> HoleMapPicture;
 
     FHoleMapFrame HoleMapFrame;
+    /** Ground height and distance from play (cm) over the frame they were sampled for. */
+    FHoleMapField HoleMapHeights;
+    FHoleMapField HoleMapPlayDistance;
     /** The picture is missing or out of date; captured by UpdateHoleMap. */
     bool bHoleMapDirty = false;
     /** The current picture was taken at the time limit, before the scene was ready. */
@@ -198,6 +232,8 @@ private:
 
     UPROPERTY(VisibleAnywhere, Category = "UOpenGolf|Range")
     TObjectPtr<UOpenGolfCupComponent> Cup;
+
+    FOpenFairwayCup OriginalCup;
 
     bool bFlagWindApplied = false;
     float AppliedWindVarMph = 0.0f;

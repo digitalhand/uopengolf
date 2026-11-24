@@ -101,6 +101,8 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
         using P=GolfSettings::FPreferences;
         switch(C)
         {
+        case 8:
+            BuildEnvironment(Rows);break;
         case 0:
             BuildPlayer(Rows);break;
         case 2:

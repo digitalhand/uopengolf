@@ -173,6 +173,30 @@ ROUGH_UNDERLAY_COLORS = {"RoughLow": (0.012, 0.024, 0.005, 1.0), "RoughHigh": (0
 DEFAULT_SAND = 'red_sand'
 
 
+MASK_SIZE = (1024, 512)
+TGA_HEADER = 18
+
+
+def play_outlines(definition):
+    """The outlines a course's rough mask follows: every region that is not rough, in terrain metres."""
+    return [[(p.x, p.y) for p in region.outline_m] for region in definition.regions
+            if region.surface and region.surface.surface != ue.OpenFairwaySurface.ROUGH]
+
+
+def mask_source(name):
+    """The grey TGA a course mask is imported from."""
+    return PROJECT / 'Saved/AssetImport/CourseMasks' / f'{name}.tga'
+
+
+def mask_values(name):
+    """A course mask's texels from its source, one byte each, row zero at the minimum Y."""
+    data = mask_source(name).read_bytes()
+    texels = data[TGA_HEADER::3]
+    if len(texels) != MASK_SIZE[0] * MASK_SIZE[1]:
+        raise RuntimeError(f'{mask_source(name)} is not a {MASK_SIZE[0]}x{MASK_SIZE[1]} course mask')
+    return texels
+
+
 def course_mask(definition, folder, name):
     """Write and import a course's rough mask (white near play) into folder/name of the current helpers.
 
@@ -183,11 +207,10 @@ def course_mask(definition, folder, name):
     savanna_layout = importlib.reload(savanna_layout)
     minimum = definition.get_editor_property('detail_minimum_m')
     maximum = definition.get_editor_property('detail_maximum_m')
-    outlines = [[(p.x, p.y) for p in region.outline_m] for region in definition.regions
-                if region.surface and region.surface.surface != ue.OpenFairwaySurface.ROUGH]
-    width, height = 1024, 512
+    outlines = play_outlines(definition)
+    width, height = MASK_SIZE
     values = savanna_layout.ground_mask(outlines, (minimum.x, minimum.y), (maximum.x, maximum.y), width, height)
-    source = PROJECT / 'Saved/AssetImport/CourseMasks' / f'{name}.tga'
+    source = mask_source(name)
     source.parent.mkdir(parents=True, exist_ok=True)
     header = struct.pack('<BBBHHBHHHHBB', 0, 0, 2, 0, 0, 0, 0, 0, width, height, 24, 0x20)
     source.write_bytes(header + b''.join(bytes((v, v, v)) for v in values))

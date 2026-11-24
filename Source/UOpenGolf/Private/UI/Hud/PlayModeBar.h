@@ -34,6 +34,9 @@ private:
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
     TWeakObjectPtr<UOpenGolfOnlineSubsystem> Online;
     bool bHoleMode = false;
+    TSharedPtr<class SBox> DrillSettings;
+    TWeakObjectPtr<class UTrainingDrill> DisplayedDrill;
+    bool bCanPlace = false;
     bool bPlacing = false;
     bool bRangeMode = false;
     bool bRecording = false;

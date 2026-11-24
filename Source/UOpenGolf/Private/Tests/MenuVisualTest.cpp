@@ -12,6 +12,7 @@
 #include "Engine/GameInstance.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
+#include "OpenGolfEnvironment.h"
 #include "GolfGimmieIndicator.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -63,18 +64,35 @@ public:
         // so the test switches to Open Connect and back; nothing is left pending, and Back needs no dialog.
         // Under -NoMainMenu the switch is not written to the player's preferences file.
         struct FStep{const TCHAR* Capture;const TCHAR* Click;};
-        static const FStep Steps[]={{TEXT("home"),nullptr},{nullptr,TEXT("#MenuSettings")},{TEXT("player"),nullptr},{nullptr,TEXT("Video")},{TEXT("video"),nullptr},
-            {nullptr,TEXT("Launch Monitor")},{TEXT("launch-monitor"),nullptr},{nullptr,TEXT("Square Home")},{nullptr,TEXT("Open Connect")},{TEXT("open-connect"),nullptr},
-            {nullptr,TEXT("Open Connect")},{nullptr,TEXT("Square Home")},{TEXT("square-home-again"),nullptr},{nullptr,BackStep},{TEXT("gimmie-hud"),nullptr},{nullptr,EscapeStep},{TEXT("pause"),nullptr}};
+        static const FStep Steps[] = {
+            {TEXT("home"), nullptr}, {nullptr, TEXT("#MenuSettings")}, {TEXT("player"), nullptr},
+            {nullptr, TEXT("Video")}, {TEXT("video"), nullptr},
+            {nullptr, TEXT("Environment")}, {TEXT("environment-day"), nullptr},
+            {nullptr, TEXT("Sunset")}, {TEXT("environment-sunset"), nullptr},
+            {nullptr, TEXT("Reset to course defaults")}, {TEXT("environment-reset"), nullptr},
+            {nullptr, TEXT("Launch Monitor")}, {TEXT("launch-monitor"), nullptr}, {nullptr, TEXT("Square Home")},
+            {nullptr, TEXT("Open Connect")}, {TEXT("open-connect"), nullptr}, {nullptr, TEXT("Open Connect")},
+            {nullptr, TEXT("Square Home")}, {TEXT("square-home-again"), nullptr}, {nullptr, BackStep},
+            {TEXT("gimmie-hud"), nullptr}, {nullptr, EscapeStep}, {TEXT("pause"), nullptr}};
         if(!File.IsEmpty())
         {
             if(!IFileManager::Get().FileExists(*File))return false;
             Test->AddInfo(TEXT("Captured ")+File);File.Empty();
             if(++Stage==UE_ARRAY_COUNT(Steps))return true;
+            // Give Slate a new frame to refresh its hit-test grid after a screenshot.
+            WaitUntil=GetCurrentRunTime()+.2;
+            return false;
         }
         const FStep& Step=Steps[Stage];
         if(Step.Capture)
         {
+            if (FString(Step.Capture).StartsWith(TEXT("environment-")))
+            {
+                auto* Environment = AOpenGolfEnvironment::Find(W);
+                if (!Test->TestNotNull(TEXT("Environment controls have a target"), Environment)) return true;
+                const float Expected = FString(Step.Capture) == TEXT("environment-sunset") ? 1.f : .5f;
+                Test->TestEqual(TEXT("Real menu clicks apply preset and reset"), Environment->GetSettings().Daylight, Expected);
+            }
             // The Training HUD names its icons in HUD-styled tooltips; the menu pages have none.
             RenderedPlay::ExpectNoToolTips(*Test,Window.ToSharedRef(),Step.Capture,FCString::Strcmp(Step.Capture,TEXT("gimmie-hud"))==0);
             if(FCString::Strcmp(Step.Capture,TEXT("home"))==0||FCString::Strcmp(Step.Capture,TEXT("pause"))==0)
@@ -117,8 +135,9 @@ public:
             Test->TestTrue(TEXT("Ring mesh created"),Ring->GetNumSections()==2);
             if(auto* Section=Ring->GetProcMeshSection(1))
             {
-                // The inner perimeter is exactly five feet from the cup in horizontal distance.
-                Test->TestEqual(TEXT("Ring inner radius matches feet conversion"),float(FVector::Dist2D(Section->ProcVertexBuffer[8*128].Position,M->GetCupLocation())),152.4f,.1f);
+                // The inner perimeter is exactly five feet from the cup in horizontal distance. Each band has its own
+                // rows (GroundBands), so the edge's inner row comes first.
+                Test->TestEqual(TEXT("Ring inner radius matches feet conversion"),float(FVector::Dist2D(Section->ProcVertexBuffer[0].Position,M->GetCupLocation())),152.4f,.1f);
             }
             auto* Camera=W->SpawnActor<ACameraActor>();const FVector Offset(-700,0,550);
             Camera->SetActorLocation(M->GetCupLocation()+Offset);Camera->SetActorRotation((-Offset).Rotation());Camera->GetCameraComponent()->SetFieldOfView(60);P->SetViewTarget(Camera);

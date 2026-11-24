@@ -11,20 +11,25 @@ import bpy
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parents[2] / 'OpenGolfCourse/Scripts'))
-from turf_rules import SURFACES, mesh_data
+from turf_rules import FOOTPRINTS, SURFACES, mesh_data
 from art_root import art_root
 
 PROJECT = HERE.parents[3]
 OUT = PROJECT / 'Saved/AssetImport/OpenGolfSavanna/CutTurf'
 
 
-def build_source(path):
+def build_source(path, families=None):
+    """Rebuild the generated tiles of the given families (default: all) and save the source. Other families'
+    objects, including their artist adjustments, are left as they are."""
+    families = tuple(FOOTPRINTS) if families is None else tuple(families)
+    unknown = [family for family in families if family not in FOOTPRINTS]
+    if unknown:
+        raise ValueError(f'No tiles are exported for {unknown}; choose from {tuple(FOOTPRINTS)}')
     for obj in list(bpy.context.scene.objects):
-        if obj.type == 'MESH' and obj.name.startswith('SM_Turf') and 'family' in obj:
+        if obj.type == 'MESH' and obj.name.startswith('SM_Turf') and obj.get('family') in families:
             bpy.data.objects.remove(obj, do_unlink=True)
-    for family in ('Fairway', 'FirstCut', 'Collar'):
-        for size, label in (((0.5, 0.5), '50cm'), ((0.25, 0.25), '25cm'),
-                            ((0.125, 0.125), '125mm'), ((0.0625, 0.0625), '625mm'), ((0.5, 0.05), 'Edge')):
+    for family in families:
+        for size, label in FOOTPRINTS[family]:
             for variant in range(4):
                 name = f'SM_Turf{family}_{label}_{"ABCD"[variant]}'
                 vertices, faces, uvs, colors = mesh_data(family,size,1731+variant)

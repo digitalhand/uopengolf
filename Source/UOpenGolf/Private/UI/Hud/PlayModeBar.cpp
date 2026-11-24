@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Hud/PlayModeBar.h"
+#include "UI/Hud/TrainingControls.h"
+#include "Training/TrainingSession.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Hud/ShotDisplay.h"
 #include "UI/Club/ClubPicker.h"
@@ -62,6 +64,21 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible).Tag(TEXT("PlayToolbar"))
                         + SHorizontalBox::Slot().AutoWidth()
                         [
+                            SNew(SHudIconButton).Icon(SHudIconButton::EIcon::Close).Tag(TEXT("TrainingBack"))
+                            .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
+                            .ToolTip(HudToolTip::Make(FText::FromString(TEXT("Back (Esc)"))))
+#if WITH_ACCESSIBILITY
+                            .AccessibleText(FText::FromString(TEXT("Back")))
+#endif
+                            .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->HandleEscape(); })
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(STrainingPicker).Player(Controller).Tag(TEXT("TrainingGames"))
+                            .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
                             SNew(SClubPicker).Tag(TEXT("ClubPicker")).Monitor(LaunchMonitor)
                         ]
                         + SHorizontalBox::Slot().AutoWidth()[ MakeRecordButton() ]
@@ -69,6 +86,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         [
                             SNew(SHudIconButton).Icon(SHudIconButton::EIcon::Ball).Tag(TEXT("PlaceBall"))
                             .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
+                            .IsEnabled_Lambda([this] { return bCanPlace; })
                             .IsActive_Lambda([this] { return bPlacing; })
                             .ToolTip(HudToolTip::Make(FText::FromString(TEXT("Place ball (B)"))))
 #if WITH_ACCESSIBILITY
@@ -77,6 +95,11 @@ void SPlayModeBar::Construct(const FArguments& Args)
                             .OnClicked_Lambda([this] { if (Controller.IsValid()) Controller->TogglePlacingBall(); })
                         ]
                     ]
+                ]
+                + SVerticalBox::Slot().AutoHeight()
+                [
+                    SAssignNew(DrillSettings, SBox).Padding(FMargin(0, 5, 0, 0))
+                    .Visibility_Lambda([this] { return DisplayedDrill.IsValid() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
                 ]
                 + SVerticalBox::Slot().AutoHeight().Padding(TileGap, 6, TileGap, 0)
                 [
@@ -141,11 +164,12 @@ void SPlayModeBar::Construct(const FArguments& Args)
 TSharedRef<SWidget> SPlayModeBar::MakeRecordButton()
 {
     auto Color = [this] { return HudStyle::RecordColor(bRecording, FailedCount); };
-    // Bound weakly: the tooltip can be read for a moment after a HUD rebuild has released this widget.
+    // Bound weakly: the status can be read for a moment after a HUD rebuild has released this widget. Only screen
+    // readers get the status; the tooltip names the button.
     const TAttribute<FText> Tip = TAttribute<FText>::CreateSP(this, &SPlayModeBar::GetRecordTip);
     return SNew(SButton).ButtonStyle(&RecordStyle).ContentPadding(FMargin(0)).Tag(TEXT("RecordToggle"))
         .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
-        .ToolTip(HudToolTip::Make(Tip))
+        .ToolTip(HudToolTip::Make(NSLOCTEXT("PlayModeBar", "RecordShots", "Record Shots")))
 #if WITH_ACCESSIBILITY
         .AccessibleText(Tip)
 #endif
@@ -219,6 +243,19 @@ void SPlayModeBar::Refresh()
     BannerOpacity = 0.0f;
     OverCupText = FText::GetEmpty();
     bRangeMode = Mode && !bHoleMode;
+    bCanPlace = Mode && Mode->CanPlaceTrainingBall();
+    UTrainingDrill* Drill = bRangeMode && Mode->GetTrainingSession() ? Mode->GetTrainingSession()->Active() : nullptr;
+    if (DrillSettings && (DisplayedDrill.Get() != Drill || DisplayedDrill.IsStale()))
+    {
+        DisplayedDrill = Drill;
+        if (!Drill) DrillSettings->SetContent(SNullWidget::NullWidget);
+        else DrillSettings->SetContent(SNew(SBorder).BorderImage(&TileBrush).Padding(8)[
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(HudStyle::Font("Bold", 12)).Text(Drill->Name())]
+            // Each drill disables its own controls in flight, so its score stays readable.
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)[Drill->MakeSettings()]
+        ]);
+    }
     bRecording = Mode && Mode->IsRecordingShots();
     RecordedCount = Mode ? Mode->GetRecordedShotCount() : 0;
     FailedCount = Mode ? Mode->GetFailedRecordingCount() : 0;

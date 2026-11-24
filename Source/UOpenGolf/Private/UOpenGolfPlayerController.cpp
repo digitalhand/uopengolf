@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerInput.h"
 #include "UI/Menu/MainMenu.h"
 #include "UI/Hud/HudNavigation.h"
+#include "UI/Hud/TrainingControls.h"
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -36,6 +37,8 @@
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfRange.h"
 #include "UI/Common/HudLayers.h"
+#include "UI/Common/HudPointer.h"
+#include "Training/TrainingSession.h"
 #include "UI/Hud/ReplayShotPanel.h"
 #include "Framework/Application/SlateApplication.h"
 
@@ -95,7 +98,7 @@ namespace
     // The aim turns around the target line on the range, and around the line to the cup on the hole.
     float AimCenterDeg(const AUOpenGolfGameMode& Mode, const AOpenFairwayBall& Ball)
     {
-        return (Mode.GetPlayMode() == EOpenGolfPlayMode::Hole || Mode.IsPractice()) ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
+        return (Mode.IsCourseRound() || Mode.IsPractice() || Mode.IsDrillActive()) ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
     }
 } // namespace
 
@@ -137,6 +140,8 @@ void AUOpenGolfPlayerController::BeginPlay()
         ReplayPanel = SNew(SReplayShotPanel).Controller(this);
         Viewport->AddViewportWidgetContent(ReplayPanel.ToSharedRef(), HudLayers::TestShotPanel);
         bShowMouseCursor = true;
+        // Placing a ball sets the crosshair pointer; it shows as the HUD's ball icon.
+        Viewport->SetSoftwareCursorWidget(EMouseCursor::Crosshairs, HudPointer::MakeBall());
         FInputModeGameAndUI InputMode;
         InputMode.SetHideCursorDuringCapture(false);
         InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
@@ -171,6 +176,7 @@ void AUOpenGolfPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReaso
         Mode->OnRoundComplete.Remove(RoundCompleteHandle);
     if(HudNavigation && FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(HudNavigation);
     HudNavigation.Reset();
+    CloseDrillDialog();
     if (MainMenu.IsValid())
     {
         if (auto* Viewport = GetWorld()->GetGameViewport()) Viewport->RemoveViewportWidgetContent(MainMenu.ToSharedRef());
@@ -268,7 +274,15 @@ bool AUOpenGolfPlayerController::ForwardUIKey(const FKey& Key, bool bPressed)
 
 void AUOpenGolfPlayerController::HandleEscape()
 {
-    if (bPlacingBall)
+    if (IsDrillDialogOpen())
+    {
+        CloseDrillDialog();
+        return;
+    }
+    AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    if (Mode && Mode->IsDrillActive() && !bMainMenuOpen)
+        OpenDrillDialog();
+    else if (bPlacingBall)
         SetPlacingBall(false);
     else if (bWindPanelOpen)
         SetWindPanelOpen(false);
@@ -276,6 +290,39 @@ void AUOpenGolfPlayerController::HandleEscape()
         SetReplayPanelOpen(false);
     else
         OpenMainMenu();
+}
+
+void AUOpenGolfPlayerController::OpenDrillDialog()
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    auto* Viewport = GetWorld()->GetGameViewport();
+    if (!Mode || !Mode->IsDrillActive() || bMainMenuOpen || IsDrillDialogOpen() || !Viewport)
+        return;
+    SetWindPanelOpen(false);
+    SetReplayPanelOpen(false);
+    TurnInput = 0;
+    AimHeldSeconds = 0;
+    bFineAimHeld = false;
+    if (PlayerInput) PlayerInput->FlushPressedKeys();
+    FSlateApplication::Get().DismissAllMenus();
+    auto Dialog = SNew(SDrillDialog).Player(this);
+    DrillDialog = Dialog;
+    Viewport->AddViewportWidgetContent(Dialog, 90);
+    FInputModeUIOnly InputMode;
+    InputMode.SetWidgetToFocus(Dialog->FirstButton());
+    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(InputMode);
+}
+
+void AUOpenGolfPlayerController::CloseDrillDialog()
+{
+    if (!DrillDialog) return;
+    // A game picked while another ran waits only in the open prompt.
+    if (AUOpenGolfGameMode* Mode = GetRangeMode(*this); Mode && Mode->GetTrainingSession())
+        Mode->GetTrainingSession()->CancelPendingDrill();
+    if (auto* Viewport = GetWorld()->GetGameViewport()) Viewport->RemoveViewportWidgetContent(DrillDialog.ToSharedRef());
+    DrillDialog.Reset();
+    SetMainMenuOpen(false);
 }
 
 bool AUOpenGolfPlayerController::IsCourseRound() const
@@ -315,7 +362,7 @@ void AUOpenGolfPlayerController::TravelToMenu(const TCHAR* Option)
 void AUOpenGolfPlayerController::SetPlacingBall(bool bPlacing)
 {
     const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
-    bPlacingBall = bPlacing && !bMainMenuOpen && Mode && !Mode->IsCourseRound();
+    bPlacingBall = bPlacing && !bMainMenuOpen && Mode && Mode->CanPlaceTrainingBall();
     CurrentMouseCursor = bPlacingBall ? EMouseCursor::Crosshairs : EMouseCursor::Default;
 }
 
@@ -558,6 +605,7 @@ void AUOpenGolfPlayerController::ResetBallToTee()
     if (bMainMenuOpen || IsCourseRound()) return;
     if (AUOpenGolfGameMode* Mode = GetRangeMode(*this))
     {
+        if (Mode->IsDrillActive()) return;
         // Only the player's tee-up clears the history tracers; the automatic re-tee keeps them.
         if (auto* PresentedBall = Cast<AUOpenGolfBall>(Mode->GetBall()))
             PresentedBall->ClearShotTrailHistory();
@@ -595,7 +643,23 @@ bool AUOpenGolfPlayerController::AimToward(const FVector2D& WorldPoint, double M
     if (!Ball || bPlacingBall)
         return false;
     const FVector2D Delta = WorldPoint - FVector2D(Ball->GetActorLocation());
-    return Delta.Size() > MinDistanceCm && SetAimYaw(FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X)));
+    if (Delta.Size() <= MinDistanceCm || !SetAimYaw(FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X))))
+        return false;
+    AimTargetDistanceCm = Delta.Size();
+    AimTargetLie = FVector2D(Ball->GetActorLocation());
+    return true;
+}
+
+double AUOpenGolfPlayerController::GetAimTargetDistanceCm() const
+{
+    const AUOpenGolfGameMode* Mode = GetRangeMode(*this);
+    const AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
+    if (!Ball)
+        return 0.0;
+    // Within a centimetre is the same lie: the re-tee puts the ball back exactly.
+    if (AimTargetLie && AimTargetLie->Equals(FVector2D(Ball->GetActorLocation()), 1.0))
+        return AimTargetDistanceCm;
+    return Mode->GetDistanceToCupM() * 100.0;
 }
 
 float AUOpenGolfPlayerController::GetAimOffsetDeg() const

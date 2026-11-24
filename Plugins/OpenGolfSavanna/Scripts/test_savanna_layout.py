@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from savanna_layout import CANOPY_RATIO, TREE_SETTINGS, ground_mask, tree_patches
+from savanna_layout import CANOPY_RATIO, TREE_SETTINGS, ground_mask, mask_shortfall, tree_patches
 
 
 class LayoutTests(unittest.TestCase):
@@ -35,6 +35,24 @@ class LayoutTests(unittest.TestCase):
 
     def test_empty_mask_is_native_ground(self):
         self.assertEqual(ground_mask([], (-10, -10), (10, 10), 8, 8), bytes(64))
+
+    def test_fresh_mask_has_no_shortfall(self):
+        outlines = [[(0, 0), (20, 0), (20, 20), (0, 20)], [(30, 5), (36, 5), (33, 12)]]
+        mask = ground_mask(outlines, (-40, -40), (80, 60), 120, 100)
+        self.assertEqual(mask_shortfall(mask, outlines, (-40, -40), (80, 60), 120, 100), [])
+
+    def test_stale_mask_reports_play_it_does_not_cover(self):
+        # A green moved 40 m past the end of the layout the mask was baked from.
+        old = [[(0, 0), (20, 0), (20, 20), (0, 20)]]
+        green = [(60, 5), (70, 5), (70, 15), (60, 15)]
+        mask = ground_mask(old, (-40, -40), (100, 60), 140, 100)
+        self.assertEqual(mask_shortfall(mask, old + [green], (-40, -40), (100, 60), 140, 100), green)
+
+    def test_play_outside_the_mask_bounds_is_a_shortfall(self):
+        outline = [(0, 0), (20, 0), (20, 20), (0, 20)]
+        mask = ground_mask([outline], (-40, -40), (60, 60), 100, 100)
+        beyond = [(61, 0), (0, -41)]
+        self.assertEqual(mask_shortfall(mask, [outline, beyond], (-40, -40), (60, 60), 100, 100), beyond)
 
 
 if __name__ == "__main__":

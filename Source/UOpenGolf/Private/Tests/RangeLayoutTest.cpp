@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "UOpenGolfRange.h"
+#include "OpenGolfEnvironment.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
@@ -37,9 +38,11 @@ bool FRangeLayoutTest::RunTest(const FString& Parameters)
     TArray<USkyAtmosphereComponent*> Skies;
     TArray<USkyLightComponent*> SkyLights;
     TArray<UPostProcessComponent*> Views;
-    Range->GetLayoutComponents(Suns);
-    Range->GetLayoutComponents(Skies);
-    Range->GetLayoutComponents(SkyLights);
+    auto* Environment = AOpenGolfEnvironment::Find(World);
+    if (!TestNotNull(TEXT("Saved environment"), Environment)) return false;
+    Environment->GetComponents(Suns);
+    Environment->GetComponents(Skies);
+    Environment->GetComponents(SkyLights);
     Range->GetLayoutComponents(Views);
     TestEqual(TEXT("One sun"), Suns.Num(), 1);
     TestEqual(TEXT("One sky atmosphere"), Skies.Num(), 1);
