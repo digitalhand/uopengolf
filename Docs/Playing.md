@@ -103,15 +103,23 @@ checked.
   the hole (**Hole 1**), then its par and length (**Par 4 · 400 yd**). The shot tiles below
   show game results, club data, and raw launch-monitor values. `…` means a value is pending,
   `—` means it is missing, `*` means it is derived, and `L`/`R` indicate direction.
-- **Top left.** The club icon opens the club drawer. The Training ball icon lets you choose a practice lie. The record icon toggles range recording, as does **F9**. It turns red
+- **Top left.** The club button shows the selected club's short label beside its icon, at the size of the
+  course's stroke and distance numbers (for example **7i**, **DR** for the driver or **PW** for the pitching wedge);
+  click it to open the club drawer. In a course round, while you are signed in, your avatar and display name follow
+  it (see [Menu and account](#menu-and-account)). The Training ball icon lets you choose a practice lie. The record icon toggles range recording, as does **F9**. It turns red
   while recording or amber if a save fails; each failed save is logged with its error (see [Recording errors and retries](#recording-errors-and-retries)).
 - **Course round.** Below the toolbar, the hole tiles show the current stroke, distance **To Pin**, and
   **Putts**. A banner names the score when the ball drops.
 - **Bottom left: hole map.** A view of the hole from above, tee at the bottom and flag at the top, with the
   ball as a white dot. Shading and contour lines show the ground's rise and fall. The view zooms in on the ball and
   the flag as you play, and holds still while the ball flies.
-  - **Header:** your lie (Tee, Fairway, Rough, Bunker, Green, Fringe and so on) and the hole. While the ball is in
-    the air it keeps the lie you hit from; once the ball lands it names the surface the ball is on.
+  - **Header:** your lie (Tee, Fairway, Rough, Bunker, Green, Fringe and so on). In a course round:
+    - Beside the lie is what the lie takes off your ball speed with the selected club, for example **Rough −8%**.
+    - On the right is what it takes off your spin, for example **Spin −25%**.
+    - Both are blank where the lie costs nothing (see [Lie penalties](#lie-penalties)).
+
+    The hole and par are in the top-right heading. While the ball is in the air the header keeps the lie and penalties
+    you hit with; once the ball lands it names the surface the ball is on.
   - **Flag:** the distance to the pin.
   - **At address:** your aim runs to a target ring that shows its own distance and height change. A thin line
     continues from the ring to the flag. Click anywhere on the map to aim at that point and put the target there. A
@@ -166,12 +174,67 @@ bunker right of the green.
 - After the banner, the final scorecard shows par, strokes and score relative to par (**E** for level, otherwise
   such as **+1** or **-2**). Choose **Play again** for a fresh round or **Courses** to return to the browser.
 
+#### Lie penalties
+
+In a course round, a shot from the rough or a bunker plays with less ball speed and spin than your launch monitor
+measured. Your launch angle and direction stay as measured. The minimap header shows both cuts before you hit. They
+depend on the kind of club selected:
+
+| Lie | Woods | Irons | Wedges |
+| --- | --- | --- | --- |
+| Tee, fairway, fringe, green | none | none | none |
+| Rough | −10%, spin −20% | −8%, spin −25% | −6%, spin −35% |
+| Fairway bunker (30 yd or more from the pin) | −15%, spin −25% | −10%, spin −25% | −8%, spin −25% |
+| Greenside bunker (within 30 yd) | −40%, spin −30% | −40%, spin −30% | −40%, spin −30% |
+
+- The putter is never penalised: the grass already slows the roll.
+- A greenside bunker shot is an explosion shot, so swing harder than you would for the same distance from grass.
+- These are provisional standard values. A course can set its own. Their sources and the estimated parts are in
+  [Lie rules](../Plugins/OpenGolfCourse/Docs/Reference.md#lie-rules).
+- Training never applies them, and shot recordings keep the shot as your launch monitor measured it.
+
 ### Changing clubs
 
-Press **Tab** to select the next club, or click the club at the top of the shot tiles and
-pick one from the list. When a Square Home is connected, the club is also sent to the
+The club button at the top left names the selected club. Press **Tab** to select the next club, or click the button
+and pick one from the list. When a Square Home is connected, the club is also sent to the
 device. Choose the club before you hit: recorded shots are tagged with the club selected
 when the shot arrives. The club resets to Driver at the start of every Play session.
+
+#### Auto club
+
+In a course round, the game picks a club for you on the tee and each time the ball turns to the pin for the next shot.
+Turn this off in **Settings › Player › Auto club**. Tab or the club list still changes the club, and your choice stays
+until the next shot. A club you pick while the stopped shot is still shown is kept when the ball turns to the pin.
+
+The game picks a club in this order:
+
+1. **Putter** on the green or fringe.
+2. **Sand wedge** in a greenside bunker.
+3. Otherwise, the club whose average PGA Tour carry, less its lie penalty, is nearest the distance to the pin. Of two
+   equally near clubs it takes the longer one.
+
+The Driver is picked only on the tee. Carries come from TrackMan's PGA Tour averages, so most players will need more
+club than it picks:
+
+| Club | Carry (yd) | Club | Carry (yd) |
+| --- | --- | --- | --- |
+| Driver | 275 | 7 Iron | 172 |
+| 3 Wood | 243 | 8 Iron | 160 |
+| 5 Wood | 230 | 9 Iron | 148 |
+| 7 Wood | 225 | Pitching Wedge | 136 |
+| 4 Iron | 203 | Gap Wedge | 124 |
+| 5 Iron | 194 | Sand Wedge | 110 |
+| 6 Iron | 183 | Lob Wedge | 95 |
+
+Sources:
+- Driver to Pitching Wedge are TrackMan's PGA Tour averages, as listed in GolfLink's
+  [swing speed and distance chart][carry-golflink] (published March 2024; it gives no year for the data).
+- That table has no 7 Wood or wedges below the pitching wedge. The 7 Wood uses its hybrid carry (225 yd), and the gap,
+  sand and lob wedge carries are estimates.
+- TrackMan's 2023 figures, reported by [Golf Monthly][carry-golfmonthly], run 4 to 7 yards longer.
+
+[carry-golflink]: https://www.golflink.com/instruction/swing-speed-chart
+[carry-golfmonthly]: https://www.golfmonthly.com/tour/how-far-pga-tour-players-hit-every-club-in-the-bag
 
 ### Recording shots
 
@@ -280,6 +343,12 @@ in with a phone without opening Settings (see below). It disappears once you are
   Scroll the shot table horizontally to see every measurement. Select a row to delete that shot. Use **Clear club** inside a club
   or **Clear all** on the overview. Clear actions include pending shots and the newest 200 saved shots per club from the last 90 days.
   Shot times and the member-since date use this computer's local time. CSV exports use UTC.
+- Signed in, the right half of **Profile** is the **Avatar** picker. The course shows, beside the club button, the
+  avatar you pick here; without a pick, your account's own picture, or the Golfer when the account has none. Your
+  account picture is the first tile once it has downloaded; the 24 built-in avatars follow. The one shown has a
+  ring, with its name above the tiles. A pick is saved with **Apply**, on this computer, for the account that made
+  it. The account picture is downloaded from the address your login service gives, with no sign-in details sent,
+  and is not stored on disk.
 
 ### Settings
 

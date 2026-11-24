@@ -56,7 +56,7 @@ elevation use the active cup.
 
 Each installed course is a `UGolfCourseDefinition` data asset (primary asset type `GolfCourse`) in
 `/Game/UOpenGolf/Courses`: its display name, a soft reference to its map, a menu preview texture (asset bundle
-`Menu`), holes, par, length and the round's fixed wind. `Config/DefaultGame.ini` registers the type with the Asset
+`Menu`), holes, par, length, the round's fixed wind and its lie rules. `Config/DefaultGame.ini` registers the type with the Asset
 Manager and always cooks it. `UGolfCourseSubsystem` (a game-instance subsystem, so it survives level travel) loads every
 definition with its preview when the game starts; the main menu's Courses browser (`SCourseBrowser`) lists them.
 The editor command `uopengolf.CreateCourseAssets` creates the bundled Savanna Range definition and imports its preview
@@ -66,7 +66,22 @@ from `Assets/Images/Courses` only if they are missing.
 with a known course it runs a round (Hole mode) at the course's par, and the range holds the course's wind whatever the
 console or HUD set. There is no ball placement, recording or wind panel in a round. When the ball drops, the GameMode
 waits `HoleOutDelayS` for the banner, then broadcasts `OnRoundComplete`; the player controller listens and opens the
-menu, which shows the final scorecard (**Play again** or **Courses**). Leaving a round opens the game's default map
+menu, which shows the final scorecard (**Play again** or **Courses**).
+
+**Lie rules.** A definition's `LieRules` points at a `UOpenGolfLieRules` asset from the OpenGolfCourse plugin
+([Lie rules](../Plugins/OpenGolfCourse/Docs/Reference.md#lie-rules)); when it is empty, the round plays the class
+default, which is the standard. Courses can share one tuned asset.
+
+- `AUOpenGolfGameMode::GetLieCut` is the one source for the penalty, used by the hole-map header and by the shot.
+  - It returns nothing in Training, on the tee box (`OpenGolfPlay::TeeBoxRadiusM`) or in the cup.
+  - Otherwise it reads the ball's surface, its distance to the cup, and the selected club's group
+    (`CourseClubs::Group`).
+- `HandleShot` passes the measured launch through `OpenGolfPlay::ApplyLieCut` just before `Launch`. The recorders keep
+  the raw `FLaunchMonitorShot`.
+- `SelectClubForLie` runs when Auto club is on, in two places: on the tee, and in `AddressNextShot`, the timer that
+  turns the ball to the cup. It never runs as a shot arrives, so a shot keeps the club in hand.
+  - It sets the club picked by `CourseClubs::Recommend`, which works from PGA Tour carries less the lie's ball-speed
+    cut. Leaving a round opens the game's default map
 (`GameDefaultMap`) with `?Courses`, which reopens the browser, or `?MainMenu`. `UTrainingWindSubsystem` keeps
 Training's wind across this travel, until the Game Defaults starting wind changes.
 
@@ -119,8 +134,12 @@ The map (`SHoleMinimap`) shows part of the picture through the brush's UV region
   at the clicked distance. The target keeps that distance while the ball stays on the same lie, re-tees included.
   Otherwise it sits at the cup's distance.
 
-The panel's header names the lie and the hole. It never names the ball's motion: in the air it keeps the lie the
-shot was hit from, and from the first bounce it names the surface under the ball. Its footer shows the pin's elevation above or below the ball in feet
+The panel's header names the lie. In a course round it also shows `GetLieCut`:
+- the speed cut beside the lie (`HoleMapLieCut`);
+- the spin cut on the right (`HoleMapSpinCut`).
+
+The hole and par are only in the course heading. The header never names the ball's motion: in the air it keeps the lie
+and cuts the shot was hit with, and from the first bounce it names the surface under the ball. Its footer shows the pin's elevation above or below the ball in feet
 and inches (`▲ 3"`, `▼ 5' 1"`, or Level). Elevations are measured on the height field at both ends, so a level target
 reads level. Framing is set on the range actor (**UOpenGolf › Minimap**: end margin,
 minimum width, side offset, minimum view length).
@@ -314,7 +333,8 @@ the physics in the [OpenFairway Physics README](../Plugins/OpenFairwayPhysics/RE
 [The launch-monitor reference](../Plugins/OpenLaunchMonitor/Docs/Reference.md#shot-and-club-data) defines device units, optional
 measurements, signs, threading and shot association. The [physics reference](../Plugins/OpenFairwayPhysics/Docs/Reference.md#units-and-frames)
 defines coordinate conversion and fixed-step ownership. Preserve measured input separately
-from game-side lie adjustments. The physics pins and parity tests check that the physics is
+from game-side lie adjustments: a course lie's penalty is applied to the launch given to physics, never to the
+`FLaunchMonitorShot` that recorders and the shot tiles' raw values read. The physics pins and parity tests check that the physics is
 unchanged and consistent; accuracy is measured against reference shots
 ([Accuracy](../Plugins/OpenFairwayPhysics/Docs/Accuracy.md)).
 

@@ -16,8 +16,8 @@ namespace HoleMapPanelDetail
 {
     constexpr float HeaderHeight = 28.0f;
     constexpr float FooterHeight = 30.0f;
-    /** A ball this close (cm) to the tee is on the tee box. */
-    constexpr double TeeRadiusCm = 300.0;
+    /** Between the lie and its speed penalty. */
+    constexpr float LieCutGap = 6.0f;
 
     void SetIfChanged(FText& Text, const FString& Value)
     {
@@ -69,9 +69,21 @@ TSharedRef<SWidget> SHoleMapPanel::MakeBar(FName Tag, float Height, const TShare
 
 TSharedRef<SWidget> SHoleMapPanel::MakeHeader()
 {
-    return MakeBar(TEXT("HoleMapHeader"), HoleMapPanelDetail::HeaderHeight,
-        SNew(STextBlock).Tag(TEXT("HoleMapLie")).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::TextColor()).Text_Lambda([this] { return Lie; }),
-        SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor()).Text_Lambda([this] { return Hole; }));
+    // The hole and par are in the course heading; the header is the lie, its speed penalty beside it ("Rough −8%") and
+    // its spin penalty on the right, both blank where the lie costs nothing.
+    // clang-format off
+    const TSharedRef<SWidget> LieAndCut = SNew(SHorizontalBox)
+        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+        [
+            SNew(STextBlock).Tag(TEXT("HoleMapLie")).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::TextColor()).Text_Lambda([this] { return Lie; })
+        ]
+        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(HoleMapPanelDetail::LieCutGap, 0, 0, 0)
+        [
+            SNew(STextBlock).Tag(TEXT("HoleMapLieCut")).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::TextColor()).Text_Lambda([this] { return LieCut; })
+        ];
+    // clang-format on
+    return MakeBar(TEXT("HoleMapHeader"), HoleMapPanelDetail::HeaderHeight, LieAndCut,
+        SNew(STextBlock).Tag(TEXT("HoleMapSpinCut")).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor()).Text_Lambda([this] { return SpinCut; }));
 }
 
 TSharedRef<SWidget> SHoleMapPanel::MakeFooter()
@@ -108,13 +120,15 @@ void SHoleMapPanel::Refresh()
     if (!Range || !Ball)
         return;
 
-    SetIfChanged(Hole, Mode->IsCourseRound() ? FString::Printf(TEXT("Hole %d  ·  Par %d"), Mode->GetHoleNumber(), Mode->GetPar()) : FString(TEXT("Training")));
     const FVector Location = Ball->GetActorLocation();
-    // In the air the header keeps the lie the shot was hit from; it names the surface again once the ball is down.
+    // In the air the header keeps the lie and penalties the shot was hit with; it reads the ground again once the ball
+    // is down. A club change at rest shows at once: the putter clears the penalty.
     if (Ball->GetBallState() != EOpenFairwayBallState::Flight)
     {
-        const bool bOnTee = FVector::Dist2D(Location, Range->GetTeeLocation()) <= TeeRadiusCm;
-        SetIfChanged(Lie, HoleMapLabels::LieText(Ball->IsHoled(), bOnTee, Ball->GetResult().Surface));
+        SetIfChanged(Lie, HoleMapLabels::LieText(Ball->IsHoled(), Mode->IsBallOnTee(), Ball->GetResult().Surface));
+        const FOpenGolfLieCut Cut = Mode->GetLieCut();
+        SetIfChanged(LieCut, OpenGolfPlay::LieCutLabel(Cut));
+        SetIfChanged(SpinCut, OpenGolfPlay::SpinCutLabel(Cut));
     }
 
     // Measured on the sampled ground at both ends, so a flat green reads level rather than a stray inch.

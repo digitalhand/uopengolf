@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Club/ClubPicker.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Common/HudStatusGlyph.h"
@@ -18,16 +20,36 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
 
-namespace
+namespace ClubPickerDetail
 {
+    /** Between the club's label and the button's right edge; the icon's own box gives the gap on its left. */
+    constexpr float NameRightPadding = 12.0f;
+
+    /** The short label (DR, 7i, PW); screen readers still hear the full name. */
     FText ClubLabel(ELaunchMonitorClub Club)
     {
         return FText::FromString(ShotDisplay::ClubLabel(Club));
     }
-}
+
+    /** The course tiles' number font, so the club reads at the size of Stroke and To Pin. */
+    FSlateFontInfo NameFont() { return HudStyle::ValueFont(); }
+
+    /** The widest club label in NameFont, so the button keeps its width as the club changes; 0 without a renderer. */
+    float WidestNameWidth()
+    {
+        if (!FSlateApplication::IsInitialized() || !FSlateApplication::Get().GetRenderer())
+            return 0.0f;
+        const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+        float Widest = 0.0f;
+        for (int32 Index = 0; Index <= static_cast<int32>(ELaunchMonitorClub::Putter); ++Index)
+            Widest = FMath::Max(Widest, static_cast<float>(Measure->Measure(ClubLabel(static_cast<ELaunchMonitorClub>(Index)), NameFont()).X));
+        return FMath::CeilToFloat(Widest);
+    }
+} // namespace ClubPickerDetail
 
 void SClubPicker::Construct(const FArguments& Args)
 {
+    using namespace ClubPickerDetail;
     Monitor = Args._Monitor;
     DrawerBrush = FSlateRoundedBoxBrush(HudStyle::LaunchTileColor(), HudStyle::TileRadius);
     ComboStyle = FCoreStyle::Get().GetWidgetStyle<FComboButtonStyle>("ComboButton");
@@ -50,7 +72,10 @@ void SClubPicker::Construct(const FArguments& Args)
     for (int32 Index = 0; Index <= static_cast<int32>(ELaunchMonitorClub::Putter); ++Index)
     {
         const auto Club = static_cast<ELaunchMonitorClub>(Index);
+        // A row picks on the press. A press focuses the row and the list centres the focused row, so a row low in the list
+        // used to slide out from under the pointer before the release and need a second click. A touch still pans.
         const TSharedRef<SButton> Row = SNew(SButton).ButtonStyle(&RowStyle)
+            .ClickMethod(EButtonClickMethod::MouseDown).TouchMethod(EButtonTouchMethod::PreciseTap)
 #if WITH_ACCESSIBILITY
             .AccessibleText(UOpenLaunchMonitorSubsystem::GetClubDisplayName(Club))
 #endif
@@ -103,9 +128,24 @@ void SClubPicker::Construct(const FArguments& Args)
 #endif
         .ButtonContent()
         [
-            SNew(SBox).WidthOverride(HudStyle::ToolbarButtonSize).HeightOverride(HudStyle::ToolbarButtonSize)
-            .HAlign(HAlign_Center).VAlign(VAlign_Center)
-            [SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Club)]
+            // The selected club, chosen by hand or by Auto club, is labelled beside the icon, so it reads without opening
+            // the drawer.
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().AutoWidth()
+            [
+                SNew(SBox).WidthOverride(HudStyle::ToolbarButtonSize).HeightOverride(HudStyle::ToolbarButtonSize)
+                .HAlign(HAlign_Center).VAlign(VAlign_Center)
+                [SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Club)]
+            ]
+            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, NameRightPadding, 0)
+            [
+                SNew(SBox).MinDesiredWidth(WidestNameWidth())
+                [
+                    SNew(STextBlock).Tag(TEXT("ClubPickerName")).Font(NameFont()).ColorAndOpacity(HudStyle::TextColor())
+                    .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor)
+                    .Text_Lambda([Current] { return ClubLabel(Current()); })
+                ]
+            ]
         ]
         .MenuContent()
         [

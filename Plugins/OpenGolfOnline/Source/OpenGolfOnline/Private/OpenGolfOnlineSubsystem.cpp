@@ -4,6 +4,11 @@
 #include "OnlineAtomicFile.h"
 #include "TokenStore.h"
 #include "BrowserLogin.h"
+#include "OnlinePicture.h"
+#include "Engine/Texture2D.h"
+#include "ImageCore.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
 #include "Misc/Base64.h"
 #include "Async/Async.h"
 #include "HAL/PlatformProcess.h"
@@ -14,6 +19,8 @@
 #include "openssl/sha.h"
 
 using namespace OpenGolfOnline;
+
+DEFINE_LOG_CATEGORY_STATIC(LogOpenGolfOnlinePicture, Log, All);
 
 struct FOpenGolfCredentialWork
 {
@@ -115,6 +122,7 @@ void UOpenGolfOnlineSubsystem::Deinitialize()
     CancelSignIn();
     for (auto& R : Requests) R->Cancel();
     for (auto& R : Requests) while (!R->Finished.load()) FPlatformProcess::Sleep(0.01f);
+    ClearPicture();
     FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
     OnBeforeReadProfile.Broadcast();
     if (Config.IsValid()) SaveLocal();
@@ -330,8 +338,11 @@ void UOpenGolfOnlineSubsystem::AcceptTokens(const FReply& Reply, uint64 Attempt,
             auto Waiters = MoveTemp(RefreshWaiters); for (auto& W : Waiters) W(false);
         }
         if (OutboxOwner != Key) { Outbox.Empty(); OutboxOwner = Key; }
-        if (AccountKey != Key) { Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); ClearClubAverages(); }
+        if (AccountKey != Key) { Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); ClearClubAverages(); ClearPicture(); }
         DisplayNameHint = Text(User,TEXT("name")).Left(40);
+        // Only an https picture is fetched; any other address shows the default avatar.
+        const FString PictureClaim = Text(User,TEXT("picture"));
+        UpdatePicture(OpenGolfOnline::Picture::IsAllowedUrl(PictureClaim) ? PictureClaim : FString());
         Permissions.Reset();
         TArray<FString> Parts; Access.ParseIntoArray(Parts, TEXT("."), false);
         if (Parts.Num() == 3)
@@ -446,7 +457,7 @@ void UOpenGolfOnlineSubsystem::InvalidateSession(bool bDiscardShots)
 {
     if (bDiscardShots) OnAccountChanged.Broadcast();
     ++Epoch; if (CredentialWork) ++CredentialWork->Epoch;
-    Permissions.Reset(); AccessToken.Empty(); RefreshToken.Empty(); DisplayNameHint.Empty();
+    Permissions.Reset(); AccessToken.Empty(); RefreshToken.Empty(); DisplayNameHint.Empty(); ClearPicture();
     if (bDiscardShots) { AccountKey.Empty(); OutboxOwner.Empty(); Outbox.Empty(); }
     bRestoring = false;
     Profile.Reset(); Carry.Empty(); History.Empty(); HistoryClub.Empty(); ClearClubAverages();
@@ -524,9 +535,73 @@ void UOpenGolfOnlineSubsystem::SetupForTests(const FConfig& TestConfig, FTestSen
 {
     if (CredentialWork) ++CredentialWork->Epoch;
     Config=TestConfig; TestSender=MoveTemp(Sender); TestLocalRoot=LocalRoot;
+    // Tests never download a picture unless they reply through SetPictureFetcherForTests.
+    TestPictureFetcher=[](const FString&, TFunction<void(int32, TArray<uint8>)>){};
     CredentialWork=MakeShared<FOpenGolfCredentialWork,ESPMode::ThreadSafe>();
 }
 #endif
+
+FString UOpenGolfOnlineSubsystem::GetDisplayName() const
+{
+    if (!HasSession()) return {};
+    const FString Name = Text(Profile, TEXT("display_name"));
+    return Name.IsEmpty() ? DisplayNameHint : Name;
+}
+
+void UOpenGolfOnlineSubsystem::UpdatePicture(const FString& Url)
+{
+    if (Url.IsEmpty()) { ClearPicture(); return; }
+    if (Url == PictureUrl && (Picture || bPictureLoading)) return;
+    // A changed address replaces the picture: the old one is not shown while the new one downloads.
+    ClearPicture();
+    PictureUrl = Url;
+    FetchPicture();
+}
+
+void UOpenGolfOnlineSubsystem::FetchPicture()
+{
+    const uint64 Attempt = ++PictureAttempt;
+    bPictureLoading = true;
+    TFunction<void(int32, TArray<uint8>)> Done = [WeakThis = TWeakObjectPtr<UOpenGolfOnlineSubsystem>(this), Attempt](int32 Status, TArray<uint8> Body)
+    {
+        UOpenGolfOnlineSubsystem* Self = WeakThis.Get();
+        if (!Self || Self->bStopped || Attempt != Self->PictureAttempt) return;
+        Self->bPictureLoading = false; Self->PictureRequest.Reset();
+        FImage Image;
+        UTexture2D* Texture = Status == 200 && OpenGolfOnline::Picture::Decode(Body, Image) ? OpenGolfOnline::Picture::MakeTexture(Image) : nullptr;
+        if (!Texture)
+        {
+            UE_LOG(LogOpenGolfOnlinePicture, Warning, TEXT("Account picture unavailable (HTTP %d, %d bytes); the default avatar is shown."), Status, Body.Num());
+            return;
+        }
+        Self->Picture = Texture;
+        Self->OnPictureChanged.Broadcast();
+    };
+#if WITH_DEV_AUTOMATION_TESTS
+    if (TestPictureFetcher) { TestPictureFetcher(PictureUrl, MoveTemp(Done)); return; }
+#endif
+    PictureRequest = OpenGolfOnline::Picture::MakeRequest(PictureUrl);
+    // Stop a reply that grows past the limit instead of downloading all of it.
+    PictureRequest->OnRequestProgress64().BindLambda([](FHttpRequestPtr Request, uint64, uint64 Received)
+    {
+        if (Received > static_cast<uint64>(OpenGolfOnline::Picture::MaxBytes) && Request) Request->CancelRequest();
+    });
+    PictureRequest->OnProcessRequestComplete().BindLambda([Done = MoveTemp(Done)](FHttpRequestPtr, FHttpResponsePtr Response, bool bConnected)
+    {
+        const bool bUsable = bConnected && Response && Response->GetContent().Num() <= OpenGolfOnline::Picture::MaxBytes;
+        Done(bUsable ? Response->GetResponseCode() : 0, bUsable ? Response->GetContent() : TArray<uint8>());
+    });
+    PictureRequest->ProcessRequest();
+}
+
+void UOpenGolfOnlineSubsystem::ClearPicture()
+{
+    ++PictureAttempt;
+    bPictureLoading = false;
+    if (PictureRequest) { PictureRequest->OnProcessRequestComplete().Unbind(); PictureRequest->CancelRequest(); PictureRequest.Reset(); }
+    PictureUrl.Empty();
+    if (Picture) { Picture = nullptr; OnPictureChanged.Broadcast(); }
+}
 
 bool UOpenGolfOnlineSubsystem::HasPermission(const FString& Permission) const
 {

@@ -14,6 +14,10 @@ namespace HudStyle
     inline FSlateFontInfo Font(const FName& Weight, int32 Size)
     { return FCoreStyle::GetDefaultFontStyle(Weight, FMath::RoundToInt(Size * GolfSettings::Get().TextPercent / 100.f)); }
 
+    /** Before the player's text-size setting. The course tiles' numbers, the club button and the player badge share it. */
+    constexpr int32 ValueFontSize = 18;
+    inline FSlateFontInfo ValueFont() { return Font("Bold", ValueFontSize); }
+
     /** Translucent gray tile; the raw launch-monitor tiles use the darker LaunchTileColor. */
     inline FLinearColor TileColor()
     {

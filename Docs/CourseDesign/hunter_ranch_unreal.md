@@ -85,6 +85,11 @@ can override per-material results. The inspected resolver prioritises a componen
 then physical material, then actor tag, then default surface. See the
 [physics surface reference](../../Plugins/OpenFairwayPhysics/Docs/Reference.md#surfaces).
 
+The surfaces resolved here also decide each lie's shot penalty in a round. The course definition's **Lie Rules** is
+empty by default, which plays the standard penalties. To tune the penalties for this course, assign a
+`UOpenGolfLieRules` asset (for example heavier rough). See
+[Lie rules](../../Plugins/OpenGolfCourse/Docs/Reference.md#lie-rules).
+
 ## Configure collision for the ball
 
 In the Static Mesh Editor, inspect **Collision Complexity**. A useful first static-terrain

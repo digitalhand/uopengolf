@@ -1,5 +1,152 @@
 # Phase status
 
+## Player badge, short club label, avatars · 2026-11-24
+
+### What changed
+
+**Short club label.** The club button shows the short label (DR, 3W, 7i, PW, PT) instead of the full name, in the
+course tiles' number font (`HudStyle::ValueFont`, Bold 18 with their shadow). This covers both a club picked by hand
+and the club Auto club picks. Screen readers still hear the full name. The button is as wide as the widest label, so
+it is much narrower than the "Pitching Wedge" width it had. That may resolve the open regression below, where Place
+ball and Record became unreachable at 150% HUD and text; this has not been rerun.
+
+**Player badge.** In a course round, a signed-in player's avatar (36 px circle) and display name sit right of the club
+button, in the same toolbar tile and font. A name wider than 220 px ends in an ellipsis. Nothing shows while signed
+out or on the range.
+
+**Avatar.** The game shows, in order:
+
+1. the built-in avatar the player picked for this account;
+2. otherwise the account picture that Auth0's `/userinfo` names (`picture` claim);
+3. otherwise the default avatar (Golfer).
+
+The pick is a local preference (`AvatarId`, with `AvatarAccount`, the account key it was picked for). Another account
+signed in on the same computer ignores it.
+
+**Account picture.** OpenGolfOnline keeps the `picture` address and downloads it (`OnlinePicture`):
+
+- https only;
+- no credentials (no Authorization header, no cookies);
+- 15 s timeout and 1 MiB limit;
+- PNG or JPEG only, at most 2048 px a side, centre-cropped to 128 px.
+
+The download is not repeated while the address is unchanged. A failed one is retried at the next token refresh. Sign
+out, a change of account and a changed address clear it. The picture is not cached on disk, so an offline start shows
+the default avatar.
+
+**Settings › Player › PROFILE.** The empty right half of the profile section now holds the avatar picker: the account
+picture tile (when there is one), then 24 built-in avatars. The shown one has an accent ring, with its name in the
+caption. A pick is part of Settings' draft, so the footer shows **Unsaved changes** and Apply/Discard work as for other
+preferences. The account panel takes the picker through a new `ProfileAside` factory, so the plugin stays independent
+of the game.
+
+**Avatars.** 24 Fluent Emoji 3D images (MIT), pinned by `FetchFluentEmoji.py` and imported to
+`/OpenGolfSavanna/UI/Avatars` as UI textures (no mips, uncompressed, sRGB). They are always cooked. See
+[Player avatars](AssetLicenseRoadmap.md#player-avatars--2026-11-24).
+
+### Verified
+
+On Linux with UE 5.8.4:
+
+- The Development editor build passed, including a full `-DisableAdaptiveUnity` build, with no warnings.
+- `python3 -m unittest test_fetch_fluent_emoji test_fetch_polyhaven` (in `Plugins/OpenGolfSavanna/Scripts`): 11 passed.
+  One of them checks that the fetch list and `AvatarCatalog.cpp` name the same avatars in the same order.
+- `FetchFluentEmoji.py` downloaded and verified all 24 PNGs (256 × 256 RGBA) and the licence.
+- All 24 textures were imported in the running editor through its MCP texture tools and saved. Their UI settings were
+  read back. They are stored in LFS.
+
+### Still unverified
+
+- No automation test has run. The new or changed tests need the rebuilt DebugGame editor:
+  - `UOpenGolf.Profile.Avatars`
+  - `UOpenGolf.Hud.PlayerBadge`
+  - `OpenGolf.Online.Picture`
+  - `UOpenGolf.Menu.PreferenceValidation`
+  - `UOpenGolf.Menu.PlayerProfile`
+  - `Visual.RangeHudControls` (expects `8i`, the value font size and the badge's toolbar slot)
+- No rendered capture yet of the badge, of the picker's layout, or of the round clip of photos and emoji.
+- `ImportAvatars.py`, the rerunnable import script, has not been run. The editor's Slate inspector saw no windows, so
+  the import used the editor's MCP texture tools with the same settings.
+- A real Auth0 account picture download (gravatar redirect included), and the owner's look review.
+- The DebugGame build, Windows and packaged builds.
+
+## Course lie penalties, auto club, minimap lie header · 2026-11-23
+
+### What changed
+
+**Lie penalties.** In a course round, shots from the rough and from sand lose part of their measured ball speed and
+spin. The amount depends on the kind of club: woods, irons or wedges.
+
+- A greenside bunker, within 30 yd of the cup, plays as an explosion shot at −40% speed and −30% spin.
+- The putter is never penalised.
+- Launch angle and direction stay as measured.
+- Recorders keep the raw shot.
+- Training never applies penalties.
+
+The rules are a reusable `UOpenGolfLieRules` data asset in OpenGolfCourse. A course definition can point at one; an
+empty reference plays the standard. The standard values are provisional (see
+[Lie rules](../Plugins/OpenGolfCourse/Docs/Reference.md#lie-rules)).
+
+**Auto club.** Course rounds pick the club on the tee and when the ball turns to the pin for the next shot, from the
+lie, its penalty and the distance. Carries are PGA Tour averages from TrackMan. Settings › Player › Auto club switches
+this off; it replaces the disabled "Club suggestion" row.
+
+**Club button.** The toolbar's club button now names the selected club beside its icon, for example "7 Iron". It is as
+wide as the longest name ("Pitching Wedge"), so the toolbar doesn't shift when the club changes.
+`Visual.RangeHudControls` now expects:
+- the club's name on the closed button;
+- a club button wider than the icon buttons but the same height;
+- a button size that stays the same when the club changes.
+
+**Club drawer fix.** The owner reported that some clubs in the drawer (7i, 6i) needed two clicks.
+
+- **Cause.** A press focuses its row, and the drawer's scroll box centres a focused row (`InstantScroll`, kept so
+  keyboard and gamepad focus stays in view). The row slid away before the release.
+- **Fix.** Rows now pick on the press (`EButtonClickMethod::MouseDown`; touch uses `PreciseTap`).
+- **Auto club.** It no longer replaces a club picked in the 2 s while a stopped shot is shown (`ClubAtRest`).
+- **Tests.** The new rendered `Visual.ClubDrawerClick` presses and releases frames apart, as a hand does.
+  `Course.LiePenalty` now checks that a pick is kept and that an untouched club is replaced.
+- **RED.** Before the fix, both failed (`Saved/Automation/20261123-233602-club-red`).
+- **GREEN.** After it, both passed (`Saved/Automation/20261123-233839-club-green`).
+
+**Club name regression.** `Visual.RangeHudControls` failed in the same GREEN run. With a 150% HUD and 150% text in a
+1024 × 640 window, the wider club button leaves Place ball and Record unreachable. This is still open.
+
+**Minimap header.** The header no longer shows "Hole 1 · Par 4" or "Training". It shows the lie, the speed cut beside
+it and the spin cut on the right, for example "Rough −10%" with "Spin −20%". The cuts are blank where a lie costs
+nothing.
+
+### Verified
+
+On Linux with UE 5.8.4:
+
+- The Development editor build passed, including a full `-DisableAdaptiveUnity` build, with no warnings.
+- These headless runs passed in one editor process, with no other editor open:
+
+  | Filter | Tests | Report |
+  | --- | --- | --- |
+  | `UOpenGolf.Course` | 22, including the new `Course.Play.LieRules`, `Course.Clubs` and `Course.LiePenalty` | `Saved/Automation/20261123-230951-6ZlGdk` |
+  | `UOpenGolf.Menu` | 9 | `Saved/Automation/20261123-231038-43iG9a` |
+  | `UOpenGolf.Minimap` | 11 | `Saved/Automation/20261123-231054-kEoGPV` |
+  | `UOpenGolf.Range.HolePlay` | 1 | `Saved/Automation/20261123-231109-bFfTGE` |
+
+- `Course.LiePenalty` hit the same 7 iron from the tee and from the rough. The rough shot launched at 0.92 of the
+  tee shot's speed and 0.75 of its spin; the log reads "Lie …Rough, 7 Iron: ball speed -8%, spin -25%".
+- An offscreen Vulkan run at 1792 × 1087 passed `Minimap.RenderedClick` and `Course.LiePenalty`. The only warnings were
+  the editor's blocked telemetry upload. See `Saved/Automation/20261123-231421-rendered-minimap` and
+  `Saved/Screenshots/Minimap-course-rough.png`, which shows "Rough −10%" and "Spin −20%" with the Driver selected.
+- `Minimap.RenderedClick` now also checks the header in a course round, with the ball placed in the rough.
+
+### Still unverified
+
+- The DebugGame build.
+- Windows.
+- Packaged builds.
+- The owner's review of the header's look and of the penalty and carry values.
+- A full round played with Auto club and a real launch monitor.
+- The club name on the club button. Its Development build passed, but `Visual.RangeHudControls` has not run, because
+  the owner's editor was open again.
+
 ## Open-ended Distance Practice, lie-only minimap header, two-line hole heading · 2026-11-23
 
 Distance Practice has no shot limit. The distance can change whenever the ball is at rest, and each

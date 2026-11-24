@@ -10,12 +10,19 @@ namespace GolfSettings
     struct UOPENGOLF_API FPreferences
     {
         FString DiagnosticDirectory, RecordingDirectory;
+        /**
+         * The built-in avatar the player picked (an AvatarCatalog id), and the account key it was picked for. Empty: the
+         * account picture, else the default avatar. Another account signed in on this computer ignores the pick.
+         */
+        FString AvatarId, AvatarAccount;
         int32 DiagnosticLevel = 3, RecordingDetail = 1;
         int32 MotionBlur = 0, DepthOfField = 0;
         int32 LeftHanded = 0, DistanceUnits = 0, PuttingUnits = 0, SpeedUnits = 0;
         int32 AutoTee = 3, FixedCamera = 0, CupZoom = 1, Tracer = 1, ShotData = 2;
         int32 HudPercent = 100, TextPercent = 100, HighContrast = 0, ReducedMotion = 0;
         int32 CalculatedSpin = 0, Reconnect = 1, Stimp = 10, GimmieFeet = 0, WindMph = -1;
+        /** Course rounds pick the club for each shot from its lie and distance (0/1). */
+        int32 AutoClub = 1;
         /** Launch-monitor provider (ELaunchMonitorProvider: 0 Square Home, 1 Open Connect), its TCP port, and LAN access (0/1). */
         int32 Provider = 0, OpenConnectPort = LaunchMonitorDefaultOpenConnectPort, OpenConnectLan = 0;
         void Validate();

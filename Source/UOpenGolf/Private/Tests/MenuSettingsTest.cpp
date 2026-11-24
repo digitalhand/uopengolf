@@ -25,6 +25,10 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     GolfSettings::FPreferences P;
     TestEqual(TEXT("Stimp preserves existing default"),P.Stimp,10);
     TestEqual(TEXT("Auto tee preserves existing default"),P.AutoTee,3);
+    TestEqual(TEXT("Auto club is on by default"),P.AutoClub,1);
+    P.AutoClub=5;P.Validate();TestEqual(TEXT("Auto club clamps"),P.AutoClub,1);
+    P.AutoClub=-2;P.Validate();TestEqual(TEXT("Auto club clamps to off"),P.AutoClub,0);
+    P.AutoClub=1;
     TestEqual(TEXT("Default diagnostic level"), P.DiagnosticLevel, 3);
     TestEqual(TEXT("Default recording detail"), P.RecordingDetail, 1);
     P.DiagnosticLevel = 99; P.RecordingDetail = -1; P.Validate();
@@ -42,6 +46,11 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     P.Provider=7;P.OpenConnectPort=70000;P.OpenConnectLan=4;P.Validate();
     TestEqual(TEXT("Provider clamps"),P.Provider,1);TestEqual(TEXT("Invalid port recovers"),P.OpenConnectPort,LaunchMonitorDefaultOpenConnectPort);TestEqual(TEXT("LAN clamps"),P.OpenConnectLan,1);
     P.OpenConnectPort=5921;P.Validate();TestEqual(TEXT("Custom port kept"),P.OpenConnectPort,5921);
+    TestTrue(TEXT("No avatar is picked by default"),P.AvatarId.IsEmpty()&&P.AvatarAccount.IsEmpty());
+    P.AvatarId=TEXT("NotAnAvatar");P.AvatarAccount=TEXT("account-key");P.Validate();
+    TestTrue(TEXT("An unknown avatar is cleared"),P.AvatarId.IsEmpty());
+    P.AvatarId=TEXT("Birdie");P.Validate();TestEqual(TEXT("A catalogue avatar is kept"),P.AvatarId,FString(TEXT("Birdie")));
+    TestEqual(TEXT("The avatar keeps the account it was picked for"),P.AvatarAccount,FString(TEXT("account-key")));
     auto* Monitor=NewObject<UOpenLaunchMonitorSubsystem>(NewObject<UGameInstance>());Monitor->SetSpinMode(ESquareSpinMode::Calculated);
     TestEqual(TEXT("Spin mode retained before connection"),Monitor->GetSpinMode(),ESquareSpinMode::Calculated);
     Monitor->SetSpinMode(ESquareSpinMode::Measured);TestEqual(TEXT("Measured selectable"),Monitor->GetSpinMode(),ESquareSpinMode::Measured);
@@ -50,6 +59,7 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     GConfig->UnloadFile(File);
     GolfSettings::FPreferences Loaded;Loaded.ReadConfig(File);
     TestTrue(TEXT("Preferences survive disk round trip"),P==Loaded);
+    TestEqual(TEXT("The avatar survives the disk round trip"),Loaded.AvatarId,FString(TEXT("Birdie")));
     GConfig->UnloadFile(File);IFileManager::Get().Delete(*File);
     return true;
 }

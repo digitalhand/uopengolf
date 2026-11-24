@@ -9,8 +9,11 @@
 #include "OpenGolfOnlineSubsystem.generated.h"
 
 class FOpenGolfBrowserLogin;
+class IHttpRequest;
+class UTexture2D;
 struct FOpenGolfCredentialWork;
 class FOpenGolfOnlineSessionTest;
+class FOpenGolfOnlinePictureTest;
 class FOpenGolfPanelHeadingTest;
 
 enum class EOpenGolfAccountState : uint8
@@ -38,6 +41,9 @@ public:
     using FTestSender = TFunction<OpenGolfOnline::FCancelHandle(const FString&, const FString&, const FString&, const FString&, OpenGolfOnline::FHttpCallback)>;
     void AdvanceForTests() { Tick(0); }
     void SetupForTests(const OpenGolfOnline::FConfig& TestConfig, FTestSender Sender, const FString& LocalRoot);
+    /** Receives each account-picture download in place of HTTP. SetupForTests installs one that never replies. */
+    using FTestPictureFetcher = TFunction<void(const FString& Url, TFunction<void(int32 Status, TArray<uint8> Body)> Reply)>;
+    void SetPictureFetcherForTests(FTestPictureFetcher Fetcher) { TestPictureFetcher = MoveTemp(Fetcher); }
 #endif
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
@@ -88,6 +94,14 @@ public:
     const FString& GetHistoryClub() const { return HistoryClub; }
     const FString& GetApplicationName() const { return Config.ApplicationName; }
     TSharedPtr<FJsonObject> GetProfile() const { return Profile; }
+    /** The profile's display name, else the login service's name for the account; empty while signed out. */
+    FString GetDisplayName() const;
+    /**
+     * The account picture the login service names, as a small UI texture. Null while signed out, when the account has
+     * none, until it downloads, and when the download fails; it is fetched again at the next token refresh.
+     */
+    UTexture2D* GetPicture() const { return Picture; }
+    FSimpleMulticastDelegate OnPictureChanged;
     const TArray<TSharedPtr<FJsonValue>>& GetCarry() const { return Carry; }
     const TArray<TSharedPtr<FJsonValue>>& GetHistory() const { return History; }
     /**
@@ -104,9 +118,11 @@ public:
 
 private:
     friend class FOpenGolfOnlineSessionTest;
+    friend class FOpenGolfOnlinePictureTest;
 #if WITH_DEV_AUTOMATION_TESTS
     friend struct FOpenGolfPermissionTestAccess;
     friend class FOpenGolfPlayerSettingsTest;
+    friend class FOpenGolfPlayerBadgeTest;
 #endif
     friend class FOpenGolfPanelHeadingTest;
 #if WITH_DEV_AUTOMATION_TESTS
@@ -114,6 +130,7 @@ private:
     TFunction<void(TFunction<void()>)> TestCredentialDispatch;
     TFunction<OpenGolfOnline::EStoreResult(const FString&,const FString&)> TestCredentialWriter;
     FString TestLocalRoot;
+    FTestPictureFetcher TestPictureFetcher;
 #endif
     using FReply = OpenGolfOnline::FHttpResult;
     using FCompletion = OpenGolfOnline::FHttpCallback;
@@ -147,6 +164,11 @@ private:
     /** Forgets every club's averages and ignores replies still in flight. */
     void ClearClubAverages();
     void FinishSignInFailure(const FString& Message);
+    /** Shows the picture at Url: an empty Url clears it; the same Url is fetched again only when it is not shown or on its way. */
+    void UpdatePicture(const FString& Url);
+    void FetchPicture();
+    /** Forgets the picture and ignores a download still on its way. */
+    void ClearPicture();
     FString LocalPath() const;
     OpenGolfOnline::FConfig Config;
     FTSTicker::FDelegateHandle TickHandle;
@@ -156,6 +178,14 @@ private:
     TArray<FString> Permissions;
     bool bLastAdminPermission = false;
     FString AccessToken, RefreshToken, AccountKey, Status, StorageWarning, DisplayNameHint;
+    /** The address of the picture shown or on its way; see UpdatePicture. */
+    FString PictureUrl;
+    UPROPERTY(Transient)
+    TObjectPtr<UTexture2D> Picture;
+    TSharedPtr<IHttpRequest, ESPMode::ThreadSafe> PictureRequest;
+    /** Bumped for each download and by ClearPicture, so a reply for an earlier address or account is ignored. */
+    uint64 PictureAttempt = 0;
+    bool bPictureLoading = false;
     FString DeviceCode, UserCode, QrUrl, HistoryClub;
     void CollectHistoryIds(const FString& Club);
     void CollectClubHistoryIds(TArray<FString> Clubs, TSet<FString> Ids);
