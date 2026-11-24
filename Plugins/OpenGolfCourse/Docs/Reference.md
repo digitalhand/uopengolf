@@ -25,6 +25,7 @@ type. Its content mounts at `/OpenGolfCourse/`.
 | `UOpenGolfFlagstickComponent` (C++) | The pole plus a simulated 20 x 14 inch cloth flag (`FOpenGolfFlagCloth`); no collision; `SetWind` flies it |
 | `Hole/UOpenGolfCupComponent` (C++) | A regulation 4.25 in cup drawn at the flag's foot; lifts the flagstick for a nearby ball. See [Cup](#cup) |
 | `Play/FOpenGolfHoleRound`, `Play/OpenGolfPlayRules.h`, `Play/OpenGolfWindSetting.h` (C++) | Strokes, putts and score names; play mode, aim bearing, aim steps and readout, short-game and placement rules; the wind the player sets on the HUD. See [Scoring and play rules](#scoring-and-play-rules) |
+| `Play/UOpenGolfLieRules` (C++ data asset) | What the rough, sand and other lies take off a shot's ball speed and spin, by kind of club. See [Lie rules](#lie-rules) |
 | `Scripts/hole_layout.py`, `course_hole.py` | Hole layout geometry (pure Python) and the editor helpers that apply it to a terrain definition. See [Laying out a hole](#laying-out-a-hole) |
 | `UOpenGolfWindSubsystem` (C++) | A world's wind (10 m vector, air density, height profile); writes `Wind/MPC_Wind` |
 | `OpenGolfBeaufort.h` (C++) | The Beaufort land scale, with the flag bands the cloth is held to |
@@ -190,6 +191,7 @@ strokes or putts, never finishes, and `ResultName()` stays empty.
 | `EOpenGolfPlayMode` | `Range` (every shot from the tee) or `Hole` (played as it lies) |
 | `BearingDeg(From, To)` | Aim toward the cup, degrees clockwise from world +X |
 | `IsShortGame(DistanceM, bOnGreen)` | On the green or within 30 yd: the lower, closer address camera (ogolf `CameraProfiles.ForLie`) |
+| `TeeBoxRadiusM` | A ball within 3 m of the tee is on the tee box: no surface is named and the lie has no penalty |
 | `CupZoomStartM`, `CupZoomAmount(DistanceM)` | How far the follow camera closes in near the cup: 0 from 8 ft out, easing to 1 at the cup |
 | `CanPlaceBallAt(Location, Cup)` | A placed ball keeps 0.15 m from the cup's centre |
 | `DistanceToPinLabel(DistanceM, bOnGreen)` | "18 ft" on the green, "152 yd" elsewhere |
@@ -204,6 +206,52 @@ right, 180 tailwind, 270 from the left). `SetSpeedMph` takes whole mph from calm
 as the map or the console: on when it blows (a console speed above 30 is kept), off and keeping the last speed when it
 is calm. `WindDirectionLabel(FromDeg)` names it against the target line in 45° sectors: Headwind, Into · right to left,
 Right to left, Helping · right to left, Tailwind and their mirror images.
+
+### Lie rules
+
+`Play/OpenGolfLieRules.h` holds what a lie takes off a shot in course play. The game applies it to the launch
+monitor's measurement before the ball is launched; recorders keep the shot as measured. Training never applies it.
+
+- `FOpenGolfLieCut` is a ball-speed percentage and a spin percentage, each held to at most 90%.
+- `FOpenGolfLiePenalty` is one lie's cut for each `EOpenGolfClubGroup`: woods, irons and wedges. The putter is never
+  penalised, because the surface's grass drag already slows a ball rolled through it.
+- `UOpenGolfLieRules` is a data asset with two maps from `EOpenFairwaySurface` to a penalty:
+  - `Lies` applies anywhere on the hole.
+  - `NearGreenLies` replaces a surface's row in the short game (`IsShortGame`, within 30 yd of the cup).
+- `CutFor(Surface, DistanceToCupM, Group)` looks a cut up. A surface without a row has no penalty, so a new surface
+  only needs its row.
+
+`OpenGolfPlay::ApplyLieCut(Launch, Cut)` returns a new launch with the ball speed and every spin that is present
+multiplied down. Launch angles, direction, spin axis and the `bHas*` flags stay as measured: the real club's loft is
+already in them. `LieCutLabel` (`−8%`) and `SpinCutLabel` (`Spin −25%`) are the hole map's header text, and are empty
+when there is no cut.
+
+The class default is the standard, and a new asset starts from it. A course plays its own rules by pointing its
+definition at an asset, and several courses can share one. The standard values are provisional:
+
+| Lie | Woods | Irons | Wedges |
+| --- | --- | --- | --- |
+| Tee box, Fairway, Soft fairway, Firm, Fringe, Green | — | — | — |
+| Rough | −10% speed, −20% spin | −8%, −25% | −6%, −35% |
+| Sand, 30 yd or more from the cup (fairway bunker) | −15%, −25% | −10%, −25% | −8%, −25% |
+| Sand, within 30 yd (greenside bunker, an explosion shot) | −40%, −30% | −40%, −30% | −40%, −30% |
+
+There is no published PGA Tour table of lie penalties. These are estimates, checked against the field tests below:
+
+- **Rough speed.** In a launch-monitor session from the rough, a 7 iron's ball speed fell from 121 to 115 mph (about 5%)
+  on a down-grain lie ([GolfWRX][lie-golfwrx]). In thick rough, 9-iron and 6-iron carries fell by 7 to 18 yards, though
+  extra roll sometimes made up the total ([Golf Digest][lie-golfdigest]).
+- **Spin.** Grass between the face and the ball lowers spin (the "flyer" lie). Both tests saw it: a thick, into-the-grain
+  lie left a 7 iron with about 1,300 rpm ([GolfWRX][lie-golfwrx]).
+- **Estimates without a measured source:**
+  - the bunker values;
+  - the split by club group: woods suffer more in rough and sand than irons, and wedges lose the most spin;
+  - wedges' larger spin cut.
+
+[lie-golfwrx]: https://www.golfwrx.com/277599/hitting-shots-from-the-rough-at-tpc-scottsdale/
+[lie-golfdigest]: https://www.golfdigest.com/story/how-much-shorter-does-the-ball-travel-out-of-thick-rough-us-open-2025-mythbusters
+
+Tune the values in data after playing them. Don't change `OpenFairwayPhysics` surface constants to compensate.
 
 ### Laying out a hole
 
@@ -318,7 +366,12 @@ original MIT contributions.
 - 30 and 144 fps agree.
 
 `UOpenGolf.Course.Play.HoleRound` checks the stroke, putt and score-name rules, including practice holes, and
-`UOpenGolf.Course.Play.Rules` the shared play rules. `Scripts/test_hole_layout.py` checks the layout geometry against
+`UOpenGolf.Course.Play.Rules` the shared play rules. `UOpenGolf.Course.Play.LieRules` checks the lie rules:
+
+- the standard table, including the greenside-bunker boundary at 30 yd;
+- a course's own asset;
+- what a cut does to a measured launch;
+- the header labels. `Scripts/test_hole_layout.py` checks the layout geometry against
 the terrain's height sum. The game's `UOpenGolf.Range.HolePlay` plays the cup and the pin lift in the saved map.
 
 `UOpenGolf.Course.FlagBeaufort` holds the cloth to the Beaufort flag bands from 0 to 40 mph and in a 60 mph gale (see
@@ -356,6 +409,7 @@ Source/OpenGolfCourse/
   Public/Play/OpenGolfHoleRound.h       One hole's strokes, putts and score name
   Public/Play/OpenGolfPlayRules.h       Play mode and the rules every course shares
   Public/Play/OpenGolfWindSetting.h     The HUD's wind setting and direction names
+  Public/Play/OpenGolfLieRules.h        Lie penalties by surface and kind of club
   Private/Tests/                        Asset, cloth, wind and play tests
 ```
 

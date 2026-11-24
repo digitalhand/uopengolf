@@ -10,6 +10,7 @@
 #include "GameUpdateSubsystem.h"
 #include "OpenGolfOnlineSubsystem.h"
 #include "SOpenGolfAccountPanel.h"
+#include "UI/Menu/AvatarPicker.h"
 #include "SOpenGolfQrSignIn.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfGameMode.h"
@@ -192,13 +193,26 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
 void SMainMenu::BuildPlayer(TSharedRef<SVerticalBox> Rows)
 {
     using P=GolfSettings::FPreferences;
-    // Sign-in acts at once; display-name edits share Settings' Apply/Discard draft. Signed out, the
+    // Sign-in acts at once; display-name and avatar edits share Settings' Apply/Discard draft. Signed out, the
     // profile and Shot history are not shown. Neither needs a page rebuild when the session changes: the account panel
     // rebuilds itself and the Shot history row's visibility follows HasProfile.
     UOpenGolfOnlineSubsystem* Online=OnlineService();
-    if(Online&&Matches(TEXT("Account"),TEXT("Sign in, create account, profile, display name")))
+    if(Online&&Matches(TEXT("Account"),TEXT("Sign in, create account, profile, display name, avatar")))
+    {
+        // The avatar picker fills the profile's right half; a pick is kept for the account that made it.
+        auto Avatars=[this]
+        {
+            return StaticCastSharedRef<SWidget>(SNew(SAvatarPicker).Tag(TEXT("AvatarPicker")).Online(OnlineService()).Style(Style)
+                .Preferences([this]()->const GolfSettings::FPreferences&{return Draft;})
+                .OnPicked_Lambda([this](const FString& Id)
+                {
+                    const UOpenGolfOnlineSubsystem* Service=OnlineService();
+                    Draft.AvatarId=Id;Draft.AvatarAccount=Service?Service->GetAccountKey():FString();
+                }));
+        };
         Rows->AddSlot().AutoHeight()[SNew(SOpenGolfAccountPanel).Tag(TEXT("PlayerAccountPanel")).Online(Online).Style(Style).ShowHeading(false).DisplayNameDraft(DisplayNameDraft)
-            .Page(EOpenGolfAccountPage::Account)];
+            .Page(EOpenGolfAccountPage::Account).ProfileAside(Avatars)];
+    }
     const FString ShotsHelp=TEXT("Club averages and saved shots from the last 90 days.");
     if(Matches(TEXT("Shot history"),ShotsHelp))
     {
@@ -210,7 +224,7 @@ void SMainMenu::BuildPlayer(TSharedRef<SVerticalBox> Rows)
     AddPreference(Rows,TEXT("Distance units"),TEXT("Carry, total and long distances."),&P::DistanceUnits,{TEXT("Yards"),TEXT("Meters")},{0,1});
     AddPreference(Rows,TEXT("Putting units"),TEXT("Short distances and height."),&P::PuttingUnits,{TEXT("Feet"),TEXT("Meters")},{0,1});
     AddPreference(Rows,TEXT("Speed units"),TEXT("Ball speed and wind."),&P::SpeedUnits,{TEXT("MPH"),TEXT("KM/H"),TEXT("M/S")},{0,1,2});
-    Disabled(Rows,TEXT("Club suggestion"),TEXT("Automatic club recommendations are not implemented yet."));
+    AddPreference(Rows,TEXT("Auto club"),TEXT("Course rounds pick a club from the lie and the distance to the pin."),&P::AutoClub,{TEXT("Off"),TEXT("On")},{0,1});
     AddPreference(Rows,TEXT("Auto tee delay"),TEXT("After the next shot stops. Manual uses R to reset."),&P::AutoTee,{TEXT("3 seconds"),TEXT("5 seconds"),TEXT("8 seconds"),TEXT("Manual")},{3,5,8,0});
 }
 void SMainMenu::AddFolderRow(TSharedRef<SVerticalBox> Rows,const TCHAR* Label,FString GolfSettings::FPreferences::*Member,bool bDiagnostic)

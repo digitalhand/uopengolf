@@ -10,7 +10,8 @@ class AUOpenGolfPlayerController;
 class UOpenGolfOnlineSubsystem;
 
 /**
- * Top-left club selector, Training recording and placement controls, or course stroke and putt tiles.
+ * Top-left club selector (with the signed-in player beside it on the course), Training recording and placement controls,
+ * or course stroke and putt tiles.
  * The hole-out banner remains visible until the final scorecard opens.
  */
 class SPlayModeBar : public SCompoundWidget

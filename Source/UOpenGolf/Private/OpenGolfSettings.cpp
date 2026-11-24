@@ -12,6 +12,7 @@
 #include "ShotRecording.h"
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
+#include "Profile/AvatarCatalog.h"
 
 namespace GolfSettings
 {
@@ -25,7 +26,7 @@ namespace GolfSettings
             FIELD(MotionBlur), FIELD(DepthOfField), FIELD(LeftHanded), FIELD(DistanceUnits), FIELD(PuttingUnits), FIELD(SpeedUnits), FIELD(AutoTee),
             FIELD(FixedCamera), FIELD(CupZoom), FIELD(Tracer), FIELD(ShotData), FIELD(HudPercent), FIELD(TextPercent),
             FIELD(HighContrast), FIELD(ReducedMotion), FIELD(CalculatedSpin), FIELD(Reconnect), FIELD(Stimp), FIELD(GimmieFeet), FIELD(WindMph),
-            FIELD(DiagnosticLevel), FIELD(RecordingDetail), FIELD(Provider), FIELD(OpenConnectPort), FIELD(OpenConnectLan)
+            FIELD(DiagnosticLevel), FIELD(RecordingDetail), FIELD(Provider), FIELD(OpenConnectPort), FIELD(OpenConnectLan), FIELD(AutoClub)
 #undef FIELD
         };
     }
@@ -48,7 +49,7 @@ namespace GolfSettings
     bool BypassStartupMenu() { return FParse::Param(FCommandLine::Get(), TEXT("NoMainMenu")); }
     void FPreferences::Validate()
     {
-        for (int32* Value : {&MotionBlur, &DepthOfField, &LeftHanded, &DistanceUnits, &PuttingUnits, &FixedCamera, &CupZoom, &HighContrast, &ReducedMotion, &CalculatedSpin, &Reconnect, &Provider, &OpenConnectLan})
+        for (int32* Value : {&MotionBlur, &DepthOfField, &LeftHanded, &DistanceUnits, &PuttingUnits, &FixedCamera, &CupZoom, &HighContrast, &ReducedMotion, &CalculatedSpin, &Reconnect, &Provider, &OpenConnectLan, &AutoClub})
             *Value = FMath::Clamp(*Value, 0, 1);
         DiagnosticLevel = FMath::Clamp(DiagnosticLevel, 0, 4);
         RecordingDetail = FMath::Clamp(RecordingDetail, 0, 1);
@@ -61,11 +62,15 @@ namespace GolfSettings
         if (GimmieFeet != 0 && GimmieFeet != 3 && GimmieFeet != 5 && GimmieFeet != 8 && GimmieFeet != 10) GimmieFeet = 0;
         if (WindMph != -1 && WindMph != 0 && WindMph != 5 && WindMph != 10 && WindMph != 20) WindMph = -1;
         if (OpenConnectPort < 1 || OpenConnectPort > 65535) OpenConnectPort = LaunchMonitorDefaultOpenConnectPort;
+        // An avatar removed from the catalogue falls back to the account picture.
+        if (!AvatarCatalog::Find(AvatarId)) AvatarId.Empty();
+        AvatarAccount.TrimStartAndEndInline();
     }
     bool FPreferences::operator==(const FPreferences& Other) const
     {
         for (const FField& Field : Fields) if (this->*Field.Member != Other.*Field.Member) return false;
-        return DiagnosticDirectory == Other.DiagnosticDirectory && RecordingDirectory == Other.RecordingDirectory;
+        return DiagnosticDirectory == Other.DiagnosticDirectory && RecordingDirectory == Other.RecordingDirectory && AvatarId == Other.AvatarId &&
+            AvatarAccount == Other.AvatarAccount;
     }
     void FPreferences::ReadConfig(const FString& Filename)
     {
@@ -73,6 +78,8 @@ namespace GolfSettings
         for (const FField& Field : Fields) Config.GetInt(Section, Field.Name, this->*Field.Member);
         Config.GetString(Section, TEXT("DiagnosticDirectory"), DiagnosticDirectory);
         Config.GetString(Section, TEXT("RecordingDirectory"), RecordingDirectory);
+        Config.GetString(Section, TEXT("AvatarId"), AvatarId);
+        Config.GetString(Section, TEXT("AvatarAccount"), AvatarAccount);
         Validate();
     }
     bool FPreferences::WriteConfig(const FString& Filename) const
@@ -81,6 +88,8 @@ namespace GolfSettings
         for (const FField& Field : Fields) Config.SetInt64(Section, Field.Name, this->*Field.Member);
         Config.SetString(Section, TEXT("DiagnosticDirectory"), *DiagnosticDirectory);
         Config.SetString(Section, TEXT("RecordingDirectory"), *RecordingDirectory);
+        Config.SetString(Section, TEXT("AvatarId"), *AvatarId);
+        Config.SetString(Section, TEXT("AvatarAccount"), *AvatarAccount);
         return Config.Write(Filename);
     }
     namespace

@@ -5,6 +5,7 @@
 #include "UI/Common/HudStyle.h"
 #include "UI/Hud/ShotDisplay.h"
 #include "UI/Club/ClubPicker.h"
+#include "UI/Hud/PlayerBadge.h"
 #include "UI/Common/HudStatusGlyph.h"
 #include "UI/Common/HudToolTip.h"
 #include "Engine/GameInstance.h"
@@ -80,6 +81,12 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         + SHorizontalBox::Slot().AutoWidth()
                         [
                             SNew(SClubPicker).Tag(TEXT("ClubPicker")).Monitor(LaunchMonitor)
+                        ]
+                        // The signed-in player, on the course only; nothing shows while signed out.
+                        + SHorizontalBox::Slot().AutoWidth()
+                        [
+                            SNew(SPlayerBadge).Online(Online)
+                            .Visibility_Lambda([this] { return bHoleMode && bSignedIn ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
                         ]
                         + SHorizontalBox::Slot().AutoWidth()[ MakeRecordButton() ]
                         + SHorizontalBox::Slot().AutoWidth()
@@ -217,7 +224,7 @@ TSharedRef<SWidget> SPlayModeBar::MakeTile(TAttribute<FText> Value, const TCHAR*
             SNew(SVerticalBox)
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
             [
-                SNew(STextBlock).Font(HudStyle::Font("Bold", 18)).ColorAndOpacity(HudStyle::TextColor())
+                SNew(STextBlock).Font(HudStyle::ValueFont()).ColorAndOpacity(HudStyle::TextColor())
                 .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudStyle::ShadowColor).Text(Value)
             ]
             + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)

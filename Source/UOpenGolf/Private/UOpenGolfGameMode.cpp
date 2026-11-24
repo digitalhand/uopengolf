@@ -3,6 +3,7 @@
 #include "OpenGolfSettings.h"
 #include "GolfGimmieIndicator.h"
 #include "GolfCourseDefinition.h"
+#include "Course/CourseClubs.h"
 #include "Course/GolfCourseSubsystem.h"
 
 #include "Engine/GameInstance.h"
@@ -89,6 +90,7 @@ void AUOpenGolfGameMode::StartPlay()
     Round.Start(GetPar());
     if (Range) { MapWindMph = Range->WindSpeedMph; MapWindFromDeg = Range->WindFromDeg; }
     StartSessionDefaults();
+    SelectClubForLie();
 
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
     {
@@ -215,6 +217,7 @@ void AUOpenGolfGameMode::PlaceOnTee()
             Ball->AimYawDeg = 0.0f;
         if (Training) Training->LeaveFinishedBall();
         Ball->PlaceAt(Range->GetTeeLocation() + FVector::UpVector * 10.0f);
+        SelectClubForLie();
     }
 }
 
@@ -304,6 +307,53 @@ void AUOpenGolfGameMode::ReadyForNextShot()
     bAddressReady = true;
 }
 
+void AUOpenGolfGameMode::AddressNextShot()
+{
+    ReadyForNextShot();
+    // Only here, never as a shot arrives: the club in hand then is the club the shot was hit with. A club the player
+    // picked while the stopped shot was shown is kept.
+    const UGameInstance* GameInstance = GetGameInstance();
+    const auto* LaunchMonitor = GameInstance ? GameInstance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr;
+    if (LaunchMonitor && LaunchMonitor->GetClub() == ClubAtRest)
+        SelectClubForLie();
+}
+
+bool AUOpenGolfGameMode::IsBallOnTee() const
+{
+    return Ball && Range && FVector::Dist2D(Ball->GetActorLocation(), Range->GetTeeLocation()) <= OpenGolfPlay::TeeBoxRadiusM * 100.0;
+}
+
+const UOpenGolfLieRules& AUOpenGolfGameMode::GetLieRules() const
+{
+    return Course ? Course->GetLieRules() : *GetDefault<UOpenGolfLieRules>();
+}
+
+FOpenGolfLieCut AUOpenGolfGameMode::GetLieCut() const
+{
+    const UGameInstance* GameInstance = GetGameInstance();
+    const auto* LaunchMonitor = GameInstance ? GameInstance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr;
+    if (!IsCourseRound() || !Ball || !LaunchMonitor || Ball->IsHoled() || IsBallOnTee())
+        return FOpenGolfLieCut();
+    return GetLieRules().CutFor(Ball->GetResult().Surface, GetDistanceToCupM(), CourseClubs::Group(LaunchMonitor->GetClub()));
+}
+
+void AUOpenGolfGameMode::SelectClubForLie()
+{
+    UGameInstance* GameInstance = GetGameInstance();
+    auto* LaunchMonitor = GameInstance ? GameInstance->GetSubsystem<UOpenLaunchMonitorSubsystem>() : nullptr;
+    if (!IsCourseRound() || GolfSettings::Get().AutoClub == 0 || !Ball || !LaunchMonitor || Ball->IsMoving() || Ball->IsHoled())
+        return;
+    CourseClubs::FAdvice Advice;
+    Advice.DistanceToCupM = GetDistanceToCupM();
+    Advice.Surface = Ball->GetResult().Surface;
+    Advice.bOnTee = IsBallOnTee();
+    Advice.Rules = &GetLieRules();
+    const ELaunchMonitorClub Club = CourseClubs::Recommend(Advice);
+    // Unchanged, nothing is sent: SetClub also tells the launch monitor.
+    if (Club != LaunchMonitor->GetClub())
+        LaunchMonitor->SetClub(Club);
+}
+
 void AUOpenGolfGameMode::SetRecordShots(bool bRecord)
 {
     if (Recorder)
@@ -367,7 +417,9 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
         else
         {
             // Let the shot be seen where it stopped, then turn to the cup for the next one.
-            GetWorldTimerManager().SetTimer(AddressTimer, this, &ThisClass::ReadyForNextShot, AddressDelayS, false);
+            if (const auto* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
+                ClubAtRest = LaunchMonitor->GetClub();
+            GetWorldTimerManager().SetTimer(AddressTimer, this, &ThisClass::AddressNextShot, AddressDelayS, false);
         }
         return;
     }
@@ -464,6 +516,12 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     else if (!bAddressReady)
         ReadyForNextShot();
     GetWorldTimerManager().ClearTimer(AddressTimer);
+    // A course lie takes its penalty off the measured launch (Docs/Architecture.md); the recorders keep the shot as measured.
+    const FOpenGolfLieCut LieCut = GetLieCut();
+    const FOpenFairwayLaunch PlayedLaunch = OpenGolfPlay::ApplyLieCut(CheckedLaunch, LieCut);
+    if (!LieCut.IsNone() && LaunchMonitor)
+        UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Lie %s, %s: ball speed -%.0f%%, spin -%.0f%%."), *UEnum::GetValueAsString(Ball->GetResult().Surface),
+            *UOpenLaunchMonitorSubsystem::GetClubDisplayName(LaunchMonitor->GetClub()).ToString(), LieCut.BallSpeedPct, LieCut.SpinPct);
     // Only Training shots are recorded; a course round never records.
     if (Recorder && LaunchMonitor && PlayMode == EOpenGolfPlayMode::Range)
     {
@@ -482,7 +540,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
             ShotRecording::IsRecordable(Shot,LaunchMonitor->GetConnectionState()));
     }
     // Range mode hits from the tee; Hole mode from wherever the ball lies.
-    if (Ball->Launch(CheckedLaunch))
+    if (Ball->Launch(PlayedLaunch))
     {
         bAddressReady = false;
         FOpenFairwayShotResult Launched;

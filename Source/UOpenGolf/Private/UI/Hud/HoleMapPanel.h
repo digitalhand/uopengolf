@@ -9,8 +9,9 @@ class AUOpenGolfPlayerController;
 class SHoleMinimap;
 
 /**
- * The HUD's hole map, bottom left: a header naming the lie and the hole, the map (SHoleMinimap), and a footer with the
- * pin's elevation above or below the ball in feet and inches. Left clicks on the header and footer are absorbed so
+ * The HUD's hole map, bottom left: a header naming the lie with, in a course round, what it takes off the shot ("Rough
+ * −8%" and "Spin −25%"), the map (SHoleMinimap), and a footer with the pin's elevation above or below the ball in feet
+ * and inches. Left clicks on the header and footer are absorbed so
  * they never place the ball in the world behind them; other buttons pass through, as on the map. Hidden with the map
  * until the range has a picture.
  */
@@ -39,5 +40,5 @@ private:
     FSlateRoundedBoxBrush PanelBrush{HudStyle::MapPanelColor(), HudStyle::TileRadius + 2.0f, HudStyle::MapEdgeColor(), 1.0f};
     FSlateRoundedBoxBrush ShadowBrush{HudStyle::MapShadowColor(), HudStyle::TileRadius + 3.0f};
 
-    FText Lie, Hole, Elevation;
+    FText Lie, LieCut, SpinCut, Elevation;
 };

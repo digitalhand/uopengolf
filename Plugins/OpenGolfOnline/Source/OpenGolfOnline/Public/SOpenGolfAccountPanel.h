@@ -50,6 +50,11 @@ public:
     SLATE_ARGUMENT(EOpenGolfAccountPage, Page)
     /** Shared with the host's Apply/Discard controls. A standalone panel owns its own draft. */
     SLATE_ARGUMENT(TSharedPtr<FOpenGolfDisplayNameDraft>, DisplayNameDraft)
+    /**
+     * Host content beside the signed-in profile's name, filling the section's remaining width (such as an avatar
+     * picker). Called each time the panel rebuilds the profile, so it returns a new widget every time.
+     */
+    SLATE_ARGUMENT(TFunction<TSharedRef<SWidget>()>, ProfileAside)
     SLATE_END_ARGS()
     void Construct(const FArguments& Args);
     virtual void Tick(const FGeometry&, double, float) override;
@@ -87,6 +92,7 @@ private:
     FButtonStyle ClubRowStyle;
     TSharedPtr<SScrollBox> Scroll, ShotScroll;
     TSharedPtr<FOpenGolfDisplayNameDraft> DisplayNameDraft;
+    TFunction<TSharedRef<SWidget>()> ProfileAside;
     TSharedPtr<SEditableTextBox> NameField;
     TSharedPtr<SListView<TSharedPtr<FJsonObject>>> HistoryList;
     TArray<TSharedPtr<FJsonObject>> HistoryRows;

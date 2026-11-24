@@ -33,3 +33,17 @@ The reusable environment plugin owns the daylight profile, cloud material and de
 
 The single 3 ft, 6 ft, or 10 ft ring uses the existing project materials `M_ShotTrail` and
 `M_TargetRingLine` with the existing ground label. See [rendered checks](PhasesStatus.md#training-game-picker-and-winning-radius--2026-11-23).
+
+## Player avatars — 2026-11-24
+
+The 24 built-in player avatars are Microsoft's Fluent Emoji 3D images (MIT, Copyright (c) Microsoft
+Corporation), pinned at commit `1ffb34c752ecf5d402f04cfb4b392c77f57c54bc`. They are imported unchanged as
+256 px UI textures in `Plugins/OpenGolfSavanna/Content/UI/Avatars/`, renamed for their golf use (for example
+`T_Avatar_Bogey` for the ghost). The MIT licence text must accompany copies; it is in
+`Plugins/OpenGolfSavanna/LICENSES/MIT-fluentui-emoji.txt`, with the source and pins in
+[the plugin notice](../Plugins/OpenGolfSavanna/NOTICE.md#player-avatars-fluent-emoji-mit) and
+[third-party notices](../THIRD_PARTY_NOTICES.md). Downloaded originals stay in the art root
+(`FluentEmoji/`). No map, turf, vegetation, lighting or 3D material asset was modified.
+
+A signed-in player's own account picture is downloaded at run time from the address their login
+service names and is never stored in the repository or on disk.

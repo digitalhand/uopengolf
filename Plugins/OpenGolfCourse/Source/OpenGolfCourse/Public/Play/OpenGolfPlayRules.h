@@ -20,6 +20,9 @@ namespace OpenGolfPlay
     /** Within this of the cup (30 yd), or on the green, the shot is a short-game shot (ogolf CameraProfiles.ForLie). */
     inline constexpr float ShortGameDistanceM = 27.432f;
 
+    /** A ball within this of the tee (3 m) is on the tee box: the hole map names no surface and the lie has no penalty. */
+    inline constexpr float TeeBoxRadiusM = 3.0f;
+
     /** A ball placed by hand keeps at least this far from the cup's centre. */
     inline constexpr float MinPlaceDistanceFromCupM = 0.15f;
 

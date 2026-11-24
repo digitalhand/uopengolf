@@ -3,7 +3,9 @@
 
 #include "GameFramework/GameModeBase.h"
 #include "Play/OpenGolfHoleRound.h"
+#include "Play/OpenGolfLieRules.h"
 #include "Play/OpenGolfPlayRules.h"
+#include "LaunchMonitorTypes.h"
 #include "OpenFairwayTypes.h"
 #include "UOpenGolfGameMode.generated.h"
 
@@ -113,6 +115,19 @@ public:
     /** Seconds since the ball dropped into the cup (Hole mode), or a negative value. */
     float GetHoledSeconds() const;
 
+    /** The ball is on the tee box, within OpenGolfPlay::TeeBoxRadiusM of the tee. */
+    bool IsBallOnTee() const;
+
+    /**
+     * What the ball's lie takes off the next shot with the selected club, from the course's lie rules. Nothing on the tee,
+     * in the cup or in Training. The hole map shows it, and a launch-monitor shot plays it (the recorders keep the shot as
+     * measured).
+     */
+    FOpenGolfLieCut GetLieCut() const;
+
+    /** Course rounds with Auto club on: selects the club for the ball's lie and distance to the cup (CourseClubs::Recommend). */
+    void SelectClubForLie();
+
     /** Records real launch-monitor shots on the range (never replays or hole shots) while connected; off at the start of play. */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Recording")
     void SetRecordShots(bool bRecord);
@@ -174,6 +189,10 @@ private:
 
     void ResetAfterShot();
     void ReadyForNextShot();
+    /** Hole mode, once a stopped shot has been seen: turns to the cup and picks the club for the next shot. */
+    void AddressNextShot();
+    /** The round's lie rules: the course's, or the standard. */
+    const UOpenGolfLieRules& GetLieRules() const;
     /** After the hole-out banner: tells listeners (the player's menu) that the round is over. */
     void FinishRound();
     /** Turns the ball (and its aim line) toward the cup. */
@@ -210,6 +229,8 @@ private:
     /** The wind saved with the map, which Training starts from when the starting-wind preference is "Course default". */
     float MapWindMph = 0, MapWindFromDeg = 0;
     int32 LastScoredShot = INDEX_NONE;
+    /** Hole mode: the club in hand when the last shot stopped; a different club at address is the player's pick. */
+    ELaunchMonitorClub ClubAtRest = ELaunchMonitorClub::Driver;
     UPROPERTY()
     TObjectPtr<UGolfGimmieIndicator> GimmieIndicator;
 };

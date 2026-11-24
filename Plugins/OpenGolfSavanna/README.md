@@ -1,6 +1,6 @@
 # OpenGolfSavanna
 
-Open-licence trees, ground textures and understory for the public savanna range. This content plugin includes the scripts used to import and place its assets.
+Open-licence trees, ground textures and understory for the public savanna range, and the built-in player avatars (Fluent Emoji, MIT; see [NOTICE.md](NOTICE.md#player-avatars-fluent-emoji-mit)). This content plugin includes the scripts used to import and place its assets.
 
 ## Use
 

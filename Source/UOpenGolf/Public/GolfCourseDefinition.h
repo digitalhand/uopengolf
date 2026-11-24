@@ -4,6 +4,7 @@
 #include "Engine/DataAsset.h"
 #include "GolfCourseDefinition.generated.h"
 
+class UOpenGolfLieRules;
 class UTexture2D;
 class UWorld;
 
@@ -52,4 +53,14 @@ public:
     /** Where the round's wind comes from, in degrees against the target line (90 is from the right). */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Wind", meta = (ClampMin = "0", ClampMax = "360"))
     float WindFromDeg = 0.0f;
+
+    /**
+     * How the round penalises shots from the rough, sand and other lies. Empty plays the standard (the class default of
+     * UOpenGolfLieRules); courses can share one tuned asset or each have their own. Training never penalises a lie.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Lies")
+    TObjectPtr<const UOpenGolfLieRules> LieRules;
+
+    /** The rules the round plays: LieRules, or the standard. */
+    const UOpenGolfLieRules& GetLieRules() const;
 };

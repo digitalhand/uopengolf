@@ -7,7 +7,8 @@
 class UOpenLaunchMonitorSubsystem;
 
 /**
- * A compact club selector with a scrollable drawer beneath it.
+ * The toolbar's club selector: the club icon with the selected club's short label beside it ("7i"), and a scrollable drawer
+ * beneath it. The button is as wide as the widest label, so the toolbar never shifts when the club changes.
  */
 class SClubPicker : public SCompoundWidget
 {

@@ -65,8 +65,12 @@ same state:
   `GetAveragesRevision()` changes whenever a club's averages are stored or forgotten, so a
   widget can format its cells again only then. This load is not part of `IsBusy()` and does
   not change `GetHistoryRevision()`; a club's own shot history request goes first.
-- **Events.** `OnAccountStateChanged`, `OnProfileChanged`, `OnHistoryChanged` and
-  `OnStatusChanged` fire on the game thread for hosts that prefer them to polling.
+- **Player identity.** `GetDisplayName()` returns the profile's display name, else the login
+  service's name for the account, and is empty while signed out. `GetPicture()` is the account
+  picture as a 128 px UI texture, or null: while signed out, when the account has none, until it
+  downloads and when the download fails. See [Account picture](#account-picture).
+- **Events.** `OnAccountStateChanged`, `OnProfileChanged`, `OnHistoryChanged`,
+  `OnStatusChanged` and `OnPictureChanged` fire on the game thread for hosts that prefer them to polling.
 
 Logout writes a `signed-out` marker next to the local profile file. Until the next
 successful explicit sign-in, startup does not restore a saved session from the
@@ -84,7 +88,9 @@ names them for screen readers; no plugin widget shows a tooltip.
 - `EOpenGolfAccountPage::Account` (default): **Sign In** and **Create Account** while
   signed out, the profile (member since, display name) while signed in. It is laid out
   at its content height without a scroll box of its own, so a host can place it among
-  its own rows.
+  its own rows. `.ProfileAside(...)` takes a function that returns host content for the
+  rest of the profile's width, beside the name (UOpenGolf puts its avatar picker there). It
+  is called each time the panel rebuilds the profile, so it returns a new widget each time.
 - `EOpenGolfAccountPage::Shots`: club averages as a table (Club, Ball speed, Carry,
   Total, Shots), with clubs abbreviated (`7I` shows as **7i**), then one club's shot
   history; a sign-in hint while signed out. Ball speed and total fill in as each club's
@@ -125,6 +131,22 @@ bounds response sizes, and runs requests off the game thread. Completion callbac
 run on the game thread. The plugin's player API client deliberately targets
 `/api/v1/ogolf/me`; it is not an unrestricted HTTP client.
 
+### Account picture
+
+The `picture` claim from `/userinfo` names the account picture, on whatever host the login
+service chose (for example a gravatar address that redirects to Auth0's CDN). It is fetched
+separately from the API transport, with the engine's HTTP module. That fetch:
+
+- only uses an https address with no spaces or control characters, at most 2048 characters long;
+- sends no Authorization header and no cookies;
+- times out after 15 s and stops a reply past 1 MiB;
+- decodes PNG or JPEG only, at most 2048 px a side, and centre-crops it to a 128 px square.
+
+The picture is fetched once per address. A failed download is tried again at the next token
+refresh, and a reply for an earlier address or account is ignored. Sign out, a change of account
+and a changed address clear it. It is kept in memory only, never written to disk; the picture's
+host sees the player's IP address, as it would in a browser.
+
 Hosts produce completed shot JSON using the shared API contract and call
 `QueueShot` with the account key captured at launch. The plugin handles local
 persistence, retries, duplicate-safe uploads, club statistics and history. Keep
@@ -145,8 +167,8 @@ private device codes and complete login request URLs are not logged.
 ## Checks
 
 `OpenGolf.Online` covers callbacks, session/account behavior, display formatting
-(`Format`) and the panel heading (`PanelHeading`) using fake HTTP and isolated
-temporary storage. Its live probes are opt-in:
+(`Format`), the panel heading (`PanelHeading`) and the account picture (`Picture`) using
+fake HTTP and isolated temporary storage. Its live probes are opt-in:
 
 - `-OpenGolfOnlineLive`: starts an Auth0 device authorization request without
   completing a login or writing player data. Codes are excluded from the report.

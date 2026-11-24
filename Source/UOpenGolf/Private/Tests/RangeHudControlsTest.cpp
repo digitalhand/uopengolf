@@ -17,6 +17,7 @@
 #include "UOpenGolfRange.h"
 #include "OpenGolfTerrain.h"
 #include "OpenGolfSettings.h"
+#include "UI/Common/HudStyle.h"
 #include "UI/Common/HudToolTip.h"
 #include "UI/Hud/BallReadyGlow.h"
 #include "UI/Hud/ShotDisplay.h"
@@ -25,6 +26,7 @@
 #include "Widgets/SToolTip.h"
 #include "Engine/GameInstance.h"
 #include "OpenLaunchMonitorSubsystem.h"
+#include "OpenGolfOnlineSubsystem.h"
 #include "Widgets/Text/STextBlock.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
@@ -199,10 +201,13 @@ private:
             Test->TestFalse(TEXT("Training omits the course toggle"), RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("GameModeToggle")).IsValid());
             Test->TestFalse(TEXT("The recording icon has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Record")));
             {
+                // The club button also names the club, so it is wider than the icon buttons but as tall.
                 const FVector2D ClubSize = SizeOf(Window.ToSharedRef(), TEXT("ClubPicker"));
-                Test->TestTrue(TEXT("Toolbar buttons have equal sizes"),
-                    ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("PlaceBall")), 0.5)
-                    && ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("RecordToggle")), 0.5));
+                const FVector2D IconSize = SizeOf(Window.ToSharedRef(), TEXT("PlaceBall"));
+                Test->TestTrue(TEXT("Icon buttons have equal sizes"), IconSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("RecordToggle")), 0.5));
+                Test->TestEqual(TEXT("The club button is as tall as the icon buttons"), ClubSize.Y, IconSize.Y, 0.5);
+                Test->TestTrue(TEXT("The club button is wider for the club's name"), ClubSize.X > IconSize.X + 10);
+                ClubButtonSize = ClubSize;
             }
             Test->TestTrue(TEXT("The ball is at address"), Mode->IsBallAtAddress());
             Test->TestTrue(TEXT("The ball-ready glow shows at address"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
@@ -231,7 +236,16 @@ private:
                 *SizeOf(Window.ToSharedRef(), TEXT("ShotHeading")).ToString()), SizeOf(Window.ToSharedRef(), TEXT("ShotHeading")).Equals(HeadingSize, 0.5));
             Test->TestTrue(FString::Printf(TEXT("A club change keeps the tile size: %s, then %s"), *TileSize.ToString(),
                 *SizeOf(Window.ToSharedRef(), TEXT("ShotTile")).ToString()), SizeOf(Window.ToSharedRef(), TEXT("ShotTile")).Equals(TileSize, 0.5));
-            Test->TestFalse(TEXT("The closed club picker has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("8i")));
+            if (const TSharedPtr<SWidget> Name = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("ClubPickerName")))
+            {
+                const TSharedRef<STextBlock> Label = StaticCastSharedRef<STextBlock>(Name.ToSharedRef());
+                Test->TestEqual(TEXT("The closed club picker shows the selected club's short label"), Label->GetText().ToString(), FString(TEXT("8i")));
+                Test->TestEqual(TEXT("The club label matches the course tiles' number size"), Label->GetFont().Size, HudStyle::ValueFont().Size);
+            }
+            else
+                Test->AddError(TEXT("Missing the club picker's label"));
+            Test->TestTrue(FString::Printf(TEXT("A club change keeps the club button's size: %s, then %s"), *ClubButtonSize.ToString(),
+                *SizeOf(Window.ToSharedRef(), TEXT("ClubPicker")).ToString()), SizeOf(Window.ToSharedRef(), TEXT("ClubPicker")).Equals(ClubButtonSize, 0.5));
             return ClickThen(TEXT("ClubPicker"), 22);
         case 22:
             FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
@@ -464,6 +478,22 @@ private:
             Test->TestTrue(TEXT("The glow shows at address on the hole"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
             Test->TestFalse(TEXT("Still no record toggle on the hole"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
             {
+                // The player badge sits right after the club button in the toolbar, and only while signed in.
+                const UOpenGolfOnlineSubsystem* Account = Player->GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>();
+                Test->TestEqual(TEXT("The course shows the player badge only while signed in"), IsShown(Window.ToSharedRef(), TEXT("PlayerBadge")),
+                    Account && Account->HasSession());
+                int32 ClubSlot = INDEX_NONE, BadgeSlot = INDEX_NONE;
+                if (const TSharedPtr<SWidget> Toolbar = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("PlayToolbar")))
+                    for (int32 Index = 0; Index < Toolbar->GetChildren()->Num(); ++Index)
+                    {
+                        const FName Tag = Toolbar->GetChildren()->GetChildAt(Index)->GetTag();
+                        if (Tag == FName(TEXT("ClubPicker"))) ClubSlot = Index;
+                        if (Tag == FName(TEXT("PlayerBadge"))) BadgeSlot = Index;
+                    }
+                Test->TestTrue(FString::Printf(TEXT("The player badge follows the club button (slots %d, %d)"), ClubSlot, BadgeSlot),
+                    ClubSlot != INDEX_NONE && BadgeSlot == ClubSlot + 1);
+            }
+            {
                 const bool bWasRecording = Mode->IsRecordingShots();
                 Player->ToggleRecordShots();
                 Test->TestEqual(TEXT("F9 does not change recording on the hole"), Mode->IsRecordingShots(), bWasRecording);
@@ -620,6 +650,7 @@ private:
     TOptional<GolfSettings::FPreferences> SavedPreferences;
     FVector2D HeadingSize = FVector2D::ZeroVector;
     FVector2D TileSize = FVector2D::ZeroVector;
+    FVector2D ClubButtonSize = FVector2D::ZeroVector;
     ELaunchMonitorClub StartClub = ELaunchMonitorClub::Driver;
     TSharedPtr<SBallReadyGlow> ReadyGlow;
 };

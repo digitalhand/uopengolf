@@ -4,6 +4,7 @@
 #include "UI/Menu/MainMenu.h"
 #include "OpenGolfOnlineSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Texture2D.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 #include "Widgets/Input/SButton.h"
@@ -38,6 +39,16 @@ namespace PlayerSettingsTestDetail
         for (int32 I = 0; I < Children->Num(); ++I)
             if (auto Found = FindButton(Children->GetChildAt(I), Text)) return Found;
         return nullptr;
+    }
+    /** Whether Tag is under Root with every widget on the way visible. */
+    bool IsTagShown(const TSharedRef<SWidget>& Root, const FName Tag)
+    {
+        if (!Root->GetVisibility().IsVisible()) return false;
+        if (Root->GetTag() == Tag) return true;
+        FChildren* Children = Root->GetChildren();
+        for (int32 I = 0; I < Children->Num(); ++I)
+            if (IsTagShown(Children->GetChildAt(I), Tag)) return true;
+        return false;
     }
     TSharedPtr<SEditableText> FindEditableText(const TSharedRef<SWidget>& Root)
     {
@@ -109,6 +120,39 @@ bool FOpenGolfPlayerSettingsTest::RunTest(const FString&)
     TestFalse(TEXT("Label hidden without permission"), HasText(Menu, TEXT("admin")));
     Session->Permissions.Add(TEXT("ogolf:Admin")); Refresh();
     TestFalse(TEXT("Permission label requires exact match"), HasText(Menu, TEXT("admin")));
+    {
+        // The avatar picker fills the profile's right half. Apply is not clicked: it would write this computer's preferences.
+        auto Panel = FindTag(Menu, TEXT("PlayerAccountPanel"));
+        if (!TestTrue(TEXT("The profile holds the avatar picker"), Panel.IsValid() && FindTag(Panel.ToSharedRef(), TEXT("AvatarPicker")).IsValid()))
+            return false;
+        auto ShownName = [&]
+        {
+            auto Name = FindTag(Menu, TEXT("AvatarShownName"));
+            return Name.IsValid() ? StaticCastSharedPtr<STextBlock>(Name)->GetText().ToString() : FString();
+        };
+        auto Pick = [&](const TCHAR* Tag) { return Click(StaticCastSharedPtr<SButton>(FindTag(Menu, Tag))); };
+        TestTrue(TEXT("The picker offers at least 20 avatars"), IsTagShown(Menu, TEXT("Avatar.Birdie")) && IsTagShown(Menu, TEXT("Avatar.HoleInOne")));
+        TestFalse(TEXT("Without an account picture there is no Account tile"), IsTagShown(Menu, TEXT("Avatar.Account")));
+        TestEqual(TEXT("Without a pick or a picture the default avatar shows"), ShownName(), FString(TEXT("Golfer")));
+        if (!Pick(TEXT("Avatar.Birdie"))) return false;
+        TestEqual(TEXT("A pick shows at once"), ShownName(), FString(TEXT("Birdie")));
+        TestTrue(TEXT("A pick is an unsaved change"), HasText(Menu, TEXT("Unsaved changes")));
+        TestEqual(TEXT("Requests are not sent for an avatar"), Pending.Num(), 0);
+        if (!ClickText(TEXT("Discard"))) return false;
+        TestEqual(TEXT("Discard restores the avatar"), ShownName(), FString(TEXT("Golfer")));
+        TestTrue(TEXT("Discard leaves nothing unsaved"), HasText(Menu, TEXT("All changes saved")));
+        Session->Picture = UTexture2D::CreateTransient(4, 4);
+        Refresh();
+        TestTrue(TEXT("An account picture adds the Account tile"), IsTagShown(Menu, TEXT("Avatar.Account")));
+        TestEqual(TEXT("Without a pick the account picture shows"), ShownName(), FString(TEXT("Account picture")));
+        if (!Pick(TEXT("Avatar.WaterHazard"))) return false;
+        TestEqual(TEXT("A pick wins over the account picture"), ShownName(), FString(TEXT("Water Hazard")));
+        if (!Pick(TEXT("Avatar.Account"))) return false;
+        TestEqual(TEXT("The account picture can be picked again"), ShownName(), FString(TEXT("Account picture")));
+        if (!ClickText(TEXT("Discard"))) return false;
+        Session->Picture = nullptr;
+        Refresh();
+    }
     if (!Edit()) return false;
     TestFalse(TEXT("Pencil enables editing"), Field()->IsReadOnly());
     TypeName(TEXT("Draft Golfer")); Refresh();

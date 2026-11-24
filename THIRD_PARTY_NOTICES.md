@@ -1,10 +1,10 @@
 # Third-party notices
 
 The project bundles the MIT-licensed Project Nayuki QR encoder in
-[OpenGolfOnline](Plugins/OpenGolfOnline/NOTICE.md). No purchased content is bundled. The public range includes
-the following redistributable CC0 assets, with import dates recorded below. They retain CC0
-1.0 Universal rather than the project's MIT license; attribution is not required
-by CC0 and is recorded here for provenance.
+[OpenGolfOnline](Plugins/OpenGolfOnline/NOTICE.md). No purchased content is bundled. The public range and the
+built-in player avatars include the following redistributable assets, with import dates recorded below.
+The CC0 assets retain CC0 1.0 Universal rather than the project's MIT license; attribution is not
+required by CC0 and is recorded here for provenance. Other rows name their own licence and obligations.
 
 | Asset / author | Source and license | Imported location |
 | --- | --- | --- |
@@ -15,6 +15,7 @@ by CC0 and is recorded here for provenance.
 | Grass008 and Ground093C / ambientCG (2026-10-21) | [Grass008](https://ambientcg.com/view?id=Grass008), [Ground093C](https://ambientcg.com/view?id=Ground093C), [CC0 terms](https://docs.ambientcg.com/license/) | `Plugins/OpenGolfSavanna/Content/Textures/Surfaces/`; fairway, green and bunker candidates, [notice](Plugins/OpenGolfSavanna/NOTICE.md#surface-textures-ambientcg) |
 | Red Sand / Poly Haven and Rock029 / ambientCG (2026-10-21) | [Red Sand](https://polyhaven.com/a/red_sand), [Rock029](https://ambientcg.com/view?id=Rock029), CC0 ([Poly Haven](https://polyhaven.com/license), [ambientCG](https://docs.ambientcg.com/license/)) | `Plugins/OpenGolfSavanna/Content/Textures/Ground/{RedSand,Rock029}/`; desert ground, [notice](Plugins/OpenGolfSavanna/NOTICE.md#desert-ground-poly-haven-ambientcg) |
 | "Realistic Nature Essentials" / CG Geek, made with Graswald (2026-10-21) | [Product page](https://superhivemarket.com/products/nature-essentials-asset-pack), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (attribution required; not covered by the MIT licence) | `Plugins/OpenGolfSavanna/Content/{Meshes,Materials,Textures}/NatureEssentials/`; understory grass, moss, rocks, seedlings and leaf litter, [credit, licence text and changes](Plugins/OpenGolfSavanna/NOTICE.md#understory-nature-essentials-cc-by-40) |
+| Fluent Emoji (3D) / Microsoft (2026-11-24) | [Source at `1ffb34c`](https://github.com/microsoft/fluentui-emoji/tree/1ffb34c752ecf5d402f04cfb4b392c77f57c54bc), MIT (licence text must accompany copies) | `Plugins/OpenGolfSavanna/Content/UI/Avatars/T_Avatar_*.uasset`; 24 built-in player avatars, [notice](Plugins/OpenGolfSavanna/NOTICE.md#player-avatars-fluent-emoji-mit), [full licence](Plugins/OpenGolfSavanna/LICENSES/MIT-fluentui-emoji.txt) |
 | Golf Set flagstick / mess110 (historical) | [Source, CC0](https://opengameart.org/content/golf-set) | Earlier `SM_Flagstick.uasset`; replaced by original dimensioned geometry on 2026-10-15 |
 
 The [CC0 1.0 legal text](https://creativecommons.org/publicdomain/zero/1.0/legalcode)

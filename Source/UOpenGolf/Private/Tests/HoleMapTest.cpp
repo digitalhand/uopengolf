@@ -9,6 +9,9 @@
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "OpenFairwayBall.h"
+#include "OpenLaunchMonitorSubsystem.h"
+#include "Tests/BundledCourse.h"
+#include "Tests/LieSearch.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfRange.h"
@@ -38,17 +41,21 @@ bool FHoleMapFrameTest::RunTest(const FString&)
 
 namespace HoleMapTestDetail
 {
-    /** The lie the hole map's header shows, or empty when the header is missing. */
-    FString HeaderLie(const TSharedRef<SWindow>& Window)
+    /** The text of the header's block tagged Tag, or empty when it is missing. */
+    FString HeaderText(const TSharedRef<SWindow>& Window, FName Tag)
     {
-        const TSharedPtr<SWidget> Lie = RenderedPlay::WithTag(Window, TEXT("HoleMapLie"));
-        return Lie ? StaticCastSharedPtr<STextBlock>(Lie)->GetText().ToString() : FString();
+        const TSharedPtr<SWidget> Text = RenderedPlay::WithTag(Window, Tag);
+        return Text ? StaticCastSharedPtr<STextBlock>(Text)->GetText().ToString() : FString();
     }
+
+    /** The lie the hole map's header shows, or empty when the header is missing. */
+    FString HeaderLie(const TSharedRef<SWindow>& Window) { return HeaderText(Window, TEXT("HoleMapLie")); }
 } // namespace HoleMapTestDetail
 
 namespace
 {
     using HoleMapTestDetail::HeaderLie;
+    using HoleMapTestDetail::HeaderText;
 
     /** Clicks on the HUD's hole map: aiming at address, nothing during placement or flight, right clicks to the game. */
     class FClickHoleMap : public IAutomationLatentCommand
@@ -96,6 +103,9 @@ namespace
                 Test.TestTrue(TEXT("The hole map samples the ground's height"), Range->GetHoleMapHeights().IsValid());
                 Test.TestTrue(TEXT("The hole map has its header and elevation footer"), RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("HoleMapHeader")).IsValid()
                     && RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("HoleMapFooter")).IsValid());
+                // The hole and par are in the course heading; the header keeps the lie and its penalties.
+                Test.TestTrue(TEXT("The header shows the lie's speed and spin penalties"),
+                    RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("HoleMapLieCut")).IsValid() && RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("HoleMapSpinCut")).IsValid());
                 Click();
                 Test.TestTrue(TEXT("Click turns range aim right"), Player->GetAimYaw() > 5);
                 const FVector Lie = Mode->GetRange()->GetTeeLocation() + FVector(6500, 1000, 0);
@@ -149,6 +159,8 @@ namespace
                 RenderedPlay::SaveWindowPng(Test, Window.ToSharedRef(), TEXT("Minimap-address.png"));
                 AddressLie = HeaderLie(Window.ToSharedRef());
                 Test.TestFalse(TEXT("The header names the lie at address"), AddressLie.IsEmpty());
+                Test.TestTrue(TEXT("A Training lie shows no penalty"), HeaderText(Window.ToSharedRef(), TEXT("HoleMapLieCut")).IsEmpty()
+                    && HeaderText(Window.ToSharedRef(), TEXT("HoleMapSpinCut")).IsEmpty());
                 FOpenGolfPermissionTestAccess::Set(World);
                 Player->InjectReplayShot();
                 const float MovingYaw = Player->GetAimYaw();
@@ -158,7 +170,7 @@ namespace
                 ++Stage;
                 return false;
             }
-            default:
+            case 3:
                 // The header has ticked at least once since the launch: in the air it keeps the lie the ball was hit from.
                 if (!bCheckedFlightLie && Mode->GetBall()->GetBallState() == EOpenFairwayBallState::Flight)
                 {
@@ -173,6 +185,42 @@ namespace
                 Test.TestTrue(TEXT("New lie after rollout"), FVector::Dist2D(Mode->GetBall()->GetActorLocation(), ShotOrigin) > 100);
                 RenderedPlay::SaveWindowPng(Test, Window.ToSharedRef(), TEXT("Minimap-landed.png"));
                 Player->ResetBallToTee();
+                ++Stage;
+                return false;
+            case 4:
+            {
+                // A course round, as Courses › Play starts one but without level travel, with the ball in the rough.
+                const UGolfCourseDefinition* Course = BundledCourse::Load();
+                if (!Test.TestNotNull(TEXT("The bundled course loads"), Course))
+                    return true;
+                if (Mode->GetBall()->IsMoving())
+                    Mode->GetBall()->PlaceAt(Mode->GetBall()->GetActorLocation());
+                PlayersClub = World->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>()->GetClub();
+                Mode->SetPlayMode(EOpenGolfPlayMode::Hole, Course);
+                FVector Rough;
+                if (!Test.TestTrue(TEXT("The hole has rough"), LieSearch::FindApproachRough(*Mode, Rough)))
+                    return true;
+                Mode->GetBall()->PlaceAt(Rough);
+                CaptureAt = GetCurrentRunTime() + 1;
+                ++Stage;
+                return false;
+            }
+            case 5:
+            {
+                if (GetCurrentRunTime() < CaptureAt)
+                    return Wait(TEXT("the course header to update"));
+                // The hole and par are in the course heading; the header is the lie and what it takes off the shot.
+                const FOpenGolfLieCut Cut = Mode->GetLieCut();
+                Test.TestFalse(TEXT("The rough is penalised in a course round"), Cut.IsNone());
+                Test.TestEqual(TEXT("The header names the rough"), HeaderLie(Window.ToSharedRef()), FString(TEXT("Rough")));
+                Test.TestEqual(TEXT("The speed penalty is beside the lie"), HeaderText(Window.ToSharedRef(), TEXT("HoleMapLieCut")), OpenGolfPlay::LieCutLabel(Cut));
+                Test.TestEqual(TEXT("The spin penalty is on the right"), HeaderText(Window.ToSharedRef(), TEXT("HoleMapSpinCut")), OpenGolfPlay::SpinCutLabel(Cut));
+                RenderedPlay::SaveWindowPng(Test, Window.ToSharedRef(), TEXT("Minimap-course-rough.png"));
+                Mode->SetPlayMode(EOpenGolfPlayMode::Range);
+                World->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>()->SetClub(PlayersClub);
+                return true;
+            }
+            default:
                 return true;
             }
         }
@@ -186,6 +234,7 @@ namespace
         FVector ShotOrigin;
         FString AddressLie;
         bool bCheckedFlightLie = false;
+        ELaunchMonitorClub PlayersClub = ELaunchMonitorClub::Driver;
     };
 } // namespace
 

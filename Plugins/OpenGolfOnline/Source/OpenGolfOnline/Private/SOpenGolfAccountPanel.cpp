@@ -23,6 +23,8 @@ using namespace OpenGolfOnline;
 namespace OpenGolfAccountPanelDetail
 {
     constexpr float NameFieldWidth = 320, SectionPadding = 12, SectionGap = 8, ButtonGap = 8;
+    /** Between the profile's name column and the host's ProfileAside content. */
+    constexpr float ProfileAsideGap = 32;
     /** The Account page keeps this height signed out, loading and signed in, so the host's rows below do not jump. */
     constexpr float AccountMinHeight = 170;
     constexpr float ClubColumn = 80, SpeedColumn = 150, CarryColumn = 130, TotalColumn = 130, ShotsColumn = 120;
@@ -149,7 +151,7 @@ TSharedRef<SVerticalBox> SOpenGolfAccountPanel::AddSection(const TSharedRef<SVer
 }
 void SOpenGolfAccountPanel::Construct(const FArguments& Args)
 {
-    Online=Args._Online;Style=Args._Style;bShowHeading=Args._ShowHeading;PageType=Args._Page;
+    Online=Args._Online;Style=Args._Style;bShowHeading=Args._ShowHeading;PageType=Args._Page;ProfileAside=Args._ProfileAside;
     ClubRowStyle = Style.Button;
     ClubRowStyle.SetNormal(FSlateNoResource());
     DisplayNameDraft=Args._DisplayNameDraft.IsValid()?Args._DisplayNameDraft:MakeShared<FOpenGolfDisplayNameDraft>();
@@ -298,7 +300,13 @@ void SOpenGolfAccountPanel::BuildSignedOut(const TSharedRef<SVerticalBox>& Page,
 void SOpenGolfAccountPanel::BuildProfile(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
 {
     auto* S=&Service;
-    auto Profile=AddSection(Page,TEXT("PROFILE"));
+    auto Section=AddSection(Page,TEXT("PROFILE"));
+    // The name and membership on the left; host content, such as an avatar picker, fills the rest of the width.
+    auto Profile=SNew(SVerticalBox);
+    Section->AddSlot().AutoHeight()[SNew(SHorizontalBox)
+        +SHorizontalBox::Slot().AutoWidth()[Profile]
+        +SHorizontalBox::Slot().FillWidth(1).Padding(ProfileAsideGap,0,0,0)
+            [ProfileAside?ProfileAside():SNullWidget::NullWidget]];
     Profile->AddSlot().AutoHeight()[SNew(STextBlock).Font(Style.GetFont(Style.BodySize)).ColorAndOpacity(Style.TextColor)
         .Text_Lambda([S]{return FText::FromString(TEXT("Member since ")+ShotDate(OpenGolfOnline::Text(S->GetProfile(),TEXT("created_at"))));})];
     Profile->AddSlot().AutoHeight().Padding(0,6,0,0)[SNew(STextBlock).Tag(TEXT("AccountAdmin"))
