@@ -16,7 +16,7 @@ bool FOpenGolfFormatTest::RunTest(const FString&)
     TestEqual(TEXT("Spoken wedge name"),ClubName(TEXT("PW")),FString(TEXT("Pitching wedge")));
 
     const FDateTime Utc(2026, 11, 11);
-    const FString LocalTime = FText::AsDateTime(Utc, EDateTimeStyle::Medium, EDateTimeStyle::Short).ToString();
+    const FString LocalTime = FText::AsDateTime(Utc, TEXT("%b%e")).ToString() + TEXT(" ") + FText::AsDateTime(Utc, TEXT("%H%M")).ToString();
     TestEqual(TEXT("UTC timestamp displays locally"), ShotTime(TEXT("2026-11-11T00:00:00Z")), LocalTime);
     TestEqual(TEXT("ISO offset represents the same instant"), ShotTime(TEXT("2026-11-10T16:00:00-08:00")), LocalTime);
     TestEqual(TEXT("Unparseable time is shown as sent"), ShotTime(TEXT("not a time")), FString(TEXT("not a time")));

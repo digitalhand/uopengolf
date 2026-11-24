@@ -37,9 +37,10 @@ void SClubPicker::Construct(const FArguments& Args)
     ToggleStyle = HudStyle::ToolbarButton();
     const auto Current = [this] { return Monitor.IsValid() ? Monitor->GetClub() : ELaunchMonitorClub::Driver; };
 
-    const auto Tip = [Current]
+    // Screen readers also hear the current club; the tooltip names the button only.
+    const auto AccessibleName = [Current]
     {
-        return FText::Format(FText::FromString(TEXT("Select club ({0})")), UOpenLaunchMonitorSubsystem::GetClubDisplayName(Current()));
+        return FText::Format(FText::FromString(TEXT("Change club ({0})")), UOpenLaunchMonitorSubsystem::GetClubDisplayName(Current()));
     };
 
     const TSharedRef<SScrollBox> Clubs = SNew(SScrollBox)
@@ -83,7 +84,7 @@ void SClubPicker::Construct(const FArguments& Args)
         SAssignNew(Picker, SComboButton).ComboButtonStyle(&ComboStyle).ButtonStyle(&ToggleStyle).HasDownArrow(false)
         .ContentPadding(FMargin(0)).HAlign(HAlign_Center).VAlign(VAlign_Center)
         // No tooltip over the open drawer. A tooltip with its own content is never empty, so it is withheld instead.
-        .ToolTip_Lambda([this, ToolTip = TSharedPtr<IToolTip>(HudToolTip::Make(TAttribute<FText>::CreateLambda(Tip)))]
+        .ToolTip_Lambda([this, ToolTip = TSharedPtr<IToolTip>(HudToolTip::Make(NSLOCTEXT("ClubPicker", "ChangeClub", "Change Club")))]
         {
             return Picker.IsValid() && Picker->IsOpen() ? TSharedPtr<IToolTip>() : ToolTip;
         })
@@ -98,7 +99,7 @@ void SClubPicker::Construct(const FArguments& Args)
                 DrawerSlide.Play(Clubs);
         })
 #if WITH_ACCESSIBILITY
-        .AccessibleText_Lambda(Tip)
+        .AccessibleText_Lambda(AccessibleName)
 #endif
         .ButtonContent()
         [

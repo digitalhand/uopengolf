@@ -22,9 +22,12 @@ struct OPENGOLFCOURSE_API FOpenGolfHoleRound
     /** Called after counting the stopped shot; adds one conceded putt at most once. */
     bool TryConcede(float DistanceM, float RadiusFeet, bool bOnGreen);
 
-
     /** "Par", "Birdie", "+3" and so on for a finished hole; empty before the hole ends and always for practice. */
     FString ResultName() const;
+
+    /** Strokes against par as a scorecard writes it: "E" for level, otherwise signed, such as "+2" or "-1". */
+    FString ScoreToPar() const { return ScoreToPar(Strokes, Par); }
+    static FString ScoreToPar(int32 Strokes, int32 Par);
 
     /** The name for Strokes against Par: "Hole in one", "Albatross", "Eagle", "Birdie", "Par", "Bogey", ... */
     static FString ScoreName(int32 Strokes, int32 Par);

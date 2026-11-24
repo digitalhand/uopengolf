@@ -1,43 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Common/HudStatusGlyph.h"
 
-#include "Rendering/DrawElements.h"
-
-namespace HudStatusGlyphDetail
-{
-    constexpr float Stroke = 1.5f;
-
-    /** Draws a tinted polyline in the glyph's local units. */
-    struct FPen
-    {
-        const FGeometry& Geometry;
-        FSlateWindowElementList& Elements;
-        int32 Layer;
-        FLinearColor Tint;
-
-        void Line(const TArray<FVector2f>& Points) const
-        {
-            FSlateDrawElement::MakeLines(Elements, Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Tint, true, Stroke);
-        }
-        /** Part of a circle, from one angle to another in degrees (0 points right, clockwise on screen). */
-        void Arc(FVector2f Center, float Radius, float FromDeg, float ToDeg) const
-        {
-            TArray<FVector2f> Points;
-            constexpr int32 Steps = 16;
-            for (int32 Step = 0; Step <= Steps; ++Step)
-            {
-                const float Angle = FMath::DegreesToRadians(FMath::Lerp(FromDeg, ToDeg, float(Step) / Steps));
-                Points.Add(Center + FVector2f(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
-            }
-            Line(Points);
-        }
-        void Box(const FSlateBrush& Brush, float X, float Y, float W, float H) const
-        {
-            FSlateDrawElement::MakeBox(Elements, Layer, Geometry.ToPaintGeometry(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))), &Brush,
-                ESlateDrawEffect::None, Tint);
-        }
-    };
-} // namespace HudStatusGlyphDetail
+#include "UI/Common/HudPen.h"
 
 void SHudStatusGlyph::Construct(const FArguments& Args)
 {
@@ -63,7 +27,7 @@ int32 SHudStatusGlyph::OnPaint(const FPaintArgs&, const FGeometry& Geometry, con
 void SHudStatusGlyph::Paint(EKind Kind, const FGeometry& Geometry, FSlateWindowElementList& Elements, int32 Layer,
     const FLinearColor& Tint, bool bFilled)
 {
-    const HudStatusGlyphDetail::FPen Pen{Geometry, Elements, Layer, Tint};
+    const FHudPen Pen{Geometry, Elements, Layer, Tint};
     switch (Kind)
     {
     case EKind::Settings:
@@ -93,6 +57,24 @@ void SHudStatusGlyph::Paint(EKind Kind, const FGeometry& Geometry, FSlateWindowE
     case EKind::Flag:
         Pen.Line({{5, 13.5f}, {5, 2}, {13, 5}, {5, 8}});
         Pen.Line({{2, 14}, {9, 14}});
+        break;
+    case EKind::Tee:
+        Pen.Arc({8, 5}, 3.5f, 0, 360);
+        Pen.Line({{4, 10}, {8, 12}, {12, 10}});
+        Pen.Line({{8, 12}, {8, 15}});
+        break;
+    case EKind::Close:
+        Pen.Line({{3, 3}, {13, 13}});
+        Pen.Line({{13, 3}, {3, 13}});
+        break;
+    case EKind::Games:
+        Pen.Arc({8, 8}, 6.5f, 0, 360);
+        Pen.Arc({8, 8}, 3.f, 0, 360);
+        break;
+    case EKind::Exit:
+        Pen.Line({{7, 2}, {2, 2}, {2, 14}, {7, 14}});
+        Pen.Line({{6, 8}, {14, 8}, {10, 4}});
+        Pen.Line({{14, 8}, {10, 12}});
         break;
     case EKind::Ball:
         Pen.Arc({8, 8}, 5.5f, 0, 360);

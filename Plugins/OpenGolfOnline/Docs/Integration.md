@@ -57,6 +57,14 @@ same state:
   `SignedOut`, `SigningIn`, `LoadingProfile`, `Ready`, `Reconnecting` or `SigningOut`.
 - **Change counters.** `GetRevision()` changes with any state change.
   `GetHistoryRevision()` changes only when club averages or shot history change.
+- **Ball speed and total.** The API's club averages carry only `avg_carry_yd`. After each
+  `LoadCarry()` the service fetches the shot history of every listed club whose shot count
+  changed, one club at a time, and averages it: `FindClubAverages(Club)` returns
+  `BallSpeedMph` and `TotalYd` (carry plus signed roll) over the club's newest 200 shots,
+  or null until loaded. `IsLoadingClubAverages()` is true while some are pending, and
+  `GetAveragesRevision()` changes whenever a club's averages are stored or forgotten, so a
+  widget can format its cells again only then. This load is not part of `IsBusy()` and does
+  not change `GetHistoryRevision()`; a club's own shot history request goes first.
 - **Events.** `OnAccountStateChanged`, `OnProfileChanged`, `OnHistoryChanged` and
   `OnStatusChanged` fire on the game thread for hosts that prefer them to polling.
 
@@ -77,8 +85,10 @@ names them for screen readers; no plugin widget shows a tooltip.
   signed out, the profile (member since, display name) while signed in. It is laid out
   at its content height without a scroll box of its own, so a host can place it among
   its own rows.
-- `EOpenGolfAccountPage::Shots`: club averages, with clubs abbreviated (`7I` shows
-  as **7i**), then one club's shot history; a sign-in hint while signed out.
+- `EOpenGolfAccountPage::Shots`: club averages as a table (Club, Ball speed, Carry,
+  Total, Shots), with clubs abbreviated (`7I` shows as **7i**), then one club's shot
+  history; a sign-in hint while signed out. Ball speed and total fill in as each club's
+  averages arrive (`…` while loading, `—` when no shot measured them).
 
 `SOpenGolfQrSignIn` is the QR code on its own: a square (`.Size(...)`, 200 by default),
 **Sign-In** under it, then the short code. Place it anywhere:

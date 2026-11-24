@@ -58,6 +58,7 @@ void SWindControl::Construct(const FArguments& Args)
                     [
                         // Over the indicator: an outline while hovered or open, and the click that opens the panel.
                         SAssignNew(ClickArea, SButton).ButtonStyle(FCoreStyle::Get(),"NoBorder").ContentPadding(0).Tag(TEXT("WindToggle"))
+                        .Visibility_Lambda([this]{return Controller.IsValid() && !Controller->IsCourseRound() ? EVisibility::Visible : EVisibility::Collapsed;})
 #if WITH_ACCESSIBILITY
                         .AccessibleText(FText::FromString(TEXT("Wind settings")))
 #endif

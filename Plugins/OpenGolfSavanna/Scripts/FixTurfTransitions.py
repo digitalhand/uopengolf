@@ -28,13 +28,14 @@ import ApplyCourseGrass as course
 import BuildCutTurf as turf
 import ApplyCutTurf as apply_turf
 import turf_field as field
+import turf_palette as palette
 import turf_shading as shading
 import savanna_assets as s
 
 MATERIALS = ['/OpenGolfSavanna/Materials/M_CutTurfSurface', '/OpenGolfSavanna/Materials/CutTurf/M_CutTurfBlades',
              '/OpenGolfSavanna/Materials/CutTurf/M_CutTurfRough', field.FIELD_PATH]
 INSTANCES = ['/OpenGolfSavanna/Materials/CutTurf/MI_Turf' + f for f in
-             ('Fairway', 'FirstCut', 'Collar', 'Green', 'Rough', 'FairwayBlades', 'FirstCutBlades', 'CollarBlades')]
+             ('Fairway', 'Collar', 'Green', 'Rough', 'FairwayBlades', 'CollarBlades', 'RoughBlades')]
 
 
 def backup():
@@ -61,7 +62,9 @@ def statistics(folder):
 
 
 def fix():
-    global turf, apply_turf, field, shading
+    global turf, apply_turf, field, shading, palette
+    # The palette first: the field, shading and rough-ground builders read its colours when they run.
+    palette = importlib.reload(palette)
     field = importlib.reload(field)
     shading = importlib.reload(shading)
     turf = importlib.reload(turf)
@@ -81,9 +84,8 @@ def fix():
             turf.a.output(parent, field.surface_normal(parent, 'Fairway', 'TurfNormal'), ue.MaterialProperty.MP_NORMAL)
             turf.a.finish_material(parent)
             turf.blade_material()
-            width = turf.first_cut_width()
-            apply_turf.rough_material(area.definition.default_surface.material, width)
-            shading.configure_all(area, turf.SOURCE, width)
+            apply_turf.rough_material(area.definition.default_surface.material)
+            shading.configure_all(area, turf.SOURCE)
             for family in shading.GROUND_FAMILIES:
                 instance = ue.load_asset(shading.MATERIALS + 'MI_Turf' + family)
                 strength = .18 if family == 'Green' else .55

@@ -28,10 +28,13 @@ AUOpenGolfBall::AUOpenGolfBall()
         Trail->SetGenerateOverlapEvents(false);
         Trail->SetCanEverAffectNavigation(false);
         Trail->CastShadow = false;
+        // The hole map (a scene capture) shows the course; the minimap draws the ball itself.
+        Trail->SetHiddenInSceneCapture(true);
         Trail->SetMaterial(0, Material.Object);
         Ribbons[I].Mesh = Trail;
     }
     // Import normalizes the mesh to 100 cm diameter, matching the base actor's scale.
+    BallMesh->SetHiddenInSceneCapture(true);
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Mesh(OpenGolfCourse::GolfBallMeshPath);
     if (Mesh.Succeeded())
     {

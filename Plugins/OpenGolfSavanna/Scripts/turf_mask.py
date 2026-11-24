@@ -14,7 +14,8 @@ import struct
 
 import numpy as np
 
-# Channel order and range in metres. Fairway reaches across the first-cut band.
+# Channel order and range in metres. Fairway's 2.5 m once reached across the first-cut band (removed 2026-11-23);
+# it is kept so the baked field stays valid.
 CHANNELS = (('FAIRWAY', 2.5), ('GREEN', 1.5), ('FRINGE', 1.5), ('SAND', 1.5))
 # Later surfaces are drawn over earlier ones, matching the terrain's last-region-wins rule.
 LAYER_ORDER = ('ROUGH', 'FAIRWAY', 'FRINGE', 'GREEN', 'SAND')

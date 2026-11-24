@@ -12,6 +12,11 @@
 #include "SOpenGolfAccountPanel.h"
 #include "SOpenGolfQrSignIn.h"
 #include "UOpenGolfPlayerController.h"
+#include "UOpenGolfGameMode.h"
+#include "GolfCourseDefinition.h"
+#include "Play/OpenGolfWindSetting.h"
+#include "UI/Wind/WindDisplay.h"
+#include "Engine/World.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
@@ -28,6 +33,19 @@
 using namespace MainMenuDetail;
 namespace
 {
+    /** The course a round is playing; null in Training. */
+    const UGolfCourseDefinition* PlayedCourse(const AUOpenGolfPlayerController* Controller)
+    {
+        const UWorld* World = Controller ? Controller->GetWorld() : nullptr;
+        const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
+        return Mode ? Mode->GetCourse() : nullptr;
+    }
+    /** A course's fixed wind as the wind controls name it, such as "3 MPH · Right to left". */
+    FString CourseWindLabel(const UGolfCourseDefinition& Course)
+    {
+        return WindDisplay::FromSettings(Course.WindMph, Course.WindFromDeg, 0.0f).SpeedLabel() + TEXT(" · ")
+            + OpenGolfPlay::WindDirectionLabel(Course.WindFromDeg);
+    }
     const TCHAR* ConnectionSaveError=TEXT("Could not save the launch monitor choice. Check storage and retry.");
 }
 bool SMainMenu::Matches(const FString& Label,const FString& Help) const
@@ -83,6 +101,8 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
         using P=GolfSettings::FPreferences;
         switch(C)
         {
+        case 8:
+            BuildEnvironment(Rows);break;
         case 0:
             BuildPlayer(Rows);break;
         case 2:
@@ -139,7 +159,11 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
         case 6:
             AddPreference(Rows,TEXT("Gimmie radius"),TEXT("New scored holes: on the green, inside the ring adds one conceded putt."),&P::GimmieFeet,{TEXT("Off"),TEXT("3 ft"),TEXT("5 ft"),TEXT("8 ft"),TEXT("10 ft")},{0,3,5,8,10});
             AddPreference(Rows,TEXT("Stimp"),TEXT("New sessions and holes. Higher stimp means faster greens."),&P::Stimp,{TEXT("8 ft"),TEXT("9 ft"),TEXT("10 ft"),TEXT("11 ft"),TEXT("12 ft"),TEXT("13 ft"),TEXT("14 ft"),TEXT("15 ft")},{8,9,10,11,12,13,14,15});
-            AddPreference(Rows,TEXT("Wind"),TEXT("Starting speed for a new session or hole; direction comes from the course."),&P::WindMph,{TEXT("Course default"),TEXT("Calm"),TEXT("Light (5 mph)"),TEXT("Moderate (10 mph)"),TEXT("Strong (20 mph)")},{-1,0,5,10,20});
+            if (const UGolfCourseDefinition* Course = PlayedCourse(Controller.Get()))
+                AddChoice(Rows,TEXT("Wind"),TEXT("Course wind is fixed for the round."),{CourseWindLabel(*Course)},{0},
+                    []{return 0;},[](int32){},false);
+            else
+                AddPreference(Rows,TEXT("Wind"),TEXT("Starting wind speed for Training."),&P::WindMph,{TEXT("Course default"),TEXT("Calm"),TEXT("Light (5 mph)"),TEXT("Moderate (10 mph)"),TEXT("Strong (20 mph)")},{-1,0,5,10,20});
             for(const TCHAR* Label:{TEXT("Mulligans"),TEXT("Fairway firmness"),TEXT("Time of day")})Disabled(Rows,Label,TEXT("This gameplay setting is not implemented yet."));break;
         case 7:
             BuildUpdates(Rows);

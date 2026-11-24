@@ -52,6 +52,8 @@ SURFACES = {
     ue.OpenFairwaySurface.GREEN: "/OpenGolfSavanna/Terrain/DA_GreenGrass008",
     ue.OpenFairwaySurface.SAND: "/OpenGolfSavanna/Terrain/DA_BunkerGround093C",
 }
+COURSE = "/Game/UOpenGolf/Terrain/Savanna"
+ROUGH_MASK = "T_SavannaRoughMask"
 ROUGH_SOURCE = "/OpenGolfCourse/Terrain/Presets/DA_CoastalRough"
 COURSE_GRASS = ["/OpenGolfSavanna/Terrain/DA_RoughGrassDense"]
 BOUNDARY_GRASS = "/OpenGolfSavanna/Terrain/DA_BoundaryGrass"
@@ -102,7 +104,7 @@ def set_surfaces(definition):
 
 def set_ground(definition, course, mount):
     folder = relative(course, mount)
-    mask, minimum, maximum = ground.course_mask(definition, f"{folder}/Materials", "T_SavannaRoughMask")
+    mask, minimum, maximum = ground.course_mask(definition, f"{folder}/Materials", ROUGH_MASK)
     instances = []
     for name, native in (("MI_SavannaRough", 0), ("MI_SavannaNative", 1)):
         instance = s.a.material_instance(f"{folder}/Materials", name, s.required("/OpenGolfSavanna/Materials/M_SavannaGround"))
@@ -116,6 +118,46 @@ def set_ground(definition, course, mount):
     s.a.save(rough)
     definition.set_editor_property("default_surface", rough)
     return instances
+
+
+def check_mask_bounds(definition, course=COURSE):
+    """Every material instance sampling the course's rough mask must map it over the definition's detail bounds, which a
+    re-baked mask covers; otherwise the new mask would land in the wrong place. Changes nothing."""
+    minimum = definition.get_editor_property("detail_minimum_m")
+    maximum = definition.get_editor_property("detail_maximum_m")
+    expected = (minimum.x, minimum.y, maximum.x - minimum.x, maximum.y - minimum.y)
+    path = f"{course}/Materials/{ROUGH_MASK}"
+    if not LIB.does_asset_exist(path):
+        raise RuntimeError(f"{path} does not exist; build the course with BuildSavannaRange.py first")
+    wrong = []
+    for package in LIB.find_package_referencers_for_asset(path, load_assets_to_confirm=True):
+        instance = LIB.load_asset(str(package))
+        if not isinstance(instance, ue.MaterialInstanceConstant):
+            continue
+        bounds = ue.MaterialEditingLibrary.get_material_instance_vector_parameter_value(instance, "MaskBounds")
+        if any(abs(have - want) > 0.01 for have, want in zip((bounds.r, bounds.g, bounds.b, bounds.a), expected)):
+            wrong.append(f"{instance.get_path_name()} {bounds.r},{bounds.g},{bounds.b},{bounds.a}")
+    if wrong:
+        raise RuntimeError(f"Mask bounds differ from the detail bounds {expected}; nothing was changed: {'; '.join(wrong)}")
+
+
+def refresh_rough_mask(definition, course=COURSE):
+    """Re-bake the course's rough mask in place from the definition's current outlines, then check that every play
+    outline is solid rough. The instances keep their bounds. Returns the number of outline points checked."""
+    check_mask_bounds(definition, course)
+    mount, content = content_dir(course)
+    folder = f"{relative(course, mount)}/Materials"
+    with s.course_helpers(mount, content, OWNER) as helpers:
+        # Refuse before course_mask overwrites the source, so a refused import leaves source and texture matching.
+        helpers.check_owned(helpers.asset_path(folder, ROUGH_MASK))
+        _, minimum, maximum = ground.course_mask(definition, folder, ROUGH_MASK)
+    outlines = ground.play_outlines(definition)
+    uncovered = layout.mask_shortfall(ground.mask_values(ROUGH_MASK), outlines, (minimum.x, minimum.y),
+                                      (maximum.x, maximum.y), *ground.MASK_SIZE)
+    if uncovered:
+        raise RuntimeError(f"The rebuilt rough mask leaves {len(uncovered)} play outline points uncovered, "
+                           f"first at {uncovered[0]}")
+    return sum(len(outline) for outline in outlines)
 
 
 def set_trees(definition, course, mount):
@@ -181,7 +223,7 @@ def counts(area):
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--map", default=vegetation.MAP)
-    parser.add_argument("--course", default="/Game/UOpenGolf/Terrain/Savanna")
+    parser.add_argument("--course", default=COURSE)
     parser.add_argument("--generated", default=vegetation.GENERATED)
     args = parser.parse_args(argv)
     editor = ue.get_editor_subsystem(ue.UnrealEditorSubsystem)

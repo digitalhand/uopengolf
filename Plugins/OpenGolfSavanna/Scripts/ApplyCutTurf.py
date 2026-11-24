@@ -2,7 +2,10 @@
 """Apply cut turf to the open public range, preserving terrain and physical surfaces.
 
 First export the course outlines with --export-mask, bake them with turf_mask.py into
-T_CourseSurfaceField.tga, then run this script without arguments. BuildCutTurf.py must have completed. --width sets the visual fairway band in metres.
+T_CourseSurfaceField.tga, then run this script without arguments. BuildCutTurf.py must have completed.
+The rough band is the 50 mm cut-turf rough, which meets the fairway with no first cut or edge strip; only the green has
+a fringe. To switch an already applied range from the Poly Haven tall rough, use ApplyCutTurfRough.py instead; to
+remove the first cut from a range that has one, use RemoveFirstCut.py.
 """
 import argparse
 import json
@@ -20,11 +23,11 @@ import BuildCutTurf as turf
 import course_assets as a
 import savanna_assets as s
 import turf_field as field
+import turf_palette as palette
 import turf_shading as shading
 
 MAP = '/Game/UOpenGolf/Maps/UOpenGolf'
 GENERATED = '/Game/UOpenGolf/Terrain/Savanna/CutTurf'
-RAMP_STRIP = '/OpenGolfSavanna/Meshes/Grass/Medium/SM_GrassMedium_30cm_EdgeRamp_'
 FIELD_SOURCE = turf.SOURCE / 'T_CourseSurfaceField.tga'
 FIELD_SPEC = turf.SOURCE / 'course-field.json'
 
@@ -38,7 +41,7 @@ def mask_spec(definition):
     regions = [{'surface':enum_name(r.surface.surface),'outline':[[p.x,p.y] for p in r.outline_m]}
                for r in definition.regions]
     if not any(r['surface']=='FAIRWAY' for r in regions):
-        raise RuntimeError('The course needs a fairway outline for its first cut')
+        raise RuntimeError('The course needs a fairway outline for the turf field')
     return {'default_surface':enum_name(definition.default_surface.surface),'regions':regions}
 
 
@@ -74,11 +77,13 @@ def import_field(definition):
     return a.save(texture)
 
 
-def rough_material(source, width):
-    """Savanna rough beyond the first cut; the shared field draws the first cut and the fairway edge."""
+def rough_material(source):
+    """Savanna ground under the rough band; the shared field draws the rough and the fairway edge, and the savanna
+    ground's own rough weight fades the rough out into the desert."""
     parent = duplicate(s.required('/OpenGolfSavanna/Materials/M_SavannaGround'),'Materials/CutTurf','M_CutTurfRough')
     ground = a.node(parent,ue.MaterialExpressionCustom,'GroundColor')
-    a.output(parent,field.field_color(parent,(ground,'')),ue.MaterialProperty.MP_BASE_COLOR)
+    weight = a.node(parent,ue.MaterialExpressionCustom,'RoughWeight')
+    a.output(parent,field.field_color(parent,(ground,''),(weight,'')),ue.MaterialProperty.MP_BASE_COLOR)
     normal = a.custom(parent,'TurfFieldGroundNormal','return normalize(lerp(N,T,W));',
                       {'N':(a.node(parent,ue.MaterialExpressionCustom,'GroundNormal'),''),
                        'T':(field.surface_normal(parent, 'FirstCut'), ''), 'W':(field.field_coverage(parent),'')},
@@ -97,12 +102,18 @@ def rough_material(source, width):
     a.finish_material(parent)
     instance = duplicate(source,'Materials/CutTurf','MI_TurfRough')
     a.MAT.set_material_instance_parent(instance,parent)
-    a.MAT.set_material_instance_scalar_parameter_value(instance,'FirstCutWidthM',width)
+    for name,rgb in palette.ROUGH_UNDERLAY.items():
+        a.MAT.set_material_instance_vector_parameter_value(instance,name,ue.LinearColor(*rgb,1.0))
     a.MAT.update_material_instance(instance)
     return a.save(instance)
 
 
-def apply(width=1.0, export_mask=False):
+def rough_grass():
+    """The 50 mm cut-turf rough band (DA_TurfRoughGrass), from the imported Rough tiles."""
+    return turf.vegetation('Rough',turf.family_meshes('Rough'))
+
+
+def apply(export_mask=False):
     area = course.terrain_area(MAP)
     definition = area.definition
     if export_mask:
@@ -114,27 +125,12 @@ def apply(width=1.0, export_mask=False):
     with s.course_helpers('/OpenGolfSavanna',turf.CONTENT,turf.OWNER):
         old_rough = definition.default_surface.material
         import_field(definition)
-        new_rough = rough_material(old_rough,width)
+        new_rough = rough_material(old_rough)
         rough_preset = duplicate(definition.default_surface,'Terrain/CutTurf','DA_TurfRough')
         rough_preset.set_editor_property('material',new_rough)
         a.save(rough_preset)
-        # Clone the authored rough presets so their appearance and original settings stay available.
-        edge = duplicate(s.required('/OpenGolfSavanna/Terrain/DA_BoundaryGrass'),'Terrain/CutTurf','DA_TurfRoughEdge')
-        edge.set_editor_property('boundary_clearance_m',0)
-        edge.set_editor_property('fairway_clearance_m',width)
-        # Graded 1 x 0.5 m strips rise from the first cut's height to the tall rough's.
-        edge.set_editor_property('meshes',[s.required(RAMP_STRIP+v) for v in 'AB'])
-        edge.set_editor_property('edge_strip_size_m',ue.Vector2D(1.0,0.5))
-        a.save(edge)
-        # Tall tiles start one strip deep behind the edge row: the smallest is judged at its centre, so its
-        # corners would otherwise poke through the row as a staircase.
-        rough = duplicate(s.required('/OpenGolfSavanna/Terrain/DA_RoughGrassDense'),'Terrain/CutTurf','DA_TurfTallRough')
-        rough.set_editor_property('fairway_clearance_m',width+edge.edge_strip_size_m.y)
-        a.save(rough)
-        shading.configure_all(area,turf.SOURCE,width)
-        first_cut = s.required('/OpenGolfSavanna/Terrain/CutTurf/DA_TurfFirstCutGrass')
-        first_cut.set_editor_property('maximum_distance_from_play_m',width)
-        a.save(first_cut)
+        rough = rough_grass()
+        shading.configure_all(area,turf.SOURCE)
     def finish():
         definition.modify()
         definition.set_editor_property('default_surface',rough_preset)
@@ -151,17 +147,14 @@ def apply(width=1.0, export_mask=False):
         if not ue.EditorAssetLibrary.save_loaded_asset(definition) or not ue.get_editor_subsystem(ue.LevelEditorSubsystem).save_current_level():
             raise RuntimeError('Could not save the applied turf')
         ue.log('OPEN_GOLF_CUT_TURF_APPLIED')
-    grass = [rough.get_path_name()] + [f'/OpenGolfSavanna/Terrain/CutTurf/DA_Turf{f}Grass' for f in ('Fairway','FirstCut','Collar')]
+    grass = [rough.get_path_name()] + [f'/OpenGolfSavanna/Terrain/CutTurf/DA_Turf{f}Grass' for f in ('Fairway','Collar')]
     surfaces = [f'/OpenGolfSavanna/Terrain/CutTurf/DA_Turf{f}' for f in ('Fairway','Collar','Green')]
-    course.apply(MAP,GENERATED,grass,edge.get_path_name(),surfaces,finished=finish)
+    # No boundary preset: the 50 mm rough meets the fairway directly, like a mowing line.
+    course.apply(MAP,GENERATED,grass,None,surfaces,finished=finish)
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--export-mask',action='store_true')
-    parser.add_argument('--width',type=float,default=1)
     args=parser.parse_args()
-    # The course field stores fairway distance to 2.5 m; the first cut's soft outer edge must fit inside it.
-    if not 0 < args.width <= 2.2:
-        raise ValueError('First cut width must be between zero and 2.2 metres (see turf_mask.CHANNELS)')
-    apply(args.width,args.export_mask)
+    apply(args.export_mask)

@@ -28,7 +28,9 @@ namespace OpenGolfOnline
     inline FString ShotTime(const FString& Iso)
     {
         FDateTime Utc;
-        return FDateTime::ParseIso8601(*Iso, Utc) ? FText::AsDateTime(Utc, EDateTimeStyle::Medium, EDateTimeStyle::Short).ToString() : Iso;
+        if (!FDateTime::ParseIso8601(*Iso, Utc)) return Iso;
+        return FText::AsDateTime(Utc, TEXT("%b%e")).ToString() + TEXT(" ")
+            + FText::AsDateTime(Utc, TEXT("%H%M")).ToString();
     }
 
     /** As ShotTime, the date only. */

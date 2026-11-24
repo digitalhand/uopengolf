@@ -41,7 +41,8 @@ MAX_PIN_GRADE = 0.01
 PIN_FLAT_RADIUS_M = 1.5
 # Green-to-bunker and fringe-to-bunker clearances.
 MIN_BUNKER_CLEARANCE_M = 1.5
-# The fairway runs up to a metre of first cut short of the fringe; it is pulled back from FAIRWAY_TRIM_START_X on.
+# The fairway stops a metre short of the fringe, and that strip is rough (it was first cut until 2026-11-23); the
+# fairway is pulled back from FAIRWAY_TRIM_START_X on.
 FAIRWAY_GAP_M = 1.0
 FAIRWAY_TRIM_START_X = 300.0
 

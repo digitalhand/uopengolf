@@ -2,6 +2,9 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Tests/RenderedPlay.h"
+#include "Training/DistanceLadder.h"
+#include "Training/DistancePractice.h"
+#include "Tests/BundledCourse.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Editor.h"
 #include "FileHelpers.h"
@@ -30,9 +33,12 @@
 namespace RangeHudControlsTestDetail
 {
     /** The range HUD's clickable controls, by their Slate tags. */
-    const TCHAR* const HudControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle"), TEXT("HudSettings")};
+    const TCHAR* const HudControls[] = {TEXT("TrainingBack"), TEXT("TrainingGames"), TEXT("ClubPicker"), TEXT("PlaceBall"), TEXT("RecordToggle"), TEXT("HudSettings")};
     /** The range toolbar's icons, each named by a hover tooltip in the HUD style. */
-    const TCHAR* const HudToolTipControls[] = {TEXT("ClubPicker"), TEXT("GameModeToggle"), TEXT("RecordToggle")};
+    const TCHAR* const HudToolTipControls[] = {TEXT("TrainingBack"), TEXT("ClubPicker"), TEXT("PlaceBall"), TEXT("RecordToggle")};
+    /** The toolbar tooltips that name a control, by tag. */
+    const TPair<const TCHAR*, const TCHAR*> HudToolTipTexts[] = {
+        {TEXT("PlaceBall"), TEXT("Place ball (B)")}, {TEXT("ClubPicker"), TEXT("Change Club")}, {TEXT("RecordToggle"), TEXT("Record Shots")}};
 
     /** The first tooltip Slate would show under Root: the club picker's sits on its inner combo button. */
     TSharedPtr<IToolTip> ShownToolTip(const TSharedRef<SWidget>& Root)
@@ -78,8 +84,20 @@ namespace RangeHudControlsTestDetail
 
     bool IsShown(const TSharedRef<SWindow>& Window, FName Tag)
     {
-        const TSharedPtr<SWidget> Widget = RenderedPlay::WithTag(Window, Tag);
-        return Widget && Widget->GetVisibility().IsVisible();
+        for (TSharedPtr<SWidget> Widget = RenderedPlay::WithTag(Window, Tag); Widget; Widget = Widget->GetParentWidget())
+        {
+            if (!Widget->GetVisibility().IsVisible()) return false;
+            if (Widget.Get() == &Window.Get()) return true;
+        }
+        return false;
+    }
+
+    /** Whether the widget tagged Tag is shown in any visible window, such as an open drop-down. */
+    bool IsShownInAnyWindow(FName Tag)
+    {
+        TArray<TSharedRef<SWindow>> Windows;
+        FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+        return Windows.ContainsByPredicate([Tag](const TSharedRef<SWindow>& Each) { return IsShown(Each, Tag); });
     }
 
     const TCHAR* const PlacingHeading = TEXT("Training · Ball Placement");
@@ -162,19 +180,28 @@ private:
                 Test->TestTrue(FString::Printf(TEXT("%s has a HUD-styled tooltip"), Tag),
                     Tip.IsValid() && Tip->AsWidget()->GetTag() == HudToolTip::Tag);
             }
+            for (const auto& [Tag, Expected] : HudToolTipTexts)
             {
-                const TSharedPtr<SWidget> Flag = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("GameModeToggle"));
-                const TSharedPtr<IToolTip> Tip = Flag ? ShownToolTip(Flag.ToSharedRef()) : nullptr;
-                Test->TestEqual(TEXT("The flag's tooltip names Game Mode and its key"),
+                const TSharedPtr<SWidget> Control = RenderedPlay::WithTag(Window.ToSharedRef(), Tag);
+                const TSharedPtr<IToolTip> Tip = Control ? ShownToolTip(Control.ToSharedRef()) : nullptr;
+                Test->TestEqual(FString::Printf(TEXT("%s tooltip text"), Tag),
                     Tip.IsValid() ? StaticCastSharedRef<SToolTip>(Tip->AsWidget())->GetTextTooltip().ToString() : FString(),
-                    FString(TEXT("Game Mode (G)")));
+                    FString(Expected));
             }
-            Test->TestFalse(TEXT("The flag has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Game Mode")));
+            {
+                // The owner wants no tooltip on the training games button.
+                const TSharedPtr<SWidget> Games = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("TrainingGames"));
+                TArray<FString> WithTips;
+                if (Games)
+                    RenderedPlay::WidgetsWithToolTips(Games.ToSharedRef(), WithTips, false);
+                Test->TestTrue(TEXT("Training games has no tooltip"), Games.IsValid() && WithTips.IsEmpty());
+            }
+            Test->TestFalse(TEXT("Training omits the course toggle"), RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("GameModeToggle")).IsValid());
             Test->TestFalse(TEXT("The recording icon has no visible caption"), ShowsText(Window.ToSharedRef(), TEXT("Record")));
             {
                 const FVector2D ClubSize = SizeOf(Window.ToSharedRef(), TEXT("ClubPicker"));
                 Test->TestTrue(TEXT("Toolbar buttons have equal sizes"),
-                    ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("GameModeToggle")), 0.5)
+                    ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("PlaceBall")), 0.5)
                     && ClubSize.Equals(SizeOf(Window.ToSharedRef(), TEXT("RecordToggle")), 0.5));
             }
             Test->TestTrue(TEXT("The ball is at address"), Mode->IsBallAtAddress());
@@ -218,6 +245,117 @@ private:
         case 3:
             if (UOpenLaunchMonitorSubsystem* Monitor = Player->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
                 Monitor->SetClub(StartClub);
+            return ClickThen(TEXT("TrainingGames"), 40);
+        case 40:
+            {
+                TArray<TSharedRef<SWindow>> Windows;
+                FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+                const bool bListed = Windows.ContainsByPredicate([](const TSharedRef<SWindow>& Menu) {
+                    return RenderedPlay::HasText(Menu, TEXT("Distance Practice")) && RenderedPlay::HasText(Menu, TEXT("Distance Ladder"));
+                });
+                Test->TestTrue(TEXT("Games lists both target games"), bListed);
+            }
+            return ActivateWithKeyboard(TEXT("TrainingRadius.6"), 49);
+        case 49:
+            Test->TestFalse(TEXT("Selecting a radius does not start a drill"), Mode->IsDrillActive());
+            // Distance Practice has no shot limit, so it offers no tries.
+            Test->TestTrue(TEXT("The picker shows the radius choices"), IsShownInAnyWindow(TEXT("TrainingRadius.6")));
+            Test->TestFalse(TEXT("Distance Practice hides the tries"), IsShownInAnyWindow(TEXT("TrainingTries.5")));
+            return ActivateWithKeyboard(TEXT("TrainingStart"), 41);
+        case 41:
+            if (!Test->TestTrue(TEXT("Games starts Distance Practice"), Mode->IsDrillActive())) return true;
+            Test->TestEqual(TEXT("Practice starts with a 6 ft ring"), CastChecked<UDistancePractice>(Mode->GetTrainingSession()->Active())->GetRadiusFeet(), 6);
+            if (auto Slider = RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("TrainingDistance")))
+            {
+                FSlateApplication::Get().SetKeyboardFocus(Slider);
+                FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Gamepad_DPad_Right, FModifierKeysState(), 0, false, 0, 0));
+                Test->TestEqual(TEXT("Controller moves the real slider 5 yd"), CastChecked<UDistancePractice>(Mode->GetTrainingSession()->Active())->GetDistance(), 30);
+            }
+            else Test->AddError(TEXT("The drill slider is missing"));
+            return Capture(TEXT("distance-practice"));
+        case 42:
+            // A game chosen while another runs replaces it.
+            return ClickThen(TEXT("TrainingGames"), 46);
+        case 46:
+            if (!RenderedPlay::ClickTagged(*Test, TEXT("TrainingGame.DistanceLadder"))) return true;
+            if (!RenderedPlay::ClickTagged(*Test, TEXT("TrainingRadius.10"))) return true;
+            Test->TestFalse(TEXT("Changing setup does not open a switch prompt"), Player->IsDrillDialogOpen());
+            Stage = 69;
+            return Wait(.25);
+        case 69:
+            {
+                TArray<TSharedRef<SWindow>> Windows;
+                FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+                for (const auto& Menu : Windows)
+                    if (RenderedPlay::WithTag(Menu, TEXT("TrainingSetup")))
+                    {
+                        RenderedPlay::SaveWindowPng(*Test, Menu, TEXT("RangeHud/training-game-picker.png"));
+                        break;
+                    }
+            }
+            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
+            Stage = 71;
+            return Wait(.25);
+        case 71:
+            Test->TestFalse(TEXT("Escape closes the training picker"), FSlateApplication::Get().AnyMenusVisible());
+            Test->TestFalse(TEXT("Escape leaves the active run alone"), Player->IsDrillDialogOpen());
+            return ClickThen(TEXT("TrainingGames"), 72);
+        case 72:
+            if (!RenderedPlay::ClickTagged(*Test, TEXT("TrainingGame.DistanceLadder"))) return true;
+            if (!RenderedPlay::ClickTagged(*Test, TEXT("TrainingRadius.10"))) return true;
+            Stage = 75;
+            return Wait(.25);
+        case 75:
+            // The tries row lays out on the frame after the Ladder is selected.
+            Test->TestTrue(TEXT("The Ladder offers tries"), IsShownInAnyWindow(TEXT("TrainingTries.5")));
+            if (!RenderedPlay::ClickTagged(*Test, TEXT("TrainingTries.5"))) return true;
+            Test->TestTrue(TEXT("Selecting the tries keeps Distance Practice running"),
+                Cast<UDistancePractice>(Mode->GetTrainingSession()->Active()) != nullptr);
+            return ActivateWithKeyboard(TEXT("TrainingStart"), 47);
+        case 47:
+            // Picking the other game asks first, through the Exit Drill prompt.
+            Test->TestTrue(TEXT("Picking the Ladder opens the Exit Drill prompt"), Player->IsDrillDialogOpen());
+            Test->TestTrue(TEXT("Distance Practice runs until the player exits"),
+                Cast<UDistancePractice>(Mode->GetTrainingSession()->Active()) != nullptr);
+            Test->TestTrue(TEXT("The prompt says which game Exit Drill starts"),
+                ShowsText(Window.ToSharedRef(), TEXT("Exit Drill to start Distance Ladder with a 10 ft ring and 5 tries.")));
+            if (!RenderedPlay::ClickLabelled(*Test, TEXT("Exit Drill"))) return true;
+            Stage = 48;
+            return Wait(1.0);
+        case 48:
+            Test->TestFalse(TEXT("Exit Drill closes the prompt"), Player->IsDrillDialogOpen());
+            Test->TestTrue(TEXT("Exit Drill starts the Distance Ladder"), Cast<UDistanceLadder>(Mode->GetTrainingSession()->Active()) != nullptr);
+            Test->TestFalse(TEXT("The Distance Practice panel closes"), RenderedPlay::WithTag(Window.ToSharedRef(), TEXT("TrainingDistance")).IsValid());
+            Test->TestTrue(TEXT("The Ladder panel shows"), ShowsText(Window.ToSharedRef(), TEXT("Distance Ladder")));
+            if (const auto* Ladder = Cast<UDistanceLadder>(Mode->GetTrainingSession()->Active()))
+            {
+                Test->TestEqual(TEXT("The new drill gets the selected radius"), Ladder->GetRadiusFeet(), 10);
+                Test->TestEqual(TEXT("The new drill gets the selected tries"), Ladder->GetTries(), 5);
+            }
+            Stage = 73;
+            return Capture(TEXT("distance-ladder-10ft"));
+        case 74:
+            return ClickThen(TEXT("TrainingBack"), 43);
+        case 43:
+            Test->TestTrue(TEXT("X opens the drill dialog"), Player->IsDrillDialogOpen());
+            {
+                auto RestartButton = RenderedPlay::FindButton(Window.ToSharedRef(), TEXT("Restart Drill"));
+                auto& App = FSlateApplication::Get();
+                App.ProcessKeyDownEvent(FKeyEvent(EKeys::Gamepad_DPad_Right, FModifierKeysState(), 0, false, 0, 0));
+                Test->TestTrue(TEXT("D-pad focuses Restart Drill"), RestartButton && RestartButton->HasKeyboardFocus());
+            }
+            if (!RenderedPlay::ClickLabelled(*Test, TEXT("Restart Drill"))) return true;
+            Stage = 44;
+            return Wait(.5);
+        case 44:
+            Test->TestTrue(TEXT("Restart returns to the drill"), Mode->IsDrillActive() && !Player->IsDrillDialogOpen());
+            FSlateApplication::Get().ProcessKeyDownEvent(FKeyEvent(EKeys::Escape, FModifierKeysState(), 0, false, 0, 0));
+            Stage = 45;
+            return Wait(.5);
+        case 45:
+            Test->TestTrue(TEXT("Esc opens the same drill dialog"), Player->IsDrillDialogOpen());
+            if (!RenderedPlay::ClickLabelled(*Test, TEXT("Exit Drill"))) return true;
+            Test->TestFalse(TEXT("Exit returns to free Training"), Mode->IsDrillActive());
             Stage = 4;
             return Wait(1.0);
         case 4:
@@ -244,7 +382,7 @@ private:
             Test->TestTrue(TEXT("The record button starts recording"), Mode->IsRecordingShots());
             return Capture(TEXT("hud-recording"));
         case 9:
-            return ClickThen(TEXT("RecordToggle"), 10);
+            return ActivateWithKeyboard(TEXT("RecordToggle"), 10);
         case 10:
             Test->TestFalse(TEXT("The record button stops recording"), Mode->IsRecordingShots());
             return ClickThen(TEXT("HudSettings"), 11);
@@ -266,7 +404,7 @@ private:
                 return Wait(1.0);
             }
             Test->TestEqual(TEXT("Settings preserves the current mode"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
-            return ClickThen(TEXT("HudSettings"), 24);
+            return ActivateWithKeyboard(TEXT("HudSettings"), 24);
         case 24:
             if (!RenderedPlay::ClickLabelled(*Test, GolfSettings::Get().LeftHanded ? TEXT("Left") : TEXT("Right")))
                 return true;
@@ -290,26 +428,37 @@ private:
         case 28:
             Test->TestFalse(TEXT("Discard returns directly to training"), Player->IsMainMenuOpen());
             Test->TestEqual(TEXT("Discard keeps the range session"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
-            return ClickThen(TEXT("GameModeToggle"), 33);
-        case 33:
-            Test->TestEqual(TEXT("The flag switches the session to Game Mode"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
-            Player->TogglePlacingBall();
-            Stage = 13;
-            return Wait(1.5);
+            return ClickThen(TEXT("PlaceBall"), 13);
         case 13:
             Test->TestTrue(TEXT("B starts placing the ball"), Player->IsPlacingBall());
             Test->TestTrue(TEXT("Placing retitles the hole"), ShowsText(Window.ToSharedRef(), PlacingHeading));
             Test->TestFalse(TEXT("The glow hides while placing"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
             Test->TestFalse(TEXT("Stroke, To Pin and Putts hide while placing"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
-            Test->TestFalse(TEXT("The hole has no record toggle"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
+            Test->TestTrue(TEXT("Training keeps its record toggle"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
+            {
+                // The pointer over the course is the HUD's ball icon while placing, not a system pointer.
+                const UGameViewportClient* Viewport = Player->GetWorld()->GetGameViewport();
+                const TSharedPtr<SWidget> Pointer = Viewport ? Viewport->GetSoftwareCursorWidget(Player->CurrentMouseCursor) : nullptr;
+                Test->TestTrue(TEXT("Placing shows the ball pointer"), Pointer.IsValid() && Pointer->GetTag() == FName(TEXT("BallPointer")));
+            }
             return Capture(TEXT("placing"));
         case 14:
             Player->CancelPlacingBall();
+            Mode->SetPlayMode(EOpenGolfPlayMode::Hole, BundledCourse::Load());
             Stage = 15;
             return Wait(1.0);
         case 15:
-            Test->TestTrue(TEXT("Game Mode shows Airways"), ShowsText(Window.ToSharedRef(), TEXT("Airways")));
-            Test->TestTrue(TEXT("Course header shows the hole details"), ShowsText(Window.ToSharedRef(), TEXT("Hole 1  ·  Par 4  ·  400 yd")));
+            Test->TestTrue(TEXT("Course HUD names the course"), ShowsText(Window.ToSharedRef(), TEXT("Savanna Range")));
+            Test->TestTrue(TEXT("Course header shows the hole"), ShowsText(Window.ToSharedRef(), TEXT("Hole 1")));
+            Test->TestTrue(TEXT("Course header shows par and length on their own line"), ShowsText(Window.ToSharedRef(), TEXT("Par 4  ·  400 yd")));
+            {
+                const FVector2D CourseHeading = SizeOf(Window.ToSharedRef(), TEXT("ShotHeading"));
+                Test->TestTrue(FString::Printf(TEXT("The course heading is at least two tiles tall: %s, tile %s"), *CourseHeading.ToString(),
+                    *TileSize.ToString()), CourseHeading.Y >= 2 * TileSize.Y - 0.5);
+                Test->TestEqual(TEXT("The course heading keeps the column width"), CourseHeading.X, HeadingSize.X, 0.5);
+            }
+            Test->TestFalse(TEXT("Course rounds hide Games"), IsShown(Window.ToSharedRef(), TEXT("TrainingGames")));
+            Test->TestFalse(TEXT("Course rounds hide the Training X"), IsShown(Window.ToSharedRef(), TEXT("TrainingBack")));
             // A normal hole: the tiles and the glow are back; recording stays a range control, and F9 is ignored.
             Test->TestTrue(TEXT("The hole tiles show on a normal hole"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
             Test->TestTrue(TEXT("The glow shows at address on the hole"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
@@ -319,7 +468,11 @@ private:
                 Player->ToggleRecordShots();
                 Test->TestEqual(TEXT("F9 does not change recording on the hole"), Mode->IsRecordingShots(), bWasRecording);
             }
+            Stage = 150;
+            return Capture(TEXT("course-heading"));
+        case 151:
             {
+                Mode->SetPlayMode(EOpenGolfPlayMode::Range);
                 // A practice hole: a ball placed on the green, as HolePlayTest places one.
                 FVector Ground;
                 FVector Normal;
@@ -334,7 +487,7 @@ private:
             Test->TestTrue(TEXT("The practice hole is titled"), ShowsText(Window.ToSharedRef(), PlacingHeading));
             Test->TestFalse(TEXT("Stroke, To Pin and Putts hide on a practice hole"), IsShown(Window.ToSharedRef(), TEXT("HoleTiles")));
             Test->TestFalse(TEXT("No glow on a practice hole"), IsShown(Window.ToSharedRef(), TEXT("BallReadyGlow")));
-            Test->TestFalse(TEXT("No record toggle on a practice hole"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
+            Test->TestTrue(TEXT("Training recording is available"), IsShown(Window.ToSharedRef(), TEXT("RecordToggle")));
             return Capture(TEXT("practice"));
         case 17:
             Mode->SetPlayMode(EOpenGolfPlayMode::Range);
@@ -410,6 +563,25 @@ private:
     {
         WaitUntil = GetCurrentRunTime() + Seconds;
         return false;
+    }
+
+    bool ActivateWithKeyboard(const TCHAR* Tag, int32 NextStage)
+    {
+        TArray<TSharedRef<SWindow>> Windows;
+        FSlateApplication::Get().GetAllVisibleWindowsOrdered(Windows);
+        TSharedPtr<SWidget> Control;
+        for (const auto& Candidate : Windows)
+            if ((Control = RenderedPlay::WithTag(Candidate, Tag)))
+                break;
+        if (!Test->TestTrue(FString(TEXT("Focusable HUD control: ")) + Tag, Control && Control->SupportsKeyboardFocus()))
+            return true;
+        auto& App = FSlateApplication::Get();
+        App.SetKeyboardFocus(Control, EFocusCause::Navigation);
+        const FKeyEvent Enter(EKeys::Enter, FModifierKeysState(), 0, false, 0, 0);
+        App.ProcessKeyDownEvent(Enter);
+        App.ProcessKeyUpEvent(Enter);
+        Stage = NextStage;
+        return Wait(1.0);
     }
 
     bool ClickThen(const TCHAR* Tag, int32 NextStage)

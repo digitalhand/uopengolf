@@ -67,6 +67,27 @@ namespace HudStyle
 
     inline const FLinearColor ShadowColor(0.0f, 0.0f, 0.0f, 0.6f);
 
+    /** Hole minimap: the dark outline under every mark, so white marks read on fairway and sand alike. */
+    inline FLinearColor MapInkColor() { return FLinearColor(0.012f, 0.025f, 0.022f); }
+
+    /** Hole minimap: the pin flag. */
+    inline FLinearColor MapFlagColor() { return FLinearColor(1.0f, 0.74f, 0.24f); }
+
+    /** Hole minimap: the panel behind its header and footer, a little more solid than a tile. */
+    inline FLinearColor MapPanelColor()
+    {
+        return FLinearColor::FromSRGBColor(FColor(16, 22, 20, GolfSettings::Get().HighContrast ? 255 : 242));
+    }
+
+    /** Hole minimap: the panel's hairline edge, which keeps it apart from a dark course behind it. */
+    inline FLinearColor MapEdgeColor() { return FLinearColor(1.0f, 1.0f, 1.0f, 0.14f); }
+
+    /** Hole minimap: the soft band under the panel that lifts it off the game view. */
+    inline FLinearColor MapShadowColor() { return FLinearColor(0.0f, 0.0f, 0.0f, 0.35f); }
+
+    /** Hole minimap: the pin and target chips, black so white text reads on turf and sand alike. */
+    inline FLinearColor MapChipColor() { return FLinearColor::Black; }
+
     constexpr float TileRadius = 4.0f;
     constexpr float ToolbarButtonSize = 44.0f;
     /** No background until hovered. Every state is set: a default FSlateBrush would draw a white box. */

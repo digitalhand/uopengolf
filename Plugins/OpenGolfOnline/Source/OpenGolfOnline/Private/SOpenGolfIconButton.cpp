@@ -73,6 +73,18 @@ namespace OpenGolfIconButtonDetail
                 Line({{6, 6}, {18, 18}});
                 Line({{18, 6}, {6, 18}});
                 break;
+            case EOpenGolfAccountIcon::Refresh:
+            {
+                TArray<FVector2f> Points;
+                for (int32 I = 0; I <= 28; ++I)
+                {
+                    const float Angle = (0.2f + I / 28.f * 5.45f);
+                    Points.Add(FVector2f(12 + 8 * FMath::Cos(Angle), 12 + 8 * FMath::Sin(Angle)));
+                }
+                Line(Points);
+                Line({{19,3},{19,8},{14,8}});
+                break;
+            }
             case EOpenGolfAccountIcon::Edit:
                 Line({{4, 20}, {6, 14}, {17, 3}, {21, 7}, {10, 18}, {4, 20}});
                 Line({{14, 6}, {18, 10}});

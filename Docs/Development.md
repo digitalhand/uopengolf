@@ -99,6 +99,21 @@ The engine-free script checks run from the repository root with
 The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
 committed with its terrain, vegetation and range actors.
 
+### Adding a course
+
+Courses are data, not code. The Courses browser lists every `UGolfCourseDefinition` the Asset Manager finds in
+`/Game/UOpenGolf/Courses` (see [Courses and rounds](Architecture.md#courses-and-rounds)):
+
+1. Create a Data Asset of class **Golf Course Definition** in `/Game/UOpenGolf/Courses`, named `DA_<Course>`.
+2. Set its **Display Name**, **Map** (a map with a range controller), **Holes**, **Par**, **Length** and the round's
+   **Wind** (mph, and degrees it comes from against the target line: 90 is from the right).
+3. Import a card preview at a 5:3 aspect into the same folder and set it as **Preview**, with texture group **UI**,
+   compression **UserInterface2D** and no mipmaps; keep the source image in `Assets/Images/Courses`.
+4. Add the map to `+MapsToCook` in `Config/DefaultGame.ini`, so packages that cook only listed maps include it.
+
+The bundled course is created by the editor command `uopengolf.CreateCourseAssets`, which leaves existing assets
+alone. Run `UOpenGolf.Course.Catalog` after changing a definition; it checks the bundled course against the range.
+
 ### Physics accuracy scripts
 
 These compare the physics with reference shots. Third-party reference data lives outside the repository, in

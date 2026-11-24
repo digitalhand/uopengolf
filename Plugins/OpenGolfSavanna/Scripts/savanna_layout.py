@@ -80,3 +80,23 @@ def ground_mask(outlines, minimum, maximum, width=1024, height=512):
                     index = row * width + col
                     pixels[index] = max(pixels[index], value)
     return bytes(pixels)
+
+
+def mask_shortfall(mask, outlines, minimum, maximum, width=1024, height=512):
+    """Outline points where a ground mask is not solid rough, in outline order.
+
+    Every play edge is solid rough in a mask made from the current outlines. A mask baked from an older layout leaves
+    desert under the rough tiles where play has moved, and the gaps between the square tiles and a curved edge show it.
+    Points outside the mask's bounds count as uncovered.
+    """
+    sx = (maximum[0] - minimum[0]) / width
+    sy = (maximum[1] - minimum[1]) / height
+    uncovered = []
+    for outline in outlines:
+        for x, y in outline:
+            col = math.floor((x - minimum[0]) / sx)
+            row = math.floor((y - minimum[1]) / sy)
+            inside = 0 <= col < width and 0 <= row < height
+            if not inside or mask[row * width + col] < 255:
+                uncovered.append((x, y))
+    return uncovered

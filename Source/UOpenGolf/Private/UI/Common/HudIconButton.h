@@ -3,17 +3,14 @@
 
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "UI/Common/HudStyle.h"
+#include "UI/Common/HudStatusGlyph.h"
 #include "Widgets/SLeafWidget.h"
 
 /** A toolbar button with a drawn icon: the hole flag (play mode) or a ball (place the ball). */
 class SHudIconButton : public SLeafWidget
 {
 public:
-    enum class EIcon : uint8
-    {
-        Flag,
-        Ball
-    };
+    using EIcon = SHudStatusGlyph::EKind;
 
     static constexpr float Size = HudStyle::ToolbarButtonSize;
 

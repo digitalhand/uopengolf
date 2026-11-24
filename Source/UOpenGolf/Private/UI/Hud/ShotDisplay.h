@@ -35,7 +35,10 @@ namespace ShotDisplay
     /** The club picker's standard abbreviation: DR, 3W, 7i, PW, LW, PT. */
     FString ClubLabel(ELaunchMonitorClub Club);
 
-    /** Course header details for the hole in play. */
+    /** The course heading's first hole line: "Hole 1". */
+    FString HoleNumber(int32 Hole);
+
+    /** The course heading's second hole line: "Par 4  ·  400 yd". */
     FString HoleDetails(int32 Par, const FString& Distance);
 
     /** Record button help, including where shots are saved and how to toggle it. */

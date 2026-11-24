@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfRange.h"
+#include "OpenGolfEnvironment.h"
 
 #include "Components/DirectionalLightComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "UObject/UObjectGlobals.h"
 #include "Engine/World.h"
 #include "Hole/OpenGolfCupComponent.h"
 #include "HAL/IConsoleManager.h"
@@ -15,6 +17,7 @@
 #include "OpenGolfWindSubsystem.h"
 #include "UOpenGolfBall.h"
 #include "UOpenGolfGameMode.h"
+#include "GolfCourseDefinition.h"
 
 namespace
 {
@@ -76,15 +79,8 @@ void AUOpenGolfRange::BuildDefaultLayout()
     // Like the rest of the range, it is movable; its cloth child moves every frame.
     Flagstick->SetMobility(EComponentMobility::Movable);
 
-    UDirectionalLightComponent* Sun = AddLayoutComponent<UDirectionalLightComponent>(TEXT("Sun"), TEXT("Range/Lighting"));
-    Sun->SetMobility(EComponentMobility::Movable);
-    Sun->SetRelativeRotation(FRotator(-40.0f, 35.0f, 0.0f));
-    Sun->SetAtmosphereSunLight(true);
-
-    AddLayoutComponent<USkyAtmosphereComponent>(TEXT("Sky"), TEXT("Range/Lighting"));
-    USkyLightComponent* SkyLight = AddLayoutComponent<USkyLightComponent>(TEXT("SkyLight"), TEXT("Range/Lighting"));
-    SkyLight->SetMobility(EComponentMobility::Movable);
-    SkyLight->SetRealTimeCaptureEnabled(false);
+    if (!AOpenGolfEnvironment::Find(GetWorld()))
+        GetWorld()->SpawnActor<AOpenGolfEnvironment>();
     for (const auto& Actor : LayoutActors)
         Actor->RegisterAllComponents();
     RefreshPresentation();
@@ -98,6 +94,8 @@ void AUOpenGolfRange::BeginPlay()
     AppliedWindBall.Reset();
     ApplyWindSettings();
     BuildDefaultLayout();
+    if (auto* Environment = AOpenGolfEnvironment::Find(GetWorld()))
+        Environment->OnSettingsChanged.AddUObject(this, &AUOpenGolfRange::InvalidateHoleMap);
     RefreshPresentation();
     if (IsValid(Flagstick))
     {
@@ -106,6 +104,9 @@ void AUOpenGolfRange::BeginPlay()
             Flagstick->SetWorldLocation(Ground);
         Cup->PlaceAtFlagstick(Flagstick, Normal);
     }
+    OriginalCup = Cup->GetFlagstick() ? Cup->GetCupDescriptor() : FOpenFairwayCup{GetTeeLocation(), FVector::UpVector};
+    // Captured on the first tick, once the flag stands on the ground and the grass switch is applied.
+    InvalidateHoleMap();
 }
 
 FVector AUOpenGolfRange::GetCupLocation() const
@@ -140,6 +141,7 @@ void AUOpenGolfRange::AlignLayoutToTerrain()
 {
     if (!IsValid(Terrain))
         return;
+    InvalidateHoleMap();
     for (const auto& Actor : LayoutActors)
     {
         if (!IsValid(Actor))
@@ -209,6 +211,12 @@ void AUOpenGolfRange::ApplyWindSettings()
     WindSpeedMph = FMath::IsFinite(WindSpeedMph) ? FMath::Max(0.0f, WindSpeedMph) : 0.0f;
     WindFromDeg = FMath::IsFinite(WindFromDeg) ? FRotator::ClampAxis(WindFromDeg) : 0.0f;
     const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
+    // A course round keeps its course's wind, whatever the console, Details or the HUD set.
+    if (const UGolfCourseDefinition* Course = Mode ? Mode->GetCourse() : nullptr)
+    {
+        WindSpeedMph = Course->WindMph;
+        WindFromDeg = Course->WindFromDeg;
+    }
     AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     if (!Ball)
         return;
@@ -288,6 +296,8 @@ void AUOpenGolfRange::Tick(float DeltaSeconds)
         return;
     }
     UpdateGrass();
+    // After the grass switch, so the picture shows the vegetation as it is drawn.
+    UpdateHoleMap();
     ApplyWindSettings();
     ApplyGreenConsoleVariable();
     SyncWindToScene();
@@ -328,6 +338,8 @@ void AUOpenGolfRange::UpdateGrass()
         for (auto* Component : Instances)
             Component->SetVisibility(bWanted);
     }
+    if (bGrassEnabled != bWanted)
+        InvalidateHoleMap();
     bGrassEnabled = bWanted;
     bTerrainGrassApplied = true;
 }

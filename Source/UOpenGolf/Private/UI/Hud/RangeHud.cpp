@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Hud/RangeHud.h"
+#include "GolfCourseDefinition.h"
 #include "UI/Hud/BallReadyGlow.h"
+#include "UI/Hud/HoleMapPanel.h"
 #include "UI/Common/HudStatusGlyph.h"
 #include "Widgets/Input/SButton.h"
 #include "RangePerformance.h"
@@ -35,6 +37,11 @@ namespace
     // Slate units before the readable-DPI scale.
     constexpr float HudTileWidth = 112.0f;
     constexpr float HudTileHeight = 48.0f;
+    /** In a course round the heading holds two large hole lines and stands two tiles tall. */
+    constexpr float HudHoleHeadingHeight = 2.0f * HudTileHeight;
+    constexpr int32 HudHoleFontSize = 18;
+    /** The heading tile's padding above and below its text. */
+    constexpr float HudHeadingPadding = 4.0f;
     constexpr float HudTileGap = 2.0f;
     constexpr float HudGroupGap = 6.0f;
     /** The tile grid's width: the column never grows past it, whatever the heading says. */
@@ -42,6 +49,10 @@ namespace
     constexpr float HudEdge = HudStyle::Edge;
     /** Version label distance from the bottom edge, inside HudScale::BottomPanelGap. */
     constexpr float HudVersionBottom = 6.0f;
+    /** The hole map stays below the play toolbar and its hole tiles, shrinking to fit a short viewport... */
+    constexpr float HudMapTop = 150.0f;
+    /** ...and above the Test shots button and the version label under it. */
+    constexpr float HudMapBottom = 72.0f;
     /** Shot and status text is rebuilt this often; the wind arrow still turns with the camera every frame. */
     constexpr double HudTextRefreshSeconds = 0.1;
     const FLinearColor HudShadowColor = HudStyle::ShadowColor;
@@ -92,6 +103,12 @@ void SRangeHud::Construct(const FArguments& Args)
                     [ MakeColumn() ]
                 ]
             ]
+            // Bottom left: the hole map, which takes clicks to aim.
+            + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, HudMapTop, 0, HudMapBottom)
+            [
+                SNew(SScaleBox).Visibility(EVisibility::SelfHitTestInvisible).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)
+                [ SNew(SHoleMapPanel).Controller(Controller) ]
+            ]
             // Game version in the bottom-left corner, under the Test shots button.
             + SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(HudEdge, 0, 0, HudVersionBottom)
             [
@@ -110,37 +127,39 @@ TSharedRef<SWidget> SRangeHud::MakeColumn()
     const TSharedRef<SVerticalBox> Column = SNew(SVerticalBox).Visibility(EVisibility::SelfHitTestInvisible)
         + SVerticalBox::Slot().AutoHeight().Padding(HudTileGap)
         [
-            SNew(SBorder).Visibility(EVisibility::SelfHitTestInvisible).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Tag(TEXT("ShotHeading"))
+            SNew(SBorder).Visibility(EVisibility::SelfHitTestInvisible).BorderImage(&TileBrush)
+            .Padding(FMargin(8, HudHeadingPadding)).Tag(TEXT("ShotHeading"))
             [
-                SNew(SVerticalBox).Visibility(EVisibility::SelfHitTestInvisible)
-                + SVerticalBox::Slot().AutoHeight()
+                SNew(SBox).Visibility(EVisibility::SelfHitTestInvisible)
+                .MinDesiredHeight_Lambda([this] { return HoleNumber.IsEmpty() ? 0.0f : HudHoleHeadingHeight - 2.0f * HudHeadingPadding; })
                 [
-                    SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible)
-                    + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+                    SNew(SVerticalBox).Visibility(EVisibility::SelfHitTestInvisible)
+                    + SVerticalBox::Slot().AutoHeight()
                     [
-                        SNew(STextBlock).Visibility(EVisibility::HitTestInvisible).Font(HudStyle::Font("Bold", 12))
-                        .ColorAndOpacity(HudStyle::TextColor()).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
-                        .Text_Lambda([this] { return Heading; })
-                    ]
-                    + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-                    [
-                        SNew(SButton).ButtonStyle(&CellStyle).ContentPadding(FMargin(8, 6)).Tag(TEXT("HudSettings"))
+                        SNew(SHorizontalBox).Visibility(EVisibility::SelfHitTestInvisible)
+                        + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+                        [
+                            SNew(STextBlock).Visibility(EVisibility::HitTestInvisible).Font(HudStyle::Font("Bold", 12))
+                            .ColorAndOpacity(HudStyle::TextColor()).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+                            .Text_Lambda([this] { return Heading; })
+                        ]
+                        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+                        [
+                            SNew(SButton).ButtonStyle(&CellStyle).ContentPadding(FMargin(8, 6)).Tag(TEXT("HudSettings"))
 #if WITH_ACCESSIBILITY
-                        .AccessibleText(FText::FromString(TEXT("Open settings")))
+                            .AccessibleText(FText::FromString(TEXT("Open settings")))
 #endif
-                        .OnClicked_Lambda([this]
-                        {
-                            if (Controller.IsValid()) Controller->OpenGeneralSettings();
-                            return FReply::Handled();
-                        })
-                        [SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Settings)]
+                            .OnClicked_Lambda([this]
+                            {
+                                if (Controller.IsValid()) Controller->OpenGeneralSettings();
+                                return FReply::Handled();
+                            })
+                            [SNew(SHudStatusGlyph).Kind(SHudStatusGlyph::EKind::Settings)]
+                        ]
                     ]
-                ]
-                + SVerticalBox::Slot().AutoHeight().Padding(0, 2, 0, 2)
-                [
-                    SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
-                    .Visibility_Lambda([this] { return HoleDetails.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
-                    .Text_Lambda([this] { return HoleDetails; })
+                    // A course round's hole, on two large lines: "Hole 1", then "Par 4  ·  400 yd".
+                    + SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)[ MakeHoleLine(TEXT("HoleNumber"), HoleNumber) ]
+                    + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 2)[ MakeHoleLine(TEXT("HoleDetails"), HoleDetails) ]
                 ]
             ]
         ];
@@ -158,6 +177,15 @@ TSharedRef<SWidget> SRangeHud::MakeColumn()
         Column->AddSlot().AutoHeight().Padding(0.0f, First == 0 ? 0.0f : HudGroupGap, 0.0f, 0.0f)[Grid];
     }
     return Column;
+}
+
+TSharedRef<SWidget> SRangeHud::MakeHoleLine(FName Tag, const FText& Line)
+{
+    // Line is a member the text refresh updates; the bindings read it each frame.
+    return SNew(STextBlock).Tag(Tag).Font(HudStyle::Font("Bold", HudHoleFontSize)).ColorAndOpacity(HudStyle::TextColor())
+        .ShadowOffset(FVector2D(1, 1)).ShadowColorAndOpacity(HudShadowColor)
+        .Visibility_Lambda([&Line] { return Line.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+        .Text_Lambda([&Line] { return Line; });
 }
 
 void SRangeHud::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
@@ -206,16 +234,21 @@ void SRangeHud::Refresh(bool bText)
         if(TileLabels[I].ToString()!=Tiles[I].Label)TileLabels[I]=FText::FromString(Tiles[I].Label);
     }
     bBallReady = LaunchMonitor && LaunchMonitor->IsBallReady();
-    const bool bHole = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
-    const bool bBallPlacement = bHole && (PlayerController->IsPlacingBall() || Mode->GetHoleRound().bPractice);
-    // Fixed headings are shared texts; the hole details are rebuilt only when they change, as the tiles are.
+    const bool bHole = Mode && Mode->IsCourseRound();
+    const bool bBallPlacement = !bHole && Mode && (PlayerController->IsPlacingBall() || Mode->GetHoleRound().bPractice);
+    const UGolfCourseDefinition* Course = Mode ? Mode->GetCourse() : nullptr;
+    // Headings are shared texts (the course's name is its asset's FText); the hole details are rebuilt only when they
+    // change, as the tiles are.
     static const FText TrainingHeading = FText::FromString(TEXT("Training"));
     static const FText PlacementHeading = FText::FromString(TEXT("Training · Ball Placement"));
-    static const FText HoleHeading = FText::FromString(TEXT("Airways"));
-    Heading = bBallPlacement ? PlacementHeading : bHole ? HoleHeading : TrainingHeading;
-    const FString Details = bHole && !bBallPlacement
-        ? ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(AUOpenGolfRange::HoleDistanceM))
+    static const FText RoundHeading = FText::FromString(TEXT("Course round"));
+    Heading = bBallPlacement ? PlacementHeading : Course ? Course->DisplayName : bHole ? RoundHeading : TrainingHeading;
+    const FString Number = bHole ? ShotDisplay::HoleNumber(Mode->GetHoleNumber()) : FString();
+    const FString Details = bHole
+        ? ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(Course ? Course->LengthM : AUOpenGolfRange::HoleDistanceM))
         : FString();
+    if (HoleNumber.ToString() != Number)
+        HoleNumber = FText::FromString(Number);
     if (HoleDetails.ToString() != Details)
         HoleDetails = FText::FromString(Details);
 }

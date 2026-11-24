@@ -25,11 +25,15 @@ namespace OpenGolfAccountPanelDetail
     constexpr float NameFieldWidth = 320, SectionPadding = 12, SectionGap = 8, ButtonGap = 8;
     /** The Account page keeps this height signed out, loading and signed in, so the host's rows below do not jump. */
     constexpr float AccountMinHeight = 170;
-    constexpr float ClubColumn = 80, AverageColumn = 200, ShotsColumn = 120;
-    constexpr float DeleteColumn = 110, DeleteIconSize = 32, TimeColumn = 230, ValueColumn = 125;
+    constexpr float ClubColumn = 80, SpeedColumn = 150, CarryColumn = 130, TotalColumn = 130, ShotsColumn = 120;
+    /** Club rows' content padding, inside the button style's NormalPadding; the column captions are inset to match. */
+    constexpr float ButtonContentPadding = 4, ButtonContentPaddingY = 2;
     const TCHAR* BackTag = TEXT("PageBack");
     const TCHAR* HistoryFields[] = {TEXT("shot_at"),TEXT("carry_yd"),TEXT("roll_yd"),TEXT("ball_speed_mph"),TEXT("launch_angle_deg"),TEXT("launch_direction_deg"),TEXT("total_spin_rpm"),TEXT("spin_axis_deg"),TEXT("back_spin_rpm"),TEXT("side_spin_rpm"),TEXT("face_angle_deg"),TEXT("club_path_deg"),TEXT("face_to_path_deg"),TEXT("attack_angle_deg"),TEXT("dynamic_loft_deg")};
-    const TCHAR* HistoryCaptions[] = {TEXT("Time (local)"),TEXT("Carry"),TEXT("Roll"),TEXT("Ball speed"),TEXT("Launch angle"),TEXT("Launch direction"),TEXT("Total spin"),TEXT("Spin axis"),TEXT("Backspin"),TEXT("Sidespin"),TEXT("Face angle"),TEXT("Club path"),TEXT("Face to path"),TEXT("Attack angle"),TEXT("Dynamic loft")};
+    constexpr float ShotTimeWidth = 245, ShotMetricWidth = 154;
+    const TCHAR* HistoryCaptions[] = {TEXT("Time (local)"), TEXT("Carry (yd)"), TEXT("Roll (yd)"), TEXT("Ball speed (mph)"),
+        TEXT("Launch angle (deg)"), TEXT("Direction (deg)"), TEXT("Spin (rpm)"), TEXT("Spin axis (deg)"), TEXT("Backspin (rpm)"),
+        TEXT("Sidespin (rpm)"), TEXT("Face angle (deg)"), TEXT("Club path (deg)"), TEXT("Face to path (deg)"), TEXT("Attack angle (deg)"), TEXT("Dynamic loft (deg)")};
     static_assert(UE_ARRAY_COUNT(HistoryFields) == UE_ARRAY_COUNT(HistoryCaptions), "Every history field has a caption.");
 
     TOptional<double> AverageCarry(const FJsonObject& Row)
@@ -38,6 +42,23 @@ namespace OpenGolfAccountPanelDetail
         if (Row.TryGetNumberField(TEXT("avg_carry_yd"), Carry) && FMath::IsFinite(Carry))
             return Carry;
         return {};
+    }
+
+    /** A live average cell's last text, and the service state it was made from. */
+    struct FAverageCellCache
+    {
+        uint64 Revision = MAX_uint64;
+        bool bLoading = false;
+        FText Text;
+    };
+
+    /** A club's average to one decimal with its unit; "…" while that club is still loading, "—" when no shot measured it. */
+    FString AverageCell(const UOpenGolfOnlineSubsystem* Online, const FString& Club, TOptional<double> FOpenGolfClubShotAverages::*Field, const TCHAR* Unit)
+    {
+        const FOpenGolfClubShotAverages* Averages = Online ? Online->FindClubAverages(Club) : nullptr;
+        if (!Averages) return Online && Online->IsLoadingClubAverages() ? TEXT("…") : TEXT("—");
+        const TOptional<double>& Value = Averages->*Field;
+        return Value.IsSet() ? FString::Printf(TEXT("%.1f %s"), Value.GetValue(), Unit) : TEXT("—");
     }
 
     /** One history cell: the local shot time, or a number to one decimal. Face to path is derived. */
@@ -129,6 +150,8 @@ TSharedRef<SVerticalBox> SOpenGolfAccountPanel::AddSection(const TSharedRef<SVer
 void SOpenGolfAccountPanel::Construct(const FArguments& Args)
 {
     Online=Args._Online;Style=Args._Style;bShowHeading=Args._ShowHeading;PageType=Args._Page;
+    ClubRowStyle = Style.Button;
+    ClubRowStyle.SetNormal(FSlateNoResource());
     DisplayNameDraft=Args._DisplayNameDraft.IsValid()?Args._DisplayNameDraft:MakeShared<FOpenGolfDisplayNameDraft>();
     DisplayNameDraft->Synchronize(Online.Get());
     bWasSignedIn=Online.IsValid()&&Online->HasSession();
@@ -159,7 +182,7 @@ void SOpenGolfAccountPanel::Tick(const FGeometry& G,double T,float D)
     DisplayNameDraft->Synchronize(Online.Get());
     if(Online.IsValid()&&Online->HasSession()!=bWasSignedIn)
     {
-        bWasSignedIn=Online->HasSession();bHistory=false;bLoadedCarry=false;ConfirmDeleteId.Empty();
+        bWasSignedIn=Online->HasSession();bHistory=false;bLoadedCarry=false;DeleteAction=nullptr;SelectedId.Empty();
         bRebuild=true;
     }
     LoadCarryIfReady();
@@ -182,8 +205,9 @@ FText SOpenGolfAccountPanel::GetTitle() const
 }
 bool SOpenGolfAccountPanel::HandleBack()
 {
+    if (DeleteAction) { DeleteAction = nullptr; bRebuild = true; return true; }
     if(!bHistory)return false;
-    bHistory=false;ConfirmDeleteId.Empty();
+    bHistory=false;DeleteAction=nullptr;SelectedId.Empty();
     if(Online.IsValid())Online->LoadCarry();
     bRebuild=true;return true;
 }
@@ -194,7 +218,7 @@ void SOpenGolfAccountPanel::Rebuild()
     const bool HadFocus=PageContent->HasFocusedDescendants();
     const float Offset=Scroll.IsValid()?Scroll->GetScrollOffset():0;
     DisplayNameDraft->Synchronize(&Service);
-    if(LastAccountKey!=Service.GetAccountKey()){LastAccountKey=Service.GetAccountKey();bLoadedCarry=false;ConfirmDeleteId.Empty();}
+    if(LastAccountKey!=Service.GetAccountKey()){LastAccountKey=Service.GetAccountKey();bLoadedCarry=false;DeleteAction=nullptr;SelectedId.Empty();}
     auto Page=SNew(SVerticalBox);
     const bool Ready=Service.HasSession() && Service.GetProfile().IsValid();
     if(PageType==EOpenGolfAccountPage::Account)
@@ -208,12 +232,25 @@ void SOpenGolfAccountPanel::Rebuild()
     else
     {
         if(!Service.HasSession())Page->AddSlot().AutoHeight()[Text(TEXT("Sign in to see your saved shots."))];
+        else if (DeleteAction)
+        {
+            auto Section = AddSection(Page, DeletePrompt);
+            CancelButton = Button(TEXT("Cancel"), [this] { DeleteAction = nullptr; bRebuild = true; });
+            Section->AddSlot().AutoHeight()[SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth().Padding(0,0,ButtonGap,0)[CancelButton.ToSharedRef()]
+                + SHorizontalBox::Slot().AutoWidth()[Button(DeleteLabel, [this]
+                {
+                    if (DeleteAction) { auto Action = MoveTemp(DeleteAction); DeleteAction = nullptr; Action(); }
+                    bRebuild = true;
+                })]];
+        }
         else if(bHistory)BuildHistory(Page,Service);
         else BuildClubs(Page,Service);
         if(bHistory)PageContent->SetContent(Page);
         else {PageContent->SetContent(SAssignNew(Scroll,SScrollBox)+SScrollBox::Slot()[Page]);Scroll->SetScrollOffset(Offset);}
     }
-    if(HadFocus)
+    if (DeleteAction && CancelButton) FSlateApplication::Get().SetKeyboardFocus(CancelButton, EFocusCause::Navigation);
+    else if(HadFocus)
     {
         TFunction<TSharedPtr<SWidget>(TSharedRef<SWidget>)> First=[&First](TSharedRef<SWidget> W)->TSharedPtr<SWidget>
         {
@@ -238,7 +275,7 @@ TSharedRef<SWidget> SOpenGolfAccountPanel::BuildHeading(UOpenGolfOnlineSubsystem
         [SNew(STextBlock).Font(Style.GetFont(Style.TitleSize)).ColorAndOpacity(Style.TextColor).Text_Lambda([this]{return GetTitle();})]
         +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
         [SNew(SOpenGolfAccountButton).Online(&Service).SignOut(true).Style(Style)
-            .OnClicked_Lambda([this]{if(Online.IsValid())Online->SignOut();DisplayNameDraft->Synchronize(Online.Get());bHistory=false;ConfirmDeleteId.Empty();bRebuild=true;})];
+            .OnClicked_Lambda([this]{if(Online.IsValid())Online->SignOut();DisplayNameDraft->Synchronize(Online.Get());bHistory=false;DeleteAction=nullptr;SelectedId.Empty();bRebuild=true;})];
 }
 void SOpenGolfAccountPanel::BuildSignedOut(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
 {
@@ -287,10 +324,17 @@ void SOpenGolfAccountPanel::BuildProfile(const TSharedRef<SVerticalBox>& Page,UO
 void SOpenGolfAccountPanel::BuildClubs(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
 {
     auto* S=&Service;
-    auto Clubs=AddSection(Page,TEXT("CLUB AVERAGES"));
-    Clubs->AddSlot().AutoHeight().Padding(0,0,0,8)[SNew(SHorizontalBox)
-        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(TEXT("Last 90 days. Select a club to view its shots."),Style.SmallSize,true)]
-        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(ButtonGap,0,0,0)[Button(TEXT("Refresh"),[S]{S->LoadCarry();},true)]];
+    auto Clubs=AddSection(Page,TEXT(""));
+    Clubs->AddSlot().AutoHeight().Padding(0,0,0,SectionGap)[SNew(SHorizontalBox)
+        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(TEXT("Club averages  /  Last 90 days"),Style.SmallSize,true)]
+        +SHorizontalBox::Slot().AutoWidth()[SNew(SOpenGolfIconButton).Style(Style).Icon(EOpenGolfAccountIcon::Refresh)
+            .Tag(TEXT("RefreshHistory")).Label(FText::FromString(TEXT("Refresh club averages")))
+            .IsEnabled_Lambda([S]{return !S->IsBusy();}).OnClicked_Lambda([S]{S->LoadCarry();})]
+        +SHorizontalBox::Slot().AutoWidth().Padding(ButtonGap,0,0,0)[Button(TEXT("Clear all"), [this,S]
+        {
+            ConfirmDeletion(TEXT("Delete recent shots for every club? Includes pending shots and the newest 200 per club from the last 90 days."),
+                TEXT("Delete all"), [S] { S->ClearAllHistory(); });
+        },true,false,Style.SmallSize)]];
     TArray<TSharedPtr<FJsonObject>> SortedCarry;
     for (const TSharedPtr<FJsonValue>& Value : Service.GetCarry())
     {
@@ -299,6 +343,18 @@ void SOpenGolfAccountPanel::BuildClubs(const TSharedRef<SVerticalBox>& Page,UOpe
     }
     if (SortedCarry.IsEmpty())
         Clubs->AddSlot().AutoHeight()[Text(TEXT("No saved club statistics yet."))];
+    else
+    {
+        // Column captions, inset by the club buttons' padding so they line up with the rows below.
+        auto Header = SNew(SHorizontalBox);
+        const TPair<const TCHAR*, float> Columns[] = {{TEXT("Club"), ClubColumn}, {TEXT("Ball speed"), SpeedColumn},
+            {TEXT("Carry"), CarryColumn}, {TEXT("Total"), TotalColumn}, {TEXT("Shots"), ShotsColumn}};
+        for (const auto& Column : Columns)
+            Header->AddSlot().FillWidth(Column.Value)[Text(Column.Key, Style.SmallSize, true)];
+        Header->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(24)];
+        const float Inset = ButtonContentPadding + Style.Button.NormalPadding.Left;
+        Clubs->AddSlot().AutoHeight().Padding(Inset, 0, Inset, 4)[Header];
+    }
     SortedCarry.StableSort([](const TSharedPtr<FJsonObject>& A, const TSharedPtr<FJsonObject>& B)
     {
         const TOptional<double> Left = AverageCarry(*A);
@@ -314,57 +370,131 @@ TSharedRef<SWidget> SOpenGolfAccountPanel::ClubRow(UOpenGolfOnlineSubsystem& Ser
     const FString Club=OpenGolfOnline::Text(Row,TEXT("club"));
     const double Shots=Number(Row,TEXT("shots"));
     const TOptional<double> Carry = AverageCarry(*Row);
-    const FString AverageLabel = Carry.IsSet() ? FString::Printf(TEXT("%.1f yd average"), Carry.GetValue()) : TEXT("—");
+    const FString CarryLabel = Carry.IsSet() ? FString::Printf(TEXT("%.1f yd"), Carry.GetValue()) : TEXT("—");
     const FString ShotCount=FString::Printf(TEXT("%.0f %s"),Shots,FMath::IsNearlyEqual(Shots,1.0)?TEXT("shot"):TEXT("shots"));
+    // Ball speed and total are loaded per club after the list, so their cells follow the service as they arrive. Each
+    // cell formats its text again only when the averages or the loading state change, not every frame.
+    const TWeakObjectPtr<UOpenGolfOnlineSubsystem> Weak=S;
+    auto Live=[this,Weak,Club](TOptional<double> FOpenGolfClubShotAverages::*Field,const TCHAR* Unit)
+    {
+        const TSharedRef<FAverageCellCache> Cache=MakeShared<FAverageCellCache>();
+        return SNew(STextBlock).Font(Style.GetFont(Style.BodySize)).ColorAndOpacity(Style.TextColor)
+            .Text_Lambda([Weak,Club,Field,Unit,Cache]
+            {
+                const UOpenGolfOnlineSubsystem* Online=Weak.Get();
+                const uint64 Revision=Online?Online->GetAveragesRevision():0;
+                const bool bLoading=Online&&Online->IsLoadingClubAverages();
+                if (Cache->Revision!=Revision || Cache->bLoading!=bLoading)
+                {
+                    Cache->Revision=Revision; Cache->bLoading=bLoading;
+                    Cache->Text=FText::FromString(AverageCell(Online,Club,Field,Unit));
+                }
+                return Cache->Text;
+            });
+    };
     // One button per club, tagged ClubRow:<club code>, laid out as table columns.
-    return SNew(SButton).ButtonStyle(&Style.Button).IsEnabled_Lambda([S]{return !S->IsBusy();}).Tag(FName(*(TEXT("ClubRow:")+Club)))
+    return SNew(SButton).ButtonStyle(&ClubRowStyle).ContentPadding(FMargin(ButtonContentPadding,ButtonContentPaddingY))
+        .IsEnabled_Lambda([S]{return !S->IsBusy();}).Tag(FName(*(TEXT("ClubRow:")+Club)))
 #if WITH_ACCESSIBILITY
         .AccessibleText(FText::FromString(FString::Printf(TEXT("View %s shots"),*ClubName(Club))))
 #endif
-        .OnClicked_Lambda([this,S,Club]{bHistory=true;ConfirmDeleteId.Empty();S->LoadHistory(Club);bRebuild=true;return FReply::Handled();})
+        .OnClicked_Lambda([this,S,Club]{bHistory=true;DeleteAction=nullptr;SelectedId.Empty();S->LoadHistory(Club);bRebuild=true;return FReply::Handled();})
         [SNew(SHorizontalBox)
-            +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(ClubColumn)[Text(ClubAbbreviation(Club))]]
-            +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(AverageColumn)[Text(AverageLabel)]]
-            +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(ShotsColumn)[Text(ShotCount,Style.SmallSize,true)]]
-            +SHorizontalBox::Slot().FillWidth(1)
-            +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-                [SNew(STextBlock).Text(FText::FromString(TEXT("View"))).Font(Style.GetFont(Style.SmallSize)).ColorAndOpacity(Style.AccentColor)]];
+            +SHorizontalBox::Slot().FillWidth(ClubColumn).VAlign(VAlign_Center)[Text(ClubAbbreviation(Club))]
+            +SHorizontalBox::Slot().FillWidth(SpeedColumn).VAlign(VAlign_Center)[Live(&FOpenGolfClubShotAverages::BallSpeedMph,TEXT("mph"))]
+            +SHorizontalBox::Slot().FillWidth(CarryColumn).VAlign(VAlign_Center)[Text(CarryLabel)]
+            +SHorizontalBox::Slot().FillWidth(TotalColumn).VAlign(VAlign_Center)[Live(&FOpenGolfClubShotAverages::TotalYd,TEXT("yd"))]
+            +SHorizontalBox::Slot().FillWidth(ShotsColumn).VAlign(VAlign_Center)[Text(ShotCount,Style.SmallSize,true)]
+            +SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(24).HAlign(HAlign_Right)
+                [Text(TEXT("\u203a"),Style.BodySize,true)]]];
 }
-void SOpenGolfAccountPanel::BuildHistory(const TSharedRef<SVerticalBox>& Page,UOpenGolfOnlineSubsystem& Service)
+void SOpenGolfAccountPanel::ConfirmDeletion(FString Prompt, FString Label, TFunction<void()> Action)
 {
-    auto* S=&Service;
+    DeletePrompt = MoveTemp(Prompt);
+    DeleteLabel = MoveTemp(Label);
+    const FString Owner = Online->GetAccountKey();
+    const FString Club = bHistory ? Online->GetHistoryClub() : FString();
+    DeleteAction = [this, Owner, Club, Action = MoveTemp(Action)]
+    {
+        if (Online.IsValid() && Online->HasSession() && Online->GetAccountKey() == Owner
+            && (!bHistory || Online->GetHistoryClub() == Club)) Action();
+    };
+    bRebuild = true;
+}
+
+void SOpenGolfAccountPanel::BuildHistory(const TSharedRef<SVerticalBox>& Page, UOpenGolfOnlineSubsystem& Service)
+{
+    auto* S = &Service;
+    const FString Club = S->GetHistoryClub();
     Page->AddSlot().AutoHeight().Padding(0,0,0,SectionGap)[SNew(SHorizontalBox)
-        +SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(TEXT("Newest 200 shots from the last 90 days. Distances in yards; speed in mph; angles in degrees."),Style.SmallSize,true)]
-        +SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(ButtonGap,0,0,0)[Button(TEXT("Export CSV"),[S]{S->ExportHistory();},true)]];
-    auto Header=SNew(SHorizontalBox);
-    Header->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(DeleteColumn)];
-    for(int32 I=0;I<UE_ARRAY_COUNT(HistoryCaptions);++I)
-        Header->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(I==0?TimeColumn:ValueColumn)[Text(HistoryCaptions[I],Style.SmallSize,true)]];
-    const float Offset=HistoryList.IsValid()?HistoryList->GetScrollOffset():0;
-    HistoryRows.Empty();
-    for(const auto& Value:Service.GetHistory())if(Value->Type==EJson::Object)HistoryRows.Add(Value->AsObject());
-    auto Table=SNew(SVerticalBox);
-    Table->AddSlot().AutoHeight().Padding(0,0,0,6)[Header];
+        + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(TEXT("Last 90 days"), Style.SmallSize, true)]
+        + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("CSV"), [S] { S->ExportHistory(); }, true, false, Style.SmallSize)]
+        + SHorizontalBox::Slot().AutoWidth().Padding(ButtonGap,0,0,0)[Button(TEXT("Clear club"), [this,S,Club]
+        {
+            ConfirmDeletion(TEXT("Clear ") + ClubName(Club) + TEXT(" history? Includes pending shots and the newest 200 shots from the last 90 days."),
+                TEXT("Clear club"), [S,Club] { S->ClearClubHistory(Club); });
+        },true,false,Style.SmallSize)]];
+    const float Offset = HistoryList ? HistoryList->GetScrollOffset() : 0;
+    HistoryRows.Reset();
+    TSharedPtr<FJsonObject> Selected;
+    for (const auto& Value : Service.GetHistory())
+    {
+        if (!Value.IsValid() || Value->Type != EJson::Object) continue;
+        auto Row = Value->AsObject();
+        HistoryRows.Add(Row);
+        if (OpenGolfOnline::Text(Row,TEXT("id")) == SelectedId) Selected = Row;
+    }
+    auto Table = SNew(SVerticalBox);
+    Table->AddSlot().AutoHeight()[HistoryLine(nullptr)];
+    if (HistoryRows.IsEmpty())
+        Page->AddSlot().AutoHeight().Padding(0,8)[Text(Service.IsBusy() ? TEXT("Loading shots...") : TEXT("No shots in this period."), Style.SmallSize, true)];
     Table->AddSlot().FillHeight(1)[SAssignNew(HistoryList,SListView<TSharedPtr<FJsonObject>>)
         .ListItemsSource(&HistoryRows).SelectionMode(ESelectionMode::Single)
-        .OnGenerateRow_Lambda([this,S](TSharedPtr<FJsonObject> Row,const TSharedRef<STableViewBase>& Owner)
-        {return SNew(STableRow<TSharedPtr<FJsonObject>>,Owner)[HistoryLine(*S,Row)];})];
+        .OnSelectionChanged_Lambda([this](TSharedPtr<FJsonObject> Row, ESelectInfo::Type) { ShowShotDetails(Row); })
+        .OnGenerateRow_Lambda([this](TSharedPtr<FJsonObject> Row, const TSharedRef<STableViewBase>& Owner)
+        { return SNew(STableRow<TSharedPtr<FJsonObject>>,Owner)[HistoryLine(Row)]; })];
+    const float HorizontalOffset = ShotScroll ? ShotScroll->GetScrollOffset() : 0.f;
+    constexpr float TableWidth = ShotTimeWidth + (UE_ARRAY_COUNT(HistoryFields) - 1) * ShotMetricWidth + 24;
+    Page->AddSlot().FillHeight(1)[SAssignNew(ShotScroll,SScrollBox).Tag(TEXT("ShotTableScroll"))
+        .Orientation(Orient_Horizontal).ScrollBarAlwaysVisible(true)
+        +SScrollBox::Slot()[SNew(SBox).WidthOverride(TableWidth)[Table]]];
+    ShotScroll->SetScrollOffset(HorizontalOffset);
+    Page->AddSlot().AutoHeight()[SAssignNew(Details,SBox)];
+    if (Selected) HistoryList->SetSelection(Selected);
+    ShowShotDetails(Selected);
     HistoryList->SetScrollOffset(Offset);
-    Page->AddSlot().FillHeight(1)[SNew(SScrollBox).Orientation(Orient_Horizontal)
-        +SScrollBox::Slot()[SNew(SBox).WidthOverride(DeleteColumn+TimeColumn+(UE_ARRAY_COUNT(HistoryFields)-1)*ValueColumn)[Table]]];
 }
-TSharedRef<SWidget> SOpenGolfAccountPanel::HistoryLine(UOpenGolfOnlineSubsystem& Service,const TSharedPtr<FJsonObject>& Row)
+
+TSharedRef<SWidget> SOpenGolfAccountPanel::HistoryLine(const TSharedPtr<FJsonObject>& Row)
 {
-    auto* S=&Service;
-    const FString Id=OpenGolfOnline::Text(Row,TEXT("id"));
-    // The first press arms the delete; the Confirm button that replaces it deletes the shot.
-    const TSharedRef<SWidget> Delete=ConfirmDeleteId==Id
-        ?Button(TEXT("Confirm"),[this,S,Id]{S->DeleteShot(Id);ConfirmDeleteId.Empty();bRebuild=true;},true,true,Style.SmallSize)
-        :StaticCastSharedRef<SWidget>(SNew(SOpenGolfIconButton).Style(Style).Icon(EOpenGolfAccountIcon::Close).Size(DeleteIconSize).Tag(TEXT("DeleteShot"))
-            .Label(FText::FromString(TEXT("Delete shot"))).IsEnabled_Lambda([S]{return !S->IsBusy();}).OnClicked_Lambda([this,Id]{ConfirmDeleteId=Id;bRebuild=true;}));
-    auto Line=SNew(SHorizontalBox);
-    Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(DeleteColumn).HAlign(HAlign_Left)[Delete]];
-    for(int32 I=0;I<UE_ARRAY_COUNT(HistoryFields);++I)
-        Line->AddSlot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(I==0?TimeColumn:ValueColumn)[Text(HistoryValue(Row,I),Style.SmallSize)]];
+    auto Line = SNew(SHorizontalBox);
+    for (int32 I = 0; I < UE_ARRAY_COUNT(HistoryFields); ++I)
+    {
+        const FString Value = Row ? HistoryValue(Row, I) : FString(HistoryCaptions[I]);
+        Line->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(I == 0 ? ShotTimeWidth : ShotMetricWidth)
+            .HAlign(I == 0 ? HAlign_Left : HAlign_Right).Padding(6,4)
+            [SNew(STextBlock).Text(FText::FromString(Value.IsEmpty() ? TEXT("\u2014") : Value))
+                .Font(Style.GetFont(Style.SmallSize)).ColorAndOpacity(Row ? Style.TextColor : Style.LabelColor)
+                .AutoWrapText(false)]];
+    }
     return Line;
+}
+
+void SOpenGolfAccountPanel::ShowShotDetails(TSharedPtr<FJsonObject> Row)
+{
+    SelectedId = OpenGolfOnline::Text(Row, TEXT("id"));
+    if (!Details) return;
+    if (!Row) { Details->SetContent(SNullWidget::NullWidget); return; }
+    auto Body = SNew(SVerticalBox);
+    const FString When = HistoryValue(Row, 0);
+    auto* S = Online.Get();
+    const FString Id = SelectedId;
+    Body->AddSlot().AutoHeight()[SNew(SHorizontalBox)
+        + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)[Text(ClubName(S->GetHistoryClub()) + TEXT("  /  ") + When)]
+        + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Delete shot"), [this,S,Id,When]
+        {
+            ConfirmDeletion(TEXT("Delete the ") + ClubName(S->GetHistoryClub()) + TEXT(" shot from ") + When + TEXT("?"),
+                TEXT("Delete shot"), [S,Id] { S->DeleteShot(Id); });
+        }, !Id.IsEmpty(), false, Style.SmallSize)]];
+    Details->SetContent(SNew(SBorder).BorderImage(&Style.Section).Padding(SectionPadding)[Body]);
 }

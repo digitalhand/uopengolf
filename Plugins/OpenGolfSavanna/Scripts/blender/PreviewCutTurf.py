@@ -118,6 +118,9 @@ def preview(family='Fairway'):
         loaded.meshes=[f'SM_Turf{family}_50cm_{v}' for v in 'ABCD']
     if all(loaded.meshes):
         render_patch(loaded.meshes,family,'before',output/(family+'-before.png'))
-    else:
+    elif any(loaded.meshes):
         raise RuntimeError('The backup does not contain the original preview meshes')
+    else:
+        # A family added after the backup (Rough, 2026-11-20) has no earlier patch to compare.
+        print('CUT_TURF_PREVIEW_NO_BEFORE '+family,flush=True)
     bpy.ops.wm.save_as_mainfile(filepath=str(art_root()/'CutTurf/CutTurf.blend'))

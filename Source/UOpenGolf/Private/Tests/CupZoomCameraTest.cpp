@@ -68,7 +68,6 @@ public:
         {
         case 0:
             FOpenGolfPermissionTestAccess::Set(World);
-            Controller->TogglePlayMode();
             Test->TestTrue(TEXT("The ball is placed 3 m from the cup"), Mode->PlaceBallAt(GreenSpot(300)));
             // Off line, it passes about 26 cm beside the cup and rolls on well past 8 ft.
             LaunchMonitor->OnShotReceivedNative.Broadcast(Putt(8.0f, 5.0f));
@@ -157,8 +156,7 @@ public:
                 return false;
             Test->TestTrue(TEXT("After the hole-out the ball is back at address"), Mode->IsBallAtAddress() && !Ball->IsHoled());
             Test->TestEqual(TEXT("The zoom resets with the ball"), Controller->GetCupZoom(), 0.0f);
-            Controller->TogglePlayMode();
-            Test->TestEqual(TEXT("G goes back to the range"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
+            Test->TestEqual(TEXT("Practice stays in Training"), Mode->GetPlayMode(), EOpenGolfPlayMode::Range);
             return true;
         default:
             return true;

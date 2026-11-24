@@ -62,14 +62,13 @@ public:
             return false;
         case 1:
         {
-            // The flag button sits under the test-shot layer, which once caught every click over it.
-            const TSharedPtr<SWidget> Flag = Find(TEXT("SPlayModeBar"), TEXT("SHudIconButton"));
-            if (!Test->TestTrue(TEXT("The flag button is drawn"), Flag.IsValid()))
-                return true;
-            const FVector2D At = PointOn(*Flag);
-            Test->TestTrue(TEXT("A click on the flag button reaches it"), Reaches(At, Flag));
+            const auto Placement = WithTag(Root, TEXT("PlaceBall"));
+            if (!Test->TestTrue(TEXT("The placement button is drawn"), Placement.IsValid())) return true;
+            const FVector2D At = PointOn(*Placement);
+            Test->TestTrue(TEXT("The placement button receives clicks"), Reaches(At, Placement));
             Click(Root, At);
-            Test->TestEqual(TEXT("Clicking the flag button plays the hole"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
+            Test->TestTrue(TEXT("Click starts Training placement"), Controller->IsPlacingBall());
+            Controller->CancelPlacingBall();
             break;
         }
         case 2:

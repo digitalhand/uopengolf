@@ -18,6 +18,17 @@ enum class EOpenGolfAccountState : uint8
     Restoring, SignedOut, SigningIn, LoadingProfile, Ready, Reconnecting, SigningOut
 };
 
+/**
+ * One club's averages over its shot history (the newest 200 shots of the last 90 days). Each value is unset when no
+ * shot measured it. Total is carry plus signed roll.
+ */
+struct FOpenGolfClubShotAverages
+{
+    TOptional<double> BallSpeedMph, TotalYd;
+    /** The club's shot count in the club averages when these were loaded; a different count reloads them. */
+    int64 Shots = -1;
+};
+
 UCLASS()
 class OPENGOLFONLINE_API UOpenGolfOnlineSubsystem : public UGameInstanceSubsystem
 {
@@ -53,6 +64,8 @@ public:
     /** Completion reports server acceptance; failed saves leave the current profile unchanged. */
     void UpdateDisplayName(const FString& Name, TFunction<void(bool)> Completion = {});
     void DeleteShot(const FString& Id);
+    void ClearClubHistory(const FString& Club);
+    void ClearAllHistory();
     FString ExportHistory();
     bool QueueShot(const TSharedPtr<FJsonObject>& Shot, const FString& Owner);
     void Flush();
@@ -77,6 +90,14 @@ public:
     TSharedPtr<FJsonObject> GetProfile() const { return Profile; }
     const TArray<TSharedPtr<FJsonValue>>& GetCarry() const { return Carry; }
     const TArray<TSharedPtr<FJsonValue>>& GetHistory() const { return History; }
+    /**
+     * A club's ball-speed and total averages, or null until they are loaded. LoadCarry loads them one club at a time
+     * after the club averages arrive, only for clubs whose shot count changed; this is not part of IsBusy.
+     */
+    const FOpenGolfClubShotAverages* FindClubAverages(const FString& Club) const { return ClubAverages.Find(Club); }
+    bool IsLoadingClubAverages() const { return bLoadingAverages || !AveragesQueue.IsEmpty(); }
+    /** Changes whenever any club's ball-speed and total averages are stored or forgotten. */
+    uint64 GetAveragesRevision() const { return AveragesRevision; }
     int32 GetPendingCount() const { return Outbox.Num(); }
     int32 GetRejectedCount() const { return RejectedCount; }
     uint64 GetRevision() const { return Revision; }
@@ -119,6 +140,12 @@ private:
     bool SaveLocal();
     void CloseBrowser();
     void ProcessPlayerRequests();
+    /** Queues the clubs in Carry whose averages are missing or were loaded at another shot count; forgets unlisted clubs. */
+    void QueueClubAverages();
+    /** Stores Club's averages from its shot rows, at the shot count Carry lists for it. */
+    void StoreClubAverages(const FString& Club, const TArray<TSharedPtr<FJsonValue>>& Rows);
+    /** Forgets every club's averages and ignores replies still in flight. */
+    void ClearClubAverages();
     void FinishSignInFailure(const FString& Message);
     FString LocalPath() const;
     OpenGolfOnline::FConfig Config;
@@ -129,7 +156,11 @@ private:
     TArray<FString> Permissions;
     bool bLastAdminPermission = false;
     FString AccessToken, RefreshToken, AccountKey, Status, StorageWarning, DisplayNameHint;
-    FString DeviceCode, UserCode, QrUrl, HistoryClub, PendingDelete;
+    FString DeviceCode, UserCode, QrUrl, HistoryClub;
+    void CollectHistoryIds(const FString& Club);
+    void CollectClubHistoryIds(TArray<FString> Clubs, TSet<FString> Ids);
+    void DeleteHistoryIds(TSet<FString> Ids);
+    void FailHistoryRead();
     /** QR sign-in: the lease's end, the code's expiry and the earliest time for another request after a failure. */
     double QrWantedUntil = 0, QrExpiresAt = 0, QrRetryAt = 0;
     /** Bumped by DropQr, so replies for an earlier code are ignored. */
@@ -138,6 +169,14 @@ private:
     FString OutboxOwner;
     TSharedPtr<FJsonObject> Profile;
     TArray<TSharedPtr<FJsonValue>> Carry, History, Outbox;
+    TMap<FString, FOpenGolfClubShotAverages> ClubAverages;
+    /** Clubs whose averages are still to be requested, sent one at a time. */
+    TArray<FString> AveragesQueue;
+    /** Bumped by ClearClubAverages, so replies for an earlier account are ignored. */
+    uint64 AveragesRequest = 0;
+    /** Bumped when ClubAverages changes; see GetAveragesRevision. */
+    uint64 AveragesRevision = 0;
+    bool bLoadingAverages = false;
     TArray<TFunction<void(bool)>> RefreshWaiters;
     double TokenExpiresAt = 0, PollAt = 0, AuthDeadline = 0, UploadAt = 0, RetryAt = 0, NextLocalRetry = 0;
     int32 PollInterval = 5, RetryStep = 0, RejectedCount = 0, UploadLimit = 100;

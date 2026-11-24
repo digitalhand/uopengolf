@@ -41,6 +41,13 @@ bool FOpenGolfHoleRoundTest::RunTest(const FString& Parameters)
         TestEqual(FString::Printf(TEXT("%d on a par 4"), Strokes), FOpenGolfHoleRound::ScoreName(Strokes, 4), FString(Name));
     TestEqual(TEXT("Albatross"), FOpenGolfHoleRound::ScoreName(2, 5), FString(TEXT("Albatross")));
     TestEqual(TEXT("An ace on a par 3 is a hole in one"), FOpenGolfHoleRound::ScoreName(1, 3), FString(TEXT("Hole in one")));
+
+    const TPair<int32, const TCHAR*> ToPar[] = {{4, TEXT("E")}, {3, TEXT("-1")}, {6, TEXT("+2")}, {1, TEXT("-3")}};
+    for (const auto& [Strokes, Text] : ToPar)
+        TestEqual(FString::Printf(TEXT("%d against par 4"), Strokes), FOpenGolfHoleRound::ScoreToPar(Strokes, 4), FString(Text));
+    Round.Start(5);
+    Round.Strokes = 6;
+    TestEqual(TEXT("A round's own score to par"), Round.ScoreToPar(), FString(TEXT("+1")));
     return true;
 }
 

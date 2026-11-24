@@ -10,6 +10,7 @@
 #include "SOpenGolfQrSignIn.h"
 #include "UI/Club/ClubPicker.h"
 #include "UI/Menu/MainMenu.h"
+#include "UI/Menu/CourseBrowser.h"
 
 namespace SlateArgumentDefaultsTestDetail
 {
@@ -41,6 +42,11 @@ bool FSlateArgumentDefaultsTest::RunTest(const FString&)
         TestNull(TEXT("Menu controller defaults to null"), Args._Controller);
         // The player controller omits Online: null means the game instance's service.
         TestNull(TEXT("Menu online override defaults to null"), Args._Online);
+    });
+    WithPatternedArguments<SCourseBrowser::FArguments>([this](const SCourseBrowser::FArguments& Args)
+    {
+        TestNull(TEXT("Course browser style defaults to null"), Args._Style);
+        TestNull(TEXT("Course browser courses default to null"), Args._Courses);
     });
     WithPatternedArguments<SClubPicker::FArguments>([this](const SClubPicker::FArguments& Args)
     {

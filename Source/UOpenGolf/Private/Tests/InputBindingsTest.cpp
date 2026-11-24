@@ -37,12 +37,13 @@ public:
         {
         case 0:
         {
-            const FKey Keys[] = {EKeys::C, EKeys::T, EKeys::H, EKeys::P, EKeys::Tab, EKeys::R, EKeys::G, EKeys::B, EKeys::W,
+            const FKey Keys[] = {EKeys::C, EKeys::T, EKeys::H, EKeys::P, EKeys::Tab, EKeys::R, EKeys::B, EKeys::W,
                 EKeys::LeftMouseButton, EKeys::RightMouseButton, EKeys::F9, EKeys::Escape, EKeys::A, EKeys::D, EKeys::LeftShift,
                 EKeys::RightShift};
             for (const FKey& Key : Keys)
                 Test->TestTrue(Key.ToString() + TEXT(" is a play key"), Controller->GetKeyMapping()->GetMappings().ContainsByPredicate(
                                                                          [&Key](const FEnhancedActionKeyMapping& Mapping) { return Mapping.Key == Key; }));
+            Test->TestFalse(TEXT("G cannot switch sessions"),Controller->ForwardUIKey(EKeys::G,true));
             Test->TestFalse(TEXT("A key no action uses is left to the panel"), Controller->ForwardUIKey(EKeys::Z, true));
             Controller->SetWindPanelOpen(false);
             Test->TestTrue(TEXT("W is handed to the controller"), Controller->ForwardUIKey(EKeys::W, true));

@@ -1,8 +1,33 @@
 # Playing UOpenGolf
 
-Choose Training from the main menu to enter the driving range. Every shot, from a Square Home or a test shot, is hit
-from the tee until you switch to [playing the hole](#playing-the-hole). Click in the viewport once so it has keyboard focus; the keys below do
-nothing until it does.
+Choose **Training** to practise from the tee or a selected lie. For a scored round, open **Courses**, select **Savanna Range** to view its scorecard, then choose **Play**. Click the viewport once to focus the gameplay keys.
+
+### Training games
+
+In Training, open the target icon beside **X**. Choose a game and a **Winning radius** of **3 ft**,
+**6 ft**, or **10 ft**; the Distance Ladder also asks for **3** or **5** tries per target. Press
+**Start** to begin. Both games show
+one white ring with the chosen radius. A ball counts as a hit when it stops inside or touching
+the white line, or goes in the cup. Each shot starts from the tee. Aim with the minimap or A and D.
+
+- **Distance Practice.** Hit as many balls as you like; there is no shot limit. The flag starts
+  25 yards from the tee. Whenever the ball is at rest, use the slider to choose a distance from
+  **10 to 250 yd** in 5-yard steps. The panel shows how many shots hit the ring at the current
+  distance, and changing the distance starts a new count. Balls already hit stay on the ground.
+- **Distance Ladder.** The targets are 15, 25, 35 … 145 yd, then 150 yd. One hit advances you to
+  the next target. If you use all your tries without a hit, the ladder drops back one target,
+  or stays at 15 yd if you are already there. The flag moves two seconds after the ball stops
+  or just before you hit again. A hit at 150 yd completes the ladder.
+
+Pressing **Start** during a drill opens a confirmation that lists the new game, its radius and,
+for the ladder, its tries.
+Choose **Exit Drill** to switch or press **Esc** to keep playing the current drill.
+
+Finished balls stay where they stopped throughout Training. Press **Esc** or click **X** for
+**Restart Drill** or **Exit Drill**. Restart (**Play Again** once the ladder is finished) keeps your
+choices, clears the balls hit during this run and starts a new count; the ladder starts again at 15 yd. Exit restores
+the original flag and keeps your finished balls. Press Esc again to return to the game. Leaving
+Training clears the range.
 
 ### Installing and updating
 
@@ -37,32 +62,31 @@ instead.
 | **F9** | On the range: record shots on/off, the same as clicking the record icon; while signed in, recorded shots also go to your online profile. Does nothing on the hole |
 | **H** | Hit the selected test shot again |
 | **P** | Open or close the test-shot list |
-| **R** | Tee the ball up again straight away (on the hole, a new hole) |
-| **G** | Play the hole / back to the range; the ball goes back to the tee either way |
-| **B** | On the hole: place the ball, then click the ground where it should go (right-click or Escape cancels) |
-| **W** | Open or close the wind controls under the wind indicator (the same as clicking the indicator) |
+| **R** | In free Training, reset the ball to its tee or practice lie |
+| **B** | In free Training, place the ball, then click the ground where it should go (right-click or Escape cancels) |
+| **W** | In Training, open or close the wind controls under the wind indicator (the same as clicking the indicator) |
 | **A** / **D** | Turn the aim line left / right: a tap turns exactly 0.25° (0.1° with **Shift**), a hold starts slowly and speeds up to 20°/s (with **Shift**, stays at 2°/s), up to 45° either way (from the target line on the range, from the line to the cup on the hole), while the ball waits for the shot. The camera turns with it, the aim stays set across shots, and Offline is measured from it. Use it to hit into the rough |
 | **~** | Unreal console, for the [settings](#settings) below |
-| **Escape** | Cancel placing the ball, or close the wind controls or the test-shot list; otherwise open the pause menu |
+| **Escape** | During a drill, open or dismiss the drill dialog. In free Training, close the current tool or open the pause menu |
 | **F6** | Move the keys onto the HUD's buttons, or back to the game (see [Without a mouse](#without-a-mouse)) |
 
 Use the mouse for the toolbar, settings cog, wind controls, test-shot panel, and ball
-placement. Hover over a toolbar icon for its name, key, or status.
+placement. Hover over a toolbar icon for its name or key; the training games button has no tooltip.
 
 #### Without a mouse
 
 The HUD's buttons also work from the keyboard or a gamepad:
 
-- **F6** (gamepad: **View**) moves the keys onto the HUD's buttons. These are the toolbar (club,
-  Game Mode, record or place ball), the settings cog, the wind controls and the test-shot list.
+- **F6** (gamepad: **View**) moves the keys onto the HUD's buttons. These include the Training toolbar (back, games, club,
+  record and place ball), the settings cog, the wind controls and the test-shot list.
 - **Up**/**Down**, **Tab**/**Shift+Tab** or the D-pad move between them.
 - **Enter**, **Space** or **A** presses the focused one.
-- **Escape** (gamepad: **B**) or **F6** again hands the keys back to the game, so **Tab**
-  changes club again.
+- **F6** hands the keys back to the game so **Tab** changes club again. **Escape** or gamepad **B**
+  opens the drill dialog during a training game and backs out of HUD controls in free Training.
 - The gamepad **Menu** button opens the menu, and goes back a page while it is open. In the
   menu, **B** goes back like **Escape**, and the shoulder buttons change Settings category.
-- While placing a ball (**B** key or the ball button), the left stick moves the cursor and **A**
-  places the ball there.
+- While placing a ball (**B** key or the ball button), the pointer is a ball icon centred where the
+  ball will go; the left stick moves it and **A** places the ball there.
 
 Only simulated key events are covered by the automated tests; a real gamepad has not been
 checked.
@@ -74,19 +98,30 @@ checked.
   monitor it stays red. It hides while the ball flies or rolls, until it is teed up again,
   while you place a ball and on a practice hole (a placed ball).
 - **Top right.** The cog opens Settings directly. The heading reads **Training**,
-  or **Training · Ball Placement** while placing or playing a placed ball. In Game Mode it
-  shows **Airways**, with the hole number, par, and length below. The shot tiles below
+  or **Training · Ball Placement** while placing or playing a placed ball. In Courses it
+  shows **Savanna Range**, and the tile grows to twice its height for two large lines below it:
+  the hole (**Hole 1**), then its par and length (**Par 4 · 400 yd**). The shot tiles below
   show game results, club data, and raw launch-monitor values. `…` means a value is pending,
   `—` means it is missing, `*` means it is derived, and `L`/`R` indicate direction.
-- **Top left.** The club icon opens the club drawer. The flag switches between Training
-  and Game Mode. The record icon toggles range recording, as does **F9**. It turns red
-  while recording or amber if a save fails. Hover over it for counts and save details.
-- **Hole play.** The ball icon replaces Record. Click it or press **B** to place the ball.
-  Below the toolbar, the hole tiles show the current stroke, distance **To Pin**, and
-  **Putts**. These tiles hide during ball placement.
-  A banner names the score when the ball drops.
+- **Top left.** The club icon opens the club drawer. The Training ball icon lets you choose a practice lie. The record icon toggles range recording, as does **F9**. It turns red
+  while recording or amber if a save fails; each failed save is logged with its error (see [Recording errors and retries](#recording-errors-and-retries)).
+- **Course round.** Below the toolbar, the hole tiles show the current stroke, distance **To Pin**, and
+  **Putts**. A banner names the score when the ball drops.
+- **Bottom left: hole map.** A view of the hole from above, tee at the bottom and flag at the top, with the
+  ball as a white dot. Shading and contour lines show the ground's rise and fall. The view zooms in on the ball and
+  the flag as you play, and holds still while the ball flies.
+  - **Header:** your lie (Tee, Fairway, Rough, Bunker, Green, Fringe and so on) and the hole. While the ball is in
+    the air it keeps the lie you hit from; once the ball lands it names the surface the ball is on.
+  - **Flag:** the distance to the pin.
+  - **At address:** your aim runs to a target ring that shows its own distance and height change. A thin line
+    continues from the ring to the flag. Click anywhere on the map to aim at that point and put the target there. A
+    and D turn the aim and keep the target's distance.
+  - **Footer:** the elevation to the pin: how far above (▲) or below (▼) the ball it is, in feet and inches (for
+    example `▲ 3"` or `▼ 5' 1"`), or Level.
+  - When the ball is off the map, an arrow on the edge points to it. Clicks on the map never place the ball, and the
+    map shrinks to fit short windows.
 - **Wind** (top centre): the wind speed and an arrow for the way it blows, turned with the
-  camera. Click it (or press **W**) to slide out the wind controls under it:
+  camera. In Training, click it (or press **W**) to slide out the wind controls under it:
   - an **On/Off** switch; off is calm, and the speed is kept for when it is switched back on;
   - **Speed**, slid from calm to 30 mph in 1 mph steps;
   - **Direction**, slid in 5° steps through where the wind comes from against the target
@@ -109,7 +144,7 @@ the tee. The tiles keep the last shot until the next one.
 
 ### Playing the hole
 
-Press **G** (or click the flag button) to play the range as a par 4: the pin is 400 yards
+Open **Courses**, select **Savanna Range**, and choose **Play**. Wind is fixed at 3 mph from right to left. The pin is 400 yards
 out on a gently contoured green, with a fairway bunker on the left of the landing area and a
 bunker right of the green.
 
@@ -127,14 +162,9 @@ bunker right of the green.
   within 5 feet.
 - From 8 feet out the camera slowly closes in behind the ball. It backs out as the ball rolls
   away, to the normal distance by 8 feet past or once a miss stops; a holed ball keeps the
-  close view until the ball is reset (automatically, or with **R**).
-- When the ball drops, a banner names the score (Birdie, Par, Bogey and so on) with the
-  strokes and putts, and after 5 seconds the ball goes back to the tee for a new hole.
-- **B** (or the ball button), then a click on the ground, places the ball there to practise,
-  for example a chip from beside the green. Placing adds no stroke, but the hole then counts
-  as practice and the banner reads "Holed in N".
-- **G** again goes back to the range. See
-[Hitting shots on the range](#controls) for details.
+  close view through the hole-out banner.
+- After the banner, the final scorecard shows par, strokes and score relative to par (**E** for level, otherwise
+  such as **+1** or **-2**). Choose **Play again** for a fresh round or **Courses** to return to the browser.
 
 ### Changing clubs
 
@@ -151,13 +181,12 @@ compare with this engine. While you are signed in, recording also saves eligible
 shots to your online profile, for the club averages and shot history in Settings › Player
 (see [Menu and account](#menu-and-account)). Recording off saves
 nothing, locally or online. Recording is a range feature: the hole shows no record icon,
-**F9** does nothing there, and hole shots are never recorded. Recording keeps its on/off
-state for when you return to the range.
+**F9** does nothing there, and hole shots are never recorded. A fresh Training session starts with recording off.
 
 1. Connect the launch monitor (**C**) and check for **Ready** in Settings › Launch Monitor.
    The record icon is a white ring while recording is off.
-2. Press **F9** or click the record icon to start recording. The dot turns red. Hover over it
-   to see the saved count. Press **F9** or click it again to stop. Recording is off at every Play start.
+2. Press **F9** or click the record icon to start recording. The dot turns red. Press **F9** or
+   click it again to stop. Recording is off at every Play start.
 3. Select the club with **Tab** before each shot; the club selected when the shot
    arrives is the one recorded.
 
@@ -216,8 +245,8 @@ the folder, writing, or renaming fails, the shot remains in memory and retries o
 per second during Play. Later shots retain their own file numbers and session folders.
 The saved count advances only on success.
 
-Hover over the record icon to see the number of unsaved records and the save error,
-including when disconnected or recording is off. Restore access to the folder while Play
+The record icon stays amber while records are unsaved, including when disconnected or recording is
+off, and each failed save is logged as a `LogUOpenGolfRecording` warning with its error and file. Restore access to the folder while Play
 remains open to let the retries complete. Ending Play makes one final save attempt
 and logs any remaining unsaved count and destination. **There is no recovery across
 Play sessions or application restarts**; failed recordings still in memory are lost.
@@ -225,10 +254,13 @@ Play sessions or application restarts**; failed recordings still in memory are l
 ### Menu and account
 
 The home page, and the pause menu that **Escape** opens during Training, share a top bar:
-**UOPEN GOLF**, the launch-monitor status (click it for Settings › Launch Monitor), an account icon
-and a settings cog. The cog opens **Settings** from either the menu or the training HUD. While
-signed out the account icon signs in (it opens Settings › Player); while signed in it is the
-logout icon.
+**UOPEN GOLF**, an account icon and a settings cog. The cog opens **Settings** from either the
+menu or the training HUD. While signed out the account icon signs in (it opens Settings › Player);
+while signed in it is the logout icon. The launch monitor's connection status is in
+**Settings › Launch Monitor**.
+
+While signed out, the home page also shows the sign-in QR code under **Exit**, so you can sign
+in with a phone without opening Settings (see below). It disappears once you are signed in.
 
 **Settings › Player** holds the account:
 
@@ -240,8 +272,13 @@ logout icon.
   screen, and approve. It signs in the account your phone's browser is logged in to. The QR
   code disappears once you are signed in.
 - Signed in: the member-since date, the **Display name** (**Save display name** saves it at
-  once) and **Shot history**. Its **View** shows club averages for the last 90 days,
-  with the longest average carry at the top. Select a club to view individual shots.
+  once) and **Shot history**. Its **View** shows club averages for the last 90 days:
+  ball speed (mph), carry and total (carry plus roll, in yards) and the shot count, with the
+  longest average carry at the top. Carry averages every shot from the server; ball speed and
+  total average each club's newest 200 shots and fill in club by club after the list appears
+  (`…` while loading, `—` when no shot measured it). Select a club to view individual shots.
+  Scroll the shot table horizontally to see every measurement. Select a row to delete that shot. Use **Clear club** inside a club
+  or **Clear all** on the overview. Clear actions include pending shots and the newest 200 saved shots per club from the last 90 days.
   Shot times and the member-since date use this computer's local time. CSV exports use UTC.
 
 ### Settings

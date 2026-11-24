@@ -2,6 +2,8 @@
 #include "UOpenGolfGameMode.h"
 #include "OpenGolfSettings.h"
 #include "GolfGimmieIndicator.h"
+#include "GolfCourseDefinition.h"
+#include "Course/GolfCourseSubsystem.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -11,6 +13,7 @@
 #include "UOpenGolfBall.h"
 #include "OpenLaunchMonitorSubsystem.h"
 #include "ShotRecording.h"
+#include "Training/TrainingSession.h"
 #include "Online/CloudShotRecorder.h"
 #include "OpenGolfOnlineSubsystem.h"
 #include "TimerManager.h"
@@ -28,6 +31,20 @@ AUOpenGolfGameMode::AUOpenGolfGameMode()
     DefaultPawnClass = nullptr;
     RangeClass = AUOpenGolfRange::StaticClass();
     Recorder = MakeShared<ShotRecording::FShotRecorder>();
+}
+
+void AUOpenGolfGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+    Super::InitGame(MapName, Options, ErrorMessage);
+    Course = UGolfCourseSubsystem::FindCourse(Options);
+    PlayMode = Course ? EOpenGolfPlayMode::Hole : EOpenGolfPlayMode::Range;
+    if (Course)
+        UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Course round: %s."), *Course->DisplayName.ToString());
+}
+
+int32 AUOpenGolfGameMode::GetPar() const
+{
+    return Course ? Course->Par : AUOpenGolfRange::Par;
 }
 
 void AUOpenGolfGameMode::StartPlay()
@@ -68,8 +85,9 @@ void AUOpenGolfGameMode::StartPlay()
         Ball->OnBallAtRest.AddDynamic(this, &ThisClass::HandleBallAtRest);
         Ball->PoleRadiusCm = UOpenGolfFlagstickComponent::PoleDiameterCm * 0.5f;
     }
-    Round.Start(AUOpenGolfRange::Par);
-    if (Range) { CourseWindMph = Range->WindSpeedMph; CourseWindFrom = Range->WindFromDeg; }
+    if (!IsCourseRound()) CreateTrainingSession();
+    Round.Start(GetPar());
+    if (Range) { MapWindMph = Range->WindSpeedMph; MapWindFromDeg = Range->WindFromDeg; }
     StartSessionDefaults();
 
     if (UOpenLaunchMonitorSubsystem* LaunchMonitor = GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
@@ -124,9 +142,29 @@ void AUOpenGolfGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void AUOpenGolfGameMode::CreateTrainingSession()
+{
+    Training = GetWorld()->SpawnActor<ATrainingSession>();
+}
+
+bool AUOpenGolfGameMode::IsDrillActive() const
+{
+    return Training && Training->Active();
+}
+
+bool AUOpenGolfGameMode::CanPlaceTrainingBall() const
+{
+    return !IsCourseRound() && (!IsDrillActive() || Training->Active()->AllowsPlacement());
+}
+
 void AUOpenGolfGameMode::ResetBallToTee()
 {
-    Round.Start(AUOpenGolfRange::Par);
+    if (!IsDrillActive()) ResetToTeeForPlay();
+}
+
+void AUOpenGolfGameMode::ResetToTeeForPlay()
+{
+    Round.Start(GetPar());
     LastScoredShot = INDEX_NONE;
     if (PlayMode == EOpenGolfPlayMode::Hole) StartSessionDefaults();
     if (CloudRecorder) CloudRecorder->Cancel();
@@ -137,9 +175,14 @@ void AUOpenGolfGameMode::ResetBallToTee()
 
 void AUOpenGolfGameMode::ResetBall()
 {
+    if (!IsDrillActive()) ResetForPlay();
+}
+
+void AUOpenGolfGameMode::ResetForPlay()
+{
     if (!Round.bPractice)
     {
-        ResetBallToTee();
+        ResetToTeeForPlay();
         return;
     }
     if (CloudRecorder) CloudRecorder->Cancel();
@@ -151,6 +194,7 @@ void AUOpenGolfGameMode::ResetBall()
     {
         if (auto* Presented = Cast<AUOpenGolfBall>(Ball)) Presented->ResetShotTrail();
         // Keep the player's aim (A/D): placing aimed the ball at the cup once, and PlaceAt faces it down the aim line.
+        if (Training) Training->LeaveFinishedBall();
         Ball->PlaceAt(PracticeOrigin);
     }
     bAddressReady = true;
@@ -169,28 +213,35 @@ void AUOpenGolfGameMode::PlaceOnTee()
         // A hole starts down the target line; on the range the aim stays set across shots.
         if (PlayMode == EOpenGolfPlayMode::Hole)
             Ball->AimYawDeg = 0.0f;
+        if (Training) Training->LeaveFinishedBall();
         Ball->PlaceAt(Range->GetTeeLocation() + FVector::UpVector * 10.0f);
     }
 }
 
-bool AUOpenGolfGameMode::SetPlayMode(EOpenGolfPlayMode Mode)
+#if WITH_DEV_AUTOMATION_TESTS
+bool AUOpenGolfGameMode::SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDefinition* InCourse)
 {
     if (Ball && Ball->IsMoving())
         return false;
+    if (Training)
+    {
+        Training->ExitDrill();
+        Training->Destroy();
+        Training = nullptr;
+    }
     PlayMode = Mode;
+    if (!IsCourseRound()) CreateTrainingSession();
+    Course = Mode == EOpenGolfPlayMode::Hole ? InCourse : nullptr;
     UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Play mode: %s."), Mode == EOpenGolfPlayMode::Hole ? TEXT("hole") : TEXT("range"));
     ResetBallToTee();
     return true;
 }
 
-bool AUOpenGolfGameMode::TogglePlayMode()
-{
-    return SetPlayMode(PlayMode == EOpenGolfPlayMode::Range ? EOpenGolfPlayMode::Hole : EOpenGolfPlayMode::Range);
-}
+#endif
 
 bool AUOpenGolfGameMode::PlaceBallAt(const FVector& Location)
 {
-    if (PlayMode != EOpenGolfPlayMode::Hole || !Ball || Ball->IsMoving() || !OpenGolfPlay::CanPlaceBallAt(Location, GetCupLocation()))
+    if (!CanPlaceTrainingBall() || !Ball || Ball->IsMoving() || !OpenGolfPlay::CanPlaceBallAt(Location, GetCupLocation()))
         return false;
     GetWorldTimerManager().ClearTimer(ResetTimer);
     GetWorldTimerManager().ClearTimer(AddressTimer);
@@ -198,11 +249,12 @@ bool AUOpenGolfGameMode::PlaceBallAt(const FVector& Location)
     if (Recorder)
         Recorder->CancelSimulation();
     // A finished hole starts over; either way the hole is now practice.
-    Round.Start(AUOpenGolfRange::Par);
+    Round.Start(GetPar());
     Round.bPractice = true;
     HoledTime = -1.0;
     if (auto* PresentedBall = Cast<AUOpenGolfBall>(Ball))
         PresentedBall->ResetShotTrail();
+    if (Training) Training->LeaveFinishedBall();
     Ball->PlaceAt(Location + FVector::UpVector * 10.0f);
     PracticeOrigin = Ball->GetActorLocation();
     AimAtCup();
@@ -226,7 +278,9 @@ bool AUOpenGolfGameMode::IsBallAtAddress() const
         return false;
     if (PlayMode == EOpenGolfPlayMode::Hole)
         return bAddressReady && !Ball->IsHoled() && !Round.bHoled;
-    return !Range || FVector::Dist2D(Ball->GetActorLocation(), Range->GetTeeLocation()) <= 200.0f;
+    if (Round.bPractice)
+        return bAddressReady && !Ball->IsHoled() && FVector::Dist2D(Ball->GetActorLocation(), PracticeOrigin) <= PracticeAddressToleranceCm;
+    return !Range || FVector::Dist2D(Ball->GetActorLocation(), Range->GetTeeLocation()) <= TeeAddressToleranceCm;
 }
 
 float AUOpenGolfGameMode::GetHoledSeconds() const
@@ -285,6 +339,7 @@ FString AUOpenGolfGameMode::GetRecordingFolder() const
 
 void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
 {
+    if (Training) Training->RememberRest(Result);
     if (CloudRecorder) CloudRecorder->OnRest(Result);
     if (Recorder)
     {
@@ -307,7 +362,7 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
         {
             HoledTime = GetWorld()->GetTimeSeconds();
             UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Holed in %d (%d putts): %s."), Round.Strokes, Round.Putts, *Round.ResultName());
-            GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::ResetAfterShot, HoleOutDelayS, false);
+            GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::FinishRound, HoleOutDelayS, false);
         }
         else
         {
@@ -321,12 +376,18 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
         GetWorldTimerManager().SetTimer(ResetTimer, this, &ThisClass::ResetAfterShot, float(GolfSettings::Get().AutoTee), false);
 }
 
+void AUOpenGolfGameMode::FinishRound()
+{
+    if (IsRoundComplete())
+        OnRoundComplete.Broadcast();
+}
+
 void AUOpenGolfGameMode::ResetAfterShot()
 {
     // A ball launched directly (not through HandleShot) during the wait finishes its shot.
     if (Ball && !Ball->IsMoving())
     {
-        ResetBall();
+        ResetForPlay();
     }
 }
 
@@ -359,7 +420,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     // A refused shot is reported, so an Open Connect connector receives an error rather than a confirmation.
     auto Reject = [LaunchMonitor, &Shot](const TCHAR* Reason) { if (LaunchMonitor) LaunchMonitor->RejectShot(Shot.ShotNumber, Reason); };
     const auto* Player = Cast<AUOpenGolfPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (Player && Player->IsMainMenuOpen())
+    if (Player && (Player->IsMainMenuOpen() || Player->IsDrillDialogOpen()))
     {
         Reject(TEXT("UOpenGolf menu is open; shot ignored"));
         return;
@@ -377,9 +438,23 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
         Reject(TEXT("Shot needs ball speed and vertical launch angle"));
         return;
     }
-    if (Round.bPractice) ResetBall();
-    else if (PlayMode == EOpenGolfPlayMode::Range || Round.bHoled)
-        ResetBallToTee();
+    if (IsRoundComplete())
+    {
+        Reject(TEXT("The course round is complete"));
+        return;
+    }
+    if (PlayMode == EOpenGolfPlayMode::Range && Training)
+    {
+        const FString DrillReason = Training->RejectReason();
+        if (!DrillReason.IsEmpty())
+        {
+            Reject(*DrillReason);
+            return;
+        }
+        Training->BeforeShot();
+    }
+    if (PlayMode == EOpenGolfPlayMode::Range)
+        ResetForPlay();
     else if (Ball && Ball->IsMoving())
     {
         // A shot arriving mid-roll is hit from where the ball is now; the interrupted shot still counts.
@@ -389,7 +464,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
     else if (!bAddressReady)
         ReadyForNextShot();
     GetWorldTimerManager().ClearTimer(AddressTimer);
-    // Only range shots are recorded; on the hole, recording keeps its state for the return to the range.
+    // Only Training shots are recorded; a course round never records.
     if (Recorder && LaunchMonitor && PlayMode == EOpenGolfPlayMode::Range)
     {
         // The club selected now is the club this shot was hit with.
@@ -442,7 +517,9 @@ void AUOpenGolfGameMode::StartSessionDefaults()
 {
     SessionGimmieFeet = GolfSettings::Get().GimmieFeet;
     if (Ball) Ball->GreenStimpFeet = GolfSettings::Get().Stimp;
-    if (Range) Range->SetWind(GolfSettings::Get().WindMph >= 0 ? GolfSettings::Get().WindMph : CourseWindMph, CourseWindFrom);
+    // A course round plays its own fixed wind (the range holds it there); Training starts from the preference.
+    if (Range && Course) Range->SetWind(Course->WindMph, Course->WindFromDeg);
+    else if (Range) Range->SetWind(GolfSettings::Get().WindMph >= 0 ? GolfSettings::Get().WindMph : MapWindMph, MapWindFromDeg);
     if (!GimmieIndicator)
     {
         // The game mode is an AInfo, hidden in game, so its own components never render; the ring gets a visible host.

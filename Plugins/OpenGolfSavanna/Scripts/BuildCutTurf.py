@@ -10,12 +10,14 @@ HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parents[2]
 sys.path.insert(0, str(PROJECT / 'Plugins/OpenGolfCourse/Scripts'))
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE / 'blender'))
 import course_assets as a
 import BuildTerrainAssets as terrain
 import BuildSurfaceTextures as surfaces
 import savanna_assets as s
 import turf_shading as shading
 import turf_field as field
+from turf_rules import FOOTPRINTS
 
 SOURCE = PROJECT / 'Saved/AssetImport/OpenGolfSavanna/CutTurf'
 OWNER = 'OpenGolfSavanna.CutTurf.v1'
@@ -23,8 +25,16 @@ CONTENT = PROJECT / 'Plugins/OpenGolfSavanna/Content'
 
 
 # Short blades read as texture beyond a few metres: they are drawn near the camera only, over ground of the
-# same colour. Instances cull from three quarters of this distance.
-CULL_DISTANCE_M = {'Fairway': 10, 'FirstCut': 14, 'Collar': 10}
+# same colour. Instances cull from three quarters of this distance. The 50 mm rough reads farther.
+# The fairway's first cut (DA_TurfFirstCutGrass) is no longer placed (2026-11-23); its preset stays as a rollback.
+CULL_DISTANCE_M = {'Fairway': 10, 'Collar': 10, 'Rough': 24}
+SURFACE = {'Fairway': 'FAIRWAY', 'Collar': 'FRINGE', 'Rough': 'ROUGH'}
+# The rough band replaces the Poly Haven tall rough (DA_TurfTallRough) out to the savanna rough's 12 m
+# (savanna_layout.ROUGH_SOLID_M). It meets the fairway directly, with no first cut or edge strip, and comes as close
+# to the fairway, fringe, sand and tee outlines as mown rough. Large tiles stay flat on the ground and still and keep
+# the band well under the placement budget.
+ROUGH_BAND = {'boundary_clearance_m': .08, 'fairway_clearance_m': 0, 'tile_sink_m': .003, 'maximum_tile_tilt_deg': 2,
+              'maximum_distance_from_play_m': 12.0, 'wind_motion': False}
 
 
 def blade_material():
@@ -37,12 +47,6 @@ def set_cull_distances():
         if preset:
             preset.set_editor_property('cull_distance_m', distance)
             a.save(preset)
-
-
-def first_cut_width():
-    rough = ue.load_asset('/OpenGolfSavanna/Materials/CutTurf/MI_TurfRough')
-    width = a.MAT.get_material_instance_scalar_parameter_value(rough, 'FirstCutWidthM') if rough else 0
-    return width if width > 0 else 1.0
 
 
 def import_maps(family):
@@ -70,7 +74,7 @@ def surface_preset(family, parent, textures, color):
         a.MAT.set_material_instance_scalar_parameter_value(instance, key, value)
     for key in ('TargetColor', 'TextureMean'):
         a.MAT.set_material_instance_vector_parameter_value(instance, key, ue.LinearColor(*a.linear_color(color)))
-    physical = {'Fairway':'Fairway', 'FirstCut':'Rough', 'Collar':'Fringe', 'Green':'Green'}[family]
+    physical = {'Fairway':'Fairway', 'Collar':'Fringe', 'Green':'Green'}[family]
     instance.set_editor_property('override_phys_material', True)
     instance.set_editor_property('phys_material', ue.load_asset('/OpenGolfCourse/Surfaces/PM_'+physical))
     a.MAT.update_material_instance(instance)
@@ -81,19 +85,32 @@ def surface_preset(family, parent, textures, color):
     return a.save(preset)
 
 
-def vegetation(family, meshes, width):
+def family_meshes(family):
+    """The imported tile meshes of one family, by name."""
+    meshes = {}
+    for _size, label in FOOTPRINTS[family]:
+        for variant in 'ABCD':
+            name = f'SM_Turf{family}_{label}_{variant}'
+            meshes[name] = s.required(f'/OpenGolfSavanna/Meshes/CutTurf/{family}/{name}')
+    return meshes
+
+
+def vegetation(family, meshes):
     preset = terrain.create_data('DA_Turf'+family+'Grass', ue.OpenGolfVegetationPreset, 'Terrain/CutTurf')
     settings = {'kind': ue.OpenGolfVegetationKind.GROUND_COVER, 'placement_pattern': ue.OpenGolfPlacementPattern.TILED,
-                'surface': {'Fairway':ue.OpenFairwaySurface.FAIRWAY, 'FirstCut':ue.OpenFairwaySurface.ROUGH,
-                            'Collar':ue.OpenFairwaySurface.FRINGE}[family],
+                'surface': getattr(ue.OpenFairwaySurface, SURFACE[family]),
                 'boundary_clearance_m':0, 'tile_sink_m':.0005, 'cull_distance_m':CULL_DISTANCE_M[family],
                 'maximum_slope_deg':35, 'maximum_tile_tilt_deg':3, 'scale_range':ue.Vector2D(1,1), 'seed':1731,
-                'use_distance_surface':family=='FirstCut', 'distance_surface':ue.OpenFairwaySurface.FAIRWAY,
-                'maximum_distance_from_play_m':width if family=='FirstCut' else 0}
+                'use_distance_surface':False, 'maximum_distance_from_play_m':0}
+    if family == 'Rough':
+        settings.update(ROUGH_BAND)
     for key, value in settings.items():
         preset.set_editor_property(key, value)
     tiles = []
-    for size, label in ((.5,'50cm'),(.25,'25cm'),(.125,'125mm'),(.0625,'625mm')):
+    # Edge strips are not tiles: the quadtree halves only the squares.
+    for (size, depth), label in FOOTPRINTS[family]:
+        if size != depth:
+            continue
         tile = ue.OpenGolfGrassTile()
         tile.set_editor_property('size_m', size)
         tile.set_editor_property('meshes', [meshes[f'SM_Turf{family}_{label}_{v}'] for v in 'ABCD'])
@@ -102,14 +119,12 @@ def vegetation(family, meshes, width):
     return a.save(preset)
 
 
-def build(width=1.0, textures_only=False, refresh=False):
+def build(textures_only=False, refresh=False):
     manifest = json.loads((SOURCE/'export.json').read_text())
     required = [SOURCE/f'T_Turf{f}_{r}.png' for f in manifest['colors'] for r in ('Color','NormalDX','Roughness')]
     missing = [str(p) for p in required if not p.exists()]
     if missing:
         raise RuntimeError('BakeCutTurf.py must finish first: '+', '.join(missing))
-    if not 0 < width <= 5:
-        raise ValueError('First cut width must be between zero and five metres')
     if not textures_only and not hasattr(ue.OpenGolfTerrainDefinition, 'distance_from_surface'):
         raise RuntimeError('Restart the editor with the built native turf controls before importing')
     previous_source, previous_parent, previous_folder = a.SOURCE, surfaces.PARENT, terrain.FOLDER
@@ -123,8 +138,9 @@ def build(width=1.0, textures_only=False, refresh=False):
             if not refresh:
                 surfaces.PARENT = 'M_CutTurfSurface'
                 parent = surfaces.build_parent(textures['Fairway'])
-                for family, color in manifest['colors'].items():
-                    surface_preset(family, parent, textures[family], color)
+                # Rough has maps for the turf field but no surface preset: its ground is MI_TurfRough.
+                for family in shading.GROUND_FAMILIES:
+                    surface_preset(family, parent, textures[family], manifest['colors'][family])
             parent = ue.load_asset('/OpenGolfSavanna/Materials/M_CutTurfSurface')
             a.output(parent, shading.surface_color(parent), ue.MaterialProperty.MP_BASE_COLOR)
             parent.set_editor_property('tangent_space_normal', False)
@@ -146,15 +162,15 @@ def build(width=1.0, textures_only=False, refresh=False):
                 ue.get_editor_subsystem(ue.StaticMeshEditorSubsystem).set_nanite_settings(mesh,nanite,True)
                 meshes[entry['name']] = a.save(mesh)
             if not refresh:
-                for family in ('Fairway','FirstCut','Collar'):
-                    vegetation(family,meshes,width)
+                for family in shading.BLADE_FAMILIES:
+                    vegetation(family,meshes)
             set_cull_distances()
             world=ue.get_editor_subsystem(ue.UnrealEditorSubsystem).get_editor_world()
             if world and world.get_path_name().split('.')[0]=='/Game/UOpenGolf/Maps/UOpenGolf':
                 areas=[actor for actor in ue.get_editor_subsystem(ue.EditorActorSubsystem).get_all_level_actors() if isinstance(actor,ue.OpenGolfTerrainArea)]
                 # Until FixTurfTransitions.py bakes the course field, the instances keep their previous settings.
                 if len(areas)==1 and (SOURCE/'T_CourseSurfaceField.json').exists() and ue.load_asset(shading.field.FIELD_PATH):
-                    shading.configure_all(areas[0], SOURCE, first_cut_width())
+                    shading.configure_all(areas[0], SOURCE)
             ue.log('OPEN_GOLF_CUT_TURF_REFRESH_COMPLETE' if refresh else 'OPEN_GOLF_CUT_TURF_BUILD_COMPLETE')
     finally:
         a.SOURCE, surfaces.PARENT, terrain.FOLDER = previous_source, previous_parent, previous_folder

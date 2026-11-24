@@ -92,7 +92,7 @@ public:
             Test->TestEqual(TEXT("The closed test-shot layer only takes clicks on its button"),
                 ClickTargets(SNew(SReplayShotPanel).Controller(Controller)), FString(Controller->CanUseManualShots() ? TEXT("SButton") : TEXT("")));
             Test->TestEqual(TEXT("The range's play bar takes clicks only on its three controls"),
-                ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SClubPicker, SHudIconButton, SButton")));
+                ClickTargets(SNew(SPlayModeBar).Controller(Controller)), FString(TEXT("SClubPicker, SButton, SHudIconButton")));
             const TSharedRef<SWindControl> Control = SNew(SWindControl).Controller(Controller);
             Test->TestEqual(TEXT("Closed, the wind controls only take clicks on the indicator"), ClickTargets(Control), FString(TEXT("SButton")));
 

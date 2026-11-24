@@ -3,6 +3,7 @@
 // game/GolfBall.cs with Godot/Jolt MoveAndCollide and ray casts replaced by Chaos sphere sweeps and line traces; see
 // OpenFairwayBallMotion.cpp (stepping and contact), OpenFairwayBallSurface.cpp (ground queries and surfaces),
 // OpenFairwayBallCup.cpp and OpenFairwayBallPresentation.cpp.
+#include "OpenFairwayBall.h"
 #include "OpenFairwayBallInternal.h"
 
 #include "Components/StaticMeshComponent.h"

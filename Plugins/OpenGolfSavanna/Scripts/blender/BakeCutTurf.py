@@ -10,10 +10,17 @@ from mathutils import Vector
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE.parents[2] / 'OpenGolfCourse/Scripts'))
 from art_root import art_root
 from turf_rules import SURFACES, mesh_data
 import png8
+import turf_palette
+
+# Ground between the blades, relative to the blade colour: (flat, ramp low, ramp high). The 50 mm rough shows a
+# darker thatch between its blades than the short cuts.
+GROUND_SHADE = {'Rough': (.55, .42, .75)}
+NOISE_SCALE = {'Fairway': 250, 'FirstCut': 150, 'Collar': 200, 'Green': 1000, 'Rough': 120}
 
 OUT = HERE.parents[3] / 'Saved/AssetImport/OpenGolfSavanna/CutTurf'
 
@@ -45,6 +52,41 @@ def record_mean(family, path):
     target.write_text(json.dumps(means, indent=2, sort_keys=True) + '\n')
 
 
+def rough_gradient(material, channels, tint):
+    """The rough blade colour with the same thatch-to-tip gradient as M_CutTurfBlades (turf_shading.blade_color)."""
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    thatch, tip = turf_palette.rough_blade_tints()
+    blade = turf_palette.ROUGH_BLADE
+
+    def smoothstep(low, high):
+        step = nodes.new('ShaderNodeMapRange')
+        step.interpolation_type = 'SMOOTHSTEP'
+        step.inputs['From Min'].default_value = low
+        step.inputs['From Max'].default_value = high
+        links.new(channels.outputs['Red'], step.inputs['Value'])
+        return step.outputs['Result']
+
+    def vector_math(operation, *inputs):
+        node = nodes.new('ShaderNodeVectorMath')
+        node.operation = operation
+        for index, value in enumerate(inputs):
+            if isinstance(value, tuple):
+                node.inputs[index].default_value = value
+            else:
+                links.new(value, node.inputs[index])
+        return node.outputs['Vector']
+
+    # g = lerp(thatch, 1, smoothstep(0, BaseEnd, R)), then towards the tip tint by TipAmount past TipStart.
+    root = vector_math('MULTIPLY_ADD', tuple(1 - v for v in thatch), smoothstep(0, blade['BaseEnd']), thatch)
+    amount = nodes.new('ShaderNodeMath')
+    amount.operation = 'MULTIPLY'
+    links.new(smoothstep(blade['TipStart'], 1), amount.inputs[0])
+    amount.inputs[1].default_value = blade['TipAmount']
+    towards_tip = vector_math('SUBTRACT', tip, root)
+    gradient = vector_math('MULTIPLY_ADD', towards_tip, amount.outputs['Value'], root)
+    return vector_math('MULTIPLY', tint.outputs['Vector'], gradient)
+
+
 def bake(family):
     spec = SURFACES[family]
     scene = bpy.data.scenes.new('Bake ' + family)
@@ -61,15 +103,16 @@ def bake(family):
     color = [int(spec.color[i:i+2], 16)/255 for i in (0, 2, 4)]
     color = [c/12.92 if c <= .04045 else ((c+.055)/1.055)**2.4 for c in color]
     blade_material, blade_shader = emission('Bake Blade ' + family, color)
-    ground_material, ground_shader = emission('Bake Ground ' + family, [c*.83 for c in color])
+    flat, low, high = GROUND_SHADE.get(family, (.83, .68, 1.05))
+    ground_material, ground_shader = emission('Bake Ground ' + family, [c*flat for c in color])
     noise = ground_material.node_tree.nodes.new('ShaderNodeTexNoise')
-    noise.inputs['Scale'].default_value = {'Fairway':250, 'FirstCut':150, 'Collar':200, 'Green':1000}[family]
+    noise.inputs['Scale'].default_value = NOISE_SCALE[family]
     noise.inputs['Detail'].default_value = 2
     ground_geometry = ground_material.node_tree.nodes.new('ShaderNodeNewGeometry')
     ground_material.node_tree.links.new(ground_geometry.outputs['Position'], noise.inputs['Vector'])
     ramp = ground_material.node_tree.nodes.new('ShaderNodeValToRGB')
-    ramp.color_ramp.elements[0].color = (*[c*.68 for c in color],1)
-    ramp.color_ramp.elements[1].color = (*[c*1.05 for c in color],1)
+    ramp.color_ramp.elements[0].color = (*[c*low for c in color],1)
+    ramp.color_ramp.elements[1].color = (*[c*high for c in color],1)
     ground_material.node_tree.links.new(noise.outputs['Fac'],ramp.inputs[0])
     ground_material.node_tree.links.new(ramp.outputs['Color'],ground_shader.inputs['Color'])
     attribute = blade_material.node_tree.nodes.new('ShaderNodeVertexColor')
@@ -84,7 +127,10 @@ def bake(family):
     tint.operation = 'SCALE'
     tint.inputs[0].default_value = color
     blade_material.node_tree.links.new(tone.outputs['Result'],tint.inputs['Scale'])
-    blade_material.node_tree.links.new(tint.outputs['Vector'],blade_shader.inputs['Color'])
+    if family == 'Rough':
+        blade_material.node_tree.links.new(rough_gradient(blade_material, channels, tint), blade_shader.inputs['Color'])
+    else:
+        blade_material.node_tree.links.new(tint.outputs['Vector'],blade_shader.inputs['Color'])
     geometry = blade_material.node_tree.nodes.new('ShaderNodeNewGeometry')
     separate = blade_material.node_tree.nodes.new('ShaderNodeSeparateXYZ')
     blade_material.node_tree.links.new(geometry.outputs['Position'], separate.inputs[0])

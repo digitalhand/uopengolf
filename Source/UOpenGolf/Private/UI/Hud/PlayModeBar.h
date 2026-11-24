@@ -10,9 +10,8 @@ class AUOpenGolfPlayerController;
 class UOpenGolfOnlineSubsystem;
 
 /**
- * Club, play and recording controls in the top-left corner. The flag switches between the range and
- * playing the hole (G); while playing, a ball button places the ball (B) and a row of tiles shows strokes,
- * distance to the pin and putts. A banner names the score when the ball drops. Hidden with the test-shot panel.
+ * Top-left club selector, Training recording and placement controls, or course stroke and putt tiles.
+ * The hole-out banner remains visible until the final scorecard opens.
  */
 class SPlayModeBar : public SCompoundWidget
 {
@@ -29,16 +28,17 @@ private:
     EVisibility GetBarVisibility() const;
     TSharedRef<SWidget> MakeRecordButton();
     TSharedRef<SWidget> MakeTile(TAttribute<FText> Value, const TCHAR* Label);
-    FText GetGameModeTip() const;
     /** Where recorded shots go, the saved and unsaved counts, and the save error while retrying. */
     FText GetRecordTip() const;
 
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
     TWeakObjectPtr<UOpenGolfOnlineSubsystem> Online;
     bool bHoleMode = false;
+    TSharedPtr<class STrainingPicker> TrainingPicker;
+    TSharedPtr<class SBox> DrillSettings;
+    TWeakObjectPtr<class UTrainingDrill> DisplayedDrill;
+    bool bCanPlace = false;
     bool bPlacing = false;
-    /** Placing a ball, or a hole with a placed ball: shown as training, with no Stroke, To Pin or Putts tiles. */
-    bool bPlacementView = false;
     bool bRangeMode = false;
     bool bRecording = false;
     bool bSignedIn = false;

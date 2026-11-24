@@ -19,14 +19,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import sys
-import time
 import unreal as ue
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bake_clock import BakeClock
 import generated_folders
 
 LIB = ue.EditorAssetLibrary
 COURSE_GRASS_TAG = 'OpenGolf.Terrain.CourseGrass'
+# Counted in editor frames (bake_clock.py): time stopped in a debugger does not use it up.
 BAKE_TIMEOUT_S = 300
 
 
@@ -92,8 +93,10 @@ def backup(map_path, definition):
     return folder
 
 
-def apply(map_path, generated, grass_presets=(), boundary_preset=None, surface_presets=(), finished=None, cleanup=None):
-    """cleanup lists the folders whose unreferenced generated runs are deleted after saving; default [generated]."""
+def apply(map_path, generated, grass_presets=(), boundary_preset=None, surface_presets=(), finished=None, cleanup=None,
+          rebuild=True):
+    """cleanup lists the folders whose unreferenced generated runs are deleted after saving; default [generated].
+    rebuild=False bakes and saves grass already placed with these presets, after an earlier bake stopped before saving."""
     area = terrain_area(map_path)
     definition = area.definition
     grass = load_presets(grass_presets, ue.OpenGolfVegetationPreset, 'Grass preset')
@@ -138,23 +141,32 @@ def apply(map_path, generated, grass_presets=(), boundary_preset=None, surface_p
     if not grass and not boundary:
         save()
         return
-    area.modify()
-    area.set_editor_property('course_grass_presets', grass)
-    area.set_editor_property('boundary_grass_preset', boundary[0] if boundary else None)
-    if ue.OpenGolfTerrainBuilder.rebuild_course_grass(area, generated) is None:
-        raise RuntimeError(f'Course grass placement failed (see LogTemp); the map was not saved. Backup: {folder}')
-    started = time.monotonic()
+    if rebuild:
+        area.modify()
+        area.set_editor_property('course_grass_presets', grass)
+        area.set_editor_property('boundary_grass_preset', boundary[0] if boundary else None)
+        if ue.OpenGolfTerrainBuilder.rebuild_course_grass(area, generated) is None:
+            raise RuntimeError(f'Course grass placement failed (see LogTemp); the map was not saved. Backup: {folder}')
+    else:
+        placed = [p.get_path_name() for p in area.course_grass_presets if p]
+        placed_boundary = area.boundary_grass_preset.get_path_name() if area.boundary_grass_preset else None
+        wanted_boundary = boundary[0].get_path_name() if boundary else None
+        if placed != [p.get_path_name() for p in grass] or placed_boundary != wanted_boundary:
+            raise RuntimeError(f'The placed course grass uses other presets ({placed}, boundary {placed_boundary}); '
+                               'apply them again with rebuild')
+    clock = BakeClock(BAKE_TIMEOUT_S)
     busy = []
 
     # PCG generates over the next frames; bake and save once it finishes. Baking, importing and
     # saving can pump Slate, which calls this again from inside itself, so nested calls return.
-    def tick(_delta):
+    def tick(delta):
         if busy:
             return
         busy.append(True)
+        clock.tick(delta)
         try:
             if ue.OpenGolfTerrainBuilder.bake_vegetation(area) is None:
-                if time.monotonic() - started < BAKE_TIMEOUT_S:
+                if not clock.expired:
                     busy.clear()
                     return
                 raise RuntimeError('Course grass bake timed out; map not saved')

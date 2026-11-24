@@ -9,6 +9,7 @@ class ACameraActor;
 class AOpenFairwayBall;
 class SWidget;
 class SMainMenu;
+class UGolfCourseDefinition;
 class UInputAction;
 class UInputMappingContext;
 struct FInputActionValue;
@@ -30,10 +31,10 @@ struct UOPENGOLF_API FOpenGolfCustomShot
 };
 
 /**
- * Range controls and the shot camera. Keys: C connect, T disconnect, H hit selected shot, P presets, Tab next
- * club, R tee up the ball again, G play the hole / back to the range, B place the ball (Hole mode; then click the
- * ground), hold A/D to turn the aim left/right, W the wind controls, F9 record shots on/off, Escape menu (or cancel
- * placing, or close the wind controls). The camera
+ * Play controls, course travel and the shot camera. Keys: C connect, T disconnect, H hit selected shot, P presets, Tab
+ * next club, R tee up the ball again, B place the ball in Training (then click the ground), hold A/D to turn the aim
+ * left/right, W the wind controls (Training), F9 record shots on/off, Escape menu (or cancel placing, or close the wind
+ * controls). A course round opens the final scorecard when the game mode announces OnRoundComplete. The camera
  * waits behind the ball along the aim line, holds that view for half a second after the hit, then follows low behind the
  * ball in flight and at rest, then glides back to the address view when the ball is ready for the next shot. On or near
  * the green the address view is lower and closer, looking along the putt. Within 8 ft of the cup the follow view slowly
@@ -55,8 +56,9 @@ public:
     void OpenGeneralSettings();
     bool CanUseManualShots() const;
     /**
-     * Ends the training session and shows the main menu: reloads the map, so the ball, round and session
-     * defaults start fresh and any recording is finalized. The launch monitor (game-instance) stays connected.
+     * Ends the Training session or course round and shows the main menu: opens the game's default map, so the ball,
+     * round and session defaults start fresh and any recording is finalized. The launch monitor (game-instance) stays
+     * connected.
      */
     void ReturnToMainMenu();
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Launch Monitor")
@@ -95,11 +97,16 @@ public:
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Range")
     void ResetBallToTee();
 
-    /** Switches between the range and playing the hole. */
-    UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Play")
-    void TogglePlayMode();
+    /** A scored course round rather than Training; see AUOpenGolfGameMode::IsCourseRound. */
+    bool IsCourseRound() const;
+    /** A course round whose ball has dropped; see AUOpenGolfGameMode::IsRoundComplete. */
+    bool IsRoundComplete() const;
+    /** Travels to Course's map for a fresh round. */
+    void StartCourse(const UGolfCourseDefinition& Course);
+    /** Ends the round and opens the main menu at the Courses browser. */
+    void ReturnToCourses();
 
-    /** In Hole mode, the next click on the ground places the ball there; a right click or Escape cancels. */
+    /** In Training, the next click on the ground places the ball there; a right click or Escape cancels. */
     UFUNCTION(BlueprintCallable, Category = "UOpenGolf|Play")
     void SetPlacingBall(bool bPlacing);
 
@@ -111,7 +118,7 @@ public:
 
     void CancelPlacingBall() { SetPlacingBall(false); }
 
-    /** Places the ball on the ground under a viewport position, in Hole mode; false when no ground is there. */
+    /** Places the ball on the ground under a viewport position, in Training; false when no ground is there. */
     bool PlaceBallAtScreen(const FVector2D& ScreenPosition);
 
     /** Lower, closer address view along the putt, for a short-game shot (OpenGolfPlay::IsShortGame) in Hole mode. */
@@ -136,12 +143,24 @@ public:
     /** One tap of A (Direction -1) or D (+1): turns exactly OpenGolfPlay::AimTapStepDeg, or the fine step with Shift. */
     bool NudgeAim(int32 Direction);
 
+    /**
+     * Aims from the ball toward a world XY point, as SetAimYaw, for pointing at the hole map. False while placing a ball,
+     * when the ball cannot aim now, or when the point is within MinDistanceCm of the ball (it has no direction).
+     */
+    bool AimToward(const FVector2D& WorldPoint, double MinDistanceCm = 1.0);
+
+    /**
+     * How far along the aim (cm) the hole map draws its target: where the map was last clicked from this lie, else the
+     * distance to the cup. Turning the aim keeps it; a new lie (not the re-tee to the same spot) starts at the cup.
+     */
+    double GetAimTargetDistanceCm() const;
+
     /** The aim off the target line in degrees, positive to the right: the range's line, or the line to the cup. */
     float GetAimOffsetDeg() const;
 
     /** Opens or closes the wind controls under the wind indicator (W, or a click on the indicator). */
     void ToggleWindPanel() { SetWindPanelOpen(!bWindPanelOpen); }
-    void SetWindPanelOpen(bool bOpen) { bWindPanelOpen = bOpen; }
+    void SetWindPanelOpen(bool bOpen) { bWindPanelOpen = bOpen && !IsCourseRound(); }
     bool IsWindPanelOpen() const { return bWindPanelOpen; }
 
     /** The wind the HUD sets. It follows wind set on the map, in Details or from the console until the player changes it. */
@@ -165,6 +184,11 @@ public:
 
     /** Escape: cancels the current tool, otherwise opens the menu. */
     void HandleEscape();
+    bool IsDrillDialogOpen() const { return DrillDialog.IsValid(); }
+    /** The Exit/Restart dialog of the active drill, which also reports a finished drill's result. */
+    void OpenDrillDialog();
+    void CloseDrillDialog();
+    void ClearMapAim() { AimTargetLie.Reset(); }
     void HandleMenuBack();
 
     /**
@@ -199,6 +223,11 @@ private:
     void ApplyWind();
     /** Takes wind the range got elsewhere (the map, Details, the console) into the HUD's setting. */
     void AdoptRangeWind();
+    /** After a course round's hole-out banner: opens the menu, which shows the final scorecard. */
+    void ShowFinishedRound();
+    /** Opens the default map with one URL option (the main menu, or the Courses browser). */
+    void TravelToMenu(const TCHAR* Option);
+    FDelegateHandle RoundCompleteHandle;
 
     UPROPERTY()
     TObjectPtr<ACameraActor> ShotCamera;
@@ -216,6 +245,7 @@ private:
 
     TSharedPtr<class FHudNavigation> HudNavigation;
     TSharedPtr<SMainMenu> MainMenu;
+    TSharedPtr<SWidget> DrillDialog;
     bool bMainMenuOpen = false;
     TSharedPtr<SWidget> ReplayPanel;
     int32 SelectedReplayIndex = 0;
@@ -223,6 +253,9 @@ private:
     bool bCustomShotSelected = false;
     bool bReplayPanelOpen = false;
     bool bPlacingBall = false;
+    // The hole map's target distance (cm), set by AimToward, and the lie it was set from.
+    double AimTargetDistanceCm = 0.0;
+    TOptional<FVector2D> AimTargetLie;
     // How long A or D has been held, for the turn-rate ramp.
     float AimHeldSeconds = 0.0f;
     // -1 while A is held, +1 while D is held, 0 otherwise.

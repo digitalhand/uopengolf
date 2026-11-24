@@ -11,6 +11,7 @@
 		}
 	],
 	"Plugins": [
+        {"Name": "OpenGolfEnvironment", "Enabled": true},
 		{
 			"Name": "ProceduralMeshComponent",
 			"Enabled": true
