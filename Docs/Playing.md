@@ -4,29 +4,28 @@ Choose **Training** to practise from the tee or a selected lie. For a scored rou
 
 ### Training games
 
-In Training, open the target icon beside **X**. Each game has a **3 tries** and a **5 tries**
-button; pick one to start. Picking a game while another runs opens the drill dialog: **Exit Drill**
-ends the running game and starts the one you picked, while **Restart Drill** or **Esc** keeps the
-running game. Both games put the flag on the line from the tee to the range's pin,
-with a white ring at **3 ft** and another at **6 ft**, each labelled on the ground. A shot is scored
-where the ball stops, and a holed ball counts as inside 3 ft. Every shot starts at the range tee, and
-you can still aim with the minimap or A and D. While a game runs, the next shot waits until the last
-ball has stopped.
+In Training, open the target icon beside **X**. Choose a game and a **Winning radius** of **3 ft**,
+**6 ft**, or **10 ft**; the Distance Ladder also asks for **3** or **5** tries per target. Press
+**Start** to begin. Both games show
+one white ring with the chosen radius. A ball counts as a hit when it stops inside or touching
+the white line, or goes in the cup. Each shot starts from the tee. Aim with the minimap or A and D.
 
-- **Distance Practice.** The flag starts 25 yards from the tee. Before the first shot of a set,
-  use the slider to choose the yardage, in 5-yard steps from **10 to 250 yd**. The panel under the toolbar
-  counts your shots, how many stopped inside 3 ft and inside 6 ft (a ball inside 3 ft counts for
-  both), and how far the last ball stopped from the pin. After the last try the result appears
-  with **Play Again** and **Exit Drill**; Play Again starts a new set at the same yardage.
-- **Distance Ladder.** The targets are 15, 25, 35 … 145 yd, then 150 yd. One ball inside 3 ft
-  moves the flag on to the next target. If every try at a target misses the 3 ft ring, the flag
-  moves back one target, or stays at 15 yd if you are already there. The flag moves two seconds
-  after the ball stops, so you can see the result, or straight away if you hit again sooner.
-  Clearing 150 yd ends the ladder and shows how many shots it took.
+- **Distance Practice.** Hit as many balls as you like; there is no shot limit. The flag starts
+  25 yards from the tee. Whenever the ball is at rest, use the slider to choose a distance from
+  **10 to 250 yd** in 5-yard steps. The panel shows how many shots hit the ring at the current
+  distance, and changing the distance starts a new count. Balls already hit stay on the ground.
+- **Distance Ladder.** The targets are 15, 25, 35 … 145 yd, then 150 yd. One hit advances you to
+  the next target. If you use all your tries without a hit, the ladder drops back one target,
+  or stays at 15 yd if you are already there. The flag moves two seconds after the ball stops
+  or just before you hit again. A hit at 150 yd completes the ladder.
+
+Pressing **Start** during a drill opens a confirmation that lists the new game, its radius and,
+for the ladder, its tries.
+Choose **Exit Drill** to switch or press **Esc** to keep playing the current drill.
 
 Finished balls stay where they stopped throughout Training. Press **Esc** or click **X** for
-**Restart Drill** or **Exit Drill**. Restart (**Play Again** once a game is finished) keeps your
-choices and clears the balls hit during this run; the ladder starts again at 15 yd. Exit restores
+**Restart Drill** or **Exit Drill**. Restart (**Play Again** once the ladder is finished) keeps your
+choices, clears the balls hit during this run and starts a new count; the ladder starts again at 15 yd. Exit restores
 the original flag and keeps your finished balls. Press Esc again to return to the game. Leaving
 Training clears the range.
 
@@ -100,7 +99,8 @@ checked.
   while you place a ball and on a practice hole (a placed ball).
 - **Top right.** The cog opens Settings directly. The heading reads **Training**,
   or **Training · Ball Placement** while placing or playing a placed ball. In Courses it
-  shows **Savanna Range**, with the hole number, par, and length below. The shot tiles below
+  shows **Savanna Range**, and the tile grows to twice its height for two large lines below it:
+  the hole (**Hole 1**), then its par and length (**Par 4 · 400 yd**). The shot tiles below
   show game results, club data, and raw launch-monitor values. `…` means a value is pending,
   `—` means it is missing, `*` means it is derived, and `L`/`R` indicate direction.
 - **Top left.** The club icon opens the club drawer. The Training ball icon lets you choose a practice lie. The record icon toggles range recording, as does **F9**. It turns red
@@ -110,8 +110,8 @@ checked.
 - **Bottom left: hole map.** A view of the hole from above, tee at the bottom and flag at the top, with the
   ball as a white dot. Shading and contour lines show the ground's rise and fall. The view zooms in on the ball and
   the flag as you play, and holds still while the ball flies.
-  - **Header:** your lie (Tee, Fairway, Rough, Bunker, Green and so on, or In flight and Rolling while the ball
-    moves) and the hole.
+  - **Header:** your lie (Tee, Fairway, Rough, Bunker, Green, Fringe and so on) and the hole. While the ball is in
+    the air it keeps the lie you hit from; once the ball lands it names the surface the ball is on.
   - **Flag:** the distance to the pin.
   - **At address:** your aim runs to a target ring that shows its own distance and height change. A thin line
     continues from the ring to the flag. Click anywhere on the map to aim at that point and put the target there. A

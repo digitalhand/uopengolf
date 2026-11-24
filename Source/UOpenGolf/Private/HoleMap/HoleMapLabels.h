@@ -54,13 +54,12 @@ namespace HoleMapLabels
         }
     }
 
-    /** The header's lie: the ball's motion while it moves, then holed, on the tee box, or the surface it rests on. */
-    inline const TCHAR* LieText(EOpenFairwayBallState State, bool bHoled, bool bOnTee, EOpenFairwaySurface Surface)
+    /**
+     * The header's lie: holed, on the tee box, or the surface the ball is on. The header never names the ball's motion;
+     * while the ball is in the air it keeps the lie the shot was hit from (SHoleMapPanel::Refresh).
+     */
+    inline const TCHAR* LieText(bool bHoled, bool bOnTee, EOpenFairwaySurface Surface)
     {
-        if (State == EOpenFairwayBallState::Flight)
-            return TEXT("In flight");
-        if (State == EOpenFairwayBallState::Rollout)
-            return TEXT("Rolling");
         if (bHoled)
             return TEXT("Holed");
         return bOnTee ? TEXT("Tee") : SurfaceName(Surface);

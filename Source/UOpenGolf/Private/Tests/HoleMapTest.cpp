@@ -14,6 +14,7 @@
 #include "UOpenGolfRange.h"
 #include "Tests/PermissionTestAccess.h"
 #include "UI/Hud/HoleMinimap.h"
+#include "Widgets/Text/STextBlock.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoleMapFrameTest, "UOpenGolf.Minimap.Projection",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -35,8 +36,20 @@ bool FHoleMapFrameTest::RunTest(const FString&)
     return true;
 }
 
+namespace HoleMapTestDetail
+{
+    /** The lie the hole map's header shows, or empty when the header is missing. */
+    FString HeaderLie(const TSharedRef<SWindow>& Window)
+    {
+        const TSharedPtr<SWidget> Lie = RenderedPlay::WithTag(Window, TEXT("HoleMapLie"));
+        return Lie ? StaticCastSharedPtr<STextBlock>(Lie)->GetText().ToString() : FString();
+    }
+} // namespace HoleMapTestDetail
+
 namespace
 {
+    using HoleMapTestDetail::HeaderLie;
+
     /** Clicks on the HUD's hole map: aiming at address, nothing during placement or flight, right clicks to the game. */
     class FClickHoleMap : public IAutomationLatentCommand
     {
@@ -134,6 +147,8 @@ namespace
                 if (GetCurrentRunTime() < CaptureAt)
                     return Wait(TEXT("the address view to settle"));
                 RenderedPlay::SaveWindowPng(Test, Window.ToSharedRef(), TEXT("Minimap-address.png"));
+                AddressLie = HeaderLie(Window.ToSharedRef());
+                Test.TestFalse(TEXT("The header names the lie at address"), AddressLie.IsEmpty());
                 FOpenGolfPermissionTestAccess::Set(World);
                 Player->InjectReplayShot();
                 const float MovingYaw = Player->GetAimYaw();
@@ -144,8 +159,17 @@ namespace
                 return false;
             }
             default:
+                // The header has ticked at least once since the launch: in the air it keeps the lie the ball was hit from.
+                if (!bCheckedFlightLie && Mode->GetBall()->GetBallState() == EOpenFairwayBallState::Flight)
+                {
+                    const FString FlightLie = HeaderLie(Window.ToSharedRef());
+                    Test.TestEqual(TEXT("In flight the header keeps the lie the ball was hit from"), FlightLie, AddressLie);
+                    Test.TestFalse(TEXT("The header never says In flight"), FlightLie == TEXT("In flight"));
+                    bCheckedFlightLie = true;
+                }
                 if (!Mode->GetBall()->GetResult().bAtRest)
                     return Wait(TEXT("the shot to come to rest"));
+                Test.TestTrue(TEXT("The flight lie was checked"), bCheckedFlightLie);
                 Test.TestTrue(TEXT("New lie after rollout"), FVector::Dist2D(Mode->GetBall()->GetActorLocation(), ShotOrigin) > 100);
                 RenderedPlay::SaveWindowPng(Test, Window.ToSharedRef(), TEXT("Minimap-landed.png"));
                 Player->ResetBallToTee();
@@ -160,6 +184,8 @@ namespace
         double CancelBy = 0, CaptureAt = 0;
         const TCHAR* WaitingFor = TEXT("Play to start");
         FVector ShotOrigin;
+        FString AddressLie;
+        bool bCheckedFlightLie = false;
     };
 } // namespace
 

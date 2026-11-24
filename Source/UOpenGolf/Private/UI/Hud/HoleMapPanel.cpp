@@ -70,7 +70,7 @@ TSharedRef<SWidget> SHoleMapPanel::MakeBar(FName Tag, float Height, const TShare
 TSharedRef<SWidget> SHoleMapPanel::MakeHeader()
 {
     return MakeBar(TEXT("HoleMapHeader"), HoleMapPanelDetail::HeaderHeight,
-        SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::TextColor()).Text_Lambda([this] { return Lie; }),
+        SNew(STextBlock).Tag(TEXT("HoleMapLie")).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::TextColor()).Text_Lambda([this] { return Lie; }),
         SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor()).Text_Lambda([this] { return Hole; }));
 }
 
@@ -110,8 +110,12 @@ void SHoleMapPanel::Refresh()
 
     SetIfChanged(Hole, Mode->IsCourseRound() ? FString::Printf(TEXT("Hole %d  ·  Par %d"), Mode->GetHoleNumber(), Mode->GetPar()) : FString(TEXT("Training")));
     const FVector Location = Ball->GetActorLocation();
-    const bool bOnTee = FVector::Dist2D(Location, Range->GetTeeLocation()) <= TeeRadiusCm;
-    SetIfChanged(Lie, HoleMapLabels::LieText(Ball->GetBallState(), Ball->IsHoled(), bOnTee, Ball->GetResult().Surface));
+    // In the air the header keeps the lie the shot was hit from; it names the surface again once the ball is down.
+    if (Ball->GetBallState() != EOpenFairwayBallState::Flight)
+    {
+        const bool bOnTee = FVector::Dist2D(Location, Range->GetTeeLocation()) <= TeeRadiusCm;
+        SetIfChanged(Lie, HoleMapLabels::LieText(Ball->IsHoled(), bOnTee, Ball->GetResult().Surface));
+    }
 
     // Measured on the sampled ground at both ends, so a flat green reads level rather than a stray inch.
     const FHoleMapField& Heights = Range->GetHoleMapHeights();

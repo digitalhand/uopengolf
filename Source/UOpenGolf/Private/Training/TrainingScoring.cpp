@@ -1,34 +1,36 @@
 // SPDX-License-Identifier: MIT
 #include "Training/TrainingScoring.h"
+#include "OpenFairway/GolfPhysics.h"
 
 namespace TrainingScoring
 {
     bool IsValidTries(int32 Tries)
     {
-        for (const int32 Choice : TryChoices)
-            if (Choice == Tries)
-                return true;
-        return false;
+        return MakeArrayView(TryChoices).Contains(Tries);
     }
 
-    ERing Classify(double DistanceCm, bool bHoled, bool bSafetyStop)
+    bool IsValidRadius(int32 Feet)
+    {
+        return MakeArrayView(RadiusChoices).Contains(Feet);
+    }
+
+    FText RadiusText(int32 Feet)
+    {
+        return FText::Format(NSLOCTEXT("Training", "RadiusFeet", "{0} ft"), Feet);
+    }
+
+    bool IsHit(double DistanceCm, bool bHoled, bool bSafetyStop, double RadiusCm, double StripeWidthCm)
     {
         if (bSafetyStop)
-            return ERing::Miss;
-        if (bHoled || DistanceCm <= InnerRadiusCm)
-            return ERing::Inside3Ft;
-        return DistanceCm <= OuterRadiusCm ? ERing::Inside6Ft : ERing::Miss;
+            return false;
+        const double BallRadiusCm = OpenFairway::GolfPhysics::Radius * 100.;
+        // Allow for rounding when subtracting world positions at exact contact.
+        return bHoled || DistanceCm <= RadiusCm + StripeWidthCm + BallRadiusCm + UE_DOUBLE_SMALL_NUMBER;
     }
 
-    FTargetSet Record(const FTargetSet& Set, ERing Ring)
+    FHitTally Record(const FHitTally& Tally, bool bHit)
     {
-        if (Set.IsComplete())
-            return Set;
-        FTargetSet Out = Set;
-        ++Out.Shots;
-        Out.Inside3 += Ring == ERing::Inside3Ft ? 1 : 0;
-        Out.Inside6 += Ring != ERing::Miss ? 1 : 0;
-        return Out;
+        return {Tally.Shots + 1, Tally.Hits + (bHit ? 1 : 0)};
     }
 
     TConstArrayView<int32> LadderYards()
@@ -37,13 +39,13 @@ namespace TrainingScoring
         return MakeArrayView(Yards);
     }
 
-    FLadderState Next(const FLadderState& State, int32 Tries, bool bInside3)
+    FLadderState Next(const FLadderState& State, int32 Tries, bool bHit)
     {
         if (State.IsComplete())
             return State;
         FLadderState Out = State;
         ++Out.TotalShots;
-        if (bInside3)
+        if (bHit)
         {
             Out.BestStage = FMath::Max(Out.BestStage, Out.Stage);
             Out.TriesUsed = 0;

@@ -134,9 +134,14 @@ FString ShotDisplay::ClubLabel(ELaunchMonitorClub Club)
     return TEXT("—");
 }
 
-FString ShotDisplay::HoleDetails(int32 Hole, int32 Par, const FString& Distance)
+FString ShotDisplay::HoleNumber(int32 Hole)
 {
-    return FString::Printf(TEXT("Hole %d  ·  Par %d  ·  %s"), Hole, Par, *Distance);
+    return FString::Printf(TEXT("Hole %d"), Hole);
+}
+
+FString ShotDisplay::HoleDetails(int32 Par, const FString& Distance)
+{
+    return FString::Printf(TEXT("Par %d  ·  %s"), Par, *Distance);
 }
 
 FString ShotDisplay::RecordTip(bool bRecording, bool bSignedIn)

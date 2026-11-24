@@ -30,7 +30,7 @@ public:
 };
 
 /**
- * White 3 ft and 6 ft rings around a training pin, each labelled flat on the ground and reading from the tee.
+ * One white ring around a training pin, labelled flat on the ground and reading from the tee.
  * The edges use M_TargetRingLine (Assets/Scripts/UpdateTrainingRings.py), which keeps them at least two pixels wide on
  * screen: from the tee their far arcs are otherwise thinner than a pixel and flicker into dashes while the camera is still.
  * The components belong to the owning actor; Destroy removes them.
@@ -48,13 +48,13 @@ public:
     static constexpr float LabelSizeCm = 25.f;
     static constexpr int32 Segments = 128;
 
-    static UTargetRings* Create(AActor& Owner);
+    static UTargetRings* Create(AActor& Owner, const FText& RadiusText);
     static float EdgeWidthCm(double TeeToPinCm);
-    /** Draws around Center, labels on the tee side of LineDir. Failed ground traces leave the previous target in place. */
-    bool Place(AOpenGolfTerrainArea& Terrain, FVector Center, FVector LineDir, double TeeToPinCm, ECollisionChannel Channel);
+    /** Draws around Center, with a label on the tee side of LineDir. Failed ground traces leave the previous target in place. */
+    bool Place(AOpenGolfTerrainArea& Terrain, FVector Center, FVector LineDir, double TeeToPinCm, double RadiusCm, ECollisionChannel Channel);
     void Destroy();
     UProceduralMeshComponent* GetMesh() const { return Mesh; }
-    TConstArrayView<TObjectPtr<UTextRenderComponent>> GetLabels() const { return Labels; }
+    UTextRenderComponent* GetLabel() const { return RingLabel; }
 
 private:
     UTextRenderComponent* MakeLabel(AActor& Owner, const FText& Text);
@@ -63,7 +63,7 @@ private:
     UPROPERTY()
     TObjectPtr<UProceduralMeshComponent> Mesh;
     UPROPERTY()
-    TArray<TObjectPtr<UTextRenderComponent>> Labels;
+    TObjectPtr<UTextRenderComponent> RingLabel;
     UPROPERTY()
     TObjectPtr<UMaterialInterface> Material;
     UPROPERTY()

@@ -30,11 +30,14 @@ private:
     /** The course header, then the shot tiles. */
     TSharedRef<SWidget> MakeColumn();
     TSharedRef<SWidget> MakeTile(int32 Index);
+    /** One large course-heading line bound to Line, a member of this HUD; collapsed while it is empty. */
+    TSharedRef<SWidget> MakeHoleLine(FName Tag, const FText& Line);
     TWeakObjectPtr<AUOpenGolfPlayerController> Controller;
     TWeakObjectPtr<UOpenGolfWindIndicator> WindIndicator;
     TArray<ShotDisplay::FTile> Tiles;
     TArray<FText> TileValues, TileLabels;
-    FText Heading, HoleDetails;
+    /** HoleNumber and HoleDetails are the course heading's two hole lines; both empty outside a course round. */
+    FText Heading, HoleNumber, HoleDetails;
     bool bBallReady = false;
     /** Slate time of the next text rebuild; the first tick rebuilds at once. */
     double NextTextRefreshTime = 0.0;

@@ -74,7 +74,7 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         ]
                         + SHorizontalBox::Slot().AutoWidth()
                         [
-                            SNew(STrainingPicker).Player(Controller).Tag(TEXT("TrainingGames"))
+                            SAssignNew(TrainingPicker, STrainingPicker).Player(Controller).Tag(TEXT("TrainingGames"))
                             .Visibility_Lambda([this] { return bRangeMode ? EVisibility::Visible : EVisibility::Collapsed; })
                         ]
                         + SHorizontalBox::Slot().AutoWidth()
@@ -99,7 +99,10 @@ void SPlayModeBar::Construct(const FArguments& Args)
                 + SVerticalBox::Slot().AutoHeight()
                 [
                     SAssignNew(DrillSettings, SBox).Padding(FMargin(0, 5, 0, 0))
-                    .Visibility_Lambda([this] { return DisplayedDrill.IsValid() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
+                    .Visibility_Lambda([this] {
+                        const bool bPickerOpen = TrainingPicker.IsValid() && TrainingPicker->IsOpen();
+                        return DisplayedDrill.IsValid() && !bPickerOpen ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed;
+                    })
                 ]
                 + SVerticalBox::Slot().AutoHeight().Padding(TileGap, 6, TileGap, 0)
                 [

@@ -8,36 +8,28 @@ namespace TrainingScoring
 {
     constexpr double CmPerFoot = 30.48;
     constexpr double CmPerYard = 91.44;
-    /** Scoring radii around the pin, measured to the ball's centre where it stops. */
-    constexpr double InnerRadiusCm = 3 * CmPerFoot;
-    constexpr double OuterRadiusCm = 6 * CmPerFoot;
-    /** The tries a player can choose when picking a game. */
+    constexpr int32 DefaultRadiusFeet = 3;
+    constexpr int32 RadiusChoices[] = {3, 6, 10};
+    /** The tries a player can choose for a game that uses them (UTrainingDrill::UsesTries). */
     constexpr int32 TryChoices[] = {3, 5};
-
-    enum class ERing : uint8
-    {
-        Inside3Ft,
-        Inside6Ft,
-        Miss
-    };
+    constexpr int32 DefaultTries = TryChoices[0];
 
     bool IsValidTries(int32 Tries);
+    bool IsValidRadius(int32 Feet);
+    FText RadiusText(int32 Feet);
 
-    /** A holed ball is inside 3 ft; a shot ended by the safety stop is a miss wherever it lies. */
-    ERing Classify(double DistanceCm, bool bHoled, bool bSafetyStop);
+    /** A holed ball or one touching the stripe is a hit. A safety stop is a miss. */
+    bool IsHit(double DistanceCm, bool bHoled, bool bSafetyStop, double RadiusCm, double StripeWidthCm);
 
-    /** One set of tries at a fixed target. Inside6 includes the balls inside 3 ft. */
-    struct FTargetSet
+    /** Shots and hits at one target, with no limit on the number of shots. */
+    struct FHitTally
     {
-        int32 Tries = 3;
         int32 Shots = 0;
-        int32 Inside3 = 0;
-        int32 Inside6 = 0;
-        bool IsComplete() const { return Shots >= Tries; }
+        int32 Hits = 0;
     };
 
-    /** The set after one more scored shot; a complete set is returned unchanged. */
-    FTargetSet Record(const FTargetSet& Set, ERing Ring);
+    /** The tally after one more scored shot. */
+    FHitTally Record(const FHitTally& Tally, bool bHit);
 
     /** The ladder's targets: 15 yd, then every 10 yd to 145 yd, then 150 yd. */
     TConstArrayView<int32> LadderYards();
@@ -48,13 +40,13 @@ namespace TrainingScoring
         Start,
         /** A miss with tries left at this target. */
         Missed,
-        /** Inside 3 ft: on to the next target. */
+        /** A hit moves on to the next target. */
         Advanced,
         /** Every try missed: back one target. */
         DroppedBack,
         /** Every try missed at the first target: try it again. */
         Repeated,
-        /** Inside 3 ft at the last target. */
+        /** A hit at the last target. */
         Completed
     };
 
@@ -71,6 +63,6 @@ namespace TrainingScoring
         bool IsComplete() const { return LastStep == ELadderStep::Completed; }
     };
 
-    /** The ladder after one scored shot with Tries per target; only a ball inside 3 ft clears a target. */
-    FLadderState Next(const FLadderState& State, int32 Tries, bool bInside3);
+    /** The ladder after one scored shot with Tries per target; one hit clears a target. */
+    FLadderState Next(const FLadderState& State, int32 Tries, bool bHit);
 } // namespace TrainingScoring

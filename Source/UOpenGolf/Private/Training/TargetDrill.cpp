@@ -20,14 +20,14 @@ namespace
     constexpr float RetrySeconds = .5f;
 } // namespace
 
-bool UTargetDrill::Start(ATrainingSession& Session, int32 InTries)
+bool UTargetDrill::Start(ATrainingSession& Session, int32 /*Tries*/, int32 InRadiusFeet)
 {
     const AUOpenGolfGameMode* Mode = Session.Mode();
-    if (!TrainingScoring::IsValidTries(InTries) || !Mode || !Mode->GetBall())
+    if (!TrainingScoring::IsValidRadius(InRadiusFeet) || !Mode || !Mode->GetBall())
         return false;
     Training = &Session;
-    Tries = InTries;
-    Rings = UTargetRings::Create(Session);
+    RadiusFeet = InRadiusFeet;
+    Rings = UTargetRings::Create(Session, TrainingScoring::RadiusText(RadiusFeet));
     if (!Rings)
         return false;
     ResetScore();
@@ -39,13 +39,18 @@ bool UTargetDrill::Start(ATrainingSession& Session, int32 InTries)
     return false;
 }
 
+FDrillChoice UTargetDrill::GetChoice() const
+{
+    FDrillChoice Choice = Super::GetChoice();
+    Choice.RadiusFeet = RadiusFeet;
+    return Choice;
+}
+
 void UTargetDrill::Restart(ATrainingSession& Session)
 {
     ClearTimers();
     PendingYards.Reset();
-    LastDistanceCm.Reset();
-    LastRing.Reset();
-    bLastHoled = false;
+    ClearLastBall();
     LastScoredShot = INDEX_NONE;
     RunStartShot = Session.Mode()->GetBall()->GetShotNumber();
     ResetScore();
@@ -53,12 +58,12 @@ void UTargetDrill::Restart(ATrainingSession& Session)
         UE_LOG(LogTrainingTarget, Warning, TEXT("Could not move the target back to %d yd."), FirstYards());
 }
 
-void UTargetDrill::Finish(ATrainingSession& Session)
+void UTargetDrill::Finish(ATrainingSession& Session, bool bRestorePin)
 {
     ClearTimers();
     PendingYards.Reset();
     AUOpenGolfGameMode* Mode = Session.Mode();
-    if (AUOpenGolfRange* Range = Mode ? Mode->GetRange() : nullptr)
+    if (AUOpenGolfRange* Range = (bRestorePin && Mode) ? Mode->GetRange() : nullptr)
     {
         Range->GetCup()->PlaceOnSurface(Range->GetOriginalCup(), Range->GetFlagstick());
         Mode->GetBall()->SetCups({Range->GetOriginalCup()});
@@ -72,16 +77,17 @@ void UTargetDrill::Finish(ATrainingSession& Session)
 void UTargetDrill::OnShotAtRest(ATrainingSession& Session, const FOpenFairwayShotResult& Result, FVector RestLocation)
 {
     // A ball from before this run, or a second report of the same ball, is not a try.
-    if (IsComplete() || Result.ShotNumber <= RunStartShot || Result.ShotNumber == LastScoredShot)
+    if (IsComplete() || Result.ShotNumber <= RunStartShot || Result.ShotNumber <= LastScoredShot)
         return;
     LastScoredShot = Result.ShotNumber;
     // Scored against the pin the ball was hit at: a pending move has not happened yet.
     const double DistanceCm = FVector::Dist2D(RestLocation, Session.Mode()->GetCupLocation());
     const bool bSafetyStop = Result.TerminationReason == EOpenFairwayShotTermination::SafetyStop;
-    LastRing = TrainingScoring::Classify(DistanceCm, Result.bHoled, bSafetyStop);
+    const double StripeWidthCm = UTargetRings::EdgeWidthCm(PinYards * TrainingScoring::CmPerYard);
+    bLastHit = TrainingScoring::IsHit(DistanceCm, Result.bHoled, bSafetyStop, GetRadiusCm(), StripeWidthCm);
     LastDistanceCm = Result.bHoled ? 0.0 : DistanceCm;
     bLastHoled = Result.bHoled;
-    Score(LastRing.GetValue());
+    Score(bLastHit);
 }
 
 bool UTargetDrill::PlacePin(int32 Yards)
@@ -100,7 +106,7 @@ bool UTargetDrill::PlacePin(int32 Yards)
     FVector Ground, Normal;
     if (!Range->Terrain->GroundAt(Tee + Line * DistanceCm, Ground, Normal, AUOpenGolfBall::ContactChannel))
         return false;
-    if (!Rings->Place(*Range->Terrain, Ground, Line, DistanceCm, AUOpenGolfBall::ContactChannel))
+    if (!Rings->Place(*Range->Terrain, Ground, Line, DistanceCm, GetRadiusCm(), AUOpenGolfBall::ContactChannel))
         return false;
     Range->GetCup()->PlaceOnSurface({Ground, Normal}, Range->GetFlagstick());
     Mode->GetBall()->SetCups({Range->GetCup()->GetCupDescriptor()});
@@ -157,15 +163,26 @@ void UTargetDrill::ClearTimers()
 
 FText UTargetDrill::LastBallText() const
 {
-    if (!LastDistanceCm || !LastRing)
+    if (!LastDistanceCm)
         return FText::GetEmpty();
-    using TrainingScoring::ERing;
-    const ERing Ring = LastRing.GetValue();
-    const TCHAR* Verdict = bLastHoled ? TEXT("holed")
-                           : Ring == ERing::Inside3Ft ? TEXT("inside 3 ft")
-                           : Ring == ERing::Inside6Ft ? TEXT("inside 6 ft")
-                                                      : TEXT("miss");
-    return FText::FromString(FString::Printf(TEXT("Last ball  %s  ·  %s"), *GolfSettings::Distance(LastDistanceCm.GetValue() / 100.0, true), Verdict));
+    const double DistanceCm = LastDistanceCm.GetValue();
+    const FText Radius = TrainingScoring::RadiusText(RadiusFeet);
+    FText Verdict = NSLOCTEXT("Training", "Miss", "miss");
+    if (bLastHoled)
+        Verdict = NSLOCTEXT("Training", "Holed", "holed");
+    else if (bLastHit)
+        Verdict = DistanceCm >= GetRadiusCm()
+            ? FText::Format(NSLOCTEXT("Training", "OnRadiusLine", "on the {0} line"), Radius)
+            : FText::Format(NSLOCTEXT("Training", "InsideRadius", "inside {0}"), Radius);
+    return FText::Format(NSLOCTEXT("Training", "LastBall", "Last ball  {0}  ·  {1}"),
+        FText::FromString(GolfSettings::Distance(DistanceCm / 100.0, true)), Verdict);
+}
+
+void UTargetDrill::ClearLastBall()
+{
+    LastDistanceCm.Reset();
+    bLastHit = false;
+    bLastHoled = false;
 }
 
 bool UTargetDrill::IsBallMoving() const

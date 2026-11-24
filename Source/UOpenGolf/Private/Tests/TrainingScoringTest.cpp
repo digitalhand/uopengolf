@@ -3,6 +3,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "Training/TrainingScoring.h"
+#include "Training/TargetRings.h"
+#include "OpenFairway/GolfPhysics.h"
 
 namespace TrainingScoringTestDetail
 {
@@ -12,8 +14,8 @@ namespace TrainingScoringTestDetail
     FLadderState Play(int32 Tries, std::initializer_list<bool> Shots)
     {
         FLadderState State;
-        for (const bool bInside3 : Shots)
-            State = Next(State, Tries, bInside3);
+        for (const bool bHit : Shots)
+            State = Next(State, Tries, bHit);
         return State;
     }
 } // namespace TrainingScoringTestDetail
@@ -24,14 +26,22 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTrainingScoringRingsTest, "UOpenGolf.Training.
 bool FTrainingScoringRingsTest::RunTest(const FString&)
 {
     using namespace TrainingScoringTestDetail;
-    TestEqual(TEXT("3 ft is 91.44 cm"), InnerRadiusCm, 91.44);
-    TestEqual(TEXT("6 ft is 182.88 cm"), OuterRadiusCm, 182.88);
-    TestTrue(TEXT("Exactly 3 ft is inside"), Classify(91.44, false, false) == ERing::Inside3Ft);
-    TestTrue(TEXT("Just past 3 ft"), Classify(91.45, false, false) == ERing::Inside6Ft);
-    TestTrue(TEXT("Exactly 6 ft is inside"), Classify(182.88, false, false) == ERing::Inside6Ft);
-    TestTrue(TEXT("Just past 6 ft misses"), Classify(182.89, false, false) == ERing::Miss);
-    TestTrue(TEXT("A holed ball is inside 3 ft"), Classify(500, true, false) == ERing::Inside3Ft);
-    TestTrue(TEXT("A safety stop misses"), Classify(10, false, true) == ERing::Miss);
+    for (const int32 Feet : {3, 6, 10})
+    {
+        TestTrue(TEXT("Offered radius is valid"), IsValidRadius(Feet));
+        for (const int32 Yards : {35, 150})
+        {
+            const double Radius = Feet * CmPerFoot;
+            const double Width = UTargetRings::EdgeWidthCm(Yards * CmPerYard);
+            const double Touch = Radius + Width + OpenFairway::GolfPhysics::Radius * 100.;
+            for (const double Distance : {50., Radius + Width / 2, Touch})
+                TestTrue(TEXT("Inside, on the stripe, and touching its outer edge all win"), IsHit(Distance, false, false, Radius, Width));
+            TestFalse(TEXT("A 1 mm gap misses"), IsHit(Touch + .1, false, false, Radius, Width));
+            TestFalse(TEXT("A safety stop on the stripe misses"), IsHit(Touch, false, true, Radius, Width));
+            TestTrue(TEXT("A holed shot wins"), IsHit(500, true, false, Radius, Width));
+        }
+    }
+    TestFalse(TEXT("A radius outside the offered choices is invalid"), IsValidRadius(5));
     TestTrue(TEXT("3 tries"), IsValidTries(3));
     TestTrue(TEXT("5 tries"), IsValidTries(5));
     for (const int32 Tries : {0, 1, 4, 6, -3})
@@ -39,33 +49,26 @@ bool FTrainingScoringRingsTest::RunTest(const FString&)
     return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTrainingScoringSetTest, "UOpenGolf.Training.Scoring.TargetSet",
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTrainingScoringTallyTest, "UOpenGolf.Training.Scoring.HitTally",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FTrainingScoringSetTest::RunTest(const FString&)
+bool FTrainingScoringTallyTest::RunTest(const FString&)
 {
     using namespace TrainingScoringTestDetail;
-    const FTargetSet Start{3};
-    const FTargetSet One = Record(Start, ERing::Inside3Ft);
+    const FHitTally Start;
+    const FHitTally One = Record(Start, true);
     TestEqual(TEXT("Recording leaves the input unchanged"), Start.Shots, 0);
     TestEqual(TEXT("One shot"), One.Shots, 1);
-    TestEqual(TEXT("Inside 3 ft"), One.Inside3, 1);
-    TestEqual(TEXT("A 3 ft ball is also inside 6 ft"), One.Inside6, 1);
-    const FTargetSet Two = Record(One, ERing::Inside6Ft);
-    TestEqual(TEXT("A 6 ft ball is not inside 3 ft"), Two.Inside3, 1);
-    TestEqual(TEXT("Inside 6 ft counts both"), Two.Inside6, 2);
-    TestFalse(TEXT("Two of three is not complete"), Two.IsComplete());
-    const FTargetSet Three = Record(Two, ERing::Miss);
-    TestEqual(TEXT("A miss counts as a shot"), Three.Shots, 3);
-    TestEqual(TEXT("A miss scores nothing"), Three.Inside6, 2);
-    TestTrue(TEXT("Three of three completes"), Three.IsComplete());
-    const FTargetSet After = Record(Three, ERing::Inside3Ft);
-    TestTrue(TEXT("A complete set takes no more shots"), After.Shots == 3 && After.Inside3 == 1);
-    FTargetSet Five{5};
-    for (int32 Shot = 0; Shot < 4; ++Shot)
-        Five = Record(Five, ERing::Miss);
-    TestFalse(TEXT("Four of five is not complete"), Five.IsComplete());
-    TestTrue(TEXT("Five of five completes"), Record(Five, ERing::Miss).IsComplete());
+    TestEqual(TEXT("One hit"), One.Hits, 1);
+    const FHitTally Two = Record(One, false);
+    TestEqual(TEXT("A miss counts as a shot"), Two.Shots, 2);
+    TestEqual(TEXT("A miss leaves the hit count alone"), Two.Hits, 1);
+    // Distance Practice has no shot limit: the tally keeps counting.
+    FHitTally Long = Two;
+    for (int32 Shot = 0; Shot < 50; ++Shot)
+        Long = Record(Long, Shot % 2 == 0);
+    TestTrue(TEXT("Fifty more shots are all counted"), Long.Shots == 52 && Long.Hits == 26);
+    TestEqual(TEXT("The default tries are the first choice"), DefaultTries, TryChoices[0]);
     return true;
 }
 

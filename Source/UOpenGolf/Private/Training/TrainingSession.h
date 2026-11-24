@@ -3,6 +3,7 @@
 
 #include "GameFramework/Actor.h"
 #include "OpenFairwayTypes.h"
+#include "Training/TrainingScoring.h"
 #include "Widgets/SNullWidget.h"
 #include "TrainingSession.generated.h"
 
@@ -10,6 +11,16 @@ class AUOpenGolfGameMode;
 class SWidget;
 class UStaticMeshComponent;
 class ATrainingSession;
+class UTrainingDrill;
+
+/** The game and settings picked from the training games menu. */
+struct FDrillChoice
+{
+    TSubclassOf<UTrainingDrill> Game;
+    /** Used only by a game whose UsesTries is true. */
+    int32 Tries = TrainingScoring::DefaultTries;
+    int32 RadiusFeet = TrainingScoring::DefaultRadiusFeet;
+};
 
 UCLASS(Abstract, Transient)
 class UTrainingDrill : public UObject
@@ -17,11 +28,17 @@ class UTrainingDrill : public UObject
     GENERATED_BODY()
 public:
     virtual FText Name() const PURE_VIRTUAL(UTrainingDrill::Name, return FText::GetEmpty(););
-    /** Tries is one of TrainingScoring::TryChoices, chosen with the game. */
-    virtual bool Start(ATrainingSession& Session, int32 Tries) PURE_VIRTUAL(UTrainingDrill::Start, return false;);
+    /** One line for the training games menu, read from the class default object. */
+    virtual FText Hint() const { return FText::GetEmpty(); }
+    /** Whether the game takes a number of tries (one of TrainingScoring::TryChoices); read from the class default object. */
+    virtual bool UsesTries() const { return false; }
+    /** Tries is ignored by a game whose UsesTries is false. */
+    virtual bool Start(ATrainingSession& Session, int32 Tries, int32 RadiusFeet) PURE_VIRTUAL(UTrainingDrill::Start, return false;);
+    /** The settings this run was started with, so the menu can offer them again. */
+    virtual FDrillChoice GetChoice() const { return {GetClass()}; }
     /** Called with the ball stopped at the tee. */
     virtual void Restart(ATrainingSession& Session) {}
-    virtual void Finish(ATrainingSession& Session) {}
+    virtual void Finish(ATrainingSession& Session, bool bRestorePin) {}
     virtual TSharedRef<SWidget> MakeSettings() PURE_VIRTUAL(UTrainingDrill::MakeSettings, return SNullWidget::NullWidget;);
     virtual bool AllowsPlacement() const { return false; }
     /** Every shot that comes to rest during the drill, including safety stops. */
@@ -34,13 +51,6 @@ public:
     virtual FText ResultText() const { return FText::GetEmpty(); }
 };
 
-/** A game and its number of tries, as picked from the training games menu. */
-struct FDrillChoice
-{
-    TSubclassOf<UTrainingDrill> Game;
-    int32 Tries = 0;
-};
-
 UCLASS(Transient, NotPlaceable)
 class ATrainingSession : public AActor
 {
@@ -49,13 +59,13 @@ public:
     ATrainingSession();
     static TConstArrayView<TSubclassOf<UTrainingDrill>> Games();
     AUOpenGolfGameMode* Mode() const;
-    /** Starts Game with Tries; refused while a game runs, in a course round or while the ball moves. */
-    bool StartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries);
+    /** Starts Game with its settings; refused while a game runs, in a course round or while the ball moves. */
+    bool StartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries, int32 RadiusFeet = TrainingScoring::DefaultRadiusFeet);
     /**
      * The training games menu's choice: starts Game, or with a game running opens the Exit Drill prompt, whose Exit
      * Drill starts Game (StartPendingDrill). The running game carries on until then.
      */
-    bool ChooseDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries);
+    bool ChooseDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries, int32 RadiusFeet = TrainingScoring::DefaultRadiusFeet);
     /** The game the Exit Drill prompt will start, if the player picked one while another ran. */
     const TOptional<FDrillChoice>& GetPendingDrill() const { return PendingDrill; }
     /** Exits the running game and starts the pending one. */
@@ -75,7 +85,8 @@ public:
     void OpenDrillDialog();
 
 private:
-    bool CanStartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries) const;
+    bool CanStartDrill(const FDrillChoice& Choice) const;
+    bool BeginDrill(const FDrillChoice& Choice);
     void TeeUpForDrill();
     TOptional<FDrillChoice> PendingDrill;
     UPROPERTY()

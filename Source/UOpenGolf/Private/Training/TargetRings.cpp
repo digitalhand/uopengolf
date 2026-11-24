@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Training/TargetRings.h"
 #include "Training/GroundBands.h"
-#include "Training/TrainingScoring.h"
 #include "Components/TextRenderComponent.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInterface.h"
@@ -27,7 +26,7 @@ namespace
     }
 } // namespace
 
-UTargetRings* UTargetRings::Create(AActor& Owner)
+UTargetRings* UTargetRings::Create(AActor& Owner, const FText& RadiusText)
 {
     auto* Rings = NewObject<UTargetRings>(&Owner);
     Rings->Material = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail"));
@@ -36,8 +35,7 @@ UTargetRings* UTargetRings::Create(AActor& Owner)
         return nullptr;
     Rings->Mesh = MakeComponent<UTargetRingMesh>(Owner);
     Rings->Mesh->RegisterComponent();
-    Rings->Labels = {Rings->MakeLabel(Owner, NSLOCTEXT("Training", "ThreeFeet", "3 ft")),
-        Rings->MakeLabel(Owner, NSLOCTEXT("Training", "SixFeet", "6 ft"))};
+    Rings->RingLabel = Rings->MakeLabel(Owner, RadiusText);
     return Rings;
 }
 
@@ -60,23 +58,19 @@ float UTargetRings::EdgeWidthCm(double TeeToPinCm)
     return FMath::Max(MinEdgeWidthCm, float(TeeToPinCm * EdgeWidthPerDistance));
 }
 
-bool UTargetRings::Place(AOpenGolfTerrainArea& Terrain, FVector Center, FVector LineDir, double TeeToPinCm, ECollisionChannel Channel)
+bool UTargetRings::Place(AOpenGolfTerrainArea& Terrain, FVector Center, FVector LineDir, double TeeToPinCm, double RadiusCm,
+    ECollisionChannel Channel)
 {
-    if (!IsValid(Mesh) || !Material || !LineMaterial || Labels.Num() != 2)
+    if (!IsValid(Mesh) || !Material || !LineMaterial || !IsValid(RingLabel))
         return false;
-    const float Inner = float(TrainingScoring::InnerRadiusCm), Outer = float(TrainingScoring::OuterRadiusCm);
+    const float Radius = static_cast<float>(RadiusCm);
     const float Edge = EdgeWidthCm(TeeToPinCm);
-    // Each white edge grows outward, so its inner side is the exact scoring radius. Between the rings is a gap.
     const GroundBands::FBand Bands[] = {
-        {Inner, 6, FLinearColor::White, FillOpacity},
-        {Inner + Edge, 1, FLinearColor::White, EdgeOpacity, LineMaterial},
-        {Outer, 1, FLinearColor::White, 0.f},
-        {Outer + Edge, 1, FLinearColor::White, EdgeOpacity, LineMaterial}};
+        {Radius, 6, FLinearColor::White, FillOpacity},
+        {Radius + Edge, 1, FLinearColor::White, EdgeOpacity, LineMaterial}};
     if (!GroundBands::Draw(*Mesh, Terrain, Center, *Material, Bands, Segments, Channel, TurfClearanceCm))
         return false;
-    // Each label sits halfway across its own ring, on the side the player looks from.
-    PlaceLabel(*Labels[0], Terrain, Center, LineDir, Inner * .5, Channel);
-    PlaceLabel(*Labels[1], Terrain, Center, LineDir, (Inner + Edge + Outer) * .5, Channel);
+    PlaceLabel(*RingLabel, Terrain, Center, LineDir, Radius * .5, Channel);
     return true;
 }
 
@@ -99,9 +93,8 @@ void UTargetRings::Destroy()
 {
     if (IsValid(Mesh))
         Mesh->DestroyComponent();
-    for (UTextRenderComponent* Label : Labels)
-        if (IsValid(Label))
-            Label->DestroyComponent();
+    if (IsValid(RingLabel))
+        RingLabel->DestroyComponent();
     Mesh = nullptr;
-    Labels.Reset();
+    RingLabel = nullptr;
 }

@@ -2,7 +2,7 @@
 """Measure training-ring shimmer from the stationary sequences of UOpenGolf.Visual.TrainingTarget.
 
 Each tee view is captured twice with the same camera: <view>-NN.png with the rings shown and
-<view>-hidden-NN.png with them hidden. <view>-ring.json gives, as viewport fractions, the 6 ft
+<view>-hidden-NN.png with them hidden. <view>-ring.json gives, as viewport fractions, the selected
 ring's screen box and points along its far (top) arc, which breaks into dashes when it is
 thinner than a pixel. For each view this prints:
 

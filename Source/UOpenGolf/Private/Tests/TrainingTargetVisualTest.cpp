@@ -48,7 +48,7 @@ namespace
             switch (Step)
             {
             case 0:
-                if (!Test.TestTrue(TEXT("The drill starts during map loading"), Session && Session->StartDrill(UDistancePractice::StaticClass(), 3)))
+                if (!Test.TestTrue(TEXT("The drill starts during map loading"), Session && Session->StartDrill(UDistancePractice::StaticClass(), 3, 6)))
                     return true;
                 Range->InvalidateHoleMap();
                 break;
@@ -71,11 +71,11 @@ namespace
                 if (Ball->IsMoving())
                     return false;
                 {
-                    // The yardage locks once a set starts, so a new set brings the pin to the ball; the ball stays.
+                    // A new run brings the pin to the ball; the ball stays where it stopped.
                     const int32 Yards = FMath::Clamp(FMath::RoundToInt(FVector::Dist2D(Range->GetTeeLocation(), Ball->GetActorLocation()) / 91.44),
                         UDistancePractice::MinYards, UDistancePractice::MaxYards);
                     Session->ExitDrill();
-                    if (!Test.TestTrue(TEXT("Start a new set"), Session->StartDrill(UDistancePractice::StaticClass(), 3)))
+                    if (!Test.TestTrue(TEXT("Start a new run"), Session->StartDrill(UDistancePractice::StaticClass(), 3, 6)))
                         return true;
                     Test.TestTrue(TEXT("Pin at the ball"), CastChecked<UDistancePractice>(Session->Active())->SetDistance(Yards));
                     Test.TestEqual(TEXT("Moving the flag reuses the overhead picture"), Range->GetHoleMapTexture(), OriginalPicture.Get());
@@ -84,7 +84,7 @@ namespace
             case 3:
                 if (!Mode->IsBallAtAddress())
                     return false;
-                Test.TestEqual(TEXT("The new set keeps the finished ball"), Session->FinishedBallCount(), 1);
+                Test.TestEqual(TEXT("The new run keeps the finished ball"), Session->FinishedBallCount(), 1);
                 WaitUntil = GetCurrentRunTime() + 2.5;
                 break;
             case 4:
@@ -155,7 +155,7 @@ namespace
 
         /**
          * A still tee view twice, rings shown then hidden, so ring shimmer can be told apart from the grass, plus the
-         * 6 ft ring's screen box and far arc for Assets/Scripts/ring_stability.py.
+         * selected ring's screen box and far arc for Assets/Scripts/ring_stability.py.
          */
         bool CaptureTee(const AUOpenGolfGameMode& Mode, APlayerController& Player, const TSharedRef<SWindow>& Window, const TCHAR* View)
         {
@@ -189,7 +189,9 @@ namespace
             const FVector Pin = Mode.GetCupLocation();
             const FVector Eye = Player.PlayerCameraManager->GetCameraLocation();
             const FVector Away = (Pin - Eye).GetSafeNormal2D();
-            const double Edge = UTargetRings::EdgeWidthCm(FVector::Dist2D(Range->GetTeeLocation(), Pin));
+            const auto* Drill = CastChecked<UTargetDrill>(Mode.GetTrainingSession()->Active());
+            const double RadiusCm = Drill->GetRadiusCm();
+            const double Edge = UTargetRings::EdgeWidthCm(Drill->GetPinYards() * TrainingScoring::CmPerYard);
             // A point on the ring at Radius, Degrees around from the far side, as a viewport fraction.
             auto Project = [&](double Radius, double Degrees, FVector2D& Fraction)
             {
@@ -207,7 +209,7 @@ namespace
             for (int32 Degrees = 0; Degrees < 360; Degrees += 10)
             {
                 FVector2D Point;
-                if (Project(TrainingScoring::OuterRadiusCm + Edge, Degrees, Point))
+                if (Project(RadiusCm + Edge, Degrees, Point))
                     Box += Point;
             }
             const FVector2D Margin(.01, .01);
@@ -217,7 +219,7 @@ namespace
             for (int32 Degrees = -60; Degrees <= 60; Degrees += 5)
             {
                 FVector2D Point;
-                if (Project(TrainingScoring::OuterRadiusCm + Edge * .5, Degrees, Point))
+                if (Project(RadiusCm + Edge * .5, Degrees, Point))
                     Arc.Add(FString::Printf(TEXT("[%.5f,%.5f]"), Point.X, Point.Y));
             }
             const FString Json = FString::Printf(TEXT("{\"view\":\"%s\",\"box\":[%.5f,%.5f,%.5f,%.5f],\"far_arc\":[%s]}\n"), View, Min.X,

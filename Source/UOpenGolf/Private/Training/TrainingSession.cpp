@@ -25,20 +25,25 @@ AUOpenGolfGameMode* ATrainingSession::Mode() const
     return GetWorld()->GetAuthGameMode<AUOpenGolfGameMode>();
 }
 
-bool ATrainingSession::CanStartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries) const
+bool ATrainingSession::CanStartDrill(const FDrillChoice& Choice) const
 {
     const AUOpenGolfGameMode* GameMode = Mode();
-    return GameMode && !GameMode->IsCourseRound() && Games().Contains(Game) && TrainingScoring::IsValidTries(Tries) && GameMode->GetBall() &&
-           !GameMode->GetBall()->IsMoving();
+    if (!GameMode || GameMode->IsCourseRound() || !Games().Contains(Choice.Game) || !TrainingScoring::IsValidRadius(Choice.RadiusFeet))
+        return false;
+    if (Choice.Game.GetDefaultObject()->UsesTries() && !TrainingScoring::IsValidTries(Choice.Tries))
+        return false;
+    return GameMode->GetBall() && !GameMode->GetBall()->IsMoving();
 }
 
-bool ATrainingSession::StartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries)
+bool ATrainingSession::BeginDrill(const FDrillChoice& Choice)
 {
-    if (ActiveDrill || !CanStartDrill(Game, Tries))
+    if (!CanStartDrill(Choice))
         return false;
-    UTrainingDrill* Drill = NewObject<UTrainingDrill>(this, Game);
-    if (!Drill->Start(*this, Tries))
+    UTrainingDrill* Drill = NewObject<UTrainingDrill>(this, Choice.Game);
+    if (!Drill->Start(*this, Choice.Tries, Choice.RadiusFeet))
         return false;
+    if (ActiveDrill)
+        ActiveDrill->Finish(*this, false);
     LeaveFinishedBall();
     RunStart = FinishedBalls.Num();
     ActiveDrill = Drill;
@@ -46,16 +51,21 @@ bool ATrainingSession::StartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries)
     return true;
 }
 
-bool ATrainingSession::ChooseDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries)
+bool ATrainingSession::StartDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries, int32 RadiusFeet)
 {
+    return !ActiveDrill && BeginDrill({Game, Tries, RadiusFeet});
+}
+
+bool ATrainingSession::ChooseDrill(TSubclassOf<UTrainingDrill> Game, int32 Tries, int32 RadiusFeet)
+{
+    const FDrillChoice Choice{Game, Tries, RadiusFeet};
     if (!ActiveDrill)
-        return StartDrill(Game, Tries);
+        return BeginDrill(Choice);
     auto* Player = Cast<AUOpenGolfPlayerController>(GetWorld()->GetFirstPlayerController());
-    if (!Player || Player->IsDrillDialogOpen() || !CanStartDrill(Game, Tries))
+    if (!Player || Player->IsDrillDialogOpen() || !CanStartDrill(Choice))
         return false;
-    PendingDrill = FDrillChoice{Game, Tries};
+    PendingDrill = Choice;
     Player->OpenDrillDialog();
-    // The choice waits only in an open prompt.
     if (!Player->IsDrillDialogOpen())
         PendingDrill.Reset();
     return PendingDrill.IsSet();
@@ -67,8 +77,7 @@ bool ATrainingSession::StartPendingDrill()
         return false;
     const FDrillChoice Choice = PendingDrill.GetValue();
     PendingDrill.Reset();
-    ExitDrill();
-    return StartDrill(Choice.Game, Choice.Tries);
+    return BeginDrill(Choice);
 }
 
 void ATrainingSession::RestartDrill()
@@ -88,7 +97,7 @@ void ATrainingSession::ExitDrill()
 {
     if (!ActiveDrill)
         return;
-    ActiveDrill->Finish(*this);
+    ActiveDrill->Finish(*this, true);
     ActiveDrill = nullptr;
     TeeUpForDrill();
 }

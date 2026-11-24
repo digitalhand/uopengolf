@@ -142,13 +142,13 @@ bool FHoleMapLabelsTest::RunTest(const FString&)
     TestEqual(TEXT("Soft fairway is named"), FString(HoleMapLabels::SurfaceName(EOpenFairwaySurface::FairwaySoft)), FString(TEXT("Soft fairway")));
     TestEqual(TEXT("Green is named"), FString(HoleMapLabels::SurfaceName(EOpenFairwaySurface::Green)), FString(TEXT("Green")));
 
-    // The header's lie: the ball's motion first, then where it rests.
-    using EState = EOpenFairwayBallState;
-    TestEqual(TEXT("A ball in the air is in flight"), FString(HoleMapLabels::LieText(EState::Flight, false, false, EOpenFairwaySurface::Fairway)), FString(TEXT("In flight")));
-    TestEqual(TEXT("A ball on the ground is rolling, not in flight"), FString(HoleMapLabels::LieText(EState::Rollout, false, false, EOpenFairwaySurface::Green)), FString(TEXT("Rolling")));
-    TestEqual(TEXT("A holed ball is holed"), FString(HoleMapLabels::LieText(EState::Rest, true, false, EOpenFairwaySurface::Green)), FString(TEXT("Holed")));
-    TestEqual(TEXT("A ball on the tee box is on the tee"), FString(HoleMapLabels::LieText(EState::Rest, false, true, EOpenFairwaySurface::Fairway)), FString(TEXT("Tee")));
-    TestEqual(TEXT("A ball at rest names its surface"), FString(HoleMapLabels::LieText(EState::Rest, false, false, EOpenFairwaySurface::Sand)), FString(TEXT("Bunker")));
+    // The header names the lie only, never the ball's motion: holed, on the tee box, or the surface it is on.
+    TestEqual(TEXT("A holed ball is holed"), FString(HoleMapLabels::LieText(true, false, EOpenFairwaySurface::Green)), FString(TEXT("Holed")));
+    TestEqual(TEXT("A ball on the tee box is on the tee"), FString(HoleMapLabels::LieText(false, true, EOpenFairwaySurface::Fairway)), FString(TEXT("Tee")));
+    for (const EOpenFairwaySurface Surface : {EOpenFairwaySurface::Fairway, EOpenFairwaySurface::Rough, EOpenFairwaySurface::Sand,
+             EOpenFairwaySurface::Green, EOpenFairwaySurface::Fringe})
+        TestEqual(TEXT("A ball off the tee names its surface"), FString(HoleMapLabels::LieText(false, false, Surface)),
+            FString(HoleMapLabels::SurfaceName(Surface)));
     return true;
 }
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoleMapChipPlacementTest, "UOpenGolf.Minimap.ChipPlacement",

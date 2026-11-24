@@ -1,5 +1,63 @@
 # Phase status
 
+## Open-ended Distance Practice, lie-only minimap header, two-line hole heading · 2026-11-23
+
+Distance Practice has no shot limit. The distance can change whenever the ball is at rest, and each
+change starts a new hit count. Only the Distance Ladder offers 3 or 5 tries. The minimap header no
+longer says In flight or Rolling: it keeps the lie the shot was hit from while the ball is in the air,
+then names the surface. In a course round the top-right heading is two tiles tall, with "Hole 1" and
+"Par 4 · 400 yd" on separate Bold 18 lines.
+
+On Linux with UE 5.8.4, the Development editor build passed, including a full `-DisableAdaptiveUnity`
+build. In one guarded editor with no other editor running:
+- Six headless tests passed: `Training.Scoring` (3), `Range.ShotDisplay`, `Minimap.Labels` and
+  `Range.TrainingGames`. See `Saved/Automation/20261123-223005-Headless-AD82Fl`.
+- Four offscreen Vulkan tests at 1792 × 1087 passed: `Visual.RangeHudControls`,
+  `Minimap.RenderedClick`, `Visual.DistanceLadderReplay` and `Visual.TrainingTarget`. Two were marked
+  with warnings, which came only from the editor's blocked telemetry upload. See
+  `Saved/Automation/20261123-223049-Rendered-2MskVx` and
+  `Saved/Screenshots/RangeHud/20261123-223246-course-heading.png`.
+
+Still unverified:
+- The DebugGame build.
+- Windows.
+- Packaged builds.
+- The owner's look review.
+- A rendered shot from the tee box. The rendered in-flight check started from a rough lie.
+
+## Training game picker and winning radius · 2026-11-23
+
+The Training picker shows both games side by side, with a 3 ft, 6 ft, or 10 ft radius and a
+choice of 3 or 5 shots or tries. Both games use the same line-touch rule and show a single ring.
+
+On Linux with Unreal Engine 5.8.4, the Development and DebugGame editor builds passed.
+Six Development tests passed in offscreen Play at 1045 × 801, including the three scoring tests,
+training gameplay, the HUD controls, and the 35 yd replay. The replay stopped 91.5782 cm from
+the cup and advanced to 45 yd after the HUD called it on the line. See
+`Saved/Automation/TrainingPicker-Development-5ymrBw/index.json` and the captures
+`Saved/Screenshots/RangeHud/training-game-picker.png` and
+`Saved/Screenshots/RangeHud/20261123-215608-distance-ladder-10ft.png`.
+
+The DebugGame target test passed separately in Vulkan SM6 at 1792 × 1087 offscreen with one
+editor and six stationary frames per view with the ring shown and hidden. Compared with the
+earlier two-ring Development capture, the 6 ft far-arc continuity stayed at 97.7%, 95.3%, and
+100% at 15, 50, and 150 yd, with zero toggles. Ring-box sparkle went from 0.001% to 0.004% at
+15 yd and stayed at 0.000% at 50 and 150 yd. A close view and a 3 cm camera move show one
+labelled ring. Continuous camera motion was not measured. See
+`Saved/Automation/TrainingPicker-DebugGame-gbKpeK/ring-stability.txt` and the frames in
+`Saved/Screenshots/TrainingGames`.
+
+## Distance Ladder line touches · 2026-11-23
+
+The ladder now counts a stopped ball that touches the white 3 ft stripe. On Linux with UE 5.8.4,
+both Development and DebugGame editor builds passed. A standalone check of the compiled scoring
+function passed at 35 and 150 yd, including exact contact and a 1 mm gap.
+All five tests passed in one DebugGame editor with Vulkan rendering. The 45 mph replay at 35 yd
+stopped 91.578205834662398 cm from the cup, 1.38 mm past the old cutoff. The HUD showed “on the 3 ft
+line” and advanced to 45 yd. The report is in `Saved/Automation/LadderLine-whH67k/index.json` and the
+1606 × 906 Play capture is in `Saved/Screenshots/TrainingGames/ladder-35yd-rest.png`.
+The original session logged distances rounded to tenths of a yard.
+
 ## Vulkan Nanite base-pass assertion · 2026-11-23
 
 One of about 11 Linux Play in Standalone Game launches (UE 5.8.4, DebugGame, Vulkan SM6 with

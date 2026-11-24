@@ -33,18 +33,21 @@ finished balls. When a shot stops, the session remembers its final transform. Wh
 moves to its next lie, a collision-free copy takes its place. The session records where each drill
 run starts in that list so restarting can clear just that run. Leaving the map clears the session.
 
-To add a game, derive from `UTrainingDrill`, give it a display name, implement its start and finish
-behavior, and return its controls from `MakeSettings`. Add its class to `ATrainingSession::Games()`.
-The Training toolbar lists the class with a button for each choice in `TrainingScoring::TryChoices`
-(3 or 5 tries) and hosts its controls. The session forwards each ball at rest to the drill, asks it
+To add a game, derive from `UTrainingDrill`, give it a display name and a one-line `Hint`, implement its
+start and finish behavior, and return its controls from `MakeSettings`. Add its class to
+`ATrainingSession::Games()`. The training games menu reads `Name`, `Hint` and `UsesTries` from the class
+default object: only a game that uses tries offers the choices in `TrainingScoring::TryChoices` (3 or 5).
+A running game reports its settings through `GetChoice`, so the menu opens on them. The toolbar hosts
+the running game's controls. The session forwards each ball at rest to the drill, asks it
 whether a launch-monitor shot may be played (`RejectReason`), and lets it finish a delayed change
 before the shot (`BeforeShot`).
 
 The target games derive from `UTargetDrill`. It moves the active cup through `PlaceOnSurface`,
-supplies that same cup to the ball, and draws `UTargetRings`: white 3 ft and 6 ft rings with flat
-text labels, 6 cm above the ground so the tallest cut-turf blades (55 mm rough) cannot cover them.
+supplies that same cup to the ball, and draws `UTargetRings`: one white ring at the chosen radius (3, 6 or
+10 ft) with a flat text label, 6 cm above the ground so the tallest cut-turf blades (55 mm rough) cannot cover them.
 Each ball is scored where it stops with the pure rules in `Training/TrainingScoring.h`, which Distance
-Practice (one set at a chosen yardage) and Distance Ladder (15 to 150 yd) apply. A pin move or a
+Practice (an open-ended hit tally at a yardage the player can change between shots) and Distance Ladder
+(15 to 150 yd, with tries per target) apply. A pin move or a
 finished game's result waits `AUOpenGolfGameMode::AddressDelayS`, so the player sees where the ball
 stopped. The overhead map always captures the full hole using the original cup. Its live pin and
 elevation use the active cup.
@@ -116,7 +119,8 @@ The map (`SHoleMinimap`) shows part of the picture through the brush's UV region
   at the clicked distance. The target keeps that distance while the ball stays on the same lie, re-tees included.
   Otherwise it sits at the cup's distance.
 
-The panel's header names the lie (or In flight and Rolling while the ball moves) and the hole. Its footer shows the pin's elevation above or below the ball in feet
+The panel's header names the lie and the hole. It never names the ball's motion: in the air it keeps the lie the
+shot was hit from, and from the first bounce it names the surface under the ball. Its footer shows the pin's elevation above or below the ball in feet
 and inches (`▲ 3"`, `▼ 5' 1"`, or Level). Elevations are measured on the height field at both ends, so a level target
 reads level. Framing is set on the range actor (**UOpenGolf › Minimap**: end margin,
 minimum width, side offset, minimum view length).

@@ -6,6 +6,7 @@
 #include "Hole/OpenGolfCupComponent.h"
 #include "Misc/AutomationTest.h"
 #include "OpenFairwayBall.h"
+#include "OpenFairway/GolfPhysics.h"
 #include "OpenGolfSettings.h"
 #include "Tests/PermissionTestAccess.h"
 #include "OpenGolfFlagstickComponent.h"
@@ -26,80 +27,55 @@ namespace TrainingGamesTestDetail
 {
     constexpr double CmPerYard = 91.44;
 
-    /**
-     * The edges draw with the screen-footprint line material and carry what it needs: UV1 (0 on the inner row, 1 on the
-     * outer row; the edge width) and UV2 (the radial direction). The fill keeps the tracer material.
-     */
-    void CheckRingLines(FAutomationTestBase& Test, UProceduralMeshComponent& Mesh, const FVector& Pin, double Edge)
-    {
-        auto ParentPath = [&Mesh](int32 Section)
-        {
-            const auto* Tint = Cast<UMaterialInstanceDynamic>(Mesh.GetMaterial(Section));
-            return Tint && Tint->Parent ? Tint->Parent->GetPathName() : FString();
-        };
-        Test.TestEqual(TEXT("The fill keeps the tracer material"), ParentPath(0), FString(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail")));
-        const double InnerRadius[] = {91.44, 182.88};
-        for (int32 Ring = 0; Ring < 2; ++Ring)
-        {
-            const int32 Section = Ring == 0 ? 1 : 3;
-            Test.TestEqual(TEXT("Edges use the screen-footprint line material"), ParentPath(Section),
-                FString(TEXT("/Game/UOpenGolf/Art/M_TargetRingLine.M_TargetRingLine")));
-            int32 BadRows = 0, BadDirections = 0;
-            for (const FProcMeshVertex& Vertex : Mesh.GetProcMeshSection(Section)->ProcVertexBuffer)
-            {
-                const double Radius = FVector::Dist2D(Pin, Vertex.Position);
-                const bool bRow = (Vertex.UV1.X == 0 || Vertex.UV1.X == 1) && FMath::IsNearlyEqual(Vertex.UV1.Y, Edge, .01) &&
-                                  FMath::IsNearlyEqual(Radius, InnerRadius[Ring] + Vertex.UV1.X * Edge, 1.);
-                const FVector2D Away = FVector2D(Vertex.Position - Pin).GetSafeNormal();
-                BadRows += !bRow;
-                BadDirections += !(FMath::IsNearlyEqual(Vertex.UV2.Size(), 1., 1e-3) && FVector2D::DotProduct(Vertex.UV2, Away) > .99);
-            }
-            double TopZ = -UE_BIG_NUMBER;
-            for (const FProcMeshVertex& Vertex : Mesh.GetProcMeshSection(Section)->ProcVertexBuffer)
-                TopZ = FMath::Max(TopZ, Vertex.Position.Z);
-            Test.TestTrue(FString::Printf(TEXT("Ring %d bounds clear the edges' screen growth"), Ring), Mesh.Bounds.GetBox().Max.Z - TopZ >= 50.);
-            Test.TestEqual(FString::Printf(TEXT("Ring %d rows carry t and the edge width"), Ring), BadRows, 0);
-            Test.TestEqual(FString::Printf(TEXT("Ring %d vertices carry their radial direction"), Ring), BadDirections, 0);
-        }
-    }
-
-    /** The 3 ft and 6 ft rings and their labels around the pin, clear of the grass. */
     void CheckTarget(FAutomationTestBase& Test, const UTargetDrill& Drill, const AUOpenGolfRange& Range, const FVector& Tee, const FVector& Pin)
     {
         const UTargetRings* Rings = Drill.GetRings();
         UProceduralMeshComponent* Mesh = Rings ? Rings->GetMesh() : nullptr;
-        if (!Test.TestTrue(TEXT("Fill, 3 ft edge, gap and 6 ft edge"), Mesh && Mesh->GetNumSections() == 4))
+        if (!Test.TestTrue(TEXT("One fill and one edge"), Mesh && Mesh->GetNumSections() == 2))
             return;
-        const float Edge = UTargetRings::EdgeWidthCm(FVector::Dist2D(Tee, Pin));
-        const double Expected[] = {91.44, 91.44 + Edge, 0, 182.88 + Edge};
-        for (int32 Section = 0; Section < 4; ++Section)
+
+        auto ParentPath = [Mesh](int32 Section)
         {
-            const FProcMeshSection* Band = Mesh->GetProcMeshSection(Section);
-            double Outer = 0;
-            for (const uint32 Index : Band->ProcIndexBuffer)
-                Outer = FMath::Max(Outer, FVector::Dist2D(Pin, Band->ProcVertexBuffer[Index].Position));
-            Test.TestEqual(FString::Printf(TEXT("Band %d outer radius"), Section), Outer, Expected[Section], 1.);
+            const auto* Tint = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(Section));
+            return Tint && Tint->Parent ? Tint->Parent->GetPathName() : FString();
+        };
+        Test.TestEqual(TEXT("The fill uses the tracer material"), ParentPath(0), FString(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail")));
+        Test.TestEqual(TEXT("The edge uses the screen-width line material"), ParentPath(1),
+            FString(TEXT("/Game/UOpenGolf/Art/M_TargetRingLine.M_TargetRingLine")));
+
+        const double Radius = Drill.GetRadiusFeet() * TrainingScoring::CmPerFoot;
+        const double Edge = UTargetRings::EdgeWidthCm(Drill.GetPinYards() * CmPerYard);
+        const auto& Stripe = Mesh->GetProcMeshSection(1)->ProcVertexBuffer;
+        if (!Test.TestFalse(TEXT("The ring has vertices"), Stripe.IsEmpty()))
+            return;
+        int32 BadRows = 0, BadDirections = 0;
+        double TopZ = -UE_BIG_NUMBER;
+        for (const FProcMeshVertex& Vertex : Stripe)
+        {
+            const FVector2D Away = FVector2D(Vertex.Position - Pin).GetSafeNormal();
+            BadRows += !((Vertex.UV1.X == 0 || Vertex.UV1.X == 1) && FMath::IsNearlyEqual(Vertex.UV1.Y, Edge, .01) &&
+                FMath::IsNearlyEqual(FVector::Dist2D(Pin, Vertex.Position), Radius + Vertex.UV1.X * Edge, 1.));
+            BadDirections += !(FMath::IsNearlyEqual(Vertex.UV2.Size(), 1., 1e-3) && FVector2D::DotProduct(Vertex.UV2, Away) > .99);
+            TopZ = FMath::Max(TopZ, Vertex.Position.Z);
         }
-        CheckRingLines(Test, *Mesh, Pin, Edge);
-        const FVector Vertex = Mesh->GetProcMeshSection(1)->ProcVertexBuffer[0].Position;
+        Test.TestEqual(TEXT("The stripe starts at the selected radius and extends by its width"), BadRows, 0);
+        Test.TestEqual(TEXT("The stripe points outward"), BadDirections, 0);
+        Test.TestTrue(TEXT("Bounds clear the edge's screen growth"), Mesh->Bounds.GetBox().Max.Z - TopZ >= 50.);
+
+        const FVector Vertex = Stripe[0].Position;
         FVector Ground, Normal;
-        Test.TestTrue(TEXT("The rings stand clear of 55 mm rough"),
+        Test.TestTrue(TEXT("The ring stands clear of 55 mm rough"),
             Range.Terrain->GroundAt(Vertex, Ground, Normal, AUOpenGolfBall::ContactChannel) && Vertex.Z - Ground.Z >= 5.5);
-        const auto Labels = Rings->GetLabels();
-        if (!Test.TestEqual(TEXT("Two labels"), Labels.Num(), 2))
+        const UTextRenderComponent* Label = Rings->GetLabel();
+        if (!Test.TestNotNull(TEXT("One label"), Label))
             return;
         const FVector Line = (Pin - Tee).GetSafeNormal2D();
-        for (int32 Index = 0; Index < 2; ++Index)
-        {
-            const UTextRenderComponent* Label = Labels[Index];
-            const double Radius = FVector::Dist2D(Pin, Label->GetComponentLocation());
-            Test.TestEqual(TEXT("Label text"), Label->Text.ToString(), FString(Index == 0 ? TEXT("3 ft") : TEXT("6 ft")));
-            Test.TestTrue(TEXT("Label shown"), Label->IsVisible());
-            Test.TestTrue(TEXT("Each label lies inside its own ring"), Index == 0 ? Radius < 91.44 : Radius > 91.44 + Edge && Radius < 182.88);
-            Test.TestTrue(TEXT("Labels sit on the tee side"), FVector::DotProduct(Label->GetComponentLocation() - Pin, Line) < 0);
-            Test.TestTrue(TEXT("Labels lie face up"), Label->GetForwardVector().Z > .9);
-            Test.TestTrue(TEXT("Labels read upright from the tee"), FVector::DotProduct(Label->GetUpVector(), Line) > .9);
-        }
+        const FVector Offset = Label->GetComponentLocation() - Pin;
+        Test.TestEqual(TEXT("Label shows the chosen radius"), Label->Text.ToString(), FString::Printf(TEXT("%d ft"), Drill.GetRadiusFeet()));
+        Test.TestTrue(TEXT("Label shown"), Label->IsVisible());
+        Test.TestTrue(TEXT("Label lies inside the ring and on the tee side"), Offset.Size2D() < Radius && FVector::DotProduct(Offset, Line) < 0);
+        Test.TestTrue(TEXT("Label lies face up and reads upright from the tee"), Label->GetForwardVector().Z > .9 &&
+            FVector::DotProduct(Label->GetUpVector(), Line) > .9);
     }
 
     double PinYards(const AUOpenGolfGameMode& Mode, const FVector& Tee)
@@ -109,7 +85,7 @@ namespace TrainingGamesTestDetail
 
     /**
      * Choosing a game while another runs opens the Exit Drill prompt; the running game keeps going until the player
-     * exits, and Exit Drill then starts the chosen game with its tries. Leaves Distance Practice with 5 tries running.
+     * exits, and Exit Drill then starts the chosen game with its settings. Leaves Distance Practice with a 6 ft ring running.
      */
     void CheckSwitchGames(FAutomationTestBase& Test, ATrainingSession& Session, const AUOpenGolfGameMode& Mode,
         AUOpenGolfPlayerController& Player, const FVector& Tee)
@@ -120,14 +96,14 @@ namespace TrainingGamesTestDetail
         Test.TestTrue(TEXT("Pick 30 yd"), Practice->SetDistance(30));
         const TWeakObjectPtr<UProceduralMeshComponent> PracticeRings = Practice->GetRings()->GetMesh();
         Test.TestFalse(TEXT("Another game never starts over a running one unasked"), Session.StartDrill(UDistanceLadder::StaticClass(), 5));
-        if (!Test.TestTrue(TEXT("Choosing the Ladder asks first"), Session.ChooseDrill(UDistanceLadder::StaticClass(), 5)))
+        if (!Test.TestTrue(TEXT("Choosing the Ladder asks first"), Session.ChooseDrill(UDistanceLadder::StaticClass(), 5, 10)))
             return;
         Test.TestTrue(TEXT("The Exit Drill prompt opens"), Player.IsDrillDialogOpen());
         Test.TestTrue(TEXT("Distance Practice runs until the player exits"), Session.Active() == Practice);
         Player.CloseDrillDialog();
         Test.TestFalse(TEXT("Closing the prompt forgets the choice"), Session.GetPendingDrill().IsSet());
         Test.TestTrue(TEXT("Distance Practice keeps running"), Session.Active() == Practice && Practice->GetDistance() == 30);
-        Session.ChooseDrill(UDistanceLadder::StaticClass(), 5);
+        Session.ChooseDrill(UDistanceLadder::StaticClass(), 5, 10);
         if (!Test.TestTrue(TEXT("Exit Drill starts the chosen game"), Session.StartPendingDrill()))
             return;
         Player.CloseDrillDialog();
@@ -135,14 +111,15 @@ namespace TrainingGamesTestDetail
         if (!Test.TestNotNull(TEXT("The Ladder runs"), Ladder))
             return;
         Test.TestEqual(TEXT("With the tries chosen for it"), Ladder->GetTries(), 5);
+        Test.TestEqual(TEXT("With the radius chosen for it"), Ladder->GetRadiusFeet(), 10);
         Test.TestFalse(TEXT("The practice rings are gone"), PracticeRings.IsValid() && PracticeRings->IsRegistered());
         Test.TestEqual(TEXT("The Ladder starts at 15 yd"), Ladder->GetPinYards(), 15);
         Test.TestEqual(TEXT("The pin moves to the Ladder's target"), int32(FMath::RoundToInt(PinYards(Mode, Tee))), 15);
-        Session.ChooseDrill(UDistancePractice::StaticClass(), 5);
+        Session.ChooseDrill(UDistancePractice::StaticClass(), TrainingScoring::DefaultTries, 6);
         Test.TestTrue(TEXT("Exit Drill starts Distance Practice again"), Session.StartPendingDrill());
         Player.CloseDrillDialog();
         const auto* Again = Cast<UDistancePractice>(Session.Active());
-        Test.TestTrue(TEXT("A fresh Distance Practice with 5 tries"), Again && Again->GetTries() == 5 && Again->GetSet().Shots == 0);
+        Test.TestTrue(TEXT("A fresh Distance Practice with a 6 ft ring"), Again && Again->GetRadiusFeet() == 6 && Again->GetTally().Shots == 0);
     }
 
     class FPlayDistancePractice : public IAutomationLatentCommand
@@ -184,7 +161,7 @@ namespace TrainingGamesTestDetail
             {
                 if (Ball->IsMoving())
                     return false;
-                Test.TestFalse(TEXT("Only 3 or 5 tries"), Session->StartDrill(Game, 4));
+                Test.TestFalse(TEXT("The Ladder offers only 3 or 5 tries"), Session->StartDrill(UDistanceLadder::StaticClass(), 4));
                 if (!Test.TestTrue(TEXT("Start Distance Practice"), Session->StartDrill(Game, 3)))
                     return true;
                 auto* Drill = CastChecked<UDistancePractice>(Session->Active());
@@ -216,8 +193,13 @@ namespace TrainingGamesTestDetail
                 if (Ball->IsMoving())
                     return false;
                 Test.TestEqual(TEXT("First run keeps both finished shots"), Session->FinishedBallCount(), 2);
-                Test.TestEqual(TEXT("The drill shot is scored"), CastChecked<UDistancePractice>(Session->Active())->GetSet().Shots, 1);
-                Test.TestFalse(TEXT("The yardage locks once a set starts"), CastChecked<UDistancePractice>(Session->Active())->SetDistance(30));
+                {
+                    auto* Drill = CastChecked<UDistancePractice>(Session->Active());
+                    Test.TestEqual(TEXT("The drill shot is scored"), Drill->GetTally().Shots, 1);
+                    Test.TestTrue(TEXT("The yardage changes between shots"), Drill->SetDistance(30));
+                    Test.TestTrue(TEXT("A new yardage starts a new count"), Drill->GetTally().Shots == 0 && Drill->GetTally().Hits == 0);
+                    Test.TestTrue(TEXT("The pin moves to the new yardage"), FMath::IsNearlyEqual(FVector::Dist2D(Tee, Mode->GetCupLocation()), 30 * CmPerYard, .1));
+                }
                 Session->ExitDrill();
                 Test.TestTrue(TEXT("Exit restores the original pin"), OriginalPin.Equals(Mode->GetCupLocation(), .1));
                 CheckSwitchGames(Test, *Session, *Mode, *Player, Tee);
@@ -247,7 +229,7 @@ namespace TrainingGamesTestDetail
                 Session->RestartDrill();
                 Test.TestEqual(TEXT("Restart clears only the current run"), Session->FinishedBallCount(), 2);
                 Test.TestEqual(TEXT("Restart keeps selected distance"), CastChecked<UDistancePractice>(Session->Active())->GetDistance(), 40);
-                Test.TestEqual(TEXT("Restart starts a fresh set"), CastChecked<UDistancePractice>(Session->Active())->GetSet().Shots, 0);
+                Test.TestEqual(TEXT("Restart starts a fresh count"), CastChecked<UDistancePractice>(Session->Active())->GetTally().Shots, 0);
                 FOpenGolfPermissionTestAccess::Set(World);
                 Player->HandleEscape();
                 Player->InjectReplayShot();
@@ -310,7 +292,7 @@ namespace TrainingGamesTestDetail
 
     private:
         /** A ball reported at rest Offset cm past the pin, along the line from the tee. */
-        void Rest(double OffsetCm)
+        void Rest(double OffsetCm, double HeightCm = 0)
         {
             if (!NextShot) NextShot = Mode->GetBall()->GetShotNumber() + 1;
             FOpenFairwayShotResult Result;
@@ -318,7 +300,7 @@ namespace TrainingGamesTestDetail
             Result.bAtRest = true;
             Result.TerminationReason = EOpenFairwayShotTermination::Rest;
             const FVector Pin = Mode->GetCupLocation();
-            Session->Active()->OnShotAtRest(*Session, Result, Pin + (Pin - Tee).GetSafeNormal2D() * OffsetCm);
+            Session->Active()->OnShotAtRest(*Session, Result, Pin + (Pin - Tee).GetSafeNormal2D() * OffsetCm + FVector::UpVector * HeightCm);
         }
 
         void WaitForDelay(const UWorld& World) { WaitUntil = World.GetTimeSeconds() + AUOpenGolfGameMode::AddressDelayS + .3; }
@@ -336,41 +318,75 @@ namespace TrainingGamesTestDetail
             }
         }
 
+        void CheckRadiusChoices()
+        {
+            for (const int32 Feet : {3, 6, 10})
+            {
+                for (const auto& Game : ATrainingSession::Games())
+                {
+                    if (!Test.TestTrue(TEXT("Start a game with the selected radius"), Session->StartDrill(Game, 3, Feet)))
+                        continue;
+                    auto* Drill = CastChecked<UTargetDrill>(Session->Active());
+                    Test.TestEqual(TEXT("The drill stores the selected radius"), Drill->GetRadiusFeet(), Feet);
+                    CheckTarget(Test, *Drill, *Mode->GetRange(), Tee, Mode->GetCupLocation());
+                    const double Touch = Feet * TrainingScoring::CmPerFoot + UTargetRings::EdgeWidthCm(Drill->GetPinYards() * CmPerYard)
+                        + OpenFairway::GolfPhysics::Radius * 100.;
+                    Rest(Touch + .1);
+                    Rest(Touch, 50);
+                    if (auto* Practice = Cast<UDistancePractice>(Drill))
+                        Test.TestEqual(TEXT("Practice counts exactly one hit"), Practice->GetTally().Hits, 1);
+                    else
+                    {
+                        const auto& State = CastChecked<UDistanceLadder>(Drill)->GetState();
+                        Test.TestTrue(TEXT("Ladder advances after the touch on the second shot"), State.Stage == 1 && State.TotalShots == 2
+                            && State.TriesUsed == 0);
+                    }
+                    Session->RestartDrill();
+                    Test.TestEqual(TEXT("Restart keeps the radius"), Drill->GetRadiusFeet(), Feet);
+                    Session->ExitDrill();
+                }
+            }
+        }
+
         bool ScorePractice(const UWorld& World)
         {
-            if (!Test.TestTrue(TEXT("Start a 3-try set"), Session->StartDrill(UDistancePractice::StaticClass(), 3)))
+            CheckRadiusChoices();
+            Test.TestFalse(TEXT("Reject a radius outside the choices"), Session->StartDrill(UDistancePractice::StaticClass(), 3, 5));
+            if (!Test.TestTrue(TEXT("Start Distance Practice with a 6 ft ring"), Session->StartDrill(UDistancePractice::StaticClass(), 3, 6)))
                 return true;
             auto* Drill = CastChecked<UDistancePractice>(Session->Active());
             Test.TestTrue(TEXT("Pick 30 yd"), Drill->SetDistance(30));
             Session->Active()->OnShotAtRest(*Session, Mode->GetBall()->GetResult(), Mode->GetCupLocation());
-            Test.TestEqual(TEXT("A ball from before the drill is not a try"), Drill->GetSet().Shots, 0);
+            Test.TestEqual(TEXT("A ball from before the drill is not a try"), Drill->GetTally().Shots, 0);
             Rest(60);
             --NextShot;
             Rest(60);
-            Test.TestEqual(TEXT("A repeated report scores once"), Drill->GetSet().Shots, 1);
-            Rest(150);
+            Test.TestEqual(TEXT("A repeated report scores once"), Drill->GetTally().Shots, 1);
+            Rest(184.94);
             Rest(400);
-            const auto& Set = Drill->GetSet();
-            Test.TestTrue(TEXT("One inside 3 ft, two inside 6 ft, three shots"), Set.Shots == 3 && Set.Inside3 == 1 && Set.Inside6 == 2);
-            Test.TestTrue(TEXT("Three of three completes the set"), Drill->IsComplete());
-            Test.TestFalse(TEXT("The result is reported"), Drill->ResultText().IsEmpty());
-            Test.TestFalse(TEXT("A finished set takes no shots"), Session->RejectReason().IsEmpty());
-            FOpenGolfPermissionTestAccess::Set(Mode->GetWorld());
-            Player->InjectReplayShot();
-            Test.TestFalse(TEXT("A monitor event after the set does not launch"), Mode->GetBall()->IsMoving());
-            Test.TestFalse(TEXT("The result waits for the player to see the last ball"), Player->IsDrillDialogOpen());
+            Test.TestTrue(TEXT("Two hits from three shots"), Drill->GetTally().Shots == 3 && Drill->GetTally().Hits == 2);
+            // Distance Practice has no shot limit: the player hits until they leave.
+            for (int32 Shot = 0; Shot < 4; ++Shot)
+                Rest(Shot % 2 == 0 ? 0 : 400);
+            Test.TestTrue(TEXT("Shots past five still count"), Drill->GetTally().Shots == 7 && Drill->GetTally().Hits == 4);
+            Test.TestFalse(TEXT("Practice never completes"), Drill->IsComplete());
+            Test.TestTrue(TEXT("Practice never refuses the next shot"), Session->RejectReason().IsEmpty());
+            Test.TestFalse(TEXT("The drill dialog has a result to show"), Drill->ResultText().IsEmpty());
+            Test.TestTrue(TEXT("Move to 40 yd between shots"), Drill->SetDistance(40));
+            Test.TestTrue(TEXT("The new yardage starts a new count"), Drill->GetTally().Shots == 0 && Drill->GetTally().Hits == 0);
+            Rest(60);
+            Test.TestTrue(TEXT("The next ball counts at the new yardage"), Drill->GetTally().Shots == 1 && Drill->GetTally().Hits == 1);
             WaitForDelay(World);
             return false;
         }
 
         bool FinishPractice()
         {
-            Test.TestTrue(TEXT("The finished set opens the drill dialog"), Player->IsDrillDialogOpen());
-            Player->CloseDrillDialog();
+            Test.TestFalse(TEXT("No result dialog opens on its own"), Player->IsDrillDialogOpen());
             Session->RestartDrill();
             auto* Drill = CastChecked<UDistancePractice>(Session->Active());
-            Test.TestTrue(TEXT("Play Again starts a fresh set at the same yardage"), !Drill->IsComplete() && Drill->GetSet().Shots == 0 && Drill->GetDistance() == 30);
-            Test.TestTrue(TEXT("Play Again keeps 3 tries"), Drill->GetTries() == 3);
+            Test.TestTrue(TEXT("Restart starts a fresh count at the same yardage"), Drill->GetTally().Shots == 0 && Drill->GetDistance() == 40);
+            Test.TestEqual(TEXT("Restart keeps the 6 ft ring"), Drill->GetRadiusFeet(), 6);
             Session->ExitDrill();
             return false;
         }
@@ -411,15 +427,24 @@ namespace TrainingGamesTestDetail
             auto* Ladder = CastChecked<UDistanceLadder>(Session->Active());
             for (int32 Stage = 0; Stage < 14; ++Stage)
             {
-                Rest(0);
+                if (Ladder->GetPinYards() == 35)
+                {
+                    Rest(93.94, 50);
+                    Test.TestEqual(TEXT("A ball over the middle of the 35 yd stripe advances"), Ladder->TargetYards(), 45);
+                }
+                else
+                    Rest(0);
                 Session->BeforeShot();
             }
             Test.TestEqual(TEXT("The last target is 150 yd"), PinYards(*Mode, Tee), 150., .01);
             CheckTarget(Test, *Ladder, *Mode->GetRange(), Tee, Mode->GetCupLocation());
-            Rest(-85);
-            Test.TestTrue(TEXT("Inside 3 ft at 150 yd completes the ladder"), Ladder->IsComplete());
-            Test.TestEqual(TEXT("Every shot counted"), Ladder->GetState().TotalShots, 22);
-            Test.TestEqual(TEXT("Result"), Ladder->ResultText().ToString(), FString(TEXT("Cleared 150 yd in 22 shots")));
+            const double Touch = 3 * TrainingScoring::CmPerFoot + UTargetRings::EdgeWidthCm(150 * CmPerYard) + OpenFairway::GolfPhysics::Radius * 100.;
+            Rest(Touch + .1);
+            Test.TestFalse(TEXT("A 1 mm gap at the wide 150 yd stripe uses a try"), Ladder->IsComplete());
+            Rest(Touch, 50);
+            Test.TestTrue(TEXT("Touching the stripe at 150 yd completes the ladder"), Ladder->IsComplete());
+            Test.TestEqual(TEXT("Every shot counted"), Ladder->GetState().TotalShots, 23);
+            Test.TestEqual(TEXT("Result"), Ladder->ResultText().ToString(), FString(TEXT("Cleared 150 yd in 23 shots  ·  3 ft ring")));
             Test.TestFalse(TEXT("A finished ladder takes no shots"), Session->RejectReason().IsEmpty());
             WaitForDelay(World);
             return false;

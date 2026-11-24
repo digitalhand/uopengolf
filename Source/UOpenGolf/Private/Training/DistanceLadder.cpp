@@ -11,6 +11,26 @@ FText UDistanceLadder::Name() const
     return NSLOCTEXT("Training", "DistanceLadder", "Distance Ladder");
 }
 
+FText UDistanceLadder::Hint() const
+{
+    return NSLOCTEXT("Training", "LadderHint", "Hit the ring to advance to the next yardage.");
+}
+
+bool UDistanceLadder::Start(ATrainingSession& Session, int32 InTries, int32 InRadiusFeet)
+{
+    if (!TrainingScoring::IsValidTries(InTries))
+        return false;
+    Tries = InTries;
+    return Super::Start(Session, InTries, InRadiusFeet);
+}
+
+FDrillChoice UDistanceLadder::GetChoice() const
+{
+    FDrillChoice Choice = Super::GetChoice();
+    Choice.Tries = Tries;
+    return Choice;
+}
+
 int32 UDistanceLadder::FirstYards() const
 {
     return LadderYards()[0];
@@ -26,10 +46,10 @@ void UDistanceLadder::ResetScore()
     State = TrainingScoring::FLadderState();
 }
 
-void UDistanceLadder::Score(TrainingScoring::ERing Ring)
+void UDistanceLadder::Score(bool bHit)
 {
     const int32 Before = State.Stage;
-    State = TrainingScoring::Next(State, Tries, Ring == TrainingScoring::ERing::Inside3Ft);
+    State = TrainingScoring::Next(State, Tries, bHit);
     if (State.IsComplete())
         ReportLater();
     else if (State.Stage != Before)
@@ -38,7 +58,8 @@ void UDistanceLadder::Score(TrainingScoring::ERing Ring)
 
 FText UDistanceLadder::TargetText() const
 {
-    return FText::Format(NSLOCTEXT("Training", "LadderTarget", "Target  {0} yd  ·  {1} of {2}"), TargetYards(), State.Stage + 1, LadderYards().Num());
+    return FText::Format(NSLOCTEXT("Training", "LadderTarget", "Target  {0} yd  ·  {1} of {2}  ·  {3} ring"),
+        TargetYards(), State.Stage + 1, LadderYards().Num(), TrainingScoring::RadiusText(GetRadiusFeet()));
 }
 
 FText UDistanceLadder::TryText() const
@@ -56,11 +77,11 @@ FText UDistanceLadder::StepText() const
     switch (State.LastStep)
     {
     case ELadderStep::Advanced:
-        return FText::Format(NSLOCTEXT("Training", "LadderAdvanced", "Inside 3 ft: on to {0} yd"), TargetYards());
+        return FText::Format(NSLOCTEXT("Training", "LadderAdvanced", "On to {0} yd"), TargetYards());
     case ELadderStep::DroppedBack:
-        return FText::Format(NSLOCTEXT("Training", "LadderDropped", "No ball inside 3 ft: back to {0} yd"), TargetYards());
+        return FText::Format(NSLOCTEXT("Training", "LadderDropped", "Back to {0} yd"), TargetYards());
     case ELadderStep::Repeated:
-        return FText::Format(NSLOCTEXT("Training", "LadderRepeated", "No ball inside 3 ft: again at {0} yd"), TargetYards());
+        return FText::Format(NSLOCTEXT("Training", "LadderRepeated", "Try again at {0} yd"), TargetYards());
     case ELadderStep::Completed:
         return NSLOCTEXT("Training", "LadderDone", "Ladder complete  ·  Esc for Play Again or Exit");
     default:
@@ -71,12 +92,14 @@ FText UDistanceLadder::StepText() const
 FText UDistanceLadder::ResultText() const
 {
     if (State.IsComplete())
-        return FText::Format(NSLOCTEXT("Training", "LadderResult", "Cleared {0} yd in {1} shots"), TargetYards(), State.TotalShots);
+        return FText::Format(NSLOCTEXT("Training", "LadderResult", "Cleared {0} yd in {1} shots  ·  {2} ring"),
+            TargetYards(), State.TotalShots, TrainingScoring::RadiusText(GetRadiusFeet()));
     if (State.TotalShots == 0)
         return FText::GetEmpty();
     const FText Best = State.BestStage == INDEX_NONE ? NSLOCTEXT("Training", "LadderNoBest", "none yet")
                                                      : FText::Format(NSLOCTEXT("Training", "LadderBestYards", "{0} yd"), LadderYards()[State.BestStage]);
-    return FText::Format(NSLOCTEXT("Training", "LadderProgress", "Target {0} yd  ·  best {1}  ·  {2} shots"), TargetYards(), Best, State.TotalShots);
+    return FText::Format(NSLOCTEXT("Training", "LadderProgress", "Target {0} yd  ·  best {1}  ·  {2} shots  ·  {3} ring"),
+        TargetYards(), Best, State.TotalShots, TrainingScoring::RadiusText(GetRadiusFeet()));
 }
 
 TSharedRef<SWidget> UDistanceLadder::MakeSettings()

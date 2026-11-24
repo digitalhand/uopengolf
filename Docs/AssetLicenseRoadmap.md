@@ -28,3 +28,8 @@ Rendered validation and its limits are recorded in [Phase status](PhasesStatus.m
 ## Daylight and weather — 2026-11-20
 
 The reusable environment plugin owns the daylight profile, cloud material and density shader. The material references Unreal Engine’s built-in `T_VolumeNoiseShape128` and `T_VolumeNoiseErosion32` volumes for cloud shape and edge detail. The textures come from the engine installation. The owner's photograph served as a visual reference. See [rendered validation](PhasesStatus.md) and [engine asset notices](../THIRD_PARTY_NOTICES.md).
+
+## Training target ring — 2026-11-23
+
+The single 3 ft, 6 ft, or 10 ft ring uses the existing project materials `M_ShotTrail` and
+`M_TargetRingLine` with the existing ground label. See [rendered checks](PhasesStatus.md#training-game-picker-and-winning-radius--2026-11-23).

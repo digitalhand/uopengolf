@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Hud/TrainingControls.h"
 #include "Training/TrainingScoring.h"
-#include "Training/TrainingSession.h"
 #include "UI/Common/HudStatusGlyph.h"
 #include "UI/Common/HudScale.h"
 #include "UOpenGolfGameMode.h"
@@ -28,6 +27,7 @@ namespace
 void STrainingPicker::Construct(const FArguments& Args)
 {
     Player = Args._Player;
+    Choice.Game = ATrainingSession::Games()[0];
     const FText Label = NSLOCTEXT("Training", "Games", "Training games");
     // clang-format off
     ChildSlot
@@ -49,55 +49,152 @@ void STrainingPicker::Construct(const FArguments& Args)
     // clang-format on
 }
 
-TSharedRef<SWidget> STrainingPicker::MakeMenu()
+bool STrainingPicker::IsOpen() const
 {
-    TSharedRef<SVerticalBox> Rows = SNew(SVerticalBox);
-    for (const auto& Game : ATrainingSession::Games())
-    {
-        TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
-        // clang-format off
-        Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(10, 0, 12, 0))
-        [
-            // One width for every name, so the tries buttons line up in columns.
-            SNew(SBox).MinDesiredWidth(140)[ SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).Text(Game.GetDefaultObject()->Name()) ]
-        ];
-        // clang-format on
-        for (const int32 Tries : TrainingScoring::TryChoices)
-        {
-            TSharedRef<SButton> Start = MakeStartButton(Game, Tries);
-            if (Rows->NumSlots() == 0 && Row->NumSlots() == 1)
-                Combo->SetMenuContentWidgetToFocus(Start);
-            Row->AddSlot().AutoWidth().Padding(FMargin(2, 0))[Start];
-        }
-        Rows->AddSlot().AutoHeight().Padding(FMargin(0, 2))[Row];
-    }
-    return SNew(SBorder).BorderImage(&Panel).Padding(3)[Rows];
+    return Combo && Combo->IsOpen();
 }
 
-TSharedRef<SButton> STrainingPicker::MakeStartButton(TSubclassOf<UTrainingDrill> Game, int32 Tries)
+TSharedRef<SButton> STrainingPicker::MakeOption(FName Tag, const FText& Label, TAttribute<bool> Selected, FOnClicked OnClick)
 {
-    const FText Label = FText::Format(NSLOCTEXT("Training", "StartTries", "{0} tries"), Tries);
     // clang-format off
-    return SNew(SButton).ButtonStyle(&Style).ContentPadding(FMargin(12, 7))
-        .Tag(FName(*FString::Printf(TEXT("TrainingStart.%s.%d"), *Game->GetName(), Tries)))
+    return SNew(SButton).Tag(Tag).ButtonStyle(&Style).ContentPadding(FMargin(3, 4)).HAlign(HAlign_Fill)
 #if WITH_ACCESSIBILITY
-        .AccessibleText(FText::Format(NSLOCTEXT("Training", "StartGameTries", "{0}, {1} tries"), Game.GetDefaultObject()->Name(), Tries))
+        .AccessibleText(TAttribute<FText>::CreateLambda([Selected, Label] {
+            return Selected.Get() ? FText::Format(NSLOCTEXT("Training", "SelectedOption", "{0}, selected"), Label) : Label;
+        }))
 #endif
-        // With a game running, the choice opens the Exit Drill prompt, whose Exit Drill starts it.
-        .IsEnabled_Lambda([this] {
-            auto* Session = SessionFor(Player);
-            return Session && Session->Mode()->GetBall() && !Session->Mode()->GetBall()->IsMoving();
-        })
-        .OnClicked_Lambda([this, Game, Tries] {
-            if (auto* Session = SessionFor(Player)) Session->ChooseDrill(Game, Tries);
-            Combo->SetIsOpen(false);
-            // The prompt keeps its own focus.
-            if (Player.IsValid() && Player->IsDrillDialogOpen())
-                return FReply::Handled();
-            return FReply::Handled().SetUserFocus(Combo.ToSharedRef());
-        })
-        [ SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).Text(Label) ];
+        .OnClicked(OnClick)
+        [
+            SNew(SBorder).Padding(FMargin(8, 6)).HAlign(HAlign_Center)
+            // Bound to this picker's lifetime: the brushes are its members, and the menu is a separate window.
+            .BorderImage(TAttribute<const FSlateBrush*>::CreateSPLambda(this, [this, Selected]() -> const FSlateBrush* {
+                return Selected.Get() ? &SelectedBrush : &OptionBrush;
+            }))
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(SBox).WidthOverride(16.f)
+                    [
+                        SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::AccentColor())
+                        .Text_Lambda([Selected] { return Selected.Get() ? FText::FromString(TEXT("\u2713")) : FText::GetEmpty(); })
+                    ]
+                ]
+                + SHorizontalBox::Slot().AutoWidth()
+                [
+                    SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).Text(Label).ColorAndOpacity(HudStyle::TextColor())
+                ]
+            ]
+        ];
     // clang-format on
+}
+
+template <typename T>
+TSharedRef<SButton> STrainingPicker::MakeChoice(FName Tag, const FText& Label, T FDrillChoice::*Field, T Value)
+{
+    return MakeOption(Tag, Label, TAttribute<bool>::CreateSPLambda(this, [this, Field, Value] { return Choice.*Field == Value; }),
+        FOnClicked::CreateSPLambda(this, [this, Field, Value] {
+            Choice.*Field = Value;
+            return FReply::Handled();
+        }));
+}
+
+TSharedRef<SWidget> STrainingPicker::MakeMenu()
+{
+    // The running game's settings; with none running, the player's last choice.
+    const ATrainingSession* Session = SessionFor(Player);
+    if (const UTrainingDrill* Drill = Session ? Session->Active() : nullptr)
+    {
+        const FDrillChoice Running = Drill->GetChoice();
+        Choice.Game = Running.Game;
+        Choice.RadiusFeet = Running.RadiusFeet;
+        // A game without tries keeps the tries last picked for one with them.
+        if (Drill->UsesTries())
+            Choice.Tries = Running.Tries;
+    }
+
+    TSharedRef<SHorizontalBox> Games = SNew(SHorizontalBox);
+    for (const TSubclassOf<UTrainingDrill>& Game : ATrainingSession::Games())
+    {
+        const TSharedRef<SButton> Button = MakeChoice(FName(*FString::Printf(TEXT("TrainingGame.%s"), *Game->GetName())),
+            Game.GetDefaultObject()->Name(), &FDrillChoice::Game, Game);
+        if (Choice.Game == Game)
+            Combo->SetMenuContentWidgetToFocus(Button);
+        Games->AddSlot().FillWidth(1.f)[Button];
+    }
+
+    TSharedRef<SHorizontalBox> Radii = SNew(SHorizontalBox);
+    for (const int32 Feet : TrainingScoring::RadiusChoices)
+        Radii->AddSlot().AutoWidth()[MakeChoice(FName(*FString::Printf(TEXT("TrainingRadius.%d"), Feet)), TrainingScoring::RadiusText(Feet),
+            &FDrillChoice::RadiusFeet, Feet)];
+
+    TSharedRef<SHorizontalBox> Tries = SNew(SHorizontalBox);
+    for (const int32 Count : TrainingScoring::TryChoices)
+        Tries->AddSlot().AutoWidth()[MakeChoice(FName(*FString::Printf(TEXT("TrainingTries.%d"), Count)), FText::AsNumber(Count),
+            &FDrillChoice::Tries, Count)];
+
+    auto Label = [](const FText& Text)
+    {
+        return SNew(SBox).MinDesiredWidth(115.f).VAlign(VAlign_Center)
+            [SNew(STextBlock).Font(HudStyle::Font("Regular", 11)).Text(Text).ColorAndOpacity(HudStyle::TextColor())];
+    };
+
+    // clang-format off
+    return SNew(SBorder).Tag(TEXT("TrainingSetup")).BorderImage(&Panel).Padding(FMargin(10, 7))
+    [
+        SNew(SVerticalBox)
+        + SVerticalBox::Slot().AutoHeight()[Games]
+        + SVerticalBox::Slot().AutoHeight().Padding(4, 4, 4, 8)
+        [
+            SNew(STextBlock).Font(HudStyle::Font("Regular", 11)).ColorAndOpacity(HudStyle::LabelColor())
+            .Text(TAttribute<FText>::CreateSPLambda(this, [this] { return Choice.Game.GetDefaultObject()->Hint(); }))
+        ]
+        + SVerticalBox::Slot().AutoHeight().Padding(4, 0, 0, 0)
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().AutoWidth()[Label(NSLOCTEXT("Training", "WinningRadius", "Winning radius"))]
+            + SHorizontalBox::Slot().AutoWidth()[Radii]
+        ]
+        + SVerticalBox::Slot().AutoHeight().Padding(4, 0, 0, 0)
+        [
+            // Only a game that takes tries offers them; Distance Practice has no shot limit.
+            SNew(SHorizontalBox)
+            .Visibility(TAttribute<EVisibility>::CreateSPLambda(this, [this] {
+                return Choice.Game.GetDefaultObject()->UsesTries() ? EVisibility::Visible : EVisibility::Collapsed;
+            }))
+            + SHorizontalBox::Slot().AutoWidth()[Label(NSLOCTEXT("Training", "TriesPerTarget", "Tries per target"))]
+            + SHorizontalBox::Slot().AutoWidth()[Tries]
+        ]
+        + SVerticalBox::Slot().AutoHeight().Padding(4, 8, 4, 5)
+        [
+            SNew(SButton).Tag(TEXT("TrainingStart")).ButtonStyle(&StartStyle).ContentPadding(FMargin(12, 8)).HAlign(HAlign_Center)
+            .IsEnabled(TAttribute<bool>::CreateSPLambda(this, [this] {
+                const auto* Running = SessionFor(Player);
+                const auto* Ball = Running ? Running->Mode()->GetBall() : nullptr;
+                return Ball && !Ball->IsMoving();
+            }))
+            .OnClicked(this, &STrainingPicker::StartDrill)
+            [
+                SNew(STextBlock).Font(HudStyle::Font("Bold", 11)).ColorAndOpacity(HudStyle::MapInkColor())
+                .Text(TAttribute<FText>::CreateSPLambda(this, [this] {
+                    return FText::Format(NSLOCTEXT("Training", "StartGame", "Start {0}"), Choice.Game.GetDefaultObject()->Name());
+                }))
+            ]
+        ]
+    ];
+    // clang-format on
+}
+
+FReply STrainingPicker::StartDrill()
+{
+    auto* Session = SessionFor(Player);
+    if (!Session || !Session->ChooseDrill(Choice.Game, Choice.Tries, Choice.RadiusFeet))
+        return FReply::Handled();
+
+    Combo->SetIsOpen(false);
+    if (Player.IsValid() && Player->IsDrillDialogOpen())
+        return FReply::Handled();
+    return FReply::Handled().SetUserFocus(Combo.ToSharedRef());
 }
 
 void SDrillDialog::Construct(const FArguments& Args)
@@ -134,9 +231,15 @@ void SDrillDialog::Construct(const FArguments& Args)
     // A game picked while this one runs starts on Exit Drill.
     const TOptional<FDrillChoice> Pending = Session ? Session->GetPendingDrill() : TOptional<FDrillChoice>();
     bSwitching = Pending.IsSet();
-    const FText Switch = bSwitching ? FText::Format(NSLOCTEXT("Training", "SwitchDrill", "Exit Drill to start {0}, {1} tries."),
-                                          Pending->Game.GetDefaultObject()->Name(), Pending->Tries)
-                                    : FText::GetEmpty();
+    FText Switch;
+    if (bSwitching)
+    {
+        const UTrainingDrill* Next = Pending->Game.GetDefaultObject();
+        const FText Radius = TrainingScoring::RadiusText(Pending->RadiusFeet);
+        Switch = Next->UsesTries()
+            ? FText::Format(NSLOCTEXT("Training", "SwitchDrill", "Exit Drill to start {0} with a {1} ring and {2} tries."), Next->Name(), Radius, Pending->Tries)
+            : FText::Format(NSLOCTEXT("Training", "SwitchDrillRing", "Exit Drill to start {0} with a {1} ring."), Next->Name(), Radius);
+    }
     // A finished drill offers another run; the button does the same either way.
     bComplete = Drill && Drill->IsComplete();
     const FText RestartLabel = bComplete ? NSLOCTEXT("Training", "PlayAgain", "Play Again") : NSLOCTEXT("Training", "RestartDrill", "Restart Drill");

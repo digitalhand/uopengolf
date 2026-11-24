@@ -4,7 +4,10 @@
 #include "Training/TargetDrill.h"
 #include "DistancePractice.generated.h"
 
-/** One set of 3 or 5 tries at a yardage the player picks before the first shot. */
+/**
+ * Open-ended practice at one yardage: the player hits as many balls as they like and the game counts how many finish
+ * in the ring. The yardage can change whenever the ball is at rest, and each change starts a new count.
+ */
 UCLASS()
 class UDistancePractice : public UTargetDrill
 {
@@ -15,22 +18,22 @@ public:
     /** The distance slider moves in whole steps of this many yards. */
     static constexpr int32 YardStep = 5;
     virtual FText Name() const override;
+    virtual FText Hint() const override;
     virtual TSharedRef<SWidget> MakeSettings() override;
-    virtual bool IsComplete() const override { return Set.IsComplete(); }
     virtual FText ResultText() const override;
-    /** Only before the first shot of a set, and never in flight. */
+    /** Moves the pin and starts a new count; refused while the ball moves. */
     bool SetDistance(int32 Yards);
-    bool CanChangeDistance() const { return Set.Shots == 0; }
+    bool CanChangeDistance() const { return !IsBallMoving(); }
     int32 GetDistance() const { return Distance; }
-    const TrainingScoring::FTargetSet& GetSet() const { return Set; }
+    const TrainingScoring::FHitTally& GetTally() const { return Tally; }
 
 protected:
     virtual int32 FirstYards() const override { return Distance; }
     virtual void ResetScore() override;
-    virtual void Score(TrainingScoring::ERing Ring) override;
+    virtual void Score(bool bHit) override;
 
 private:
     FText ProgressText() const;
-    TrainingScoring::FTargetSet Set;
+    TrainingScoring::FHitTally Tally;
     int32 Distance = 25;
 };

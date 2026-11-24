@@ -73,6 +73,11 @@ bool FHudNavigation::HandleKeyDownEvent(FSlateApplication& App,const FKeyEvent& 
     if(Key==EKeys::Escape||Key==EKeys::Gamepad_FaceButton_Right)
     {
         if(Event.IsRepeat())return true;
+        if (App.AnyMenusVisible())
+        {
+            App.DismissAllMenus();
+            return true;
+        }
         const auto* Mode = Player->GetWorld()->GetAuthGameMode<AUOpenGolfGameMode>();
         if (Mode && Mode->IsDrillActive())
         {
@@ -80,7 +85,6 @@ bool FHudNavigation::HandleKeyDownEvent(FSlateApplication& App,const FKeyEvent& 
             Player->HandleEscape();
             return true;
         }
-        if(App.AnyMenusVisible()){App.DismissAllMenus();return true;}
         if(Player->IsPlacingBall()||Player->IsWindPanelOpen()||Player->IsReplayPanelOpen())
         {Player->HandleEscape();if(bFocused)FocusHud(App);return true;}
         if(bFocused){LeaveHud(App);return true;}
