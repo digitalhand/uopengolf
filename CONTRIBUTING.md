@@ -1,8 +1,8 @@
 # Contributing to Unreal Open Golf
 
-Thank you for helping. Bug reports, fixes, features, documentation, tests and
-redistributable assets are all welcome. This guide covers how to propose a change and
-what a pull request needs before it can be merged.
+Thank you for helping. Bug reports, fixes, features, documentation, tests and redistributable assets are all welcome. This guide covers how to propose a change and what a pull request needs before it can be merged.
+
+We welcome good quality AI prompt engineering, small code feature base that are fully tested prior to creating a pull request. This game contains about 60% AI code, and the rest is manual validation, blender asset creation, some manual documentation (like this one). Most of all, a lot of shot testing with a simulator or manual shot capability. This is enabled via `ogolf:admin` role. Disabled by default. Please request if interesting.  
 
 ## Table of contents
 

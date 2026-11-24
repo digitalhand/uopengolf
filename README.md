@@ -1,38 +1,23 @@
 # Unreal Open Golf
+Physics, Freedom, Golf! 
 
-An open-source golf game for Windows and Linux, built with Unreal Engine 5.8.4 and native C++.
-Practise on the savanna driving range or play its 400-yard par 4. Use replay shots,
-a Square Home launch monitor, or an Open Connect connector.
+An open-source golf simulation game for Windows and Linux using Unreal Engine. We aim at being a fully open source, golf gaming simulation project. Contributors welcome, see [CONTRIBUTING.md](CONTRIBUTING.md) section. 
+
+Supports Launch Monitor, and OpenAPI Connectivity
 
 ![The public savanna range](Assets/Images/public_range.png)
 
 ## Get started
 
-Install Unreal Engine 5.8.4 with its C++ toolchain and Git LFS. Clone this repository,
-then run `git lfs pull` if the assets were not downloaded during the clone.
-No sibling repositories or launch-monitor hardware are required.
+Install from [Releases](https://github.com/digitalhand/uopengolf/releases) 
+- Native debian .deb package.
+- Native .exe Windows 64 installation. 
+    - Includes auto-update. 
+
+- For developers. All code and assets are fully open source, most using MIT license. See below [Build and editor setup](Docs/Development.md)
 
 Run these commands from the repository root.
 
-Windows PowerShell:
-
-```powershell
-$env:UE_ROOT = 'C:\Program Files\Epic Games\UE_5.8'
-powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Build
-powershell -NoProfile -ExecutionPolicy Bypass -File Assets/Scripts/ue.ps1 Editor
-```
-
-Linux:
-
-```bash
-export UE_ROOT='/path/to/UnrealEngine-5.8.4'
-bash Assets/Scripts/ue.sh build
-bash Assets/Scripts/ue.sh editor
-```
-
-Press **Play**, then choose **Training**. Press **H** for a replay shot and **P** to
-choose another. **C** connects a Square Home, **T** disconnects, **Tab** changes club,
-and **F9** toggles recording while connected. For a scored round, open **Courses** from the main menu, select **Savanna Range**, and choose **Play**. **Escape** closes an active panel or opens the pause menu.
 
 For toolchain and graphics requirements, see [Development](Docs/Development.md).
 
