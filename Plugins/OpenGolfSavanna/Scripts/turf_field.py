@@ -34,8 +34,8 @@ FAMILY_DEFAULTS = {'Fairway': {'StripeContrast': .06}, 'Tee': {'StripeContrast':
 SHARED_SAMPLER = ('Rough',)
 EDGES = {'MowEdgeM': .06, 'EdgeWobbleM': .03, 'LipWidthM': .25, 'LipShade': .8}
 RETIRED_EDGES = ('FirstCutWidthM', 'FirstCutOuterEdgeM')
-FIELD_PATH = '/OpenGolfSavanna/Textures/CutTurf/T_CourseSurfaceField'
-PLACEHOLDER = '/OpenGolfSavanna/Materials/T_WhiteMask'
+FIELD_PATH = '/OpenGolfSavanna/CutTurf/Textures/T_CourseSurfaceField'
+PLACEHOLDER = '/OpenGolfSavanna/Shared/Textures/T_WhiteMask'
 GROUP = 'Turf field'
 
 # Signed distances in terrain metres (negative inside), then each layer's coverage. The tee box,
@@ -75,7 +75,7 @@ def family_color(material, family, position, hue, bright):
     shared = {'sampler_source': ue.SamplerSourceMode.SSM_WRAP_WORLD_GROUP_SETTINGS} if family in SHARED_SAMPLER else {}
     texture = a.node(material, ue.MaterialExpressionTextureSampleParameter2D, family + 'FieldTexture',
                      parameter_name=family + 'TurfTexture',
-                     texture=ue.load_asset(f'/OpenGolfSavanna/Textures/CutTurf/{maps}/T_Turf{maps}_Color'),
+                     texture=ue.load_asset(f'/OpenGolfSavanna/CutTurf/Textures/{maps}/T_Turf{maps}_D'),
                      sampler_type=ue.MaterialSamplerType.SAMPLERTYPE_COLOR, **shared)
     a.connect(uv, texture, 'UVs')
     def color(name):
@@ -185,7 +185,7 @@ def surface_normal(material, family, parameter=None):
                   ue.CustomMaterialOutputType.CMOT_FLOAT2)
     sample = a.node(material, ue.MaterialExpressionTextureSampleParameter2D, family + 'ReliefMap',
                     parameter_name=parameter or family + 'ReliefMap',
-                    texture=ue.load_asset(f'/OpenGolfSavanna/Textures/CutTurf/{family}/T_Turf{family}_NormalDX'),
+                    texture=ue.load_asset(f'/OpenGolfSavanna/CutTurf/Textures/{family}/T_Turf{family}_N'),
                     sampler_type=ue.MaterialSamplerType.SAMPLERTYPE_NORMAL)
     a.connect(uv, sample, 'UVs')
     return a.custom(material, family + 'Relief',
@@ -214,6 +214,6 @@ def profiles(source):
         values.update({'TargetColor': a.linear_color(tones['Mid']), 'DryColor': a.linear_color(tones['Dry']),
                        'LushColor': a.linear_color(tones['Lush'])})
         values['TextureMean'] = (*means[maps], 1.0)
-        values['TurfTexture'] = ue.load_asset(f'/OpenGolfSavanna/Textures/CutTurf/{maps}/T_Turf{maps}_Color')
+        values['TurfTexture'] = ue.load_asset(f'/OpenGolfSavanna/CutTurf/Textures/{maps}/T_Turf{maps}_D')
         result[family] = values
     return result

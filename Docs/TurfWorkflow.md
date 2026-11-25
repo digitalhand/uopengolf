@@ -51,7 +51,7 @@ even height that stand nearly upright and lean over in their top third.
     (`ROUGH_BLADE`), read from `BladeHeight` red.
   - The tip changes hue, not brightness, so blades seen from above match the ground under them.
   - `RoughDetailStrength` 2.0 stretches the baked blade-to-gap contrast for the reference's dark gaps.
-- **Field.** Rough is now the turf field's lowest layer, with its own baked `T_TurfRough_Color`.
+- **Field.** Rough is now the turf field's lowest layer, with its own baked colour map (now `T_TurfRough_D`).
   - Every cut-turf material draws rough beyond the first cut; previously that was first-cut colour.
   - `M_CutTurfRough` blends the rough into the savanna ground by its `RoughWeight`, so the rough
     fades into the desert at 12–16 m.
@@ -297,12 +297,14 @@ Only Unreal-required assets and texture sources at 2K belong in the repository.
 
 The live Unreal assets are in the public plugin:
 
-- `/OpenGolfSavanna/Meshes/CutTurf/<Family>/SM_Turf<Family>_<Footprint>_<Variant>`
-- `/OpenGolfSavanna/Textures/CutTurf/<Family>/T_Turf<Family>_<Role>`
-- `/OpenGolfSavanna/Materials/CutTurf/` and `/OpenGolfSavanna/Materials/M_CutTurfSurface`
-- `/OpenGolfSavanna/Terrain/CutTurf/`
+- `/OpenGolfSavanna/CutTurf/Meshes/<Family>/SM_Turf<Family>_<Footprint>_<Variant>`
+- `/OpenGolfSavanna/CutTurf/Textures/<Family>/T_Turf<Family>_<D|N|R>` (the bake's files keep their role names,
+  `T_Turf<Family>_Color.png`, `_NormalDX.png` and `_Roughness.png`; the import names the assets by
+  [Docs/ContentNaming.md](ContentNaming.md))
+- `/OpenGolfSavanna/CutTurf/Materials/`, including `M_CutTurfSurface`
+- `/OpenGolfSavanna/CutTurf/Presets/`
 
-The public range, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map. Confirm the
+The public range, `/Game/UOpenGolf/Maps/L_SavannaRange`, is the project's only map. Confirm the
 current map and Play state before doing anything. This work does not modify the terrain layout,
 physical surface types or ball tuning. Scripts that rebuild course grass or ground meshes delete the
 generated folders they replace once the map is saved.
@@ -484,14 +486,15 @@ The material builders must use the default output (`''`) from `MaterialExpressio
 so its sample uses the Linear Color sampler. Do not confuse intermediate compile warnings while
 rebuilding a graph with its final compilation result.
 
-After any turf edit, run `UOpenGolf.Visual.CoastalTerrain` in Play with one editor and a fixed
+After any turf edit, run `UOpenGolf.Visual.RangeTerrain` in Play with one editor and a fixed
 layout. Compare grass-on and grass-off views (0/1, 4/5, 6/7); the cut turf should match its
-ground within a couple of sRGB levels. Analyze with `Assets/Scripts/grass_stability.py --profile coastal`,
+ground within a couple of sRGB levels. Analyze with `Assets/Scripts/grass_stability.py --profile terrain`,
 and compare second differences in the View 9 pan for motion flicker. Blender previews are not
 Unreal shimmer or performance evidence.
 
 Historical turf captures (2026-10-28) are `AfterTurfField-20261028-042858`, compared against `BeforeEdgeRepair-20261028-032124`,
-under `Saved/Automation/CoastalReview`. That run did not establish rendering cost because
+under `Saved/Automation/CoastalReview` (the test was then `UOpenGolf.Visual.CoastalTerrain`; it now writes to
+`Saved/Automation/RangeTerrainReview`). That run did not establish rendering cost because
 its frame probe was capped. Its `UOpenGolf.Range.RolloutSurfaces` failure came from flat-range
 assumptions that sent the fixed shot into the saved coastal bunker; it was not evidence
 for changing the physics to match that layout.

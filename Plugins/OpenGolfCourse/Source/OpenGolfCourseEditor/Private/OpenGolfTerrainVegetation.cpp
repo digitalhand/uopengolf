@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include "OpenGolfTerrainBuilder.h"
 #include "OpenGolfTerrain.h"
+#include "OpenGolfAssetNames.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
@@ -111,7 +112,7 @@ namespace
         auto* Actor = Area->GetWorld()->SpawnActor<AActor>();
         Actor->SetOwner(Area);
         Actor->Tags.Append({AOpenGolfTerrainArea::GeneratedTag, AOpenGolfTerrainArea::TreeCollidersTag, AOpenFairwayBall::GetObstacleTag()});
-        Actor->SetActorLabel(FString::Printf(TEXT("Tree colliders %s"), *Name));
+        Actor->SetActorLabel(OpenGolfAssetNames::KindLabel(TEXT("Colliders"), OpenGolfAssetNames::WithoutPrefix(Name)));
         Actor->SetFolderPath(TEXT("Terrain/Trees"));
         auto* Colliders = NewObject<UInstancedStaticMeshComponent>(Actor, TEXT("TrunkColliders"), RF_Transactional);
         Colliders->SetMobility(EComponentMobility::Static);
@@ -164,7 +165,7 @@ namespace
         auto* Actor = Area->GetWorld()->SpawnActor<AActor>();
         Actor->SetOwner(Area);
         Actor->Tags.Append({AOpenGolfTerrainArea::GeneratedTag, AOpenGolfTerrainArea::TreeCanopyTag, AOpenFairwayBall::GetCanopyTag(), CanopyForTag(TreeMesh)});
-        Actor->SetActorLabel(FString::Printf(TEXT("Tree canopy %s"), *TreeMesh->GetName()));
+        Actor->SetActorLabel(OpenGolfAssetNames::KindLabel(TEXT("Canopy"), OpenGolfAssetNames::WithoutPrefix(TreeMesh->GetName())));
         Actor->SetFolderPath(TEXT("Terrain/Trees"));
         auto* Canopy = NewObject<UInstancedStaticMeshComponent>(Actor, TEXT("CanopyVolumes"), RF_Transactional);
         Canopy->SetMobility(EComponentMobility::Static);
@@ -244,7 +245,7 @@ namespace
                 UE_LOG(LogTemp, Warning, TEXT("OpenGolf vegetation %s placed nothing; check its outline, spacing and filters."), *Jobs[Index].Name);
                 continue;
             }
-            const FString DataName = Folder / FString::Printf(TEXT("Points_%d"), Index);
+            const FString DataName = Folder / (TEXT("DA_Points_") + OpenGolfAssetNames::Variant(Index));
             auto* Data = NewObject<UPCGDataAsset>(CreatePackage(*DataName), *FPackageName::GetLongPackageAssetName(DataName), RF_Public | RF_Standalone);
             auto* PointData = NewObject<UPCGPointData>(Data);
             auto& Points = PointData->GetMutablePoints();
@@ -264,7 +265,7 @@ namespace
                 Error = TEXT("Could not save vegetation point data.");
                 return false;
             }
-            const FString GraphName = Folder / FString::Printf(TEXT("PCG_Vegetation_%d"), Index);
+            const FString GraphName = Folder / (TEXT("PCG_Vegetation_") + OpenGolfAssetNames::Variant(Index));
             auto* Graph = NewObject<UPCGGraph>(CreatePackage(*GraphName), *FPackageName::GetLongPackageAssetName(GraphName), RF_Public | RF_Standalone);
             UPCGLoadDataAssetSettings* LoadSettings = nullptr;
             UPCGNode* LoadNode = Graph->AddNodeOfType(LoadSettings);
@@ -303,7 +304,7 @@ namespace
             Actor->Tags.Add(bTree ? AOpenGolfTerrainArea::TreesTag : AOpenGolfTerrainArea::VegetationTag);
             if (Jobs[Index].bCourseGrass)
                 Actor->Tags.Append({CourseGrassTag, PendingCourseGrassTag});
-            Actor->SetActorLabel(FString::Printf(TEXT("PCG %s"), *Jobs[Index].Name));
+            Actor->SetActorLabel(OpenGolfAssetNames::KindLabel(TEXT("PCG"), OpenGolfAssetNames::WithoutPrefix(Jobs[Index].Name)));
             Actor->SetFolderPath(bTree ? TEXT("Terrain/Trees") : TEXT("Terrain/Vegetation"));
             auto* Root = NewObject<UBoxComponent>(Actor, TEXT("Bounds"), RF_Transactional);
             FBox2D Bounds(D.DetailMinimumM, D.DetailMaximumM);
@@ -630,7 +631,10 @@ bool UOpenGolfTerrainBuilder::BakeVegetation(AOpenGolfTerrainArea* Area, FString
                 Baked->Tags.AddUnique(bTrees ? AOpenGolfTerrainArea::TreesTag : AOpenGolfTerrainArea::VegetationTag);
                 if (Actor->ActorHasTag(CourseGrassTag))
                     Baked->Tags.Append({CourseGrassTag, PendingCourseGrassTag});
-                Baked->SetActorLabel(bTrees ? TEXT("Coastal trees") : TEXT("Coastal vegetation"));
+                // The PCG actor's label names its job: PCG_SavannaTree_Near_00 bakes to Trees_SavannaTree_Near_00.
+                FString Job = Actor->GetActorLabel();
+                Job.RemoveFromStart(TEXT("PCG_"));
+                Baked->SetActorLabel(OpenGolfAssetNames::KindLabel(bTrees ? TEXT("Trees") : TEXT("Vegetation"), Job));
                 Baked->SetFolderPath(bTrees ? TEXT("Terrain/Trees") : TEXT("Terrain/Vegetation"));
                 TArray<UInstancedStaticMeshComponent*> Components;
                 Baked->GetComponents(Components);
@@ -655,7 +659,9 @@ bool UOpenGolfTerrainBuilder::BakeVegetation(AOpenGolfTerrainArea* Area, FString
             if (Actor->ActorHasTag(PendingCourseGrassTag))
             {
                 Actor->Tags.Remove(PendingCourseGrassTag);
-                Actor->SetActorLabel(TEXT("Course grass"));
+                FString Job = Actor->GetActorLabel();
+                Job.RemoveFromStart(TEXT("Vegetation_"));
+                Actor->SetActorLabel(OpenGolfAssetNames::KindLabel(TEXT("CourseGrass"), Job));
             }
             else
             {

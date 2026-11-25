@@ -1,8 +1,9 @@
 # OpenGameUpdate
 
 In-game updates from GitHub Releases: checks for a newer published release, downloads its installer with progress,
-verifies its SHA-256 and starts it. The plugin has no UI and no game code; the host decides when to check and draws
-its own screens.
+verifies its SHA-256 and starts it. On Linux it replaces a portable folder with the release's archive, or installs the
+release's system package (deb, rpm) after the desktop's password prompt. The plugin has no UI and no game code; the
+host decides when to check and draws its own screens.
 
 ## Use
 
@@ -13,7 +14,7 @@ instance. Each release must carry the installer and a `sha256sum`-style `.sha256
 
 - [Configuration](Docs/Reference.md#configuration)
 - [Quick start](Docs/Reference.md#quick-start)
-- [How an update runs](Docs/Reference.md#how-an-update-runs)
+- [How an update runs](Docs/Reference.md#how-an-update-runs), and [on Linux](Docs/Reference.md#linux)
 - [Other update sources](Docs/Reference.md#other-update-sources)
 - [Limitations](Docs/Reference.md#limitations)
 

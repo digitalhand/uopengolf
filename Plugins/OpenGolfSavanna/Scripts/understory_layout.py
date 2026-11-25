@@ -8,7 +8,7 @@ import random
 # savanna_layout.CANOPY_RATIO.
 CANOPY_RADIUS_M = 5.8
 PLAY_CLEARANCE_M = 2.0
-NE = "/OpenGolfSavanna/Meshes/NatureEssentials"
+NE = "/OpenGolfSavanna/NatureEssentials/Meshes"
 
 # ring: fraction of the scaled canopy radius. count: pieces for a canopy-scale-1 tree, scaled by canopy area.
 # center: True packs pieces toward the inner edge (linear in radius) instead of evenly over the area.

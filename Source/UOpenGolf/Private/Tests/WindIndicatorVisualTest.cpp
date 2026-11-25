@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Blueprint/UserWidget.h"
+#include "TestMaps.h"
 #include "Editor.h"
 #include "Tests/PermissionTestAccess.h"
 #include "Engine/GameViewportClient.h"
@@ -145,7 +146,7 @@ bool FWindIndicatorVisualTest::RunTest(const FString& Parameters)
             AddInfo(TEXT("Designer capture: Saved/Screenshots/") + Name);
     }
     BeginCleanup(Renderer);
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the range map."));
         return false;

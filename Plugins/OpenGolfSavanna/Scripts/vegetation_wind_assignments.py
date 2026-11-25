@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
-"""Which savanna vegetation moves in the wind, and how. Pure Python, so it can be tested without Unreal.
+"""Which vegetation moves in the wind, and how: the savanna's and the courses' own trees. Pure Python, so it can be
+tested without Unreal.
 
 The motion itself is the course kit's (vegetation_wind.py profiles, vegetation_wind_assets.py wiring).
 To give more vegetation wind:
@@ -18,8 +19,12 @@ import savanna_layout
 import understory_layout
 
 JACARANDA = "/OpenGolfSavanna/Trees/Jacaranda"
-NE = "/OpenGolfSavanna/Meshes/NatureEssentials"
-GRASS_MEDIUM = "/OpenGolfSavanna/Meshes/Grass/Medium/SM_GrassMedium_30cm_"
+NE = "/OpenGolfSavanna/NatureEssentials/Meshes"
+GRASS_MEDIUM = "/OpenGolfSavanna/Grass/Medium/Meshes/SM_GrassMedium_30cm_"
+# Hunter Ranch's tree, a blue-oak stand-in (Plugins/HunterRanch/Scripts/ExportIslandTree.py): about 9 m tall at
+# scale 1 and placed at 0.8-1.3 (Docs/CourseDesign/course_vegetation.md).
+ISLAND_TREE = "/HunterRanch/Vegetation/Trees/IslandTree02"
+ISLAND_TREE_MAX_SCALE = 1.3
 # Largest scale of a vegetation preset's default ScaleRange (OpenGolfTerrain.h).
 PRESET_MAX_SCALE = 1.3
 TREE_MAX_SCALE = max(settings["scale_range"][1] for settings in savanna_layout.TREE_SETTINGS.values())
@@ -39,12 +44,17 @@ class MaterialWind:
 
 
 TREE = (f"{JACARANDA}/Meshes/SM_Jacaranda",)
+ISLAND = (f"{ISLAND_TREE}/Meshes/SM_IslandTree02",)
 MATERIALS = {
-    f"{JACARANDA}/Materials/MI_JacarandaTreeLeaves": MaterialWind("BroadleafTree", TREE, max_scale=TREE_MAX_SCALE),
-    f"{JACARANDA}/Materials/MI_JacarandaTreeBranches": MaterialWind("BroadleafTree", TREE, flutter=False, max_scale=TREE_MAX_SCALE),
-    f"{JACARANDA}/Materials/MI_JacarandaTreeTrunk": MaterialWind("BroadleafTree", TREE, flutter=False, max_scale=TREE_MAX_SCALE),
-    "/OpenGolfSavanna/Materials/Grass/Medium/MI_GrassMedium01": MaterialWind("TallGrass", (f"{GRASS_MEDIUM}1m_A",)),
-    "/OpenGolfSavanna/Materials/NatureEssentials/MI_NE_Grass": MaterialWind(
+    f"{JACARANDA}/Materials/MI_Jacaranda_Leaves": MaterialWind("BroadleafTree", TREE, max_scale=TREE_MAX_SCALE),
+    f"{JACARANDA}/Materials/MI_Jacaranda_Branches": MaterialWind("BroadleafTree", TREE, flutter=False, max_scale=TREE_MAX_SCALE),
+    f"{JACARANDA}/Materials/MI_Jacaranda_Trunk": MaterialWind("BroadleafTree", TREE, flutter=False, max_scale=TREE_MAX_SCALE),
+    f"{ISLAND_TREE}/Materials/MI_IslandTree02_Leaves": MaterialWind("BroadleafTree", ISLAND, max_scale=ISLAND_TREE_MAX_SCALE),
+    f"{ISLAND_TREE}/Materials/MI_IslandTree02_Branches": MaterialWind("BroadleafTree", ISLAND, flutter=False,
+                                                                    max_scale=ISLAND_TREE_MAX_SCALE),
+    f"{ISLAND_TREE}/Materials/MI_IslandTree02_Trunk": MaterialWind("BroadleafTree", ISLAND, flutter=False, max_scale=ISLAND_TREE_MAX_SCALE),
+    "/OpenGolfSavanna/Grass/Medium/Materials/MI_GrassMedium01": MaterialWind("TallGrass", (f"{GRASS_MEDIUM}1m_A",)),
+    "/OpenGolfSavanna/NatureEssentials/Materials/MI_NE_Grass": MaterialWind(
         "UnderstoryGrass", tuple(f"{NE}/SM_NE_Grass{name}" for name in ("Clump", "Seedy", "Small")), max_scale=UNDERSTORY_MAX_SCALE),
 }
 
@@ -52,6 +62,7 @@ MATERIALS = {
 # hold still. Trees stop at 150 m so their distant shadows stay cached; grass stops where it fades out.
 MESHES = {
     f"{JACARANDA}/Meshes/SM_Jacaranda": 150.0,
+    f"{ISLAND_TREE}/Meshes/SM_IslandTree02": 150.0,
     f"{GRASS_MEDIUM}*": 90.0,
     f"{NE}/SM_NE_Grass*": 60.0,
 }

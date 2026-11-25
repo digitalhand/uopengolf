@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "TestMaps.h"
 #include "OpenGolfSettings.h"
 #include "Play/OpenGolfHoleRound.h"
 #include "OpenLaunchMonitorSubsystem.h"
@@ -40,7 +41,13 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     TestEqual(TEXT("Stimp clamps"),P.Stimp,15);TestEqual(TEXT("Invalid tee time recovers"),P.AutoTee,3);
     TestEqual(TEXT("Invalid radius is off"),P.GimmieFeet,0);TestEqual(TEXT("Invalid scale recovers"),P.HudPercent,100);
     P.AutoTee=0;P.Stimp=8;P.Validate();TestEqual(TEXT("Manual persists validation"),P.AutoTee,0);
-    for(int32 Radius:{0,3,5,8,10}){P.GimmieFeet=Radius;P.Validate();TestEqual(TEXT("Approved radius"),P.GimmieFeet,Radius);}
+    for(int32 Radius:{0,3,6}){P.GimmieFeet=Radius;P.Validate();TestEqual(TEXT("Approved radius"),P.GimmieFeet,Radius);}
+    // The old 5, 8 and 10 ft choices became 6 ft when the radius was cut to 3 or 6 ft.
+    for(int32 Radius:{5,8,10}){P.GimmieFeet=Radius;P.Validate();TestEqual(TEXT("An old radius becomes 6 ft"),P.GimmieFeet,6);}
+    TestEqual(TEXT("Fairway speed starts at the standard 7.4 ft"),GolfSettings::FPreferences().FairwayStimpTenths,74);
+    for(int32 Tenths:{60,74,80,90,100}){P.FairwayStimpTenths=Tenths;P.Validate();TestEqual(TEXT("Approved fairway speed"),P.FairwayStimpTenths,Tenths);}
+    P.FairwayStimpTenths=75;P.Validate();TestEqual(TEXT("An unknown fairway speed plays the standard"),P.FairwayStimpTenths,74);
+    TestEqual(TEXT("Fairway speed in feet"),GolfSettings::FairwayStimpFeet(P),7.4f);
     TestEqual(TEXT("Square Home is the default provider"),P.Provider,0);
     TestEqual(TEXT("Default connector port"),P.OpenConnectPort,LaunchMonitorDefaultOpenConnectPort);
     P.Provider=7;P.OpenConnectPort=70000;P.OpenConnectLan=4;P.Validate();
@@ -55,7 +62,7 @@ bool FMenuPreferencesTest::RunTest(const FString&)
     TestEqual(TEXT("Spin mode retained before connection"),Monitor->GetSpinMode(),ESquareSpinMode::Calculated);
     Monitor->SetSpinMode(ESquareSpinMode::Measured);TestEqual(TEXT("Measured selectable"),Monitor->GetSpinMode(),ESquareSpinMode::Measured);
     const FString File=FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir()/TEXT("Automation")/(FGuid::NewGuid().ToString()+TEXT(".ini")));
-    P.CalculatedSpin=1;P.AutoTee=0;P.GimmieFeet=8;TestTrue(TEXT("Write preferences"),P.WriteConfig(File));
+    P.CalculatedSpin=1;P.AutoTee=0;P.GimmieFeet=6;P.FairwayStimpTenths=90;TestTrue(TEXT("Write preferences"),P.WriteConfig(File));
     GConfig->UnloadFile(File);
     GolfSettings::FPreferences Loaded;Loaded.ReadConfig(File);
     TestTrue(TEXT("Preferences survive disk round trip"),P==Loaded);
@@ -66,7 +73,7 @@ bool FMenuPreferencesTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMenuGimmieTest,"UOpenGolf.Menu.GimmieScoring",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
 bool FMenuGimmieTest::RunTest(const FString&)
 {
-    for(float Radius:{3.f,5.f,8.f,10.f})
+    for(float Radius:{3.f,6.f})
     {
         FOpenGolfHoleRound Round;Round.Start(4);Round.RecordStroke(false,false);
         TestFalse(TEXT("Outside radius"),Round.TryConcede(Radius*.3048f+.001f,Radius,true));
@@ -138,7 +145,7 @@ private: FAutomationTestBase* Test;int32 Stage=0;TWeakObjectPtr<AUOpenGolfPlayer
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMenuReturnTest,"UOpenGolf.Menu.ReturnToMainMenu",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
 bool FMenuReturnTest::RunTest(const FString&)
 {
-    if(!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"),false,true))return false;
+    if(!FEditorFileUtils::LoadMap(TestMaps::Range,false,true))return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckReturnToMainMenu>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;
@@ -146,7 +153,7 @@ bool FMenuReturnTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMenuIsolationTest,"UOpenGolf.Menu.InputIsolation",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
 bool FMenuIsolationTest::RunTest(const FString&)
 {
-    if(!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"),false,true))return false;
+    if(!FEditorFileUtils::LoadMap(TestMaps::Range,false,true))return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckMenuIsolation>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;

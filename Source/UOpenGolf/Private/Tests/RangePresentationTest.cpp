@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Camera/CameraActor.h"
+#include "TestMaps.h"
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Editor.h"
@@ -32,7 +33,7 @@ public:
     FCheckRangePresentation(FAutomationTestBase* InTest, bool bInCapture)
         : Test(InTest), bCapture(bInCapture)
     {
-        // Set at console priority below: the coastal capture test sets it at that priority, and in a run of the whole
+        // Set at console priority below: the range terrain capture test sets it at that priority, and in a run of the whole
         // UOpenGolf.Visual group a lower-priority set is then ignored.
         GrassVar = IConsoleManager::Get().FindConsoleVariable(TEXT("uopengolf.Grass3D"));
     }
@@ -240,7 +241,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeAssetsVisualTest, "UOpenGolf.Visual.Range
 
 static bool QueuePresentationCheck(FAutomationTestBase* Test, bool bCapture)
 {
-    FString Map = TEXT("/Game/UOpenGolf/Maps/UOpenGolf");
+    FString Map = TestMaps::Range;
     if (bCapture)
         FParse::Value(FCommandLine::Get(), TEXT("RangeVisualMap="), Map);
     if (!FEditorFileUtils::LoadMap(Map, false, true))

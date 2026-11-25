@@ -35,7 +35,7 @@ namespace
 AUOpenGolfRange::AUOpenGolfRange()
 {
     PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.TickInterval = 0.25f;
+    PrimaryActorTick.TickInterval = IdleTickIntervalS;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Tee"));
     RootComponent->SetMobility(EComponentMobility::Static);
     Cup = CreateDefaultSubobject<UOpenGolfCupComponent>(TEXT("Cup"));
@@ -80,7 +80,16 @@ void AUOpenGolfRange::BuildDefaultLayout()
     Flagstick->SetMobility(EComponentMobility::Movable);
 
     if (!AOpenGolfEnvironment::Find(GetWorld()))
-        GetWorld()->SpawnActor<AOpenGolfEnvironment>();
+    {
+        auto* Environment = GetWorld()->SpawnActor<AOpenGolfEnvironment>();
+#if WITH_EDITOR
+        if (Environment)
+        {
+            Environment->SetActorLabel(TEXT("Environment_Daylight"));
+            Environment->SetFolderPath(TEXT("Range/Lighting"));
+        }
+#endif
+    }
     for (const auto& Actor : LayoutActors)
         Actor->RegisterAllComponents();
     RefreshPresentation();
@@ -116,9 +125,21 @@ FVector AUOpenGolfRange::GetCupLocation() const
     return IsValid(Flagstick) ? Flagstick->GetComponentLocation() : GetTeeLocation();
 }
 
+void AUOpenGolfRange::SetCourseHole(FVector TeeLocation, FVector CupLocation, const TArray<FVector>& Routing)
+{
+    CourseRouting = Routing;
+    CourseTee = TeeLocation;
+    FVector Ground, Normal = FVector::UpVector;
+    if (IsValid(Terrain) && Terrain->GroundAt(CupLocation, Ground, Normal, AUOpenGolfBall::ContactChannel))
+        CupLocation = Ground;
+    OriginalCup = {CupLocation, Normal};
+    Cup->PlaceOnSurface(OriginalCup, Flagstick);
+    InvalidateHoleMap();
+}
+
 FVector AUOpenGolfRange::GetTeeLocation() const
 {
-    const FVector Origin = GetActorLocation();
+    const FVector Origin = CourseTee.Get(GetActorLocation());
     if (!IsValid(Terrain))
         return Origin;
     // The player controller asks every frame and the ground is fixed during Play; editing can rebuild it.
@@ -211,11 +232,13 @@ void AUOpenGolfRange::ApplyWindSettings()
     WindSpeedMph = FMath::IsFinite(WindSpeedMph) ? FMath::Max(0.0f, WindSpeedMph) : 0.0f;
     WindFromDeg = FMath::IsFinite(WindFromDeg) ? FRotator::ClampAxis(WindFromDeg) : 0.0f;
     const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
-    // A course round keeps its course's wind, whatever the console, Details or the HUD set.
-    if (const UGolfCourseDefinition* Course = Mode ? Mode->GetCourse() : nullptr)
+    // A course round keeps the wind picked in its setup, whatever the console, Details or the HUD set.
+    float RoundMph = 0.0f;
+    float RoundFromDeg = 0.0f;
+    if (Mode && Mode->GetRoundWind(RoundMph, RoundFromDeg))
     {
-        WindSpeedMph = Course->WindMph;
-        WindFromDeg = Course->WindFromDeg;
+        WindSpeedMph = RoundMph;
+        WindFromDeg = RoundFromDeg;
     }
     AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     if (!Ball)

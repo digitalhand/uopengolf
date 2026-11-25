@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Editor.h"
+#include "TestMaps.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
 #include "Slate/SceneViewport.h"
@@ -179,7 +180,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FShotTrailVisualTest, "UOpenGolf.Visual.ShotTra
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::NonNullRHI)
 static bool QueueTrail(FAutomationTestBase* Test, bool bCapture)
 {
-    FString Map = TEXT("/Game/UOpenGolf/Maps/UOpenGolf");
+    FString Map = TestMaps::Range;
     if (bCapture)
         FParse::Value(FCommandLine::Get(), TEXT("RangeVisualMap="), Map);
     if (!FEditorFileUtils::LoadMap(Map, false, true))

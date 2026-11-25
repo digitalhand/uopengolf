@@ -20,6 +20,7 @@
 #include "Play/OpenGolfPlayRules.h"
 #include "Styling/CoreStyle.h"
 #include "UOpenGolfGameMode.h"
+#include "GolfCourseDefinition.h"
 #include "UOpenGolfPlayerController.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -136,10 +137,10 @@ void SPlayModeBar::Construct(const FArguments& Args)
                         + SVerticalBox::Slot().AutoHeight().Padding(TileGap, 6, TileGap, 0)
                         [
                             SNew(SBorder).BorderImage(&TileBrush).Padding(FMargin(8, 4)).Visibility_Lambda([this]
-                                { return OverCupText.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+                                { return StatusText.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
                             [
                                 SNew(STextBlock).Font(HudStyle::Font("Regular", 9)).ColorAndOpacity(HudStyle::LabelColor())
-                                .Text_Lambda([this] { return OverCupText; })
+                                .Text_Lambda([this] { return StatusText; })
                             ]
                         ]
                     ]
@@ -251,7 +252,7 @@ void SPlayModeBar::Refresh()
     bHoleMode = Mode && Mode->GetPlayMode() == EOpenGolfPlayMode::Hole;
     bPlacing = PlayerController && PlayerController->IsPlacingBall();
     BannerOpacity = 0.0f;
-    OverCupText = FText::GetEmpty();
+    StatusText = FText::GetEmpty();
     bRangeMode = Mode && !bHoleMode;
     bCanPlace = Mode && Mode->CanPlaceTrainingBall();
     UTrainingDrill* Drill = bRangeMode && Mode->GetTrainingSession() ? Mode->GetTrainingSession()->Active() : nullptr;
@@ -281,8 +282,14 @@ void SPlayModeBar::Refresh()
     ToPinText = FText::FromString(Ball->IsHoled() ? FString(TEXT("In")) : GolfSettings::RoundDistance(Mode->GetDistanceToCupM(), Result.Surface == EOpenFairwaySurface::Green));
     PuttsText = FText::AsNumber(Round.Putts);
     if (Result.bOverCup && !Round.bHoled && !Ball->IsHoled())
-        OverCupText = FText::FromString(FString::Printf(TEXT("Over the cup at %s  ·  drops under %s"), *GolfSettings::Speed(Result.OverCupSpeedMps),
+        StatusText = FText::FromString(FString::Printf(TEXT("Over the cup at %s  ·  drops under %s"), *GolfSettings::Speed(Result.OverCupSpeedMps),
             *GolfSettings::Speed(Result.OverCupMaxSpeedMps)));
+    switch (Mode->GetRecentPenalty())
+    {
+    case EGolfPenalty::Water: StatusText = FText::FromString(TEXT("In the water  ·  penalty stroke  ·  replay from the last spot")); break;
+    case EGolfPenalty::OutOfBounds: StatusText = FText::FromString(TEXT("Out of bounds  ·  penalty stroke  ·  replay from the last spot")); break;
+    default: break;
+    }
 
     const float HoledSeconds = Mode->GetHoledSeconds();
     if (Round.bHoled && HoledSeconds >= 0.0f)

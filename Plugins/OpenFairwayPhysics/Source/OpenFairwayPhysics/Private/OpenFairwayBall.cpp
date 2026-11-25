@@ -7,6 +7,8 @@
 #include "OpenFairwayBallInternal.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
 #include "Engine/StaticMesh.h"
 #include "OpenFairwayLog.h"
 #include "UObject/ConstructorHelpers.h"
@@ -123,6 +125,7 @@ FShotSimulationResult AOpenFairwayBall::PredictShot(const FOpenFairwayLaunch& La
     Air.WindFromDeg -= AimYawDeg;
     FBallPhysicsProfile Predicted = Profile;
     Predicted.GreenStimpFeet = GreenSpeed::Clamp(GreenStimpFeet);
+    Predicted.FairwayStimpFeet = FairwaySpeed::Clamp(FairwayStimpFeet);
     return ShotSimulator::Simulate(ToLaunchData(LaunchData), ToCoreSurface(Surface), Predicted, Air, MaxShotSeconds);
 }
 
@@ -145,8 +148,9 @@ bool AOpenFairwayBall::Launch(const FOpenFairwayLaunch& LaunchData)
     }
 
     const FShotSpin Spin = ShotSetup::ParseSpin(Data);
-    // Every surface this shot touches resolves its green from this stimp.
+    // Every surface this shot touches resolves its green and fairway from these stimps.
     Profile.GreenStimpFeet = GreenSpeed::Clamp(GreenStimpFeet);
+    Profile.FairwayStimpFeet = FairwaySpeed::Clamp(FairwayStimpFeet);
     ShotParams = FResolvedShotParams::Resolve(Profile, GetAirConditions(), Data.VerticalLaunchDeg, Spin.TotalSpinRpm, Spin.BackSpinRpm);
     SurfaceSettings = ShotParams.ResolveSurface(ToCoreSurface(CurrentSurface), Profile);
     FLaunchVectors Vectors = ShotSetup::BuildLaunchVectors(Data.SpeedMph, Data.VerticalLaunchDeg, Data.HorizontalLaunchDeg, Spin.BackSpinRpm, Spin.SideSpinRpm);
@@ -244,8 +248,13 @@ void AOpenFairwayBall::Tick(float DeltaSeconds)
 
     const FVector FrameStart = GetActorLocation();
     SubstepAccumulator += DeltaSeconds;
+    // A sped-up world (fast-forward) brings that many frames' time each frame; the cap grows with it so the speed-up
+    // holds, and the fixed step keeps the shot where it would stop at normal speed.
+    const UWorld* World = GetWorld();
+    const float Dilation = World && World->GetWorldSettings() ? GetActorTimeDilation(*World) : CustomTimeDilation;
+    const int32 MaxSubsteps = MaxSubstepsPerFrame * FMath::Max(1, FMath::CeilToInt(Dilation));
     int32 Substeps = 0;
-    while (SubstepAccumulator >= GolfPhysics::SimulationDt && Substeps < MaxSubstepsPerFrame)
+    while (SubstepAccumulator >= GolfPhysics::SimulationDt && Substeps < MaxSubsteps)
     {
         SubstepAccumulator -= GolfPhysics::SimulationDt;
         ++Substeps;
@@ -261,7 +270,7 @@ void AOpenFairwayBall::Tick(float DeltaSeconds)
     }
 
     // Prevent runaway catch-up after a stall while keeping the motion continuous.
-    if (Substeps == MaxSubstepsPerFrame && SubstepAccumulator > GolfPhysics::SimulationDt)
+    if (Substeps == MaxSubsteps && SubstepAccumulator > GolfPhysics::SimulationDt)
     {
         SubstepAccumulator = GolfPhysics::SimulationDt;
     }

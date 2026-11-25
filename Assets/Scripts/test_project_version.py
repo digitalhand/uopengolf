@@ -16,7 +16,7 @@ INI = (
     "ProjectVersion=0.0.1\n"
     "\n"
     "[/Script/UnrealEd.ProjectPackagingSettings]\n"
-    "+MapsToCook=(FilePath=\"/Game/UOpenGolf/Maps/UOpenGolf\")\n"
+    "+MapsToCook=(FilePath=\"/Game/UOpenGolf/Maps/L_SavannaRange\")\n"
 )
 
 

@@ -2,6 +2,9 @@
 
 [Series](hunter_ranch_workflow.md) | Previous: [Export](hunter_ranch_export_coordinates.md) | Next: [Environment](hunter_ranch_environment.md)
 
+> **Current path:** Hunter Ranch is now built with the [Course Designer](course_designer.md), which imports the
+> terrain and layout directly in Unreal. This page describes the earlier manual FBX route.
+
 **Inputs:** calibrated FBX, coordinate record, marker table and a working repository checkout.
 **Outputs:** a visual first-hole map, verified collision/surfaces, and an explicit gameplay
 integration record. The GUI can import the environment; a complete playable course also requires

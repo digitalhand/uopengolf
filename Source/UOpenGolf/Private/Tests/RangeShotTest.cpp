@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "LaunchMonitorTypes.h"
+#include "TestMaps.h"
 #include "OpenFairwayBall.h"
 #include "UOpenGolfGameMode.h"
 
@@ -184,7 +185,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUOpenGolfRangeShotTest, "UOpenGolf.Range.Shot"
 
 bool FUOpenGolfRangeShotTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the startup map."));
         return false;
@@ -250,11 +251,14 @@ public:
         }
         AOpenFairwayBall* Ball = Mode->GetBall();
         FOpenFairwayShotResult Baseline;
-        const float Deltas[] = {1.0f / 60, 1.0f / 30, 1.0f / 144, 0.2f, 1.0f / 60};
+        // The last case is fast-forward: a 30 fps frame at four times speed brings four frames' time each frame.
+        const float Deltas[] = {1.0f / 60, 1.0f / 30, 1.0f / 144, 0.2f, 1.0f / 60, 4.0f / 30};
+        constexpr int32 FastForwardCase = 5;
         // Drive the actor directly within one latent update; world timers cannot auto-reset it between steps.
         for (int32 Case = 0; Case < UE_ARRAY_COUNT(Deltas); ++Case)
         {
             Mode->ResetBallToTee();
+            Ball->CustomTimeDilation = Case == FastForwardCase ? 4.0f : 1.0f;
             Test->TestTrue(TEXT("Frame-rate shot accepted"), Ball->Launch(DriveLaunch()));
             int32 Frames = 0;
             int32 StillFlightFrames = 0;
@@ -274,8 +278,17 @@ public:
                     Ball->GetShotResult(First);
                     Test->TestEqual(TEXT("Hitch consumes at most 12 physics steps"), First.ElapsedS, 0.1f, 1e-5f);
                 }
+                if (Frames == 0 && Case == FastForwardCase)
+                {
+                    FOpenFairwayShotResult First;
+                    Ball->GetShotResult(First);
+                    // About 16 steps, past the 12-step cap (0.1 s) that holds the world at normal speed.
+                    Test->TestTrue(FString::Printf(TEXT("A fast-forwarded frame keeps its time (%.4f s)"), First.ElapsedS),
+                        First.ElapsedS > 0.1f + 1e-4f && First.ElapsedS <= 4.0f / 30 + 1e-4f);
+                }
                 ++Frames;
             }
+            Ball->CustomTimeDilation = 1.0f;
             FOpenFairwayShotResult Result;
             Ball->GetShotResult(Result);
             Test->TestTrue(TEXT("Shot reaches rest at every frame rate"), Result.bAtRest);
@@ -357,7 +370,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeRecordedShotsTest, "UOpenGolf.Range.Recor
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRangeRecordedShotsTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true)) return false;
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true)) return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FReplayRecordedShots>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
@@ -368,7 +381,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeFrameRatesTest, "UOpenGolf.Range.FrameRat
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRangeFrameRatesTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true)) return false;
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true)) return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckRangeFrameRates>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());

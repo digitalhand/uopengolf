@@ -262,7 +262,27 @@ public:
     bool ScatterBoundary(const UOpenGolfVegetationPreset& Preset, FGroundQuery Ground, TArray<FOpenGolfScatterPoint>& OutPoints,
         FString& Error, double TerrainYawDeg = 0) const;
 
+    /** First sample, at the southwest corner in terrain-local metres. */
+    UPROPERTY(EditAnywhere, Category = "Elevation")
+    FVector2D ElevationOriginM = FVector2D::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Elevation")
+    FIntPoint ElevationSize = FIntPoint::ZeroValue;
+
+    UPROPERTY(EditAnywhere, Category = "Elevation")
+    float ElevationSpacingM = 1.0f;
+
+    /** Rows run west to east, starting at the south edge. Heights are relative to the course datum. */
+    UPROPERTY()
+    TArray<float> ElevationM;
+
+    /** The whole definition, as BuildTerrain needs it: bounds, Landscape alignment, sample budgets, regions and elevation. */
     bool Validate(FString& Error) const;
+    /**
+     * The elevation grid alone: its size, finite samples and coverage of the terrain bounds. Imported courses build in
+     * squares (BuildCourseTile), so the single detailed area's alignment and sample budget do not apply to them.
+     */
+    bool ValidateElevation(FString& Error) const;
     double HeightAt(FVector2D PointM) const;
     FVector NormalAt(FVector2D PointM) const;
     UOpenGolfSurfacePreset* SurfaceAt(FVector2D PointM) const;
@@ -274,6 +294,8 @@ public:
     double DistanceFromSurface(FVector2D PointM, EOpenFairwaySurface Surface) const;
     static bool Contains(const TArray<FVector2D>& Outline, FVector2D Point);
     static double DistanceToOutline(const TArray<FVector2D>& Outline, FVector2D Point);
+    /** 0 when Point is inside Outline or on its edge, else its distance to the edge: Contains and DistanceToOutline in one pass. */
+    static double DistanceFromOutline(const TArray<FVector2D>& Outline, FVector2D Point);
 
 private:
     /**

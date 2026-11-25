@@ -203,6 +203,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway", meta = (ClampMin = "8", ClampMax = "15"))
     float GreenStimpFeet = OpenFairway::GreenSpeed::DefaultStimpFeet;
 
+    /**
+     * Speed of every fairway as a stimp reading in feet (5-12; 7.4 is the fitted fairway, values outside play as the
+     * nearest end). It sets only the fairway's rolling friction; applies from the next launch.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway", meta = (ClampMin = "5", ClampMax = "12"))
+    float FairwayStimpFeet = OpenFairway::FairwaySpeed::StandardStimpFeet;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "OpenFairway|Air")
     float TemperatureF = 75.0f;
 

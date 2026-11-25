@@ -6,12 +6,29 @@
 
 class AOpenGolfTerrainArea;
 class UStaticMesh;
+class UOpenGolfTerrainDefinition;
+class UMaterialInterface;
 
 UCLASS()
 class OPENGOLFCOURSEEDITOR_API UOpenGolfTerrainBuilder : public UBlueprintFunctionLibrary
 {
     GENERATED_BODY()
 public:
+    UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
+    static bool ImportElevation(UOpenGolfTerrainDefinition* Definition, const FString& Filename, FString& Error);
+
+    /**
+     * Builds one 64 m square of an imported course (see OpenGolfTerrainTiles.h) and replaces that square's ground.
+     * Surface edges follow the region outlines; each region uses its own SpacingM and open ground the DetailSpacingM.
+     */
+    UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
+    static bool BuildCourseTile(AOpenGolfTerrainArea* Area, FIntPoint Tile, const FString& OutputFolder, FString& Error);
+
+    /** A flat, collision-free water surface over a lake outline, at the lake's ground height plus 5 cm. Name keys a rebuild. */
+    UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
+    static bool BuildWaterSurface(AOpenGolfTerrainArea* Area, const TArray<FVector2D>& OutlineM, UMaterialInterface* Material,
+        const FString& OutputFolder, const FString& Name, FString& Error);
+
     // Saves new assets first. Existing generated actors are replaced only after a successful build.
     UFUNCTION(BlueprintCallable, Category = "OpenGolf|Terrain")
     static bool BuildTerrain(AOpenGolfTerrainArea* Area, const FString& OutputFolder, bool ReplaceGenerated, FString& Error);

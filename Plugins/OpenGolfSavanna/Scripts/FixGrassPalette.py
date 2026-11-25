@@ -5,7 +5,7 @@
 
 Pass --maintained-only to retain the tall rough's material and tuning.
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped, after FixTurfTransitions.py has run once.
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped, after FixTurfTransitions.py has run once.
 - M_SavannaGrass colours the tall rough by world-space patch noise instead of per instance, so the
   tiled squares of tufts no longer show; MI_GrassMedium01 takes the muted rough settings.
 - The turf field materials are rebuilt with the dry/lush palette (turf_palette.py) and every turf
@@ -26,7 +26,7 @@ import FixTurfTransitions as transitions
 import savanna_assets as s
 import turf_palette as palette
 
-GRASS = ['/OpenGolfSavanna/Materials/M_SavannaGrass', '/OpenGolfSavanna/Materials/Grass/Medium/MI_GrassMedium01']
+GRASS = ['/OpenGolfSavanna/Grass/Materials/M_SavannaGrass', '/OpenGolfSavanna/Grass/Medium/Materials/MI_GrassMedium01']
 
 
 def backup():

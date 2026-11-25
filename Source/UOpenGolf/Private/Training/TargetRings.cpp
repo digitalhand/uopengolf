@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "Training/TargetRings.h"
+#include "UOpenGolfAssetPaths.h"
 #include "Training/GroundBands.h"
 #include "Components/TextRenderComponent.h"
 #include "GameFramework/Actor.h"
@@ -29,8 +30,8 @@ namespace
 UTargetRings* UTargetRings::Create(AActor& Owner, const FText& RadiusText)
 {
     auto* Rings = NewObject<UTargetRings>(&Owner);
-    Rings->Material = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail"));
-    Rings->LineMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/UOpenGolf/Art/M_TargetRingLine.M_TargetRingLine"));
+    Rings->Material = LoadObject<UMaterialInterface>(nullptr, UOpenGolfAssetPaths::ShotTrailMaterial);
+    Rings->LineMaterial = LoadObject<UMaterialInterface>(nullptr, UOpenGolfAssetPaths::TargetRingLineMaterial);
     if (!Rings->Material || !Rings->LineMaterial)
         return nullptr;
     Rings->Mesh = MakeComponent<UTargetRingMesh>(Owner);

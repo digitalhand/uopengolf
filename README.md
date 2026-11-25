@@ -9,10 +9,11 @@ Supports Launch Monitor, and OpenAPI Connectivity
 
 ## Get started
 
-Install from [Releases](https://github.com/digitalhand/uopengolf/releases) 
-- Native debian .deb package.
-- Native .exe Windows 64 installation. 
-    - Includes auto-update. 
+Install from [Releases](https://github.com/digitalhand/uopengolf/releases). Every install updates itself from the game.
+- Native Ubuntu/Debian `.deb` package.
+- Native Fedora/openSUSE `.rpm` package.
+- Portable `.tar.gz` for any Linux distribution.
+- Native .exe Windows 64 installation.
 
 - For developers. All code and assets are fully open source, most using MIT license. See below [Build and editor setup](Docs/Development.md)
 
@@ -28,6 +29,7 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 - [Tests and validation](Docs/Testing.md)
 - [CI and releases](Docs/Releases.md)
 - [Architecture](Docs/Architecture.md) and [plugins](Plugins/README.md)
+- [Content naming and layout](Docs/ContentNaming.md)
 - [Range assets](Docs/RangeAssets.md) and [Blender turf workflow](Docs/TurfWorkflow.md)
 - Physics: [how it works](Plugins/OpenFairwayPhysics/Docs/Reference.md) and [accuracy against reference shots](Plugins/OpenFairwayPhysics/Docs/Accuracy.md)
 - [Current status and remaining acceptance](Docs/PhasesStatus.md) and [asset licence roadmap](Docs/AssetLicenseRoadmap.md)

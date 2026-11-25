@@ -13,6 +13,7 @@ from unittest.mock import patch
 from xml.etree import ElementTree
 
 from Assets.Installer.build_deb import ICON_SIZES, METAINFO_ID, appstream_metadata, build_package, debian_version, main
+from Assets.Installer.linux_payload import INSTALLER, KEYRING, POLKIT_ACTION, RELEASE_KEY, dearmor_public_key
 
 METAINFO = f"./usr/share/metainfo/{METAINFO_ID}.metainfo.xml"
 
@@ -69,8 +70,31 @@ class DebPackageTests(unittest.TestCase):
         self.assertEqual(checksum, f"{hashlib.sha256(package.read_bytes()).hexdigest()}  {package.name}\n")
         self.assertTrue((self.source / "UOpenGolf/Saved/Config/account.ini").exists())
 
+    def test_in_game_update_files(self):
+        package = self.build()
+        depends = subprocess.check_output(["dpkg-deb", "-f", str(package), "Depends"], text=True)
+        self.assertIn("pkexec", depends)
+        self.assertIn("gpgv", depends)
+        archive = subprocess.check_output(["dpkg-deb", "--fsys-tarfile", str(package)])
+        with tarfile.open(fileobj=io.BytesIO(archive)) as files:
+            helper = files.getmember("./usr/lib/uopengolf/install-update")
+            self.assertEqual(helper.mode, 0o755)
+            self.assertEqual(files.extractfile(helper).read(), (INSTALLER / "install-update").read_bytes())
+            policy = files.getmember(f"./{POLKIT_ACTION}")
+            self.assertEqual(policy.mode, 0o644)
+            action = ElementTree.fromstring(files.extractfile(policy).read()).find("action")
+            self.assertEqual(action.findtext("defaults/allow_active"), "auth_admin")
+            self.assertEqual(action.findtext("defaults/allow_any"), "no")
+            self.assertEqual(action.find("annotate").text, "/usr/lib/uopengolf/install-update")
+            marker = files.getmember("./opt/uopengolf/.package-format")
+            self.assertEqual(marker.mode, 0o644)
+            self.assertEqual(files.extractfile(marker).read(), b"deb\n")
+            keyring = files.getmember(f"./{KEYRING}")
+            self.assertEqual(keyring.mode, 0o644)
+            self.assertEqual(files.extractfile(keyring).read(), dearmor_public_key(RELEASE_KEY.read_text()))
+
     def test_appstream_metadata_for_software_centres(self):
-        with patch("Assets.Installer.build_deb.release_date", return_value=date(2026, 11, 20)):
+        with patch("Assets.Installer.linux_payload.release_date", return_value=date(2026, 11, 20)):
             package = self.build("1.2.3-rc.1")
         archive = subprocess.check_output(["dpkg-deb", "--fsys-tarfile", str(package)])
         with tarfile.open(fileobj=io.BytesIO(archive)) as files:
@@ -134,7 +158,7 @@ class DebPackageTests(unittest.TestCase):
             build_package(self.source, "1.2.3", self.source / "dist")
 
     def test_missing_content_and_build_tool(self):
-        with patch("Assets.Installer.build_deb.shutil.which", return_value=None):
+        with patch("Assets.Installer.linux_payload.shutil.which", return_value=None):
             with self.assertRaisesRegex(ValueError, "dpkg-deb"):
                 self.build()
         shutil.rmtree(self.source / "UOpenGolf/Content/Paks")

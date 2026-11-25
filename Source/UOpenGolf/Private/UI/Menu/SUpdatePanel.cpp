@@ -100,6 +100,8 @@ void SUpdatePanel::Construct(const FArguments& Args)
     using S = EGameUpdateState;
     const auto Offered = [](const UGameUpdateSubsystem& U) { return U.IsUpdateAvailable() && (U.GetState() == S::Available || U.GetState() == S::Failed); };
     const auto InProgress = [](const UGameUpdateSubsystem& U) { return U.GetState() == S::Downloading || U.GetState() == S::Verifying || U.GetState() == S::Installing; };
+    // Linux system packages install as root, after the polkit password prompt.
+    const auto bAsksPassword = [](const UGameUpdateSubsystem& U) { return U.GetInstallKind() == EGameUpdateInstallKind::Package; };
 
     BarStyle = FCoreStyle::Get().GetWidgetStyle<FProgressBarStyle>("ProgressBar");
     BarStyle.SetBackgroundImage(FSlateRoundedBoxBrush(HudStyle::HoverTileColor(), 5.f));
@@ -118,24 +120,32 @@ void SUpdatePanel::Construct(const FArguments& Args)
         // What happens next, or why it failed.
         +SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 16)
             [SNew(STextBlock).Font(Style->GetFont(MenuStyle::BodySize)).ColorAndOpacity(Style->LabelColor).AutoWrapText(true)
-                .Text(Text([](const UGameUpdateSubsystem& U) -> FString
+                .Text(Text([bAsksPassword](const UGameUpdateSubsystem& U) -> FString
                 {
                     const FString Latest = TEXT("v") + U.GetLatest().Version;
                     switch (U.GetState())
                     {
                     case S::Available:
-                        if (U.CanInstall())
-                            return FString::Printf(TEXT("Downloads %s, then the game closes, installs the update and restarts. Your settings, sign-in and recordings are kept."),
+                        if (!U.CanInstall())
+                            return FString::Printf(TEXT("%s Download %s from its release page."), *U.GetInstallBlocker(), *Latest);
+                        if (bAsksPassword(U))
+                            return FString::Printf(TEXT("Downloads %s, then the game closes, asks for your password to install the update, and restarts. Your settings, sign-in and recordings are kept."),
                                 *GameUpdate::FormatSize(U.GetLatest().InstallerSize));
-                        return PLATFORM_WINDOWS
-                            ? FString::Printf(TEXT("%s Download %s from its release page."), *U.GetInstallBlocker(), *Latest)
-                            : FString::Printf(TEXT("Download %s from its release page."), *Latest);
+                        return FString::Printf(TEXT("Downloads %s, then the game closes, installs the update and restarts. Your settings, sign-in and recordings are kept."),
+                            *GameUpdate::FormatSize(U.GetLatest().InstallerSize));
                     case S::Downloading: return TEXT("Downloading the update.");
                     case S::Verifying: return TEXT("Checking the download.");
-                    case S::Installing: return TEXT("Starting the installer. The game will close and restart.");
+                    case S::Installing: return bAsksPassword(U)
+                        ? TEXT("The game will close and ask for your password to install the update, then restart.")
+                        : TEXT("Starting the installer. The game will close and restart.");
                     default: return UpdateText::Status(&U);
                     }
                 }))]
+        // Why the previous attempt didn't install, until another one starts.
+        +SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 16)
+            [SNew(STextBlock).Font(Style->GetFont(MenuStyle::BodySize)).ColorAndOpacity(Style->LabelColor).AutoWrapText(true)
+                .Visibility(VisibleWhen([InProgress](const UGameUpdateSubsystem& U) { return !InProgress(U) && !U.GetLastInstallFailure().IsEmpty(); }))
+                .Text(Text([](const UGameUpdateSubsystem& U) { return TEXT("The last update didn't install: ") + U.GetLastInstallFailure(); }))]
         // Release notes, before the download starts.
         +SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 20)
             [SNew(SBox).MaxDesiredHeight(280.f).Visibility(VisibleWhen([](const UGameUpdateSubsystem& U)

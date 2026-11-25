@@ -3,7 +3,7 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/RefreshRoughMask.py"
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. The mask (T_SavannaRoughMask) makes the ground under the rough
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped. The mask (T_SavannaRoughMask) makes the ground under the rough
 tiles rough-coloured within 12 m of play and fades it to desert by 16 m. BuildSavannaRange.py bakes it; until 2026-11-23
 BuildParFourHole.py did not, so the mask still described the range before the par-4 hole. The ground beside the back of
 the green and the greenside bunker was desert, and it showed in steps between the square rough tiles and the curved

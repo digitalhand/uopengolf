@@ -331,6 +331,25 @@ The catalog (`SurfaceCatalog`, `Private/OpenFairway/Surfaces.cpp`):
 - The ball profile (`FBallPhysicsProfile`) can scale every surface's kinetic friction, rolling friction and grass
   drag, and offset its critical angle.
 
+## Fairway speed
+
+- **One setting for every fairway.** The ball's **Fairway Stimp Feet** (5–12, default 7.4;
+  `FBallPhysicsProfile::FairwayStimpFeet` headless) sets the Fairway surface's rolling friction from the next launch. The
+  game's **Settings › Game Defaults › Fairway speed** offers 6, 7.4, 8, 9 and 10 ft. Soft fairway, rough, firm, fringe,
+  green and sand are unchanged, as is the fairway's grass drag.
+- **The standard is the fit.** At 7.4 ft (`FairwaySpeed::StandardStimpFeet`, what the fitted fairway reads) the rolling
+  friction is exactly the catalog's 0.0469. Any other reading scales it by the stimp solve's ratio,
+  `RollingFriction(s) = 0.0469 * Solve(s) / Solve(7.4)`. The solve is the green's, run with the fairway's linear and
+  speed-squared grass drag (both reach a rolling ball through 5/7, as the air drag does), so the solve's own error near
+  the standard cancels.
+
+  | Fairway stimp, ft | 6 | 7.4 | 8 | 9 | 10 |
+  | --- | ---: | ---: | ---: | ---: | ---: |
+  | Rolling friction | 0.0701 | 0.0469 | 0.0396 | 0.0298 | 0.0221 |
+
+  A stimpmeter roll on level fairway measures each reading within 0.1 m (`UOpenGolf.Physics.FairwayStimp`). A faster
+  fairway also holds a resting ball on less slope, since the holding slope scales with rolling friction.
+
 ## Greens
 
 - **Speed.** The ball's **Green Stimp Feet** (8–15, default 10; the `uopengolf.GreenStimp` console variable on the
@@ -353,7 +372,7 @@ The catalog (`SurfaceCatalog`, `Private/OpenFairway/Surfaces.cpp`):
   `FirstImpactTangentInMps`, `FirstImpactTangentOutMps` (negative after spin-back) and `bFirstImpactSpinback`.
 - **Slopes and break.** The actor uses each contact's normal, so a contoured green breaks putts; `Simulate` takes a
   planar `GroundNormal`. Grain and firmness are not modelled.
-- **Building greens.** A green is ground whose material carries `PM_Green` (`MI_Green`, `MI_CoastalGreen` in
+- **Building greens.** A green is ground whose material carries `PM_Green` (`MI_Green`, `MI_TerrainSurface_Green` in
   OpenGolfCourse) or a component tagged `OpenFairway.Surface.Green`. The terrain builder sets `PM_<Surface>` on each
   region mesh; a green painted as a Landscape layer needs that layer's physical material set to `PM_Green`.
 

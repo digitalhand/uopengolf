@@ -39,7 +39,7 @@ void SAvatarPicker::Construct(const FArguments& Args)
         .SetPressedPadding(FMargin(0));
     Ring = FSlateRoundedBoxBrush(FLinearColor::Transparent, Outer * 0.5f, Style.AccentColor, RingWidth);
 
-    const TSharedRef<SWrapBox> Tiles = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(TileGap, TileGap));
+    const TSharedRef<SWrapBox> Tiles = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(AvatarPickerDetail::TileGap, AvatarPickerDetail::TileGap));
     // The account picture first; it shows only once the account has one.
     Tiles->AddSlot()
     [

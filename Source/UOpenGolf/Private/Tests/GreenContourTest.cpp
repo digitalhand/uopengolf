@@ -4,6 +4,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "TestMaps.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "FileHelpers.h"
@@ -40,7 +41,7 @@ namespace GreenContourTestDetail
 bool FGreenContourTest::RunTest(const FString& Parameters)
 {
     using namespace GreenContourTestDetail;
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     UWorld* World = GEditor->GetEditorWorldContext().World();
     AUOpenGolfRange* Range = nullptr;

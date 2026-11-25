@@ -10,6 +10,29 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTerrainDefinitionTest, "UOpenGolf.Course.Terra
 bool FTerrainDefinitionTest::RunTest(const FString& Parameters)
 {
     auto* Definition = NewObject<UOpenGolfTerrainDefinition>();
+    Definition->ElevationOriginM = FVector2D(-1, -1);
+    Definition->ElevationSpacingM = 2;
+    Definition->ElevationSize = FIntPoint(2, 2);
+    Definition->ElevationM = {1, 3, 5, 7};
+    TestEqual(TEXT("Grid centre interpolates all four elevations"), Definition->HeightAt(FVector2D::ZeroVector), 4.0);
+    TestEqual(TEXT("North-east grid edge uses last sample"), Definition->HeightAt(FVector2D(1, 1)), 7.0);
+    {
+        FString ElevationError;
+        const FVector2D DefaultMinimum = Definition->MinimumM, DefaultMaximum = Definition->MaximumM;
+        Definition->MinimumM = FVector2D(-1, -1);
+        Definition->MaximumM = FVector2D(1, 1);
+        TestTrue(TEXT("An elevation grid covering the bounds is valid on its own"), Definition->ValidateElevation(ElevationError));
+        Definition->MaximumM = FVector2D(2, 1);
+        TestFalse(TEXT("An elevation grid short of the bounds is rejected"), Definition->ValidateElevation(ElevationError));
+        Definition->ElevationM[3] = NAN;
+        Definition->MaximumM = FVector2D(1, 1);
+        TestFalse(TEXT("A missing elevation sample is rejected"), Definition->ValidateElevation(ElevationError));
+        Definition->ElevationM[3] = 7;
+        Definition->MinimumM = DefaultMinimum;
+        Definition->MaximumM = DefaultMaximum;
+    }
+    Definition->ElevationM.Reset();
+    Definition->ElevationSize = FIntPoint::ZeroValue;
     auto* Rough = NewObject<UOpenGolfSurfacePreset>();
     Rough->Surface = EOpenFairwaySurface::Rough;
     Definition->DefaultSurface = Rough;

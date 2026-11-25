@@ -11,6 +11,7 @@ PROJECT = HERE.parents[2]
 sys.path.insert(0, str(PROJECT / 'Plugins/OpenGolfCourse/Scripts'))
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / 'blender'))
+import asset_naming as names
 import course_assets as a
 import BuildTerrainAssets as terrain
 import BuildSurfaceTextures as surfaces
@@ -38,12 +39,12 @@ ROUGH_BAND = {'boundary_clearance_m': .08, 'fairway_clearance_m': 0, 'tile_sink_
 
 
 def blade_material():
-    return shading.build_blade_material(a.material('Materials/CutTurf', 'M_CutTurfBlades'))
+    return shading.build_blade_material(a.material('CutTurf/Materials', 'M_CutTurfBlades'))
 
 
 def set_cull_distances():
     for family, distance in CULL_DISTANCE_M.items():
-        preset = ue.load_asset(f'/OpenGolfSavanna/Terrain/CutTurf/DA_Turf{family}Grass')
+        preset = ue.load_asset(f'/OpenGolfSavanna/CutTurf/Presets/DA_Turf{family}Grass')
         if preset:
             preset.set_editor_property('cull_distance_m', distance)
             a.save(preset)
@@ -52,8 +53,9 @@ def set_cull_distances():
 def import_maps(family):
     textures = {}
     for role in ('Color', 'NormalDX', 'Roughness'):
+        # The bake names its files after the role (T_TurfFairway_NormalDX.png); the asset takes the suffix (T_TurfFairway_N).
         name = f'T_Turf{family}_{role}'
-        texture = a.import_asset(name+'.png', f'Textures/CutTurf/{family}', name)
+        texture = a.import_asset(name+'.png', f'CutTurf/Textures/{family}', names.texture(f'Turf{family}', role))
         texture.set_editor_property('srgb', role == 'Color')
         if role == 'NormalDX':
             texture.set_editor_property('compression_settings', ue.TextureCompressionSettings.TC_NORMALMAP)
@@ -64,7 +66,7 @@ def import_maps(family):
 
 
 def surface_preset(family, parent, textures, color):
-    instance = a.material_instance('Materials/CutTurf', f'MI_Turf{family}', parent)
+    instance = a.material_instance('CutTurf/Materials', f'MI_Turf{family}', parent)
     for role, parameter in surfaces.TEXTURE_ROLES.items():
         a.MAT.set_material_instance_texture_parameter_value(instance, parameter, textures[role])
     for key, value in {'TextureSizeCm': 50, 'NormalStrength': .03 if family == 'Green' else .08,
@@ -79,7 +81,7 @@ def surface_preset(family, parent, textures, color):
     instance.set_editor_property('phys_material', ue.load_asset('/OpenGolfCourse/Surfaces/PM_'+physical))
     a.MAT.update_material_instance(instance)
     a.save(instance)
-    preset = terrain.create_data('DA_Turf'+family, ue.OpenGolfSurfacePreset, 'Terrain/CutTurf')
+    preset = terrain.create_data('DA_Turf'+family, ue.OpenGolfSurfacePreset, 'CutTurf/Presets')
     preset.set_editor_property('surface', getattr(ue.OpenFairwaySurface, physical.upper()))
     preset.set_editor_property('material', instance)
     return a.save(preset)
@@ -91,12 +93,12 @@ def family_meshes(family):
     for _size, label in FOOTPRINTS[family]:
         for variant in 'ABCD':
             name = f'SM_Turf{family}_{label}_{variant}'
-            meshes[name] = s.required(f'/OpenGolfSavanna/Meshes/CutTurf/{family}/{name}')
+            meshes[name] = s.required(f'/OpenGolfSavanna/CutTurf/Meshes/{family}/{name}')
     return meshes
 
 
 def vegetation(family, meshes):
-    preset = terrain.create_data('DA_Turf'+family+'Grass', ue.OpenGolfVegetationPreset, 'Terrain/CutTurf')
+    preset = terrain.create_data('DA_Turf'+family+'Grass', ue.OpenGolfVegetationPreset, 'CutTurf/Presets')
     settings = {'kind': ue.OpenGolfVegetationKind.GROUND_COVER, 'placement_pattern': ue.OpenGolfPlacementPattern.TILED,
                 'surface': getattr(ue.OpenFairwaySurface, SURFACE[family]),
                 'boundary_clearance_m':0, 'tile_sink_m':.0005, 'cull_distance_m':CULL_DISTANCE_M[family],
@@ -137,11 +139,11 @@ def build(textures_only=False, refresh=False):
                 return
             if not refresh:
                 surfaces.PARENT = 'M_CutTurfSurface'
-                parent = surfaces.build_parent(textures['Fairway'])
+                parent = surfaces.build_parent(textures['Fairway'], 'CutTurf/Materials')
                 # Rough has maps for the turf field but no surface preset: its ground is MI_TurfRough.
                 for family in shading.GROUND_FAMILIES:
                     surface_preset(family, parent, textures[family], manifest['colors'][family])
-            parent = ue.load_asset('/OpenGolfSavanna/Materials/M_CutTurfSurface')
+            parent = ue.load_asset('/OpenGolfSavanna/CutTurf/Materials/M_CutTurfSurface')
             a.output(parent, shading.surface_color(parent), ue.MaterialProperty.MP_BASE_COLOR)
             parent.set_editor_property('tangent_space_normal', False)
             a.output(parent, field.surface_normal(parent, 'Fairway', 'TurfNormal'), ue.MaterialProperty.MP_NORMAL)
@@ -152,9 +154,9 @@ def build(textures_only=False, refresh=False):
             for entry in manifest['meshes']:
                 family = entry['family']
                 if family not in instances:
-                    instance = a.material_instance('Materials/CutTurf', 'MI_Turf'+family+'Blades', blade)
+                    instance = a.material_instance('CutTurf/Materials', 'MI_Turf'+family+'Blades', blade)
                     instances[family] = a.save(instance)
-                mesh = a.import_asset(entry['name']+'.fbx','Meshes/CutTurf/'+family,entry['name'],mesh=True,vertex_colors=True)
+                mesh = a.import_asset(entry['name']+'.fbx','CutTurf/Meshes/'+family,entry['name'],mesh=True,vertex_colors=True)
                 mesh.set_material(0,instances[family])
                 nanite = mesh.get_editor_property('nanite_settings')
                 nanite.set_editor_property('enabled',True)
@@ -166,7 +168,7 @@ def build(textures_only=False, refresh=False):
                     vegetation(family,meshes)
             set_cull_distances()
             world=ue.get_editor_subsystem(ue.UnrealEditorSubsystem).get_editor_world()
-            if world and world.get_path_name().split('.')[0]=='/Game/UOpenGolf/Maps/UOpenGolf':
+            if world and world.get_path_name().split('.')[0]=='/Game/UOpenGolf/Maps/L_SavannaRange':
                 areas=[actor for actor in ue.get_editor_subsystem(ue.EditorActorSubsystem).get_all_level_actors() if isinstance(actor,ue.OpenGolfTerrainArea)]
                 # Until FixTurfTransitions.py bakes the course field, the instances keep their previous settings.
                 if len(areas)==1 and (SOURCE/'T_CourseSurfaceField.json').exists() and ue.load_asset(shading.field.FIELD_PATH):

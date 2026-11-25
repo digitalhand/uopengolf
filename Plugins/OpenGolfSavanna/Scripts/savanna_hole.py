@@ -3,7 +3,7 @@
 left of the landing area and a greenside bunker right of the green.
 
 Terrain-local metres (X downrange, Y right). apply_layout is pure, so the layout is tested under plain Python;
-BuildSavannaRange.py applies it to DA_SavannaRange. Running it again leaves an applied layout unchanged.
+BuildSavannaRange.py applies it to DA_SavannaRange_Terrain. Running it again leaves an applied layout unchanged.
 """
 from pathlib import Path
 import sys

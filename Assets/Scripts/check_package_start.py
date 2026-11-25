@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import sys
 
-STARTUP_MAP = "/Game/UOpenGolf/Maps/UOpenGolf"
+STARTUP_MAP = "/Game/UOpenGolf/Maps/L_SavannaRange"
 CRASH_MARKERS = ("Fatal error", "Assertion failed", "Unhandled Exception", "appError called")
 # Content the game loads only by a C++ path, which the cook silently drops (AUOpenGolfHUD::RefreshTheme logs this).
 MISSING_CONTENT_MARKERS = ("Wind indicator widget",)

@@ -3,7 +3,7 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/SmoothCourseOutlines.py"
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. Each outline becomes a curve through its
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped. Each outline becomes a curve through its
 authored corners (outline_smoothing.py), so the physical surfaces, the ground meshes and the turf
 field follow the same curve. Trees, vegetation and Landscapes are kept. The map and definition are
 backed up to Saved/TerrainBackups first. Afterwards bake the course field (see FixTurfTransitions.py).

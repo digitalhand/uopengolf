@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.1",
+  "FriendlyName": "Hunter Ranch",
+  "Description": "Hunter Ranch course content.",
+  "Category": "Golf courses",
+  "CanContainContent": true,
+  "Plugins": [
+    {"Name": "OpenGolfCourse", "Enabled": true},
+    {"Name": "OpenGolfSavanna", "Enabled": true}
+  ]
+}

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #include "UI/Menu/CourseBrowser.h"
 #include "Course/GolfCourseSubsystem.h"
+#include "Course/CourseDownloads.h"
+#include "Engine/GameInstance.h"
 #include "Engine/Texture2D.h"
 #include "GolfCourseDefinition.h"
 #include "OpenGolfSettings.h"
@@ -13,6 +15,7 @@
 #include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
+#include "Widgets/Text/STextBlock.h"
 
 using namespace MainMenuDetail;
 
@@ -53,11 +56,27 @@ void SCourseBrowser::Construct(const FArguments& Args)
             SNew(SSearchBox).Style(&SearchStyle).Tag(TEXT("CourseSearch")).HintText(FText::FromString(TEXT("Search courses")))
             .OnTextChanged_Lambda([this](const FText& Text) { Filter = Text.ToString().TrimStartAndEnd(); })
         ]
+        + SScrollBox::Slot().Padding(0, 0, 0, 12)
+        [
+            SNew(STextBlock).Font_Lambda([] { return HudStyle::Font("Regular", MenuStyle::BodySize); })
+            .ColorAndOpacity(HudStyle::LabelColor()).AutoWrapText(true)
+            .Visibility_Lambda([this] { return Downloads.IsValid() && !Downloads->Message().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+            .Text_Lambda([this] { return FText::FromString(Downloads.IsValid() ? Downloads->Message() : FString()); })
+        ]
         + SScrollBox::Slot()[SAssignNew(Cards, SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(CardGap, CardGap))]
     ];
     // clang-format on
 
     UGolfCourseSubsystem* Subsystem = Courses.Get();
+    if (Subsystem)
+    {
+        Downloads = Subsystem->GetGameInstance()->GetSubsystem<UCourseDownloads>();
+        if (Downloads.IsValid())
+        {
+            DownloadHandle = Downloads->Changed.AddSP(this, &SCourseBrowser::RebuildCards);
+            Downloads->Refresh();
+        }
+    }
     if (Subsystem && !Subsystem->IsLoaded())
         LoadedHandle = Subsystem->OnCoursesLoaded.AddSP(this, &SCourseBrowser::RebuildCards);
     else
@@ -66,6 +85,7 @@ void SCourseBrowser::Construct(const FArguments& Args)
 
 SCourseBrowser::~SCourseBrowser()
 {
+    if (Downloads.IsValid()) Downloads->Changed.Remove(DownloadHandle);
     if (UGolfCourseSubsystem* Subsystem = Courses.Get())
         Subsystem->OnCoursesLoaded.Remove(LoadedHandle);
 }
@@ -98,6 +118,70 @@ void SCourseBrowser::RebuildCards()
         Previews.Add(Preview);
         Cards->AddSlot()[MakeCard(*Course, *Preview)];
     }
+    if (!Downloads.IsValid())
+        return;
+    // Catalog courses not installed yet; installed ones show Update and Uninstall on their own card.
+    for (const FCoursePack& Pack : Downloads->Entries())
+    {
+        if (Downloads->IsInstalled(Pack.Id) || Downloads->IsPendingRemoval(Pack.Id))
+            continue;
+        const FString Detail = FString::Printf(TEXT("Version %s  ·  %.0f MB"), *Pack.Version, Pack.DownloadBytes() / 1e6);
+        Cards->AddSlot()[MakeDownloadCard(Pack.Id, Pack.Name, Detail)];
+    }
+}
+
+TSharedRef<SWidget> SCourseBrowser::MakeDownloadCard(const FString& Id, const FString& Name, const FString& Detail)
+{
+    const FSlateBrush* Fill = FCoreStyle::Get().GetBrush("WhiteBrush");
+    // clang-format off
+    return SNew(SBox).WidthOverride(CardWidth)
+        .Visibility_Lambda([this, Name] { return Filter.IsEmpty() || Name.Contains(Filter) ? EVisibility::Visible : EVisibility::Collapsed; })
+        [
+            SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(HudStyle::LaunchTileColor()).Padding(12)
+            [
+                SNew(SVerticalBox)
+                + SVerticalBox::Slot().AutoHeight()[MakeText(FText::FromString(Name), CardNameSize)]
+                + SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 10)[MakeText(FText::FromString(Detail), MenuStyle::SmallSize, true)]
+                + SVerticalBox::Slot().AutoHeight()
+                [
+                    SNew(SButton).ButtonStyle(&Style->PrimaryButton).Tag(TEXT("CourseDownload"))
+                    .IsEnabled_Lambda([this] { return Downloads.IsValid() && !Downloads->Busy(); })
+                    .OnClicked_Lambda([this, Id] { if (Downloads.IsValid()) Downloads->Install(Id); return FReply::Handled(); })
+                    [
+                        SNew(STextBlock).Font(HudStyle::Font("Regular", MenuStyle::BodySize)).ColorAndOpacity(Style->PrimaryLabelColor)
+                        .Text_Lambda([this, Id] { return FText::FromString(Downloads.IsValid() && Downloads->DownloadingId() == Id ? TEXT("Downloading…") : TEXT("Download")); })
+                    ]
+                ]
+            ]
+        ];
+    // clang-format on
+}
+
+TSharedRef<SWidget> SCourseBrowser::MakeCardActions(const UGolfCourseDefinition& Course)
+{
+    const TWeakObjectPtr<const UGolfCourseDefinition> Weak(&Course);
+    const TSharedRef<SVerticalBox> Actions = SNew(SVerticalBox);
+    // The tees and the round's conditions are picked on the Round setup page that Play opens.
+    Actions->AddSlot().AutoHeight()[MakeButton(*Style, FText::FromString(TEXT("Play")), [this, Weak]
+    {
+        if (const UGolfCourseDefinition* Picked = Weak.Get())
+            OnPlay.ExecuteIfBound(*Picked);
+    }, true)];
+    const FCoursePack* Pack = Downloads.IsValid() ? Downloads->FindInstalledDefinition(Course.GetPathName()) : nullptr;
+    if (!Pack)
+        return Actions;
+    const FString Id = Pack->Id;
+    const FCoursePack* Entry = Downloads->FindEntry(Id);
+    if (Entry && !Downloads->IsCurrent(*Entry))
+        Actions->AddSlot().AutoHeight().Padding(0, 6, 0, 0)[MakeButton(*Style, FText::FromString(TEXT("Update")), [this, Id]
+        {
+            if (Downloads.IsValid()) Downloads->Install(Id);
+        })];
+    Actions->AddSlot().AutoHeight().Padding(0, 6, 0, 0)[MakeButton(*Style, FText::FromString(TEXT("Uninstall")), [this, Id]
+    {
+        if (Downloads.IsValid()) Downloads->Uninstall(Id);
+    })];
+    return Actions;
 }
 
 bool SCourseBrowser::MatchesSearch(const UGolfCourseDefinition& Course) const
@@ -143,11 +227,7 @@ TSharedRef<SWidget> SCourseBrowser::MakeCard(const UGolfCourseDefinition& Course
                     ]
                     + SVerticalBox::Slot().AutoHeight().Padding(12, 0, 12, 12)
                     [
-                        MakeButton(*Style, FText::FromString(TEXT("Play")), [this, Weak]
-                        {
-                            if (const UGolfCourseDefinition* Picked = Weak.Get())
-                                OnPlay.ExecuteIfBound(*Picked);
-                        }, true)
+                        MakeCardActions(Course)
                     ]
                 ]
             ]

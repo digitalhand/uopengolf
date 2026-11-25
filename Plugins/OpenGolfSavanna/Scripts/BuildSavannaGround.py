@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Build the open-licence desert ground parent, /OpenGolfSavanna/Materials/M_SavannaGround.
+"""Build the open-licence desert ground parent, /OpenGolfSavanna/Ground/Materials/M_SavannaGround.
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/BuildSavannaGround.py"
 
@@ -25,6 +25,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT / 'Plugins/OpenGolfCourse/Scripts'))
 sys.path.insert(0, str(HERE))
 import art_root
+import asset_naming as names
 import BuildTerrainAssets as terrain
 import savanna_assets as s
 
@@ -41,7 +42,7 @@ SANDS = {
     'red_sand': dict(folder='RedSand', mean='815A46'),
 }
 ROCK_MEAN = '7D5538'
-LEAFY_GRASS = '/OpenGolfSavanna/Textures/Ground/LeafyGrass/T_leafy_grass_'
+LEAFY_GRASS = '/OpenGolfSavanna/Ground/Textures/LeafyGrass/'
 # Target colours for the rendered desert in the close view.
 SAND_TARGET = '835D45'
 ROCK_TARGET = '87583C'
@@ -49,7 +50,7 @@ LUMA = 'float3(0.2126,0.7152,0.0722)'
 
 
 def import_sand(name):
-    folder = f"Textures/Ground/{SANDS[name]['folder']}"
+    folder = f"Ground/Textures/{SANDS[name]['folder']}"
     maps = POLYHAVEN / name / 'maps'
     if not (maps / f'{name}_diff_2k.jpg').exists():
         raise RuntimeError(f'Run FetchPolyHaven.py {name} first: {maps} has no maps')
@@ -62,7 +63,7 @@ def import_sand(name):
 def import_rock():
     if not (ROCK_SOURCE / 'Rock029_2K-JPG_Color.jpg').exists():
         raise RuntimeError(f'Run FetchAmbientCG.py Rock029 first: {ROCK_SOURCE} has no maps')
-    folder = 'Textures/Ground/Rock029'
+    folder = 'Ground/Textures/Rock029'
     return {'RockColor': s.import_texture(str(ROCK_SOURCE / 'Rock029_2K-JPG_Color.jpg'), folder, 'albedo'),
             'RockNormal': s.import_texture(str(ROCK_SOURCE / 'Rock029_2K-JPG_NormalDX.jpg'), folder, 'normal',
                                            opengl_normals=False)}
@@ -82,7 +83,7 @@ def tiling(material, name, position, size_name, size_cm):
 
 
 def build_parent(sand, rock):
-    material = a.material('Materials', PARENT)
+    material = a.material('Ground/Materials', PARENT)
     COLOR, NORMAL = ue.MaterialSamplerType.SAMPLERTYPE_COLOR, ue.MaterialSamplerType.SAMPLERTYPE_NORMAL
     MASKS = ue.MaterialSamplerType.SAMPLERTYPE_MASKS
     world = a.node(material, ue.MaterialExpressionWorldPosition, 'WorldPosition')
@@ -95,7 +96,7 @@ def build_parent(sand, rock):
     bounds = a.vector(material, 'MaskBounds', (0.0, 0.0, 1.0, 1.0), 'Course')
     mask_uv = a.custom(material, 'CourseMaskUV', 'return (M.xy-B.xy)/max(B.zw,0.001);',
                        {'M': (meters, ''), 'B': (bounds, 'RGBA')}, ue.CustomMaterialOutputType.CMOT_FLOAT2)
-    mask = sample(material, 'CourseMask', s.required('/OpenGolfSavanna/Materials/T_WhiteMask'), mask_uv, MASKS)
+    mask = sample(material, 'CourseMask', s.required(s.WHITE_MASK), mask_uv, MASKS)
     native = a.scalar(material, 'NativeOnly', 0, 'Course')
     rough_weight = a.custom(material, 'RoughWeight', 'return M*(1-N);', {'M': (mask, 'R'), 'N': (native, '')},
                             ue.CustomMaterialOutputType.CMOT_FLOAT1)
@@ -104,8 +105,8 @@ def build_parent(sand, rock):
     sand_rough = sample(material, 'SandRoughness', sand['SandRoughness'], sand_uv, MASKS)
     rock_color = sample(material, 'RockColor', rock['RockColor'], rock_uv, COLOR)
     rock_normal = sample(material, 'RockNormal', rock['RockNormal'], rock_uv, NORMAL)
-    grass_color = sample(material, 'GrassColor', s.required(LEAFY_GRASS + 'diff_2k'), grass_uv, COLOR)
-    grass_normal = sample(material, 'GrassNormal', s.required(LEAFY_GRASS + 'nor_gl_2k'), grass_uv, NORMAL)
+    grass_color = sample(material, 'GrassColor', s.required(LEAFY_GRASS + names.source_texture('leafy_grass_diff')), grass_uv, COLOR)
+    grass_normal = sample(material, 'GrassNormal', s.required(LEAFY_GRASS + names.source_texture('leafy_grass_nor_gl')), grass_uv, NORMAL)
 
     # Rock patches: two octaves of seam-free value noise, thresholded, and never in the rough.
     large = a.custom(material, 'RockNoiseLarge', terrain.value_noise(3100, seed=1), {'P': (world, '')},
@@ -226,8 +227,8 @@ def course_mask(definition, folder, name):
 def apply_rough_underlay(instance):
     """Point a ground instance's rough at Leafy Grass with the underlay colours."""
     MAT = ue.MaterialEditingLibrary
-    MAT.set_material_instance_texture_parameter_value(instance, 'GrassColor', s.required(LEAFY_GRASS + 'diff_2k'))
-    MAT.set_material_instance_texture_parameter_value(instance, 'GrassNormal', s.required(LEAFY_GRASS + 'nor_gl_2k'))
+    MAT.set_material_instance_texture_parameter_value(instance, 'GrassColor', s.required(LEAFY_GRASS + names.source_texture('leafy_grass_diff')))
+    MAT.set_material_instance_texture_parameter_value(instance, 'GrassNormal', s.required(LEAFY_GRASS + names.source_texture('leafy_grass_nor_gl')))
     for name, rgba in ROUGH_UNDERLAY_COLORS.items():
         MAT.set_material_instance_vector_parameter_value(instance, name, ue.LinearColor(*rgba))
     MAT.update_material_instance(instance)
@@ -240,7 +241,7 @@ def configure_ground(instance, native, mask, minimum, maximum, sand=DEFAULT_SAND
     Every earlier override is cleared first, so references to an earlier parent's textures don't survive.
     """
     MAT = ue.MaterialEditingLibrary
-    MAT.set_material_instance_parent(instance, s.required(f'/OpenGolfSavanna/Materials/{PARENT}'))
+    MAT.set_material_instance_parent(instance, s.required(f'/OpenGolfSavanna/Ground/Materials/{PARENT}'))
     MAT.clear_all_material_instance_parameters(instance)
     textures, colors = sand_settings(sand)
     for name, path in textures.items():
@@ -259,8 +260,9 @@ def configure_ground(instance, native, mask, minimum, maximum, sand=DEFAULT_SAND
 
 def sand_settings(name):
     """Texture and colour overrides that select a sand on an instance of the parent."""
-    folder = f"/OpenGolfSavanna/Textures/Ground/{SANDS[name]['folder']}/T_{name}_"
-    textures = {'SandColor': folder + 'diff_2k', 'SandNormal': folder + 'nor_gl_2k', 'SandRoughness': folder + 'rough_2k'}
+    folder = f"/OpenGolfSavanna/Ground/Textures/{SANDS[name]['folder']}/"
+    textures = {parameter: folder + names.source_texture(f'{name}_{role}')
+                for parameter, role in (('SandColor', 'diff'), ('SandNormal', 'nor_gl'), ('SandRoughness', 'rough'))}
     return textures, {'SandMean': SANDS[name]['mean'], 'SandTarget': SAND_TARGET}
 
 

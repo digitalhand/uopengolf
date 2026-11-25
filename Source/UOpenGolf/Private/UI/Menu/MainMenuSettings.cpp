@@ -15,6 +15,7 @@
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfGameMode.h"
 #include "GolfCourseDefinition.h"
+#include "Course/RoundConditions.h"
 #include "Play/OpenGolfWindSetting.h"
 #include "UI/Wind/WindDisplay.h"
 #include "Engine/World.h"
@@ -34,18 +35,12 @@
 using namespace MainMenuDetail;
 namespace
 {
-    /** The course a round is playing; null in Training. */
-    const UGolfCourseDefinition* PlayedCourse(const AUOpenGolfPlayerController* Controller)
+    /** The game mode of a course round; null in Training. */
+    const AUOpenGolfGameMode* RoundMode(const AUOpenGolfPlayerController* Controller)
     {
         const UWorld* World = Controller ? Controller->GetWorld() : nullptr;
         const AUOpenGolfGameMode* Mode = World ? World->GetAuthGameMode<AUOpenGolfGameMode>() : nullptr;
-        return Mode ? Mode->GetCourse() : nullptr;
-    }
-    /** A course's fixed wind as the wind controls name it, such as "3 MPH · Right to left". */
-    FString CourseWindLabel(const UGolfCourseDefinition& Course)
-    {
-        return WindDisplay::FromSettings(Course.WindMph, Course.WindFromDeg, 0.0f).SpeedLabel() + TEXT(" · ")
-            + OpenGolfPlay::WindDirectionLabel(Course.WindFromDeg);
+        return Mode && Mode->GetCourse() ? Mode : nullptr;
     }
     const TCHAR* ConnectionSaveError=TEXT("Could not save the launch monitor choice. Check storage and retry.");
 }
@@ -158,14 +153,16 @@ void SMainMenu::BuildSettings(TSharedRef<SVerticalBox> Body)
             AddPreference(Rows,TEXT("Reduced motion"),TEXT("Use a fixed shot camera and instant return to address."),&P::ReducedMotion,{TEXT("Off"),TEXT("On")},{0,1});
             Disabled(Rows,TEXT("Color palette"),TEXT("Color-vision palettes are not implemented yet."));Disabled(Rows,TEXT("Subtitles"),TEXT("Spoken content and subtitles are not implemented yet."));break;
         case 6:
-            AddPreference(Rows,TEXT("Gimmie radius"),TEXT("New scored holes: on the green, inside the ring adds one conceded putt."),&P::GimmieFeet,{TEXT("Off"),TEXT("3 ft"),TEXT("5 ft"),TEXT("8 ft"),TEXT("10 ft")},{0,3,5,8,10});
-            AddPreference(Rows,TEXT("Stimp"),TEXT("New sessions and holes. Higher stimp means faster greens."),&P::Stimp,{TEXT("8 ft"),TEXT("9 ft"),TEXT("10 ft"),TEXT("11 ft"),TEXT("12 ft"),TEXT("13 ft"),TEXT("14 ft"),TEXT("15 ft")},{8,9,10,11,12,13,14,15});
-            if (const UGolfCourseDefinition* Course = PlayedCourse(Controller.Get()))
-                AddChoice(Rows,TEXT("Wind"),TEXT("Course wind is fixed for the round."),{CourseWindLabel(*Course)},{0},
+            AddPreference(Rows,TEXT("Gimmie radius"),TEXT("Starting choice for new rounds: on the green, inside the ring adds one conceded putt."),&P::GimmieFeet,{TEXT("Off"),TEXT("3 ft"),TEXT("6 ft")},{0,3,6});
+            AddPreference(Rows,TEXT("Stimp"),TEXT("Green speed for Training and the starting choice for new rounds. Higher stimp means faster greens."),&P::Stimp,{TEXT("8 ft"),TEXT("9 ft"),TEXT("10 ft"),TEXT("11 ft"),TEXT("12 ft"),TEXT("13 ft"),TEXT("14 ft"),TEXT("15 ft")},{8,9,10,11,12,13,14,15});
+            AddPreference(Rows,TEXT("Fairway speed"),TEXT("Every fairway in the game, from the next shot. Standard is the calibrated fairway."),&P::FairwayStimpTenths,{TEXT("6 ft"),TEXT("Standard (7.4 ft)"),TEXT("8 ft"),TEXT("9 ft"),TEXT("10 ft")},{60,74,80,90,100});
+            if (const AUOpenGolfGameMode* Mode = RoundMode(Controller.Get()))
+                AddChoice(Rows,TEXT("Wind"),FString::Printf(TEXT("Random for each round and fixed over the course; read against hole %d's tee shot."),Mode->GetHoleNumber()),
+                    {Mode->GetCourse()?RoundConditions::WindLabel(Mode->GetRoundSetup(),*Mode->GetCourse(),Mode->GetHoleNumber()-1):FString()},{0},
                     []{return 0;},[](int32){},false);
             else
                 AddPreference(Rows,TEXT("Wind"),TEXT("Starting wind speed for Training."),&P::WindMph,{TEXT("Course default"),TEXT("Calm"),TEXT("Light (5 mph)"),TEXT("Moderate (10 mph)"),TEXT("Strong (20 mph)")},{-1,0,5,10,20});
-            for(const TCHAR* Label:{TEXT("Mulligans"),TEXT("Fairway firmness"),TEXT("Time of day")})Disabled(Rows,Label,TEXT("This gameplay setting is not implemented yet."));break;
+            Disabled(Rows,TEXT("Mulligans"),TEXT("This gameplay setting is not implemented yet."));break;
         case 7:
             BuildUpdates(Rows);
             Rows->AddSlot().AutoHeight().Padding(12)[Text(TEXT("Shot recording\nOn the range, press F9 or click the record icon to start or stop. Signed in, shots also save to your online profile."),18)];

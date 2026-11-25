@@ -8,6 +8,61 @@ class UOpenGolfLieRules;
 class UTexture2D;
 class UWorld;
 
+/** Why a ball at rest is replayed with a penalty stroke. */
+UENUM()
+enum class EGolfPenalty : uint8
+{
+    None,
+    Water,
+    OutOfBounds
+};
+
+USTRUCT(BlueprintType)
+struct UOPENGOLF_API FGolfWaterArea
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, Category = "Golf")
+    TArray<FVector2D> OutlineCm;
+};
+
+USTRUCT(BlueprintType)
+struct UOPENGOLF_API FGolfCourseTee
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, Category = "Golf")
+    FName SetName;
+
+    UPROPERTY(EditAnywhere, Category = "Golf")
+    FVector PositionCm = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Golf", meta = (ClampMin = "1"))
+    int32 PublishedYards = 1;
+};
+
+USTRUCT(BlueprintType)
+struct UOPENGOLF_API FGolfCourseHole
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, Category = "Golf", meta = (ClampMin = "1"))
+    int32 Par = 4;
+
+    UPROPERTY(EditAnywhere, Category = "Golf")
+    TArray<FGolfCourseTee> Tees;
+
+    UPROPERTY(EditAnywhere, Category = "Golf")
+    FVector CupCm = FVector::ZeroVector;
+
+    /** World positions in play order, between the tee and the green. */
+    UPROPERTY(EditAnywhere, Category = "Golf")
+    TArray<FVector> RoutingCm;
+
+    /** The tee of set SetName, or the hole's first tee when it lacks that set; null without tees. */
+    const FGolfCourseTee* FindTee(FName SetName) const;
+};
+
 /**
  * One installed course: what the Courses browser shows and what a course round plays. The Asset Manager finds every
  * definition under /Game/UOpenGolf/Courses (primary asset type GolfCourse, see Config/DefaultGame.ini), so a course
@@ -46,13 +101,38 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Scorecard", meta = (ClampMin = "0", Units = "m"))
     float LengthM = 0.0f;
 
-    /** The round's wind, fixed for the whole round; Training keeps the player's own wind. */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Wind", meta = (ClampMin = "0", UIMax = "30"))
-    float WindMph = 0.0f;
+    /** The holes in playing order. Empty for a single-hole course, which plays the range's own tee and cup. */
+    UPROPERTY(EditDefaultsOnly, Category = "Course|Scorecard")
+    TArray<FGolfCourseHole> Layout;
 
-    /** Where the round's wind comes from, in degrees against the target line (90 is from the right). */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Wind", meta = (ClampMin = "0", ClampMax = "360"))
-    float WindFromDeg = 0.0f;
+    /** The course boundary in world centimetres; a ball at rest outside it is out of bounds. Empty means no boundary. */
+    UPROPERTY(EditDefaultsOnly, Category = "Course|Play")
+    TArray<FVector2D> InBoundsCm;
+
+    /** Lakes; a ball at rest inside one is in the water. A ball that carries a lake and lands beyond it plays on. */
+    UPROPERTY(EditDefaultsOnly, Category = "Course|Play")
+    TArray<FGolfWaterArea> Water;
+
+    /** The penalty for a ball at rest at BallLocation, judged from above: out of bounds first, then water. */
+    EGolfPenalty PenaltyAt(FVector BallLocation) const;
+
+    /** Published yards for the round from set SetName, each hole's tee found as the round plays it (FindTee). */
+    int32 TeeSetYards(FName SetName) const;
+
+    /** Where the course is, such as "Paso Robles, California"; the round setup's Course information. Empty hides it. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Information")
+    FText Location;
+
+    /** Who designed the course; the round setup's Course information. Empty hides it. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Information")
+    FText Designer;
+
+    /**
+     * The course's ground height above sea level, shown in the round setup's Course information. Information only:
+     * ball flight plays at sea level on every course.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Information", meta = (Units = "m"))
+    float ElevationM = 0.0f;
 
     /**
      * How the round penalises shots from the rough, sand and other lies. Empty plays the standard (the class default of

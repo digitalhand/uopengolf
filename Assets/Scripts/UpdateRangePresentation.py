@@ -6,7 +6,7 @@ Run with UnrealEditor-Cmd -ExecutePythonScript, or py "<path>" in the editor. Co
 """
 import unreal as u
 
-DEST = '/Game/UOpenGolf/Art'
+DEST = '/Game/UOpenGolf/Effects'
 LIB = u.EditorAssetLibrary
 MAT = u.MaterialEditingLibrary
 TOOLS = u.AssetToolsHelpers.get_asset_tools()

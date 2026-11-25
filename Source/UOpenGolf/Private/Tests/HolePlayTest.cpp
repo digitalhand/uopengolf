@@ -2,6 +2,8 @@
 // Playing the hole in the saved map: the mode switch, strokes, placing the ball, and the cup capturing a putt.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
+#include "Course/RoundConditions.h"
+#include "TestMaps.h"
 #include "Editor.h"
 #include "Tests/PermissionTestAccess.h"
 #include "Tests/BundledCourse.h"
@@ -10,6 +12,8 @@
 #include "Hole/OpenGolfCupComponent.h"
 #include "Misc/AutomationTest.h"
 #include "OpenFairwayBall.h"
+#include "OpenGolfSettings.h"
+#include "Play/OpenGolfRoundSetup.h"
 #include "OpenGolfTerrain.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UOpenGolfGameMode.h"
@@ -75,7 +79,11 @@ public:
                 const UGolfCourseDefinition* Course = BundledCourse::Load();
                 if (!Test->TestNotNull(TEXT("The bundled course loads"), Course))
                     return true;
-                Mode->SetPlayMode(EOpenGolfPlayMode::Hole, Course);
+                // The round's wind is rolled; this one is fixed, so the shots below play as they always have.
+                OpenGolfPlay::FOpenGolfRoundSetup Round = RoundConditions::Defaults(*Course, GolfSettings::Get());
+                Round.WindSpeedMph = 3;
+                Round.WindFromDeg = 90.0f;
+                Mode->SetPlayMode(EOpenGolfPlayMode::Hole, Course, &Round);
                 Test->TestFalse(TEXT("Course play rejects free placement"), Mode->PlaceBallAt(GreenSpot(300, 0)));
                 Test->TestEqual(TEXT("Course starts hole play"), Mode->GetPlayMode(), EOpenGolfPlayMode::Hole);
                 Test->TestTrue(TEXT("The hole starts at the tee"), Mode->IsBallAtAddress() &&
@@ -85,8 +93,8 @@ public:
                 Controller->SetWindFromDeg(180);
                 Controller->ToggleWindPanel();
                 Test->TestFalse(TEXT("Course wind controls are locked"), Controller->IsWindPanelOpen());
-                Test->TestEqual(TEXT("Course wind speed"), Mode->GetRange()->WindSpeedMph, Course->WindMph);
-                Test->TestEqual(TEXT("Course wind direction"), Mode->GetRange()->WindFromDeg, Course->WindFromDeg);
+                Test->TestEqual(TEXT("The round's wind speed"), Mode->GetRange()->WindSpeedMph, 3.0f);
+                Test->TestEqual(TEXT("The round's wind direction"), Mode->GetRange()->WindFromDeg, 90.0f);
             }
             Mode->SetPlayMode(EOpenGolfPlayMode::Range);
             Test->TestFalse(TEXT("No ball on the cup"), Mode->PlaceBallAt(Cup + FVector(3, 0, 0)));
@@ -213,7 +221,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHolePlayTest, "UOpenGolf.Range.HolePlay",
 
 bool FHolePlayTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the range map."));
         return false;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 
+#include "Play/OpenGolfRoundSetup.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "GolfCourseSubsystem.generated.h"
 
@@ -43,11 +44,24 @@ public:
     /** The URL options that start a round of Course. */
     static FString TravelOptions(const UGolfCourseDefinition& Course);
 
+    /** Lists a course installed while the game runs, with its menu preview; the caller refreshes the browser. */
+    void AddCourse(UGolfCourseDefinition& Course);
+    /** Takes an uninstalled course off the list for the rest of the session. */
+    void RemoveCourse(const FSoftObjectPath& Definition);
+
+    /** The setup the Round setup page opens with: the player's last one for Course this session, else its defaults. */
+    OpenGolfPlay::FOpenGolfRoundSetup LastSetup(const UGolfCourseDefinition& Course) const;
+    /** Keeps Setup as Course's starting choice for the rest of the session (not saved to disk). */
+    void RememberSetup(const UGolfCourseDefinition& Course, const OpenGolfPlay::FOpenGolfRoundSetup& Setup);
+
 private:
     void HandleLoaded();
+    void SortCourses();
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UGolfCourseDefinition>> Courses;
     TSharedPtr<FStreamableHandle> Handle;
     bool bLoaded = false;
+    /** The last setup started for each course, by its definition's asset name. */
+    TMap<FName, OpenGolfPlay::FOpenGolfRoundSetup> Setups;
 };

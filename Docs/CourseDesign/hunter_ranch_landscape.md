@@ -68,9 +68,8 @@ assume its origin is the geographic southwest corner without checking the import
 2. Select the 16-bit grayscale heightmap. Confirm that the proposed resolution/component
    arrangement matches your prepared grid before creating the actor.
 3. Enter the calculated X/Y/Z scales and the intended placement. Record the settings.
-4. Compare the three control points with the geographic record. North-up image rows increase
-   southward, while your target +Y increases northward: use the importer's flip option if present
-   or a deliberately prepared flipped export. Apply the same orientation to masks.
+4. Compare the three control points with the geographic record. Row zero belongs at the northernmost sample centre.
+   North-up image rows run south, along Unreal +Y. Keep that order in the imported heights and masks.
 5. Check dimensions and multiple elevations, then save the accepted import settings.
 
 See [Epic's heightmap import instructions](https://dev.epicgames.com/documentation/en-us/unreal-engine/importing-and-exporting-landscape-heightmaps-in-unreal-engine).

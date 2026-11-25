@@ -245,7 +245,7 @@ void SRangeHud::Refresh(bool bText)
     Heading = bBallPlacement ? PlacementHeading : Course ? Course->DisplayName : bHole ? RoundHeading : TrainingHeading;
     const FString Number = bHole ? ShotDisplay::HoleNumber(Mode->GetHoleNumber()) : FString();
     const FString Details = bHole
-        ? ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(Course ? Course->LengthM : AUOpenGolfRange::HoleDistanceM))
+        ? ShotDisplay::HoleDetails(Mode->GetHoleRound().Par, GolfSettings::RoundDistance(Mode->GetHoleLengthM()))
         : FString();
     if (HoleNumber.ToString() != Number)
         HoleNumber = FText::FromString(Number);

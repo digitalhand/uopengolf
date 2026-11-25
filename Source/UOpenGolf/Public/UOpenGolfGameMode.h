@@ -5,6 +5,7 @@
 #include "Play/OpenGolfHoleRound.h"
 #include "Play/OpenGolfLieRules.h"
 #include "Play/OpenGolfPlayRules.h"
+#include "Play/OpenGolfRoundSetup.h"
 #include "LaunchMonitorTypes.h"
 #include "OpenFairwayTypes.h"
 #include "UOpenGolfGameMode.generated.h"
@@ -14,6 +15,7 @@ class ATrainingSession;
 class UGolfGimmieIndicator;
 class AUOpenGolfRange;
 class UGolfCourseDefinition;
+enum class EGolfPenalty : uint8;
 struct FLaunchMonitorClubData;
 struct FLaunchMonitorShot;
 
@@ -60,12 +62,33 @@ public:
     const UGolfCourseDefinition* GetCourse() const { return Course; }
     /** A scored course round (Hole mode), as opposed to Training. */
     bool IsCourseRound() const { return PlayMode == EOpenGolfPlayMode::Hole; }
-    /** A course round whose ball has dropped: no more shots are taken and the scorecard follows. */
-    bool IsRoundComplete() const { return IsCourseRound() && Round.bHoled; }
+    /**
+     * A course round whose last hole is on the scorecard. Shots stop when the last ball drops; the round completes
+     * after the hole-out pause, once that hole's score is recorded, so the final card always has every hole.
+     */
+    bool IsRoundComplete() const;
+    int32 GetTeeIndex() const { return TeeIndex; }
+    float GetOpeningAimDeg() const { return OpeningAimDeg; }
+    float GetHoleLengthM() const;
+    const TArray<FOpenGolfHoleRound>& GetCompletedHoles() const { return CompletedHoles; }
+    /** The hole number of each completed hole, in the order of GetCompletedHoles. */
+    const TArray<int32>& GetCompletedHoleNumbers() const { return CompletedHoleNumbers; }
+    /** The setup the course round plays (its conditions and holes); "Play again" starts another round with it. */
+    const OpenGolfPlay::FOpenGolfRoundSetup& GetRoundSetup() const { return RoundSetup; }
+    /** The number of the round's first hole. */
+    int32 GetFirstHoleNumber() const { return HoleOrder.IsEmpty() ? 1 : HoleOrder[0] + 1; }
+    /**
+     * The wind a course round plays, fixed for the round: its speed and the world direction it comes from (as
+     * AOpenFairwayBall::WindFromDeg). False in Training, which keeps the player's own wind.
+     */
+    bool GetRoundWind(float& OutMph, float& OutWorldFromDeg) const;
+    /** The penalty taken in the last PenaltyNoticeS seconds, for the HUD to explain the replay; None otherwise. */
+    EGolfPenalty GetRecentPenalty() const;
+    static constexpr float PenaltyNoticeS = 4.0f;
     /** Par for the round: the course's in a course round, the range's in Training. */
     int32 GetPar() const;
-    /** The hole being played, from 1. Every course is a single hole for now. */
-    int32 GetHoleNumber() const { return 1; }
+    /** The hole being played, from 1: its number on the course's scorecard. */
+    int32 GetHoleNumber() const { return HoleIndex + 1; }
 
     DECLARE_MULTICAST_DELEGATE(FOnRoundComplete);
     /** A course round has ended and its hole-out banner has been shown for HoleOutDelayS. */
@@ -84,10 +107,10 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
     /**
      * Tests only: switches the running world between Training and a round of InCourse without level travel, as a fresh
-     * session; players enter courses through travel (?Course=). Hole mode without a course counts strokes but keeps
-     * Training's wind. Ignored mid-shot.
+     * session; players enter courses through travel (?Course=). The round plays Setup, or the course's defaults with a
+     * rolled wind. Hole mode without a course counts strokes but keeps Training's wind. Ignored mid-shot.
      */
-    bool SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDefinition* InCourse = nullptr);
+    bool SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDefinition* InCourse = nullptr, const OpenGolfPlay::FOpenGolfRoundSetup* Setup = nullptr);
 #endif
 
     /** The hole being played; strokes are only counted in Hole mode. */
@@ -199,6 +222,8 @@ private:
     void AimAtCup();
     void PlaceOnTee();
     void StartSessionDefaults();
+    /** A course round: takes its setup (Setup, or the URL's over the course's defaults with a rolled wind) and orders its holes. */
+    void ReadRoundSetup(const OpenGolfPlay::FOpenGolfRoundSetup* Setup);
 
     UPROPERTY()
     TObjectPtr<AUOpenGolfRange> Range;
@@ -219,6 +244,25 @@ private:
     FTimerHandle ResetTimer;
     FTimerHandle AddressTimer;
     EOpenGolfPlayMode PlayMode = EOpenGolfPlayMode::Range;
+    void ActivateCourseHole();
+    /** The layout index of the hole being played. */
+    int32 HoleIndex = 0;
+    /** Layout indices in play order, from the round's setup; empty for a course without a layout. */
+    TArray<int32> HoleOrder;
+    /** How far through HoleOrder the round is. */
+    int32 OrderPosition = 0;
+    /** The travel URL's options, read once the player's preferences are loaded. */
+    FString RoundOptions;
+    /** The round's setup, with its random wind fixed in the world. */
+    OpenGolfPlay::FOpenGolfRoundSetup RoundSetup;
+    TArray<int32> CompletedHoleNumbers;
+    int32 TeeIndex = 0;
+    FName TeeSet;
+    FVector PreviousLie = FVector::ZeroVector;
+    EGolfPenalty LastPenalty{};  // None
+    double LastPenaltyTime = -1;
+    float OpeningAimDeg = 0;
+    TArray<FOpenGolfHoleRound> CompletedHoles;
     FOpenGolfHoleRound Round;
     FVector PracticeOrigin = FVector::ZeroVector;
     bool bAddressReady = true;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "GolfGimmieIndicator.h"
+#include "UOpenGolfAssetPaths.h"
 #include "OpenGolfTerrain.h"
 #include "Training/GroundBands.h"
 #include "Materials/MaterialInterface.h"
@@ -13,7 +14,7 @@ UGolfGimmieIndicator::UGolfGimmieIndicator(const FObjectInitializer& ObjectIniti
     SetCanEverAffectNavigation(false);
     CastShadow = false;
     SetHiddenInSceneCapture(true);
-    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail"));
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(UOpenGolfAssetPaths::ShotTrailMaterial);
     RingMaterial = Material.Object;
 }
 

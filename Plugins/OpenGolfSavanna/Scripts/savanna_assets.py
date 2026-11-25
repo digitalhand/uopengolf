@@ -12,7 +12,6 @@ Both carry the course kit's vegetation wind, off until an instance turns it on (
 from contextlib import contextmanager
 from pathlib import Path
 import importlib
-import re
 import struct
 import sys
 
@@ -21,6 +20,7 @@ import unreal as ue
 PROJECT = Path(ue.Paths.project_dir()).resolve()
 PLUGIN = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "Plugins/OpenGolfCourse/Scripts"))
+import asset_naming as names
 import course_assets as a
 
 a = importlib.reload(a)
@@ -31,7 +31,7 @@ MOUNT = "/OpenGolfSavanna"
 OWNER = "OpenGolfSavanna.v1"
 WHITE = "/Engine/EngineResources/WhiteSquareTexture"
 FLAT_NORMAL = "/Engine/EngineMaterials/DefaultNormal"
-WHITE_MASK = f"{MOUNT}/Materials/T_WhiteMask"
+WHITE_MASK = f"{MOUNT}/Shared/Textures/T_WhiteMask"
 MAX_SIZE = {"albedo": 2048, "albedo_dry": 2048, "normal": 2048, "roughness": 1024, "ao": 1024, "opacity": 1024}
 
 
@@ -68,15 +68,18 @@ def sample(material, name, path, uv, normal=False, mask=False):
 
 
 def texture_name(path, prefix="T_"):
-    return prefix + re.sub(r"[^A-Za-z0-9]+", "_", Path(path).stem).strip("_")
+    """Asset name for a source texture file (Docs/ContentNaming.md): jacaranda_tree_leaves_nor_gl_2k.png -> T_Jacaranda_Leaves_N."""
+    return names.source_texture(Path(path).stem, prefix)
 
 
-def import_texture(path, folder, role, normal=None, opengl_normals=True, reuse=False, prefix="T_"):
-    """Import a texture with settings for its role; reuse an existing import when asked."""
-    existing = a.asset_path(folder, texture_name(path, prefix))
+def import_texture(path, folder, role, normal=None, opengl_normals=True, reuse=False, prefix="T_", name=None):
+    """Import a texture with settings for its role; reuse an existing import when asked. name overrides the asset
+    name that texture_name gives the file."""
+    name = name or texture_name(path, prefix)
+    existing = a.asset_path(folder, name)
     if reuse and ue.EditorAssetLibrary.does_asset_exist(existing):
         return required(existing)
-    texture = a.import_asset(path, folder, texture_name(path, prefix))
+    texture = a.import_asset(path, folder, name)
     texture.set_editor_property("srgb", role.startswith("albedo"))
     texture.set_editor_property("max_texture_size", MAX_SIZE[role])
     if role == "normal":
@@ -96,14 +99,14 @@ def white_mask(scratch):
     source = Path(scratch) / "T_WhiteMask.tga"
     source.parent.mkdir(parents=True, exist_ok=True)
     source.write_bytes(struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 24, 0x20) + b"\xff" * 48)
-    texture = a.import_asset(str(source), "Materials", "T_WhiteMask")
+    texture = a.import_asset(str(source), "Shared/Textures", "T_WhiteMask")
     texture.set_editor_property("srgb", False)
     texture.set_editor_property("compression_settings", ue.TextureCompressionSettings.TC_MASKS)
     return a.save(texture)
 
 
 def card_material():
-    material = a.material("Materials", "M_SavannaCard")
+    material = a.material("Shared/Materials", "M_SavannaCard")
     for key, value in (("two_sided", True), ("tangent_space_normal", False), ("used_with_instanced_static_meshes", True),
                        ("used_with_nanite", True), ("blend_mode", ue.BlendMode.BLEND_MASKED), ("opacity_mask_clip_value", 0.45)):
         material.set_editor_property(key, value)
@@ -151,7 +154,7 @@ def card_material():
 
 
 def solid_material():
-    material = a.material("Materials", "M_SavannaSolid")
+    material = a.material("Shared/Materials", "M_SavannaSolid")
     material.set_editor_property("used_with_instanced_static_meshes", True)
     material.set_editor_property("used_with_nanite", True)
     uv = a.node(material, ue.MaterialExpressionTextureCoordinate, "SolidUV")

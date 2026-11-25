@@ -17,7 +17,7 @@ def migrate():
     if editor.get_game_world():
         raise RuntimeError('Stop Play before migrating the environment.')
     world = editor.get_editor_world()
-    if world.get_path_name().split('.')[0] != '/Game/UOpenGolf/Maps/UOpenGolf':
+    if world.get_path_name().split('.')[0] != '/Game/UOpenGolf/Maps/L_SavannaRange':
         raise RuntimeError('Open the UOpenGolf map before migrating.')
     all_actors = actors.get_all_level_actors()
     ranges = [a for a in all_actors if isinstance(a, unreal.UOpenGolfRange)]
@@ -38,17 +38,17 @@ def migrate():
     root = Path(unreal.Paths.project_dir())
     backup = root / 'Saved/AssetBackups/Environment' / datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
     backup.mkdir(parents=True, exist_ok=False)
-    for file in (root / 'Content/UOpenGolf/Maps').glob('UOpenGolf*'):
+    for file in (root / 'Content/UOpenGolf/Maps').glob('L_SavannaRange*'):
         if file.is_file():
             shutil.copy2(file, backup / file.name)
     # Also preserve current in-memory map edits before replacing any actors.
     if not level.save_current_level():
         raise RuntimeError('Could not save current map; no lighting was replaced.')
-    shutil.copy2(root / 'Content/UOpenGolf/Maps/UOpenGolf.umap', backup / 'UOpenGolf-live.umap')
+    shutil.copy2(root / 'Content/UOpenGolf/Maps/L_SavannaRange.umap', backup / 'L_SavannaRange-live.umap')
     profile = build()
     with unreal.ScopedEditorTransaction('Replace range daylight with reusable environment'):
         environment = environments[0] if environments else actors.spawn_actor_from_class(unreal.OpenGolfEnvironment, unreal.Vector(0,0,0))
-        environment.set_actor_label('Course Environment')
+        environment.set_actor_label('Environment_Daylight')
         environment.set_folder_path('Range/Lighting')
         environment.set_editor_property('profile', profile)
         ranges[0].modify()

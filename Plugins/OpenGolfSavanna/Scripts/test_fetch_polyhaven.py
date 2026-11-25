@@ -50,6 +50,15 @@ class PinTests(unittest.TestCase):
         for role in ("diff_2k.png", "nor_gl_2k.png", "rough_1k.png", "ao_1k.png"):
             self.assertIn(f"maps/{name}_{role}", paths)
 
+    def test_island_tree_brings_its_project_and_every_texture_it_opens(self):
+        name = "island_tree_02"
+        paths = {path for path, *_ in ASSETS[name]}
+        self.assertIn(f"{name}_2k.blend", paths)
+        for role in ("diff_2k.jpg", "nor_gl_2k.exr", "rough_2k.exr", "branches_diff_2k.png", "branches_nor_gl_2k.png",
+                     "branches_rough_2k.png", "leaves_alpha_2k.png", "leaves_diff_2k.png", "leaves_nor_gl_2k.png",
+                     "leaves_rough_2k.png"):
+            self.assertIn(f"textures/{name}_{role}", paths)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,123 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Installs a newer UOpenGolf package as root. Packages install it as /usr/lib/uopengolf/install-update,
+# and the game's update helper runs it through pkexec (polkit action io.github.digitalhand.uopengolf.update)
+# with the download and the release's signed checksum list:
+#
+#   pkexec /usr/lib/uopengolf/install-update PACKAGE SHA256SUMS SHA256SUMS.asc
+#
+# It only installs a package that the release key signed for (PACKAGE's SHA-256 and file name are in
+# SHA256SUMS, which SHA256SUMS.asc signs), that is named uopengolf, that is in the format this copy was
+# installed with, and that is newer than the installed one.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+umask 022
+
+NAME=uopengolf
+MARKER=/opt/uopengolf/.package-format
+# The release key's public half. The keyring holds only this key, so any valid signature is the project's.
+KEYRING=/usr/share/uopengolf/release-signing-key.gpg
+# Larger than any release; stops a swapped-in endless file from filling /var/tmp.
+MAX_BYTES=8589934592
+
+fail() {
+    echo "install-update: $*" >&2
+    exit 1
+}
+
+[ "$(id -u)" -eq 0 ] || fail "run it through pkexec."
+[ $# -eq 3 ] || fail "usage: install-update /path/to/package /path/to/SHA256SUMS /path/to/SHA256SUMS.asc"
+format=$(cat "$MARKER" 2>/dev/null) || fail "UOpenGolf wasn't installed from a package."
+
+# Root-owned copies: the player's files can't change between the checks and the install.
+# /var/tmp, not /tmp, which is often a small tmpfs.
+work=$(mktemp -d /var/tmp/uopengolf-update.XXXXXX)
+trap 'rm -rf "$work"' EXIT
+# dash doesn't run the EXIT trap when a signal ends it.
+trap 'exit 1' HUP INT TERM
+
+# Copies the player's file FROM to the root-owned TO. cp -P never follows a link, so a file swapped for a
+# link after the first check is copied as a link and refused below; the timeout ends a swapped-in FIFO.
+take() {
+    case $1 in /?*) ;; *) fail "the $3 path must be absolute." ;; esac
+    [ -f "$1" ] && [ ! -L "$1" ] || fail "the $3 is not a regular file."
+    timeout 300 cp -P -- "$1" "$2" || fail "the $3 couldn't be copied."
+    [ -f "$2" ] && [ ! -L "$2" ] || fail "the $3 is not a regular file."
+    [ "$(stat -c %s "$2")" -le "$MAX_BYTES" ] || fail "the $3 is too large."
+}
+
+# True when gpgv reports a valid signature by the release key. An expired key still counts: a renewed
+# signing subkey must not strand copies that shipped its old expiry date. A revoked key never counts.
+signed_by_release_key() {
+    GNUPGHOME="$work/gnupg"
+    export GNUPGHOME
+    mkdir -m 700 "$GNUPGHOME"
+    status=$(gpgv --status-fd 1 --keyring "$KEYRING" "$work/SHA256SUMS.asc" "$work/SHA256SUMS" 2>/dev/null) || true
+    printf '%s\n' "$status" | grep -q '^\[GNUPG:\] VALIDSIG ' || return 1
+    printf '%s\n' "$status" | grep -Eq '^\[GNUPG:\] (GOODSIG|EXPKEYSIG) ' || return 1
+    ! printf '%s\n' "$status" | grep -Eq '^\[GNUPG:\] (BADSIG|ERRSIG|REVKEYSIG|NO_PUBKEY) '
+}
+
+# True when SHA256SUMS lists PACKAGE (the root copy) under the downloaded file's name.
+listed_in_sums() {
+    HASH=$(sha256sum "$1" | cut -d ' ' -f 1) FILE=$2 awk '
+        { file = $2; sub(/^\*/, "", file) }
+        $1 == ENVIRON["HASH"] && file == ENVIRON["FILE"] { found = 1 }
+        END { exit !found }' "$work/SHA256SUMS"
+}
+
+# Version strings reach rpm's Lua; nothing outside this set is accepted.
+check_version_text() {
+    case $1 in ''|*[!0-9A-Za-z.~+_-]*) fail "the $2 version can't be read." ;; esac
+}
+
+install_deb() {
+    [ "$(dpkg-deb -f "$1" Package)" = "$NAME" ] || fail "this is not a UOpenGolf package."
+    [ "$(dpkg-deb -f "$1" Architecture)" = amd64 ] || fail "this package is not for amd64."
+    new=$(dpkg-deb -f "$1" Version)
+    old=$(dpkg-query -W -f='${Version}' "$NAME" 2>/dev/null) || old=''
+    if [ -n "$old" ] && ! dpkg --compare-versions "$new" gt "$old"; then
+        fail "UOpenGolf $old is installed; $new is not newer."
+    fi
+    # Wait for unattended-upgrades or a software centre instead of failing at once.
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=120 "$1"
+}
+
+install_rpm() {
+    info=$(rpm -qp --nosignature --qf '%{NAME} %{ARCH} %{VERSION}-%{RELEASE}' "$1")
+    read -r name arch new <<EOF
+$info
+EOF
+    [ "$name" = "$NAME" ] || fail "this is not a UOpenGolf package."
+    [ "$arch" = x86_64 ] || fail "this package is not for x86_64."
+    check_version_text "$new" package
+    # rpm prints "package ... is not installed" on stdout, so only a success counts.
+    old=$(rpm -q --qf '%{VERSION}-%{RELEASE}' "$NAME" 2>/dev/null) || old=''
+    if [ -n "$old" ]; then
+        check_version_text "$old" installed
+        # The versions reach Lua as data, never as code.
+        [ "$(NEW=$new OLD=$old rpm --eval '%{lua:print(rpm.vercmp(os.getenv("NEW"), os.getenv("OLD")))}')" = 1 ] \
+            || fail "UOpenGolf $old is installed; $new is not newer."
+    fi
+    if command -v dnf >/dev/null 2>&1; then
+        dnf install -y "$1"
+    elif command -v zypper >/dev/null 2>&1; then
+        # PackageKit often holds zypper's lock; wait for it instead of failing at once.
+        ZYPP_LOCK_TIMEOUT=120 zypper --non-interactive install --allow-unsigned-rpm "$1"
+    else
+        fail "neither dnf nor zypper is installed."
+    fi
+}
+
+case $format in
+deb|rpm) ;;
+*) fail "unknown package format '$format'." ;;
+esac
+package="$work/$NAME.$format"
+take "$1" "$package" package
+take "$2" "$work/SHA256SUMS" "checksum list"
+take "$3" "$work/SHA256SUMS.asc" signature
+signed_by_release_key || fail "the checksum list isn't signed by the UOpenGolf release key."
+listed_in_sums "$package" "$(basename "$1")" || fail "the signed checksum list doesn't include this package."
+"install_$format" "$package"

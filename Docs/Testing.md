@@ -9,7 +9,7 @@ implementation details. Keep the physics pins and meaningful regression cases.
 Build the matching editor configuration. Development builds do not update DebugGame
 modules. Run only one editor, including automation processes. Let the owner close an
 interactive editor before starting an automated one. Use the public map:
-`/Game/UOpenGolf/Maps/UOpenGolf`.
+`/Game/UOpenGolf/Maps/L_SavannaRange`.
 
 ## Headless checks
 
@@ -35,8 +35,13 @@ matching completed tests; an empty or failed run is not a pass.
 | Training games and finished balls | `UOpenGolf.Range.TrainingGames`. In rendered Play, `UOpenGolf.Visual.RangeHudControls` opens the game picker and drill dialog, and `UOpenGolf.Visual.TrainingTarget` captures tee, target and moving-camera views. |
 | Input, shot recording, reset or scoring | Relevant tests under `UOpenGolf.Range` |
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
-| Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
+| Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.Terrain` |
+| Content names, folders or actor labels (any new or renamed asset) | `python3 Assets/Scripts/check_content_names.py` and `UOpenGolf.Content.Naming`; see [Content naming](ContentNaming.md) |
 | Course definitions, round scoring or travel | `UOpenGolf.Course` (its `Catalog` test checks the bundled course against the range) and `UOpenGolf.Range.HolePlay`; with rendering (`-Rendered`), `UOpenGolf.Visual.CourseBrowser` |
+| Round setup (tabs, course information, random wind, picked holes, scorecard) | `UOpenGolf.Course.Play.RoundSetup` (headless rules and the wind roll), `UOpenGolf.Menu.RoundSetup` (the page through its buttons), `UOpenGolf.Course.HunterRanch.BackNine`, `.PickedHoles` and `.RolledWind` (Play), and with rendering `UOpenGolf.Visual.CourseBrowser` (800×600 through 2560×1080, tab and footer hit tests, and large-text captures with Hunter Ranch installed) |
+| Course building scripts | `python3 -m unittest discover -s Plugins/OpenGolfCourse/Scripts -p 'test_*.py'` (layout, elevation, folders) |
+| Fast-forward (Space) | `UOpenGolf.Course.Play.FastForward` (tap and hold rules), `UOpenGolf.Range.FastForward` (Play), `UOpenGolf.Range.FrameRates` (the dilated step cap) and `UOpenGolf.Range.InputBindings` |
+| Fairway speed or Gimmie choices | `UOpenGolf.Physics.FairwayStimp`, `UOpenGolf.Menu.PreferenceValidation` and `UOpenGolf.Menu.GimmieScoring` |
 | Hole minimap | `UOpenGolf.Minimap` (framing, ground fields, compositing and labels run headless; `RenderedClick` needs rendering, `-Rendered`) and `UOpenGolf.Range.Aim` for the map's target |
 | In-game updates | `OpenGameUpdate` (run with `-Filter OpenGameUpdate`); the installer by hand, see [In-game updates](Releases.md#in-game-updates) |
 | Ubuntu packaging | `python3 -B -m unittest Assets.Scripts.test_build_deb Assets.Scripts.test_check_package_runner`; requires `dpkg-deb` |
@@ -73,9 +78,9 @@ Use the relevant rendered test and inspect its images. A successful screenshot r
 alone is not visual evidence. `Assets/Scripts/check_range_render.py` runs range/flag captures
 or tracer captures with `--shot-trail`.
 
-Use `UOpenGolf.Visual.CoastalTerrain` for terrain and vegetation stability. Compare
+Use `UOpenGolf.Visual.RangeTerrain` for terrain and vegetation stability. Compare
 stationary Play sequences with grass on and off using `Assets/Scripts/grass_stability.py
---profile coastal`, then inspect slow camera motion. Keep the camera, resolution,
+--profile terrain`, then inspect slow camera motion. Keep the camera, resolution,
 AA settings and editor layout fixed. See [Range assets](RangeAssets.md) for wind checks
 and [phase status](PhasesStatus.md) for baseline measurements and pending acceptance.
 

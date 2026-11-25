@@ -19,7 +19,7 @@ def ellipse(cx, cy, rx, ry, count=64):
 
 
 # The range before the hole: the authored fairway, the 150-yard green and fringe, and the approach bunker with its lip
-# and hollow, as saved in DA_SavannaRange on 2026-10-29.
+# and hollow, as saved in DA_SavannaRange_Terrain (then DA_SavannaRange) on 2026-10-29.
 FAIRWAY = [(-12, -13), (25, -16), (75, -14), (120, -17), (165, -17), (220, -14), (285, -16), (335, -11), (350, 0),
            (335, 12), (280, 15), (220, 17), (160, 16), (110, 15), (60, 17), (10, 14), (-12, 12)]
 RANGE = {

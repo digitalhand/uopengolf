@@ -78,7 +78,7 @@ def host_actor(terrain):
             return actor
     if not hasattr(ue.OpenGolfTerrainBuilder, "add_vegetation_host"):
         raise RuntimeError("Rebuild DebugGame and restart the editor to load AddVegetationHost")
-    actor = ue.OpenGolfTerrainBuilder.add_vegetation_host(terrain, "Savanna understory")
+    actor = ue.OpenGolfTerrainBuilder.add_vegetation_host(terrain, "Vegetation_SavannaUnderstory")
     if not actor:
         raise RuntimeError("Could not create the understory host actor (see LogTemp)")
     return actor

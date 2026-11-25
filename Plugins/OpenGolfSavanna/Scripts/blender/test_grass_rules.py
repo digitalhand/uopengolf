@@ -96,10 +96,10 @@ class GrassRuleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             tile_points(1, {"Unknown": "Weed"})
 
-    def test_folders_are_type_first(self):
+    def test_folders_are_one_per_feature(self):
         self.assertEqual(content_folders("Grass/Medium"),
-                         {"Meshes": "Meshes/Grass/Medium", "Materials": "Materials/Grass/Medium",
-                          "Textures": "Textures/Grass/Medium"})
+                         {"Meshes": "Grass/Medium/Meshes", "Materials": "Grass/Medium/Materials",
+                          "Textures": "Grass/Medium/Textures"})
 
     def test_grass_maps_include_the_dry_colour_and_alpha(self):
         medium = grass_maps(MEDIUM, "/art/PolyHaven/grass_medium_01/maps")

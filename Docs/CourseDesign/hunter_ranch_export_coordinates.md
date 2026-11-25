@@ -26,7 +26,7 @@ Source vertical datum:
 Source Z units and conversion:
 Course origin E0, N0, H0 (metres):
 Blender axes: +X east, +Y north, +Z up
-Target Unreal axes: +X east, +Y north, +Z up
+Target Unreal axes: +X east, +Y south, +Z up
 Patch ID and revision:
 Outer raster bounds west/east/south/north:
 Columns C, rows R, spacing sx/sy:
@@ -50,7 +50,7 @@ Blender y_m = N - N0
 Blender z_m = H - H0
 
 Unreal X_cm = 100 * x_m
-Unreal Y_cm = 100 * y_m
+Unreal Y_cm = -100 * y_m
 Unreal Z_cm = 100 * z_m
 ```
 
@@ -59,7 +59,7 @@ conversions, so verify the result before relying on it. A correct length alone c
 a mirrored course.
 
 **Illustrative arithmetic:** a point 125 m east, 80 m north and 12.5 m above the chosen origin
-must end up at `(12500,8000,1250)` cm in the target convention. Put asymmetric labelled markers
+must end up at `(12500,-8000,1250)` cm in the target convention. Put asymmetric labelled markers
 at those relative directions to detect an unexpected rotation or reflection.
 
 ## Understand raster edges and samples

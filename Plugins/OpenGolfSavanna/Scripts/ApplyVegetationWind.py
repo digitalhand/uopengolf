@@ -36,12 +36,13 @@ import vegetation_wind_assignments as assign
 assign = importlib.reload(assign)
 a, wind = s.a, s.wind
 LIB = ue.EditorAssetLibrary
-MAP = "/Game/UOpenGolf/Maps/UOpenGolf"
-PARENTS = tuple(f"/OpenGolfSavanna/Materials/{name}"
-                for name in ("M_SavannaCard", "M_SavannaSolid", "M_SavannaGrass", "M_SavannaUnderstoryGrass"))
+MAP = "/Game/UOpenGolf/Maps/L_SavannaRange"
+PARENTS = ("/OpenGolfSavanna/Shared/Materials/M_SavannaCard", "/OpenGolfSavanna/Shared/Materials/M_SavannaSolid",
+           "/OpenGolfSavanna/Grass/Materials/M_SavannaGrass", "/OpenGolfSavanna/NatureEssentials/Materials/M_SavannaUnderstoryGrass")
 PRESET_CLASS = ue.TopLevelAssetPath("/Script/OpenGolfCourse", "OpenGolfVegetationPreset")
-MOUNTS = {"/OpenGolfSavanna/": s.PROJECT / "Plugins/OpenGolfSavanna/Content",
-          "/OpenGolfCourse/": s.PROJECT / "Plugins/OpenGolfCourse/Content", "/Game/": s.PROJECT / "Content"}
+# Every content mount, including course plugins such as /HunterRanch, whose trees are in the assignments too.
+MOUNTS = {"/Game/": s.PROJECT / "Content",
+          **{f"/{content.parent.name}/": content for content in sorted((s.PROJECT / "Plugins").glob("*/Content"))}}
 
 
 def require_ready(keep_map_unsaved=False):

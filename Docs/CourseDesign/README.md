@@ -6,6 +6,7 @@ the external tools and import paths described here have not been tested together
 
 ## Table of contents
 
+- [Course import coordinates](#course-import-coordinates)
 - [Recommended starting point](#recommended-starting-point)
 - [Understand the four jobs](#understand-the-four-jobs)
 - [Compare the options](#compare-the-options)
@@ -21,7 +22,25 @@ the external tools and import paths described here have not been tested together
 - [Reading list and references](#reading-list-and-references)
 - [Glossary](#glossary)
 
+## Course import coordinates
+
+Keep map outlines, tee positions and author corrections in local metres east and north. In Unreal,
+X points east, Y points south and Z points up. For an Unreal field in centimetres, use
+`(100 × east, −100 × north, 100 × height)` relative to the course origin. Convert back when
+saving Course Designer edits. Keep north-up elevation rows in order, starting at the northernmost
+sample centre. For meshes, check the exporter and importer together so the Y sign changes once.
+
+Face from a known tee toward the green and compare a landmark on each side with an aerial or
+flyover. On Hunter Ranch hole 1 the creek corridor is on the right and the lobed fairway bunker
+is on the left. A mirrored course still measures the same yardage.
+
 ## Recommended starting point
+
+**Current path (2026-11-24):** build real courses with the [Course Designer](course_designer.md) in Unreal. It
+prepares public elevation and map data, reviews the layout on aerial imagery, builds a playable map and packages the
+course as a download. The manual workflows below remain useful background and an alternative for hand-shaped terrain.
+To add trees, undergrowth and rough grass by hand and reshape surface edges, follow
+[Course vegetation](course_vegetation.md).
 
 For a concrete real-course walkthrough, see [Recreating Hunter Ranch in Paso Robles](course_hunter_ranch.md), including a step-by-step workflow and PlantUML sequence diagram.
 

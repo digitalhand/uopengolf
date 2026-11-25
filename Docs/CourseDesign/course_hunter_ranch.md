@@ -324,12 +324,12 @@ slots together. Landscape is an alternative broad-terrain route, not an extra re
    units, FBX axis/unit settings, origin, source bounds and height encoding in `exports/coordinates.md`.
 3. Export the 10 m calibration object separately. Import it first in Unreal and verify it
    measures **1,000 cm**. Correct export/import units before bringing in the terrain.
-4. In the same note, record the chosen map convention. A simple target is Unreal `+X = east`,
-   `+Y = north`, `+Z = up`, with centimetres computed from the geographic origin:
+4. In the same note, record the chosen map convention. The project uses Unreal `+X = east`,
+   `+Y = south`, `+Z = up`, with centimetres computed from the geographic origin:
 
 ```text
 X_cm = 100 * (E - E0)
-Y_cm = 100 * (N - N0)
+Y_cm = -100 * (N - N0)
 Z_cm = 100 * (H - H0)
 ```
 

@@ -43,9 +43,9 @@ Epic's [Foliage Mode guide](https://dev.epicgames.com/documentation/en-us/unreal
 describes painting and instance controls. Use it for repeated placement, not as a substitute
 for reference-based landmark positions. Do not randomly fill the entire rough with trees.
 
-Tree collision and canopy interaction are gameplay decisions. Confirm the current physics
-plugin's obstacle/foliage conventions before assigning arbitrary blocking volumes. Cosmetic
-leaf cards should not inadvertently become ground hits.
+Tree collision and canopy interaction are gameplay decisions. Use the physics plugin's obstacle
+and canopy conventions, described in [How a tree plays](course_vegetation.md#how-a-tree-plays),
+rather than arbitrary blocking volumes. Cosmetic leaf cards should not inadvertently become ground hits.
 
 ## Add grass and ground materials
 

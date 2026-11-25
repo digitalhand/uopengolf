@@ -26,7 +26,7 @@ We welcome good quality AI prompt engineering, small code feature base that are 
 - Search existing issues and pull requests first.
 - For anything bigger than a small fix, open an issue describing the problem and your
   proposed approach before writing code. Agreeing on the direction early saves rework.
-- Say in the issue if you plan to edit the map (`/Game/UOpenGolf/Maps/UOpenGolf`) or other
+- Say in the issue if you plan to edit the map (`/Game/UOpenGolf/Maps/L_SavannaRange`) or other
   `.uasset` files. Unreal assets are binary and can't be merged, so two people editing the
   same asset at once means one of them redoes their work.
 - Be respectful and constructive in issues, reviews and discussions.
@@ -153,6 +153,10 @@ Read [Licensing](Docs/Licensing.md) before adding any asset.
   force-add ignored files.
 - For every third-party import, record the source URL, pinned version, licence, required
   attribution and destination in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- Name assets, folders and placed actors by [Content naming](Docs/ContentNaming.md): a type prefix
+  (`SM_`, `MI_`, `T_`, `BP_`, `L_`, `DA_`, ...), PascalCase segments, two-digit variants and one folder per
+  feature. Generators build names with `asset_naming.py` or `OpenGolfAssetNames.h`. Run
+  `python3 Assets/Scripts/check_content_names.py` before a pull request.
 - Include editable sources (for example `.blend` files) for original assets when you have them.
 - `.uasset` and `.umap` files go through Git LFS automatically. Check that `git lfs status`
   lists them before you push.

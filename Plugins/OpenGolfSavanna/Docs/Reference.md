@@ -5,8 +5,10 @@ Paths in this reference are relative to the plugin root unless stated otherwise.
 Reusable open artwork for the course kit. See [NOTICE.md](../NOTICE.md) for source credits
 and licences. Course layout and physics remain in the course kit.
 
-Content uses type-first folders: `Meshes/<Category>`, `Materials/<Category>` and
-`Textures/<Category>`, with shared parent materials in `Materials/`. Blender projects and
+Content uses one folder per feature ([Content naming](../../../Docs/ContentNaming.md#folders)):
+`<Feature>/Meshes`, `<Feature>/Materials`, `<Feature>/Textures` and `<Feature>/Presets`, for example
+`CutTurf/`, `Grass/Medium/`, `Ground/`, `Surfaces/`, `NatureEssentials/` and `Trees/Jacaranda/`. The shared
+`M_SavannaCard` and `M_SavannaSolid` parents and `T_WhiteMask` are in `Shared/`. Blender projects and
 downloaded originals live outside the repository under the Blender art root
 (`UOPENGOLF_BLENDER_ROOT`, default `~/Code/3D/blender/uopengolf`).
 
@@ -126,7 +128,7 @@ Cards and rocks use `M_SavannaCard` and `M_SavannaSolid`. The grass uses
 ## Savanna range
 
 `Scripts/BuildSavannaRange.py` turns a range map into the savanna course, or rebuilds it.
-With no arguments it converts the public range, `/Game/UOpenGolf/Maps/UOpenGolf`, and writes
+With no arguments it converts the public range, `/Game/UOpenGolf/Maps/L_SavannaRange`, and writes
 course assets to `/Game/UOpenGolf/Terrain/Savanna`; `--map`, `--course` and `--generated` select
 another course. Build the savanna assets above first, then open the map and run it in the editor.
 The script:
@@ -143,10 +145,10 @@ The importer sets the tree's Nanite shape preservation to Preserve Area. Without
 leaves shrink below a pixel at range: distant crowns look bare and shimmer under TSR.
 
 Tree ball contact uses two hidden helpers exported with the tree by `blender/ExportJacaranda.py`:
-`SM_JacarandaCollision` (the trunk and main limbs, triangle collision) blocks the ball, and
-`SM_JacarandaCanopy` (one convex hull around the branches and leaves) slows a ball flying through
+`SM_Jacaranda_Collision` (the trunk and main limbs, triangle collision) blocks the ball, and
+`SM_Jacaranda_Canopy` (one convex hull around the branches and leaves) slows a ball flying through
 the crown without blocking it. To update them on an existing course, reimport only the helpers with
-`ImportSavannaAssets.py <export.json> --meshes=SM_JacarandaCollision,SM_JacarandaCanopy`, then run
+`ImportSavannaAssets.py <export.json> --meshes=SM_Jacaranda_Collision,SM_Jacaranda_Canopy`, then run
 `Scripts/ApplyTreeCollision.py [--canopy]` on the open map; it backs up, applies, checks ball-sized
 sweeps and saves. `Scripts/PlayTreeShots.py` plays trunk and canopy shots at one tree during Play.
 
@@ -187,7 +189,7 @@ trees and understory away from them. It logs `OPEN_GOLF_PAR_FOUR_HOLE_COMPLETE`,
 NumPy is checked before anything changes. In an editor that is already open, set the variable from the
 console first, for example `py import os; os.environ['OPEN_GOLF_NUMPY_PYTHON'] = r'C:\Python311\python.exe'`.
 The rebuilt trees keep their wood colliders and canopy volumes because every jacaranda preset carries
-`SM_JacarandaCollision` and `SM_JacarandaCanopy`; `ApplyTreeCollision.py --canopy` restores both on a course
+`SM_Jacaranda_Collision` and `SM_Jacaranda_Canopy`; `ApplyTreeCollision.py --canopy` restores both on a course
 whose presets predate the canopy.
 
 ## Wind

@@ -10,6 +10,7 @@
 
 class UPostProcessComponent;
 class USceneCaptureComponent2D;
+struct FHoleMapBuild;
 class UTexture2D;
 class UTextureRenderTarget2D;
 class UOpenGolfCupComponent;
@@ -62,6 +63,8 @@ public:
     /** Where the ball is teed up. */
     UFUNCTION(BlueprintPure, Category = "UOpenGolf|Range")
     FVector GetTeeLocation() const;
+    /** Moves the tee and cup to a course hole; Routing lists the aim points between them for the hole map. */
+    void SetCourseHole(FVector TeeLocation, FVector CupLocation, const TArray<FVector>& Routing);
 
     UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "UOpenGolf|Terrain")
     TObjectPtr<AOpenGolfTerrainArea> Terrain;
@@ -89,7 +92,9 @@ public:
      * The finished top-down picture of the hole that the HUD minimap draws: the capture with relief, contours and a
      * dimmed surround, and mips for zooming. Null before the first capture and without a renderer (NullRHI). Captured
      * once the scene has finished loading (and, in editor builds, compiling its textures, meshes and shaders), so a
-     * picture taken just after level travel never shows placeholder textures; again after InvalidateHoleMap.
+     * picture taken just after level travel never shows placeholder textures; again after InvalidateHoleMap. The new
+     * picture is read back and finished off the game thread, then published with its frame and heights; until then the
+     * previous picture, frame and heights stay as they were.
      */
     UTexture2D* GetHoleMapTexture() const { return HoleMapPicture; }
 
@@ -108,11 +113,20 @@ public:
     /** Recaptures the hole map once the scene is ready, after a change to what it shows (grass, layout). */
     void InvalidateHoleMap();
 
+    /** Longest single game-thread step (ms) of the last hole map published: what a hole change can cost a frame. */
+    double GetHoleMapGameThreadMs() const { return HoleMapGameThreadMs; }
+
+    /** A hole map is being captured or finished. */
+    bool IsHoleMapBuilding() const { return HoleMapBuild.IsValid(); }
+
     /**
      * Longest wait (seconds) for the scene to be ready before the hole map is captured anyway, so the minimap is never
      * missing for long; it is captured again once the scene is ready.
      */
     static constexpr double HoleMapReadyTimeoutS = 10.0;
+
+    /** How often the range ticks (seconds), except while a hole map is due or being built, when it ticks every frame. */
+    static constexpr float IdleTickIntervalS = 0.25f;
 
     /** Distance from the tee to the pin (400 yards), where a new layout places the flag. */
     static constexpr float HoleDistanceM = 365.76f;
@@ -161,20 +175,26 @@ private:
     T* AddLayoutComponent(FName Name, const TCHAR* Folder);
     void UpdateGrass();
 
-    /** Captures a stale hole map when the scene is ready, or an interim one when it has waited too long. */
+    /**
+     * Moves a hole map build on, or starts one for a stale map when the scene is ready (or an interim one when it has
+     * waited too long). Called every tick; no step waits for the GPU or does the heavy finishing.
+     */
     void UpdateHoleMap();
 
     /**
-     * Frames the hole, renders it top-down into HoleMapCaptureTarget and finishes that into HoleMapPicture, once; the
-     * scene is static during Play.
+     * Frames the hole, samples its heights, renders it top-down into HoleMapCaptureTarget and queues the read-back; the
+     * scene is static during Play. Without a renderer it only publishes the frame and heights.
      */
-    void CaptureHoleMap();
+    void StartHoleMap(bool bReady, double WaitedS);
 
-    /** Samples the ground's height and distance from play over HoleMapFrame; again only when the frame changes. */
-    void SampleHoleMapFields();
+    /** Hands read-back pixels to the worker thread, and publishes the finished map. */
+    void ContinueHoleMap();
 
-    /** Reads HoleMapCaptureTarget back and finishes it into HoleMapPicture. */
-    void FinishHoleMapPicture();
+    /** The terrain definition's ground height (cm) over Frame, or traces of the ground without a definition. */
+    FHoleMapField SampleHoleMapHeights(const FHoleMapFrame& Frame) const;
+
+    /** Creates the capture component and its target on first use. */
+    void EnsureHoleMapCapture();
 
     /** Nothing the capture draws is still loading or, in editor builds, compiling (placeholders would be captured). */
     static bool IsSceneReadyForHoleMap();
@@ -200,6 +220,10 @@ private:
     bool bHoleMapInterim = false;
     /** Platform time when the picture went stale. */
     double HoleMapStaleSince = 0.0;
+    /** Counts InvalidateHoleMap calls, so a build started before the latest one is dropped. */
+    uint32 HoleMapGeneration = 0;
+    TSharedPtr<FHoleMapBuild> HoleMapBuild;
+    double HoleMapGameThreadMs = 0.0;
 
     UPROPERTY(VisibleInstanceOnly, Category = "UOpenGolf|Layout")
     TArray<TObjectPtr<AActor>> LayoutActors;
@@ -222,6 +246,10 @@ private:
     /** The grass switch has been applied to the terrain's vegetation since the last refresh. */
     bool bTerrainGrassApplied = false;
 
+    /** The active course hole's route between tee and green, which the hole map frames; empty on the range. */
+    TArray<FVector> CourseRouting;
+    /** The active course hole's tee; unset on the range, which tees off at the range actor. */
+    TOptional<FVector> CourseTee;
     /** Ground under the tee during Play, found once per range position because it traces the terrain. */
     mutable TOptional<FVector> CachedTee;
     mutable FVector CachedTeeOrigin = FVector::ZeroVector;

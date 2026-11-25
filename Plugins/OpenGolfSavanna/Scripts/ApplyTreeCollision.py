@@ -4,7 +4,7 @@
     py "<project>/Plugins/OpenGolfSavanna/Scripts/ApplyTreeCollision.py" [--map PATH] [--canopy]
 
 Import the collision mesh first (blender/ExportJacaranda.py, then ImportSavannaAssets.py with
---meshes=SM_JacarandaCollision,SM_JacarandaCanopy). The map must be open with Play stopped; it is
+--meshes=SM_Jacaranda_Collision,SM_Jacaranda_Canopy). The map must be open with Play stopped; it is
 backed up, every tree collider is swapped for the trunk-and-main-limb proxy, ball-sized sweeps check
 that wood blocks and branches and leaves do not, and the map is saved only when the check passes.
 --canopy also replaces each tree's hidden canopy volume (it slows a ball flying through the crown; it

@@ -13,6 +13,8 @@
 #include "Misc/FileHelper.h"
 #include "HAL/FileManager.h"
 #include "Profile/AvatarCatalog.h"
+#include "EngineUtils.h"
+#include "OpenFairwayBall.h"
 
 namespace GolfSettings
 {
@@ -26,11 +28,13 @@ namespace GolfSettings
             FIELD(MotionBlur), FIELD(DepthOfField), FIELD(LeftHanded), FIELD(DistanceUnits), FIELD(PuttingUnits), FIELD(SpeedUnits), FIELD(AutoTee),
             FIELD(FixedCamera), FIELD(CupZoom), FIELD(Tracer), FIELD(ShotData), FIELD(HudPercent), FIELD(TextPercent),
             FIELD(HighContrast), FIELD(ReducedMotion), FIELD(CalculatedSpin), FIELD(Reconnect), FIELD(Stimp), FIELD(GimmieFeet), FIELD(WindMph),
-            FIELD(DiagnosticLevel), FIELD(RecordingDetail), FIELD(Provider), FIELD(OpenConnectPort), FIELD(OpenConnectLan), FIELD(AutoClub)
+            FIELD(DiagnosticLevel), FIELD(RecordingDetail), FIELD(Provider), FIELD(OpenConnectPort), FIELD(OpenConnectLan), FIELD(AutoClub),
+            FIELD(FairwayStimpTenths)
 #undef FIELD
         };
     }
 
+    float FairwayStimpFeet(const FPreferences& P) { return P.FairwayStimpTenths / 10.0f; }
     FString DiagnosticPath(const FPreferences& P) { return FPaths::ConvertRelativePathToFull(P.DiagnosticDirectory.IsEmpty() ? FPaths::ProjectLogDir() : P.DiagnosticDirectory); }
     FString RecordingPath(const FPreferences& P) { return FPaths::ConvertRelativePathToFull(P.RecordingDirectory.IsEmpty() ? ShotRecording::DefaultRootDir() : P.RecordingDirectory); }
     FString ValidateDataDirectories(const FPreferences& P)
@@ -59,7 +63,11 @@ namespace GolfSettings
         if (HudPercent != 100 && HudPercent != 125 && HudPercent != 150) HudPercent = 100;
         if (TextPercent != 100 && TextPercent != 125 && TextPercent != 150) TextPercent = 100;
         Stimp = FMath::Clamp(Stimp, 8, 15);
-        if (GimmieFeet != 0 && GimmieFeet != 3 && GimmieFeet != 5 && GimmieFeet != 8 && GimmieFeet != 10) GimmieFeet = 0;
+        // The radius is 3 or 6 ft; the earlier 5, 8 and 10 ft choices became 6 ft.
+        if (GimmieFeet == 5 || GimmieFeet == 8 || GimmieFeet == 10) GimmieFeet = 6;
+        if (GimmieFeet != 0 && GimmieFeet != 3 && GimmieFeet != 6) GimmieFeet = 0;
+        if (FairwayStimpTenths != 60 && FairwayStimpTenths != 74 && FairwayStimpTenths != 80 && FairwayStimpTenths != 90 && FairwayStimpTenths != 100)
+            FairwayStimpTenths = 74;
         if (WindMph != -1 && WindMph != 0 && WindMph != 5 && WindMph != 10 && WindMph != 20) WindMph = -1;
         if (OpenConnectPort < 1 || OpenConnectPort > 65535) OpenConnectPort = LaunchMonitorDefaultOpenConnectPort;
         // An avatar removed from the catalogue falls back to the account picture.
@@ -114,6 +122,10 @@ namespace GolfSettings
         ConfigureDiagnostics(Current);
         SetCVar(TEXT("r.MotionBlurQuality"), Current.MotionBlur ? 4 : 0);
         SetCVar(TEXT("r.DepthOfFieldQuality"), Current.DepthOfField ? 2 : 0);
+        // One fairway speed for the whole game, Training and rounds alike; a ball takes it from its next launch.
+        if (World)
+            for (TActorIterator<AOpenFairwayBall> Ball(World); Ball; ++Ball)
+                Ball->FairwayStimpFeet = FairwayStimpFeet(Current);
         if (World && World->GetGameInstance())
             if (auto* Monitor = World->GetGameInstance()->GetSubsystem<UOpenLaunchMonitorSubsystem>())
             {

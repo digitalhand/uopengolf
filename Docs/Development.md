@@ -96,7 +96,7 @@ Build logs are under `Saved/Logs/`. Generated outputs are ignored by Git.
 The engine-free script checks run from the repository root with
 `python -m unittest discover -s Assets/Scripts -p "test_*.py"` (`python3` on Linux); see [Testing](Testing.md).
 
-The public range map, `/Game/UOpenGolf/Maps/UOpenGolf`, is the project's only map and is
+The public range map, `/Game/UOpenGolf/Maps/L_SavannaRange`, is the project's only map and is
 committed with its terrain, vegetation and range actors.
 
 ### Adding a course
@@ -171,7 +171,7 @@ choose the `Packaged` folder.
 
 | Setting | Where | Purpose |
 | --- | --- | --- |
-| Map to cook | `Config/DefaultGame.ini`, `[/Script/UnrealEd.ProjectPackagingSettings]` `+MapsToCook` | Cooks `/Game/UOpenGolf/Maps/UOpenGolf` |
+| Map to cook | `Config/DefaultGame.ini`, `[/Script/UnrealEd.ProjectPackagingSettings]` `+MapsToCook` | Cooks `/Game/UOpenGolf/Maps/L_SavannaRange` |
 | Startup map and game mode | `Config/DefaultEngine.ini`, `[/Script/EngineSettings.GameMapsSettings]` | `GameDefaultMap` and `GlobalDefaultGameMode` used by the packaged game |
 | Project name and version | `Config/DefaultGame.ini`, `[/Script/EngineSettings.GeneralProjectSettings]` | Package metadata and the HUD version label (`ProjectVersion=0.0.6`, shown as **v0.0.6**); CI release builds stamp it from the tag ([Versioning](Releases.md#versioning)) |
 | Game target | `Source/UOpenGolf.Target.cs` | The `UOpenGolf` game target that `-build` compiles |

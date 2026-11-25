@@ -3,6 +3,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Engine/GameViewportClient.h"
+#include "TestMaps.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "HAL/FileManager.h"
@@ -146,7 +147,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindControlsVisualTest, "UOpenGolf.Visual.Wind
 
 bool FWindControlsVisualTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the range map."));
         return false;

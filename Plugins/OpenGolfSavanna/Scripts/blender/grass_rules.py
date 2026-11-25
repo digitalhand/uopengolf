@@ -109,8 +109,8 @@ def tile_points(seed, pieces, size=(TILE_M, TILE_M), scale=1.0, weights=None, ce
 
 
 def content_folders(category):
-    """Type-first content folders, e.g. Grass/Medium -> Meshes/Grass/Medium."""
-    return {kind: f"{kind}/{category}" for kind in ("Meshes", "Materials", "Textures")}
+    """One content folder per feature (Docs/ContentNaming.md), e.g. Grass/Medium -> Grass/Medium/Meshes."""
+    return {kind: f"{category}/{kind}" for kind in ("Meshes", "Materials", "Textures")}
 
 
 def grass_maps(asset, maps):

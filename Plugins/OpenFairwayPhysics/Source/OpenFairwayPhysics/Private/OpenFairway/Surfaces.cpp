@@ -20,6 +20,12 @@ namespace OpenFairway
             return 10.0 * 3.14159265 * GolfPhysics::Radius * Viscosity / GolfPhysics::Mass;
         }
 
+        /**
+         * Rolling friction that, with this grass drag (linear Viscosity, speed-squared FormDrag) and the ground air drag in
+         * standard air, stops a ball leaving a stimpmeter at Distance metres.
+         */
+        float StimpRollingFriction(float Distance, float Viscosity, float FormDrag);
+
         FSurfacePhysicsSettings Make(float KineticFriction, float RollingFriction, float GrassViscosity, float CriticalAngle, float SpinbackResponseScale)
         {
             FSurfacePhysicsSettings Settings;
@@ -138,15 +144,15 @@ namespace OpenFairway
         return FMath::IsFinite(StimpFeet) ? FMath::Clamp(StimpFeet, MinStimpFeet, MaxStimpFeet) : DefaultStimpFeet;
     }
 
-    float GreenSpeed::RollingFriction(float StimpFeet, float Viscosity)
+    float SurfacesDetail::StimpRollingFriction(float Distance, float Viscosity, float FormDrag)
     {
-        using namespace SurfacesDetail;
         // The stimp fixes the constant deceleration a0 of a rolling ball (a0 + k*v + q*v*v); bisection finds it
         // because the roll distance has no closed-form inverse. Rolling friction = 7*a0 / (5*g).
-        const double K = SpeedDragPerSecond(FMath::IsFinite(Viscosity) ? FMath::Max(Viscosity, 0.0f) : GrassViscosity);
-        const float Distance = Clamp(StimpFeet) * MetersPerFoot;
+        const double K = SpeedDragPerSecond(Viscosity);
+        // Grass form drag slows the ball's centre, so like the air drag it reaches a rolling ball through the 5/7.
+        const double F = 5.0 / 7.0 * FormDrag;
         // A ball rolling without slipping along +X: its spin ratio is 1.
-        const FVector3f RollVelocity(StimpmeterSpeedMps, 0, 0);
+        const FVector3f RollVelocity(GreenSpeed::StimpmeterSpeedMps, 0, 0);
         const float RollSpeed = RollVelocity.Size();
         const float SpinRatio = (FVector3f::CrossProduct(FVector3f(0, 1, 0), RollVelocity) / GolfPhysics::Radius).Size() * GolfPhysics::Radius / RollSpeed;
         const float Reynolds = StandardAirDensity * RollSpeed * GolfPhysics::Radius * 2.0f / StandardAirViscosity;
@@ -156,19 +162,19 @@ namespace OpenFairway
         {
             // Integral v/(a + k*v + q*v*v), using the same low-speed aerodynamic cutoff.
             constexpr int32 Intervals = 128;
-            const double H = StimpmeterSpeedMps / Intervals;
+            const double H = GreenSpeed::StimpmeterSpeedMps / Intervals;
             double Sum = 0;
             for (int32 I = 0; I <= Intervals; ++I)
             {
                 const double V = I * H;
                 const double Drag = V >= FlightAerodynamics::MinAerodynamicSpeed ? Q * V * V : 0;
-                const double Value = V / (A + K * V + Drag);
+                const double Value = V / (A + K * V + Drag + F * V * V);
                 Sum += (I == 0 || I == Intervals ? 1 : I % 2 ? 4 : 2) * Value;
             }
             return Sum * H / 3.0;
         };
         float Low = 0.0f;
-        float High = StimpmeterSpeedMps * StimpmeterSpeedMps / (2.0f * Distance);
+        float High = GreenSpeed::StimpmeterSpeedMps * GreenSpeed::StimpmeterSpeedMps / (2.0f * Distance);
         for (int32 Iteration = 0; Iteration < SolveIterations; ++Iteration)
         {
             const float Middle = 0.5f * (Low + High);
@@ -182,5 +188,30 @@ namespace OpenFairway
             }
         }
         return 7.0f * 0.5f * (Low + High) / (5.0f * GolfPhysics::Gravity);
+    }
+
+    float GreenSpeed::RollingFriction(float StimpFeet, float Viscosity)
+    {
+        return SurfacesDetail::StimpRollingFriction(Clamp(StimpFeet) * MetersPerFoot,
+            FMath::IsFinite(Viscosity) ? FMath::Max(Viscosity, 0.0f) : GrassViscosity, 0.0f);
+    }
+
+    float FairwaySpeed::Clamp(float StimpFeet)
+    {
+        return FMath::IsFinite(StimpFeet) && StimpFeet > 0.0f ? FMath::Clamp(StimpFeet, MinStimpFeet, MaxStimpFeet) : StandardStimpFeet;
+    }
+
+    float FairwaySpeed::RollingFriction(float StimpFeet)
+    {
+        const FSurfacePhysicsSettings& Fairway = SurfaceCatalog::Get(ESurface::Fairway);
+        const float Reading = Clamp(StimpFeet);
+        if (FMath::IsNearlyEqual(Reading, StandardStimpFeet, 1e-3f))
+        {
+            return Fairway.RollingFriction;
+        }
+        // The fitted value times the solve's ratio: the solve's own error near the standard cancels.
+        auto Solve = [&Fairway](float Feet)
+        { return SurfacesDetail::StimpRollingFriction(Feet * MetersPerFoot, Fairway.GrassViscosity, Fairway.GrassFormDrag); };
+        return Fairway.RollingFriction * Solve(Reading) / Solve(StandardStimpFeet);
     }
 } // namespace OpenFairway

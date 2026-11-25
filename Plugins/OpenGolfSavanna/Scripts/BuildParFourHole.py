@@ -3,9 +3,9 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/BuildParFourHole.py"
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. The script backs up the map and terrain definition, then:
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped. The script backs up the map and terrain definition, then:
 
-1. lays out the hole in DA_SavannaRange: the green 400 yards out with its contour, the fairway bunker on the left of
+1. lays out the hole in DA_SavannaRange_Terrain: the green 400 yards out with its contour, the fairway bunker on the left of
    the landing area, a greenside bunker right of the green, and the backdrop hill moved behind the new green;
 2. rebuilds the ground meshes (the Landscape outside the detailed area is unchanged), re-bakes the savanna ground's
    rough mask (T_SavannaRoughMask) from the new outlines and stands the flag at the pin;

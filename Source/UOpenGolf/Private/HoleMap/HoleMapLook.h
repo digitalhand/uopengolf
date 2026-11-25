@@ -27,6 +27,12 @@ namespace HoleMapLook
     /** The surround starts to dim this far (cm) from play and is fully dimmed at DimFullCm. */
     constexpr double DimStartCm = 2500;
     constexpr double DimFullCm = 6000;
+    /**
+     * Distance from play is sampled up to this far (cm). The dimming is full from DimFullCm on, and the field interpolates
+     * between samples FieldSpacingCm apart, so any pixel the dimming can still tell apart uses samples below the cap:
+     * the picture is the same as with exact distances.
+     */
+    constexpr double PlayDistanceCapCm = DimFullCm + 2 * FieldSpacingCm;
     /** Fully dimmed ground keeps this share of its saturation and of its brightness. */
     constexpr double DimSaturation = 0.7;
     constexpr double DimBrightness = 0.85;
