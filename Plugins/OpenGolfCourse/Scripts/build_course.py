@@ -75,6 +75,29 @@ def course_name(layout):
     return names.pascal(layout["name"])
 
 
+def apply_preview(course, root, course_id):
+    """Use the course plugin's menu image when rebuilding its definition."""
+    name = names.texture(course_id, "D", "Preview")
+    plugin = root.split("/")[1]
+    source = Path(__file__).resolve().parents[2] / plugin / "Images" / f"{name}.png"
+    if not source.is_file():
+        return
+    task = ue.AssetImportTask()
+    task.filename = str(source)
+    task.destination_path = root
+    task.destination_name = name
+    task.automated = True
+    ue.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
+    texture = ue.EditorAssetLibrary.load_asset(f"{root}/{name}")
+    if not isinstance(texture, ue.Texture2D):
+        raise RuntimeError(f"Could not import the course preview from {source}")
+    texture.set_editor_property("lod_group", ue.TextureGroup.TEXTUREGROUP_UI)
+    texture.set_editor_property("compression_settings", ue.TextureCompressionSettings.TC_EDITOR_ICON)
+    texture.set_editor_property("mip_gen_settings", ue.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+    require(ue.EditorAssetLibrary.save_loaded_asset(texture), "Saving course preview")
+    course.set_editor_property("preview", texture)
+
+
 def terrain_definition(root, layout, presets, source):
     terrain = asset(root, names.course_terrain(course_name(layout)), ue.OpenGolfTerrainDefinition)
     terrain.set_editor_property("default_surface", presets["rough"])
@@ -167,6 +190,7 @@ def build(source, root):
     course.set_editor_property("display_name", layout["name"])
     library.set_metadata_tag(course, AXES_TAG, EAST_SOUTH)
     apply_information(course, json.loads((source / "recipe.json").read_text()), layout)
+    apply_preview(course, root, course_name(layout))
     course.set_editor_property("layout", hole_records(layout))
     course.set_editor_property("holes", len(layout["holes"]))
     course.set_editor_property("par", sum(h["par"] for h in layout["holes"]))

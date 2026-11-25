@@ -160,7 +160,7 @@ the tee. The tiles keep the last shot until the next one.
 
 ### Playing the hole
 
-Open **Courses**, select **Savanna Range**, and choose **Play**, then **Start round** on the [round setup](#round-setup). Its wind
+Open **Courses**, select **Savanna Range**, and choose **Play**, then **Start round** in the [Club House](#club-house). Its wind
 starts at 3 mph from right to left. The pin is 400 yards
 out on a gently contoured green, with a fairway bunker on the left of the landing area and a
 bunker right of the green.
@@ -183,21 +183,19 @@ bunker right of the green.
 - After the banner, the final scorecard shows par, strokes and score relative to par (**E** for level, otherwise
   such as **+1** or **-2**). Choose **Play again** for a fresh round or **Courses** to return to the browser.
 
-### Round setup
+### Club House
 
-**Play** on a course card opens the course's **Round setup** page, named after the course. Every course has the same
-full-width lobby. **Back to courses**, **Escape**, or controller **Back** returns to your selected card and search. The page remembers your choices for each course until the game
-closes.
-
-Three tabs hold the choices:
+**Play** on a course card opens the **Club House** on the Players tab. Use the back arrow beside the title,
+**Escape**, or controller **Back** to return to your selected card and search. The game remembers each course’s
+round choices until you close it.
 
 | Tab | Row | Choices | Starts at |
 | --- | --- | --- | --- |
-| Players | | Your avatar and name when signed in. You can also play signed out. | |
+| Players | Player | Your avatar and display name, or **Guest** when signed out. The open seat is reserved for a future player. | |
+| Players | Tees | Each tee set and its full-course distance | The first set |
 | Match | Gimmie | On or off | **Settings › Game Defaults › Gimmie radius** |
 | Match | Gimmie radius | 3 ft or 6 ft | **Settings › Game Defaults › Gimmie radius** |
-| Course | Green speed | Stimp 8–15 ft, from **Slower** to **Faster**: 8–9 Slow, 10–11 Medium, 12–13 Fast, 14–15 Tour | **Settings › Game Defaults › Stimp** |
-| Course | Tees | The course's tee sets (only when it has more than one) | The first set |
+| Course | Green speed | Move the slider in whole feet from 8 to 15. 8–9 Slow, 10–11 Medium, 12–13 Fast, 14–15 Tour | **Settings › Game Defaults › Stimp** |
 | Course | Holes to play | **All**, **Front 9** or **Back 9** (on courses with more than nine holes), or tick the holes to play; **Custom** shows a hand-picked set. A line under the boxes adds up the holes, par and length | All |
 
 Course details sit beside the settings on wide windows and follow them in the same scrolling area on narrow windows.
@@ -208,7 +206,7 @@ Course details sit beside the settings on wide windows and follow them in the sa
   from any direction. It stays fixed over the whole course, as it does outside, so it plays differently on each hole.
   The panel names it against the tee shot of the first hole you picked, such as "Right to left · hole 1".
 
-The bottom bar stays visible while you scroll. It shows the selected holes, par and distance. **Reset to defaults** restores the starting choices and keeps the wind. **Start round** begins play.
+The bottom bar stays visible while you scroll. It shows the selected holes, par and distance. **Reset** restores the starting choices and keeps the wind. **Start round** begins play.
 
 - Rounds are played in daylight.
 - Holes play in order of their numbers. With nothing ticked, **Start round** waits and the page says why. The
@@ -227,7 +225,7 @@ version is published and **Uninstall**; an update and an uninstall finish the ne
 Hunter Ranch (Paso Robles, California) is the first downloadable course: 18 holes, par 72, from the club's published
 scorecard. Its tees and cups are placed from map data (see [Course Designer](CourseDesign/course_designer.md#limits)).
 
-- Select the card and choose **Play**. On the [round setup](#round-setup), pick the tees (Blue, White, Combo, Silver or
+- Select the card and choose **Play**. In the [Club House](#club-house), pick the tees (Blue, White, Combo, Silver or
   Red), the green speed, the Gimmie and the holes, then **Start round**.
 - Each hole opens along its line of play, so the first aim follows a dogleg. After each hole-out the score is kept and
   the next picked hole starts; after the last one the scorecard shows each nine played and the total.
@@ -426,7 +424,7 @@ remain between Play sessions in the same editor process.
 | Wind speed | 0 mph (calm) | In Play: click the wind indicator (up to 30 mph). Saved with the map: select **RangeSettings → Details → UOpenGolf → Wind → Wind Speed (mph)** |
 | Wind direction | 0° (headwind) | In Play: the wind controls' **Direction**. Saved with the map: **Wind From (degrees)**: `90` from the right, `180` tailwind, `270` from the left |
 | Editor flag preview | On | **Preview Wind in Editor**; viewport Realtime must be enabled |
-| Green speed | Stimp 10 ft | **Settings › Game Defaults › Stimp** (Training, and the starting choice for a round); a round's own on its [round setup](#round-setup). Console: `uopengolf.GreenStimp 8` to `15`; applies from the next shot |
+| Green speed | Stimp 10 ft | **Settings › Game Defaults › Stimp** (Training, and the starting choice for a round); a round's own on its [Club House](#club-house). Console: `uopengolf.GreenStimp 8` to `15`; applies from the next shot |
 | Fairway speed | Standard (7.4 ft, the calibrated fairway) | **Settings › Game Defaults › Fairway speed**: 6, 7.4, 8, 9 or 10 ft on the stimpmeter, for every fairway in the game from the next shot |
 | Gimmie radius | Off | **Settings › Game Defaults › Gimmie radius**: Off, 3 ft or 6 ft (earlier 5, 8 and 10 ft choices became 6 ft); a round's own on its round setup |
 | Auto-reconnect after a dropped link | On, up to twelve attempts | `UOpenLaunchMonitorSubsystem::bAutoReconnect` |

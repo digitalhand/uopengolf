@@ -15,6 +15,7 @@
 #include "OpenFairwayBall.h"
 #include "OpenGolfSettings.h"
 #include "UI/Menu/RoundSetup.h"
+#include "UI/Menu/RoundSetupPanels.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfPlayerController.h"
 #include "UOpenGolfRange.h"
@@ -90,6 +91,7 @@ namespace
                 const TSharedPtr<SWidget> SearchBox = RenderedPlay::WithTag(Root, TEXT("CourseSearch"));
                 if (!Test.TestTrue(TEXT("Search is present and enabled"), SearchBox && SearchBox->IsEnabled()))
                     return true;
+                Test.TestTrue(TEXT("Search fits one course card"), SearchBox->GetCachedGeometry().GetLocalSize().X <= 301);
                 // Typed, as a player would: the box reports edits, not text set from code, a moment after typing stops.
                 FSlateApplication::Get().SetKeyboardFocus(SearchBox, EFocusCause::Mouse);
                 for (const TCHAR Character : FString(TEXT("zq")))
@@ -149,8 +151,13 @@ namespace
                     return true;
                 break;
             case EStep::SetGreenSpeed:
-                if (!Click(TEXT("Faster")))
-                    return true;
+                {
+                    const auto Slider = RenderedPlay::WithTag(Root, SRoundSetup::GreenSpeedTag);
+                    if (!Test.TestTrue(TEXT("The green speed slider is focusable"), Slider && Slider->SupportsKeyboardFocus()))
+                        return true;
+                    FSlateApplication::Get().SetKeyboardFocus(Slider, EFocusCause::Navigation);
+                    Press(EKeys::Right);
+                }
                 {
                     const auto Lobby = StaticCastSharedPtr<SRoundSetup>(RenderedPlay::FindWidget(Root, TEXT("SRoundSetup")));
                     if (!Test.TestTrue(TEXT("The lobby is active"), Lobby.IsValid()))
@@ -164,7 +171,7 @@ namespace
             {
                 if (!CheckLobby(Root, true))
                     return true;
-                Test.TestTrue(TEXT("Course options stay open"), RenderedPlay::FindButton(Root, TEXT("Faster")).IsValid());
+                Test.TestTrue(TEXT("Course options stay open"), RenderedPlay::WithTag(Root, SRoundSetup::GreenSpeedTag).IsValid());
                 const auto Lobby = StaticCastSharedPtr<SRoundSetup>(RenderedPlay::FindWidget(Root, TEXT("SRoundSetup")));
                 if (!Test.TestTrue(TEXT("Resizing retains all round settings and wind"), Lobby && Lobby->GetSetup() == BeforeResize))
                     return true;
@@ -259,13 +266,66 @@ namespace
                     LargeText.HighContrast = 1;
                     Test.TestTrue(TEXT("Large text and high contrast applied"), GolfSettings::Commit(LargeText, nullptr));
                 }
+                RenderedPlay::SaveWindowPng(Test, Root, TEXT("Menu/ClubHouse-HunterCard.png"));
                 if (!Click(TEXT("Play")))
                     return true;
                 break;
+            case EStep::HunterPlayers:
+            {
+                const auto Selector = RenderedPlay::WithTag(Root, SRoundSetup::TeesTag);
+                if (!Test.TestTrue(TEXT("Hunter Ranch offers player tees"), Selector.IsValid()))
+                    return true;
+                StaticCastSharedPtr<SComboBox<FName>>(Selector)->SetSelectedItem(TEXT("White"));
+                RenderedPlay::SaveWindowPng(Test, Root, TEXT("Menu/ClubHouse-HunterPlayers.png"));
+                Window->Resize(FVector2D(800, 600));
+                break;
+            }
+            case EStep::HunterResize:
+            {
+                // Sweep the actual content breakpoint in both directions and hold it for four frames.
+                const auto Columns = RenderedPlay::WithTag(Root, TEXT("ClubHouseColumns"));
+                if (!Test.TestTrue(TEXT("Club House columns exist"), Columns.IsValid()))
+                    return true;
+                const auto& Geometry = Columns->GetCachedGeometry();
+                const float Scale = Geometry.GetAccumulatedLayoutTransform().GetScale();
+                const float Required = SClubHouseColumns::SideBySideWidth * FMath::Max(1.f, Scale);
+                const float Current = Geometry.GetLocalSize().X * Scale;
+                if (!CheckLobby(Root, Current >= Required))
+                    return true;
+                if (ResizeFrame == -1)
+                {
+                    RenderedPlay::SaveWindowPng(Test, Root, TEXT("Menu/ClubHouse-HunterPlayers-narrow.png"));
+                    Window->Resize(FVector2D(800, 720));
+                    ++ResizeFrame;
+                    Next = GetCurrentRunTime() + 0.2;
+                    return false;
+                }
+                if (ResizeFrame == 0)
+                    Breakpoint = Window->GetClientSizeInScreen().X + (Required - Current);
+                constexpr int32 Offsets[] = {-24, -12, -4, -1, 0, 0, 0, 0, 1, 4, 12, 24, 12, 4, 1, 0, -1, -4, -12, -24};
+                if (ResizeFrame >= 4 && ResizeFrame <= 8)
+                    RenderedPlay::SaveWindowPng(Test, Root, FString::Printf(TEXT("Menu/ClubHouse-resize-%02d.png"), ResizeFrame));
+                if (ResizeFrame < UE_ARRAY_COUNT(Offsets))
+                {
+                    Window->Resize(FVector2D(Breakpoint + Offsets[ResizeFrame++], 720));
+                    return false;
+                }
+                Window->Resize(FVector2D(1600, 900));
+                break;
+            }
             case EStep::HunterCourse:
                 if (!Click(TEXT("Course")))
                     return true;
                 break;
+            case EStep::HunterSpeed:
+            {
+                const auto Slider = RenderedPlay::WithTag(Root, SRoundSetup::GreenSpeedTag);
+                if (!Test.TestTrue(TEXT("Green speed is available for Hunter Ranch"), Slider.IsValid()))
+                    return true;
+                FSlateApplication::Get().SetKeyboardFocus(Slider, EFocusCause::Navigation);
+                Press(EKeys::Gamepad_DPad_Right);
+                break;
+            }
             case EStep::HunterHoles:
             {
                 const auto Preset = RenderedPlay::FindButton(Root, TEXT("Back 9"));
@@ -296,9 +356,27 @@ namespace
                     return true;
                 RenderedPlay::SaveWindowPng(Test, Root, TEXT("Menu/RoundSetup-holes-narrow.png"));
                 Test.TestTrue(TEXT("The chosen nine survives resizing"), RenderedPlay::HasText(Root, TEXT("9 holes · Par"), true));
-                Press(EKeys::Escape);
+                {
+                    const auto Page = StaticCastSharedPtr<SRoundSetup>(RenderedPlay::FindWidget(Root, TEXT("SRoundSetup")));
+                    if (!Test.TestTrue(TEXT("The chosen Hunter Ranch setup is available"), Page.IsValid()))
+                        return true;
+                    HunterSetup = Page->GetSetup();
+                    if (!Click(TEXT("Start round")))
+                        return true;
+                }
+                break;
+            case EStep::HunterRound:
+                if (!Player->IsCourseRound() || !Mode->GetCourse() || Mode->GetCourse()->GetName() != TEXT("DA_HunterRanch"))
+                    return false;
+                Test.TestTrue(TEXT("Hunter Ranch receives the Club House choices"), Mode->GetRoundSetup() == HunterSetup);
+                Test.TestEqual(TEXT("The back nine starts on hole ten"), Mode->GetHoleNumber(), 10);
+                Test.TestEqual(TEXT("The selected green speed reaches the ball"), Mode->GetBall()->GreenStimpFeet, float(HunterSetup.GreenStimpFeet));
+                Test.TestEqual(TEXT("The round uses the player's tees"), Mode->GetCourse()->Layout[0].Tees[Mode->GetRoundSetup().TeeIndex].SetName, FName(TEXT("White")));
+                Player->ReturnToCourses();
                 break;
             case EStep::LeaveCourses:
+                if (Player->IsCourseRound() || !Player->IsMainMenuOpen())
+                    return false;
                 if (!Click(TEXT("Training")))
                     return true;
                 break;
@@ -317,7 +395,7 @@ namespace
         enum class EStep : int32
         {
             OpenMenu, OpenCourses, Search, ClearSearch, SelectCard, Selected, PlayFromNarrow, StartFromSetup, MatchSetup, SetGreenSpeed, CourseSetup, WideSetup, ReopenLobby, StartFromWideSetup,
-            FirstRound, ResumeRound, FinishFirst, FirstScorecard, SecondRound, SecondScorecard, BackInCourses, HunterPlay, HunterCourse, HunterHoles, HunterSelection, HunterCompact, LeaveCourses, TrainingAgain
+            FirstRound, ResumeRound, FinishFirst, FirstScorecard, SecondRound, SecondScorecard, BackInCourses, HunterPlay, HunterPlayers, HunterResize, HunterCourse, HunterSpeed, HunterHoles, HunterSelection, HunterCompact, HunterRound, LeaveCourses, TrainingAgain
         };
 
         bool CheckLobby(const TSharedRef<SWindow>& Window, bool bWide)
@@ -327,6 +405,8 @@ namespace
             const auto Start = RenderedPlay::FindButton(Window, TEXT("Start round"));
             if (!Test.TestTrue(TEXT("Round settings, information and Start round exist"), Settings && Facts && Start))
                 return false;
+            const auto Reset = RenderedPlay::WithTag(Window, SRoundSetup::ResetTag);
+            Test.TestTrue(TEXT("Footer actions have equal dimensions"), Reset && Reset->GetCachedGeometry().GetLocalSize().Equals(Start->GetCachedGeometry().GetLocalSize(), 1.f));
             const FVector2D FactsTop = RenderedPlay::PointOn(*Facts, {0, 0});
             if (bWide)
                 Test.TestTrue(TEXT("Facts sit to the right of settings"), FactsTop.X >= RenderedPlay::PointOn(*Settings, {1, 0}).X);
@@ -356,7 +436,10 @@ namespace
         FAutomationTestBase& Test;
         TOptional<GolfSettings::FPreferences> OriginalPreferences;
         OpenGolfPlay::FOpenGolfRoundSetup BeforeResize;
+        OpenGolfPlay::FOpenGolfRoundSetup HunterSetup;
         int32 FocusSteps = 0;
+        int32 ResizeFrame = -1;
+        float Breakpoint = 0;
         TWeakPtr<SWidget> FocusBeforeResize;
         TWeakPtr<SWidget> HomeTrainingButton;
         FVector2D HomeTrainingPosition = FVector2D::ZeroVector;

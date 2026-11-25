@@ -22,6 +22,10 @@
 #include "UI/Menu/RoundSetupPanels.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
+#include "Widgets/Input/SSlider.h"
+#include "Widgets/Layout/SScrollBar.h"
+#include "Widgets/Layout/SUniformGridPanel.h"
+#include "Widgets/Layout/SUniformWrapPanel.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
@@ -39,8 +43,7 @@ const FName SRoundSetup::HoleSetTag(TEXT("RoundHoles"));
 const FName SRoundSetup::GimmieTag(TEXT("RoundGimmie"));
 const FName SRoundSetup::GimmieSwitchTag(TEXT("RoundGimmieSwitch"));
 const FName SRoundSetup::TeesTag(TEXT("RoundTees"));
-const FName SRoundSetup::FasterTag(TEXT("RoundStimpFaster"));
-const FName SRoundSetup::SlowerTag(TEXT("RoundStimpSlower"));
+const FName SRoundSetup::GreenSpeedTag(TEXT("RoundGreenSpeed"));
 const FName SRoundSetup::StartTag(TEXT("RoundStart"));
 const FName SRoundSetup::ResetTag(TEXT("RoundReset"));
 
@@ -50,13 +53,7 @@ namespace RoundSetupDetail
     constexpr float ControlWidth = 320.0f;
     constexpr float HoleBoxWidth = 44.0f;
     constexpr float HoleBoxGap = 4.0f;
-    /** Minimum space for settings alongside the course facts. */
-    constexpr float MainWidth = 560.0f;
-    constexpr float SidebarWidth = 320.0f;
-    constexpr float ColumnGap = 24.0f;
-    /** Below this, the sidebar wraps under the tabs and both take the full width. */
-    constexpr float SideBySideWidth = MainWidth + ColumnGap + SidebarWidth;
-    const FLinearColor Pine = FLinearColor::FromSRGBColor(FColor(19, 44, 37));
+    constexpr float CardWidth = 224.0f;
     constexpr float AvatarSize = 64.0f;
 } // namespace RoundSetupDetail
 
@@ -69,7 +66,17 @@ void SRoundSetup::Construct(const FArguments& Args)
 {
     using namespace RoundSetupDetail;
     checkf(Args._Style && Args._Course, TEXT("SRoundSetup needs the menu's style and a course"));
-    Style = Args._Style;
+    Style = *Args._Style;
+    const FLinearColor Accent = Style.AccentColor;
+    auto AccentFill = [Accent](float Alpha) { return Accent.CopyWithNewOpacity(Alpha); };
+    PlayerBorder = FSlateRoundedBoxBrush(AccentFill(0.035f), MenuStyle::ControlRadius, AccentFill(0.8f), 1.0f);
+    SeatBorder = FSlateRoundedBoxBrush(FLinearColor::Transparent, MenuStyle::ControlRadius, HudStyle::MapEdgeColor(), 1.0f);
+    Style.Button.SetNormal(SeatBorder);
+    Style.PrimaryButton = Style.Button;
+    Style.PrimaryButton.SetNormal(FSlateRoundedBoxBrush(AccentFill(0.08f), MenuStyle::ControlRadius, Accent, 1.5f))
+        .SetHovered(FSlateRoundedBoxBrush(AccentFill(0.18f), MenuStyle::ControlRadius, Accent, 1.5f))
+        .SetPressed(FSlateRoundedBoxBrush(AccentFill(0.26f), MenuStyle::ControlRadius, Accent, 1.5f));
+    Style.PrimaryLabelColor = Style.TextColor;
     Course = Args._Course;
     Online = Args._Online;
     OnStart = Args._OnStart;
@@ -83,42 +90,38 @@ void SRoundSetup::Construct(const FArguments& Args)
 
     // clang-format off
     const TSharedRef<SWidget> Settings = SNew(SBorder).Tag(TEXT("RoundSettings"))
-        .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Pine).Padding(20)
+        .BorderImage(&Style.Section).Padding(16)
         [
             SNew(SWidgetSwitcher).WidgetIndex_Lambda([this] { return static_cast<int32>(Tab); })
             + SWidgetSwitcher::Slot()[MakePlayers()]
             + SWidgetSwitcher::Slot()[MakeMatch()]
             + SWidgetSwitcher::Slot()[MakeCourse()]
         ];
-    SAssignNew(Columns, SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(ColumnGap, 12))
-        + SWrapBox::Slot().VAlign(VAlign_Top).FillLineWhenSizeLessThan(SideBySideWidth)
-        [
-            SNew(SBox).WidthOverride_Lambda([this]
-            {
-                const float Width = Columns ? Columns->GetTickSpaceGeometry().GetLocalSize().X : 0.f;
-                return FOptionalSize(FMath::Max(MainWidth, FMath::FloorToFloat(Width - ColumnGap - SidebarWidth)));
-            })[Settings]
-        ]
-        + SWrapBox::Slot().VAlign(VAlign_Top).FillLineWhenSizeLessThan(SideBySideWidth)
-        [
-            SNew(SBox).WidthOverride(SidebarWidth)[MakeSidebar()]
-        ];
-    ChildSlot.Padding(TAttribute<FMargin>::CreateLambda([this]
-    {
-        const float Margin = FMath::Max(0.f, (float(GetTickSpaceGeometry().GetLocalSize().X) - 1440.f) * 0.5f);
-        return FMargin(Margin, 0);
-    }))
+    const auto Columns = SNew(SClubHouseColumns, Settings, MakeSidebar()).Tag(TEXT("ClubHouseColumns"));
+    const auto ScrollBar = SNew(SScrollBar).Thickness(FVector2D(5, 5));
+    ChildSlot.HAlign(HAlign_Center)
     [
-        SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight()[MakeHeader(*Args._Course)]
-        + SVerticalBox::Slot().AutoHeight().Padding(0, 12)[MakeTabs()]
-        + SVerticalBox::Slot().FillHeight(1)
+        SNew(SBox).WidthOverride(1440)
         [
-            SAssignNew(Scroll, SScrollBox).Clipping(EWidgetClipping::ClipToBounds)
-            .ScrollWhenFocusChanges(EScrollWhenFocusChanges::InstantScroll)
-            + SScrollBox::Slot()[Columns.ToSharedRef()]
+            SNew(SVerticalBox)
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, 10)
+            [PageHeader::Make(Style, FText::FromString(TEXT("Club House")), OnBack)]
+            + SVerticalBox::Slot().FillHeight(0.30f).MinHeight(104).MaxHeight(224)[MakeHeader(*Args._Course)]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 12)[MakeTabs()]
+            + SVerticalBox::Slot().FillHeight(1)
+            [
+                SNew(SHorizontalBox)
+                + SHorizontalBox::Slot().FillWidth(1)
+                [
+                    SAssignNew(Scroll, SScrollBox).ExternalScrollbar(ScrollBar).Clipping(EWidgetClipping::ClipToBounds)
+                    .ScrollWhenFocusChanges(EScrollWhenFocusChanges::InstantScroll)
+                    + SScrollBox::Slot()[Columns]
+                ]
+                + SHorizontalBox::Slot().AutoWidth().Padding(4, 0, 0, 0)
+                [SNew(SBox).WidthOverride(8)[ScrollBar]]
+            ]
+            + SVerticalBox::Slot().AutoHeight().Padding(0, 10, 0, 0)[MakeFooter()]
         ]
-        + SVerticalBox::Slot().AutoHeight().Padding(0, 10, 0, 0)[MakeFooter()]
     ];
     // clang-format on
 }
@@ -140,20 +143,15 @@ TSharedRef<SWidget> SRoundSetup::MakeHeader(const UGolfCourseDefinition& Picked)
             ]
         ];
     }
-    const FLinearColor Shade = FLinearColor::FromSRGBColor(FColor(10, 30, 23, 246));
+    const float Cover = GolfSettings::Get().HighContrast ? 0.90f : 0.74f;
     Banner->AddSlot()
     [
-        SNew(SSimpleGradient).Orientation(Orient_Vertical).StartColor(Shade)
-        .EndColor(GolfSettings::Get().HighContrast ? Shade : FLinearColor(0, 0, 0, 0.05f))
-        .Visibility(EVisibility::HitTestInvisible)
+        SNew(SSimpleGradient).Orientation(Orient_Horizontal).StartColor(FLinearColor(0.012f, 0.024f, 0.018f, Cover))
+        .EndColor(FLinearColor(0, 0, 0, 0.08f)).Visibility(EVisibility::HitTestInvisible)
     ];
-    const TSharedRef<SButton> Back = MainMenuDetail::MakeButton(*Style, FText::FromString(TEXT("Back to courses")),
-        [this] { OnBack.ExecuteIfBound(); }, false, MenuStyle::SmallSize);
-    Back->SetTag(PageHeader::BackTag());
-    Banner->AddSlot().VAlign(VAlign_Bottom).Padding(20, 14)
+    Banner->AddSlot().VAlign(VAlign_Bottom).Padding(20, 12)
     [
         SNew(SVerticalBox)
-        + SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)[Back]
         + SVerticalBox::Slot().AutoHeight().Padding(0, 6, 0, 0)
         [
             SNew(STextBlock).Text(Picked.DisplayName).AutoWrapText(true)
@@ -166,12 +164,9 @@ TSharedRef<SWidget> SRoundSetup::MakeHeader(const UGolfCourseDefinition& Picked)
             .Font_Lambda([] { return HudStyle::Font("Regular", MenuStyle::NavSize); }).ColorAndOpacity(HudStyle::TextColor())
         ]
     ];
-    return SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(Pine).Padding(0)
+    return SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(HudStyle::MapPanelColor()).Padding(0)
         [
-            SNew(SBox).MinDesiredHeight_Lambda([this]
-            {
-                return FOptionalSize(FMath::Clamp(float(GetTickSpaceGeometry().GetLocalSize().Y) * 0.24f, 96.f, 230.f));
-            })[Banner]
+            SNew(SBox).MinDesiredHeight(96)[Banner]
         ];
 }
 
@@ -210,7 +205,7 @@ void SRoundSetup::AddHeading(const TSharedRef<SVerticalBox>& Rows, const FString
 
 TSharedRef<SWidget> SRoundSetup::MakeTabs()
 {
-    return SNew(SChoiceChips).Style(Style).ChipTag(TabTag)
+    return SNew(SChoiceChips).Style(&Style).ChipTag(TabTag)
         .Labels({FText::FromString(TEXT("Players")), FText::FromString(TEXT("Match")), FText::FromString(TEXT("Course"))})
         .Selected_Lambda([this] { return static_cast<int32>(Tab); })
         .OnSelected_Lambda([this](int32 Index)
@@ -222,32 +217,48 @@ TSharedRef<SWidget> SRoundSetup::MakeTabs()
 
 TSharedRef<SWidget> SRoundSetup::MakePlayers()
 {
-    const auto SignedIn = [this] { return Online.IsValid() && Online->HasSession(); };
-    const TSharedRef<SVerticalBox> Rows = SNew(SVerticalBox);
-    AddHeading(Rows, TEXT("Playing this round"));
-    Rows->AddSlot().AutoHeight().Padding(0, 8)
+    using namespace RoundSetupDetail;
+    const auto PlayerName = [this]
+    {
+        return Online.IsValid() && Online->HasSession() ? Online->GetDisplayName() : FString(TEXT("Guest"));
+    };
+    const auto Avatar = SNew(SAvatarImage).Tag(PlayerAvatarTag).Size(AvatarSize)
+        .Texture_Lambda([this] { return PlayerAvatar::Texture(GolfSettings::Get(), Online.Get()); });
+    const auto Details = SNew(SVerticalBox);
+    Details->AddSlot().AutoHeight().HAlign(HAlign_Center)
     [
-        SNew(SHorizontalBox).Tag(PlayerTag)
-        .Visibility_Lambda([SignedIn] { return SignedIn() ? EVisibility::Visible : EVisibility::Collapsed; })
-        + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+        SNew(SOverlay)
+        + SOverlay::Slot()[Avatar]
+        + SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
         [
-            SNew(SAvatarImage).Tag(PlayerAvatarTag).Size(RoundSetupDetail::AvatarSize)
-            .Texture_Lambda([this] { return PlayerAvatar::Texture(GolfSettings::Get(), Online.Get()); })
-        ]
-        + SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center).Padding(16, 0, 0, 0)
-        [
-            SNew(STextBlock).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::BodySize); }).AutoWrapText(true)
-            .ColorAndOpacity(HudStyle::TextColor())
-            .Text_Lambda([this] { return FText::FromString(Online.IsValid() ? Online->GetDisplayName() : FString()); })
+            SNew(STextBlock).ColorAndOpacity(Style.TextColor).Font_Lambda([] { return HudStyle::Font("Bold", 24); })
+            .Visibility_Lambda([Avatar] { return Avatar->GetShownTexture() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+            .Text_Lambda([PlayerName] { return FText::FromString(PlayerName().Left(1).ToUpper()); })
         ]
     ];
-    Rows->AddSlot().AutoHeight()
+    Details->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0, 8)
     [
-        SNew(STextBlock).Text(FText::FromString(TEXT("You can play this round without signing in."))).AutoWrapText(true)
-        .Font_Lambda([] { return HudStyle::Font("Regular", MenuStyle::NavSize); }).ColorAndOpacity(HudStyle::TextColor())
-        .Visibility_Lambda([SignedIn] { return SignedIn() ? EVisibility::Collapsed : EVisibility::Visible; })
+        SNew(STextBlock).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::BodySize); })
+        .ColorAndOpacity(Style.TextColor).AutoWrapText(true).Justification(ETextJustify::Center)
+        .Text_Lambda([PlayerName] { return FText::FromString(PlayerName()); })
     ];
-    return Rows;
+    if (TeeCount > 0)
+    {
+        Details->AddSlot().AutoHeight().Padding(0, 6, 0, 4)[MakeText(FText::FromString(TEXT("Tees")), MenuStyle::SmallSize, true)];
+        Details->AddSlot().AutoHeight()[MakeTees()];
+    }
+    return SNew(SUniformWrapPanel).SlotPadding(FMargin(0, 0, 10, 8)).MinDesiredSlotWidth(CardWidth).MaxDesiredSlotWidth(300)
+        .HAlign(HAlign_Fill)
+        + SUniformWrapPanel::Slot()
+        [ SNew(SBorder).Tag(PlayerTag).BorderImage(&PlayerBorder).Padding(16)[Details] ]
+        + SUniformWrapPanel::Slot()
+        [
+            SNew(SBorder).BorderImage(&SeatBorder).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(16)
+            [
+                SNew(STextBlock).Text(FText::FromString(TEXT("Open seat"))).ColorAndOpacity(Style.LabelColor)
+                .Font_Lambda([] { return HudStyle::Font("Regular", MenuStyle::NavSize); })
+            ]
+        ];
 }
 
 TSharedRef<SWidget> SRoundSetup::MakeMatch()
@@ -263,9 +274,7 @@ TSharedRef<SWidget> SRoundSetup::MakeCourse()
 {
     const TSharedRef<SVerticalBox> Rows = SNew(SVerticalBox);
     AddHeading(Rows, TEXT("Course options"));
-    AddRow(Rows, TEXT("Green speed"), TEXT("Stimp for every green this round; fairways keep Game Defaults."), MakeGreenSpeed());
-    if (TeeCount > 1)
-        AddRow(Rows, TEXT("Tees"), TEXT("The tee set every hole plays from."), MakeTees());
+    AddRow(Rows, TEXT("Green speed"), TEXT("Distance a Stimp putt rolls on a level green."), MakeGreenSpeed());
     if (HoleCount > 0)
     {
         AddHeading(Rows, TEXT("Holes"));
@@ -282,33 +291,60 @@ FName SRoundSetup::TeeSet() const
 
 TSharedRef<SWidget> SRoundSetup::MakeTees()
 {
-    // One chip per tee set, in the scorecard's order; the sidebar's Total distance follows the pick.
-    TArray<FText> Labels;
-    if (const UGolfCourseDefinition* Picked = Course.Get())
-        for (const FGolfCourseTee& Tee : Picked->Layout[0].Tees)
-            Labels.Add(FText::FromName(Tee.SetName));
-    return SNew(SChoiceChips).Style(Style).Labels(Labels).ChipTag(TeesTag)
-        .Selected_Lambda([this] { return Setup.TeeIndex; })
-        .OnSelected_Lambda([this](int32 Index) { Setup.TeeIndex = FMath::Clamp(Index, 0, FMath::Max(TeeCount - 1, 0)); });
+    auto Label = [this](FName Set)
+    {
+        const UGolfCourseDefinition* Picked = Course.Get();
+        if (!Picked)
+            return FText::GetEmpty();
+        return FText::FromString(Set.ToString() + TEXT(" · ") + GolfSettings::RoundDistance(RoundConditions::CourseLengthM(*Picked, Set)));
+    };
+    if (TeeCount == 1)
+        return MakeText(Label(TeeSet()), MenuStyle::NavSize);
+    for (int32 Index = 0; Index < TeeCount; ++Index)
+        TeeOptions.Add(RoundConditions::TeeSetName(*Course.Get(), Index));
+    return SAssignNew(TeePicker, SComboBox<FName>).Tag(TeesTag).OptionsSource(&TeeOptions)
+        .InitiallySelectedItem(TeeOptions[Setup.TeeIndex]).ButtonStyle(&Style.Button).ForegroundColor(Style.TextColor)
+        .OnGenerateWidget_Lambda([Label](FName Set) { return MakeText(Label(Set), MenuStyle::NavSize); })
+        .OnSelectionChanged_Lambda([this](FName Set, ESelectInfo::Type)
+        {
+            const int32 Index = TeeOptions.Find(Set);
+            if (Index != INDEX_NONE) Setup.TeeIndex = Index;
+        })
+        [
+            SNew(STextBlock).Font_Lambda([] { return HudStyle::Font("Regular", MenuStyle::NavSize); })
+            .AutoWrapText(true).ColorAndOpacity(Style.TextColor).Text_Lambda([this, Label] { return Label(TeeSet()); })
+        ];
 }
 
 TSharedRef<SWidget> SRoundSetup::MakeGreenSpeed()
 {
-    auto Step = [this](int32 Feet) { Setup.GreenStimpFeet = FMath::Clamp(Setup.GreenStimpFeet + Feet, MinRoundStimpFeet, MaxRoundStimpFeet); };
-    const TSharedRef<SButton> Slower = MainMenuDetail::MakeButton(*Style, FText::FromString(TEXT("Slower")), [Step] { Step(-1); }, false, MenuStyle::NavSize);
-    const TSharedRef<SButton> Faster = MainMenuDetail::MakeButton(*Style, FText::FromString(TEXT("Faster")), [Step] { Step(1); }, false, MenuStyle::NavSize);
-    Slower->SetTag(SlowerTag);
-    Faster->SetTag(FasterTag);
-    // clang-format off
-    return SNew(SHorizontalBox)
-        + SHorizontalBox::Slot().AutoWidth()[Slower]
-        + SHorizontalBox::Slot().FillWidth(1).HAlign(HAlign_Center).VAlign(VAlign_Center)
+    const FSlateRoundedBoxBrush Track(HudStyle::LabelColor().CopyWithNewOpacity(.55f), 2.f);
+    const FSlateRoundedBoxBrush Thumb(Style.AccentColor, 8.f, FVector2f(16.f, 16.f));
+    SliderStyle = FSliderStyle::GetDefault();
+    SliderStyle.SetNormalBarImage(Track).SetHoveredBarImage(Track).SetBarThickness(4.f)
+        .SetNormalThumbImage(Thumb).SetHoveredThumbImage(FSlateRoundedBoxBrush(Style.TextColor, 8.f, FVector2f(16.f, 16.f)));
+    return SNew(SVerticalBox)
+        + SVerticalBox::Slot().AutoHeight()
         [
-            SNew(STextBlock).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::BodySize); }).ColorAndOpacity(HudStyle::TextColor())
+            SNew(STextBlock).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::BodySize); }).ColorAndOpacity(Style.TextColor)
             .Text_Lambda([this] { return FText::FromString(GreenSpeedLabel(Setup.GreenStimpFeet)); })
         ]
-        + SHorizontalBox::Slot().AutoWidth()[Faster];
-    // clang-format on
+        + SVerticalBox::Slot().AutoHeight().Padding(0, 4)
+        [
+            SNew(SSlider).Tag(GreenSpeedTag).MinValue(MinRoundStimpFeet).MaxValue(MaxRoundStimpFeet)
+            .Style(&SliderStyle).StepSize(1.f).RequiresControllerLock(false)
+#if WITH_ACCESSIBILITY
+            .AccessibleText(FText::FromString(TEXT("Green speed")))
+#endif
+            .Value_Lambda([this] { return float(Setup.GreenStimpFeet); })
+            .OnValueChanged_Lambda([this](float Feet) { Setup.GreenStimpFeet = FMath::Clamp(FMath::RoundToInt(Feet), MinRoundStimpFeet, MaxRoundStimpFeet); })
+        ]
+        + SVerticalBox::Slot().AutoHeight()
+        [
+            SNew(SHorizontalBox)
+            + SHorizontalBox::Slot().FillWidth(1)[MakeText(FText::FromString(FString::Printf(TEXT("%d ft"), MinRoundStimpFeet)), MenuStyle::SmallSize, true)]
+            + SHorizontalBox::Slot().AutoWidth()[MakeText(FText::FromString(FString::Printf(TEXT("%d ft"), MaxRoundStimpFeet)), MenuStyle::SmallSize, true)]
+        ];
 }
 
 TSharedRef<SWidget> SRoundSetup::MakeGimmieSwitch()
@@ -329,7 +365,7 @@ TSharedRef<SWidget> SRoundSetup::MakeGimmieSwitch()
 
 TSharedRef<SWidget> SRoundSetup::MakeGimmieRadius()
 {
-    return SNew(SChoiceChips).Style(Style).ChipTag(GimmieTag).IsEnabled_Lambda([this] { return Setup.bGimmie; })
+    return SNew(SChoiceChips).Style(&Style).ChipTag(GimmieTag).IsEnabled_Lambda([this] { return Setup.bGimmie; })
         .Labels({FText::FromString(FString::Printf(TEXT("%d ft"), ShortGimmieFeet)), FText::FromString(FString::Printf(TEXT("%d ft"), LongGimmieFeet))})
         .Selected_Lambda([this] { return Setup.GimmieFeet == LongGimmieFeet ? 1 : 0; })
         .OnSelected_Lambda([this](int32 Index) { Setup.GimmieFeet = Index == 1 ? LongGimmieFeet : ShortGimmieFeet; });
@@ -391,7 +427,7 @@ TSharedRef<SWidget> SRoundSetup::MakeHoles()
     return SNew(SVerticalBox)
         + SVerticalBox::Slot().AutoHeight()
         [
-            SNew(SChoiceChips).Style(Style).Labels(Labels).ChipTag(HoleSetTag)
+            SNew(SChoiceChips).Style(&Style).Labels(Labels).ChipTag(HoleSetTag)
             .Selected_Lambda([this] { return HoleSetIndex(); })
             // Custom keeps the ticks; the grid below changes them.
             .OnSelected_Lambda([this, Sets](int32 Index) { if (Sets[Index] != EOpenGolfHoleSet::Custom) Setup.Holes = HolesFor(Sets[Index], HoleCount); })
@@ -425,11 +461,11 @@ TSharedRef<SWidget> SRoundSetup::MakeSidebar()
     return SNew(SVerticalBox)
         + SVerticalBox::Slot().AutoHeight().Padding(0, 0, 0, MenuStyle::RowGap)
         [
-            SNew(SCourseInformation).Tag(TEXT("RoundFacts")).Style(Style).Course(Picked).TeeSet_Lambda([this] { return TeeSet(); })
+            SNew(SCourseInformation).Tag(TEXT("RoundFacts")).Style(&Style).Course(Picked).TeeSet_Lambda([this] { return TeeSet(); })
         ]
         + SVerticalBox::Slot().AutoHeight()
         [
-            SNew(SCourseConditions).Style(Style).Course(Picked).Setup_Lambda([this] { return Setup; })
+            SNew(SCourseConditions).Style(&Style).Course(Picked).Setup_Lambda([this] { return Setup; })
         ];
     // clang-format on
 }
@@ -446,29 +482,38 @@ TSharedRef<SWidget> SRoundSetup::MakeFooter()
                 SNew(STextBlock).AutoWrapText(true).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::NavSize); })
                 .ColorAndOpacity(HudStyle::TextColor()).Text(this, &SRoundSetup::HoleSummary)
             ]
-            + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0, 0, 8, 0)
-            [
-                SNew(SButton).ButtonStyle(&Style->Button).HAlign(HAlign_Center).Tag(ResetTag)
-                .OnClicked_Lambda([this] { Setup = Defaults; return FReply::Handled(); })
-                [MakeText(FText::FromString(TEXT("Reset to defaults")), MenuStyle::NavSize)]
-            ]
             + SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
             [
-                SAssignNew(StartButton, SButton).ButtonStyle(&Style->PrimaryButton).HAlign(HAlign_Center).Tag(StartTag)
-                .IsEnabled_Lambda([this] { return CanStart(); })
-                .OnClicked_Lambda([this]
-                {
-                    if (CanStart())
-                    {
-                        FOpenGolfRoundSetup Picked = Setup;
-                        Picked.Validate(HoleCount, TeeCount);
-                        OnStart.ExecuteIfBound(Picked);
-                    }
-                    return FReply::Handled();
-                })
+                SNew(SUniformGridPanel).SlotPadding(FMargin(4, 0))
+                + SUniformGridPanel::Slot(0, 0)
                 [
-                    SNew(STextBlock).Text(FText::FromString(TEXT("Start round"))).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::BodySize); })
-                    .ColorAndOpacity(Style->PrimaryLabelColor)
+                    SNew(SButton).ButtonStyle(&Style.Button).HAlign(HAlign_Center).VAlign(VAlign_Center).Tag(ResetTag)
+                    .OnClicked_Lambda([this]
+                    {
+                        Setup = Defaults;
+                        if (TeePicker) TeePicker->SetSelectedItem(TeeOptions[Setup.TeeIndex]);
+                        return FReply::Handled();
+                    })
+                    [MakeText(FText::FromString(TEXT("Reset")), MenuStyle::BodySize)]
+                ]
+                + SUniformGridPanel::Slot(1, 0)
+                [
+                    SAssignNew(StartButton, SButton).ButtonStyle(&Style.PrimaryButton).HAlign(HAlign_Center).VAlign(VAlign_Center).Tag(StartTag)
+                    .IsEnabled_Lambda([this] { return CanStart(); })
+                    .OnClicked_Lambda([this]
+                    {
+                        if (CanStart())
+                        {
+                            FOpenGolfRoundSetup Picked = Setup;
+                            Picked.Validate(HoleCount, TeeCount);
+                            OnStart.ExecuteIfBound(Picked);
+                        }
+                        return FReply::Handled();
+                    })
+                    [
+                        SNew(STextBlock).Text(FText::FromString(TEXT("Start round"))).Font_Lambda([] { return HudStyle::Font("Bold", MenuStyle::BodySize); })
+                        .ColorAndOpacity(Style.PrimaryLabelColor)
+                    ]
                 ]
             ]
         ];

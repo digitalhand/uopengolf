@@ -3,9 +3,30 @@
 
 #include "Play/OpenGolfRoundSetup.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/SPanel.h"
 
 class UGolfCourseDefinition;
 struct FOpenGolfAccountStyle;
+
+/** Keeps the settings and course facts in the same widget tree as the window changes size. */
+class SClubHouseColumns : public SPanel
+{
+public:
+    SLATE_BEGIN_ARGS(SClubHouseColumns) {}
+    SLATE_END_ARGS()
+    void Construct(const FArguments&, const TSharedRef<SWidget>& Settings, const TSharedRef<SWidget>& Sidebar);
+    FChildren* GetChildren() override { return &Children; }
+    void OnArrangeChildren(const FGeometry& Geometry, FArrangedChildren& Arranged) const override;
+    FVector2D ComputeDesiredSize(float) const override;
+    void Tick(const FGeometry& Geometry, double Time, float Delta) override;
+
+    static constexpr float SideBySideWidth = 904.f;
+
+private:
+    static bool FitsSideBySide(const FGeometry& Geometry);
+    TSlotlessChildren<SWidget> Children{this};
+    bool bSideBySide = false;
+};
 
 /** The round setup sidebar's facts about the course: where it is, its elevation, par, designer and length from the picked tees. */
 class SCourseInformation : public SCompoundWidget

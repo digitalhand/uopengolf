@@ -12,6 +12,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SScaleBox.h"
 #include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
@@ -51,10 +52,13 @@ void SCourseBrowser::Construct(const FArguments& Args)
         SNew(SScrollBox).Clipping(EWidgetClipping::ClipToBounds)
         + SScrollBox::Slot()[MakeText(FText::FromString(TEXT("Courses")), MenuStyle::TitleSize)]
         + SScrollBox::Slot().Padding(0, 2, 0, 16)[InstalledCount.ToSharedRef()]
-        + SScrollBox::Slot().Padding(0, 0, 0, 16)
+        + SScrollBox::Slot().HAlign(HAlign_Left).Padding(0, 0, 0, 16)
         [
-            SNew(SSearchBox).Style(&SearchStyle).Tag(TEXT("CourseSearch")).HintText(FText::FromString(TEXT("Search courses")))
-            .OnTextChanged_Lambda([this](const FText& Text) { Filter = Text.ToString().TrimStartAndEnd(); })
+            SNew(SBox).WidthOverride(MenuStyle::SearchWidth)
+            [
+                SNew(SSearchBox).Style(&SearchStyle).Tag(TEXT("CourseSearch")).HintText(FText::FromString(TEXT("Search courses")))
+                .OnTextChanged_Lambda([this](const FText& Text) { Filter = Text.ToString().TrimStartAndEnd(); })
+            ]
         ]
         + SScrollBox::Slot().Padding(0, 0, 0, 12)
         [
@@ -109,7 +113,7 @@ void SCourseBrowser::RebuildCards()
         if (UTexture2D* Texture = Course->Preview.Get())
         {
             Preview->SetResourceObject(Texture);
-            Preview->ImageSize = PreviewSize;
+            Preview->ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
         }
         else
         {
@@ -207,7 +211,12 @@ TSharedRef<SWidget> SCourseBrowser::MakeCard(const UGolfCourseDefinition& Course
                     .OnClicked_Lambda([this, Weak] { Selected = Weak; return FReply::Handled(); })
                     [
                         SNew(SOverlay)
-                        + SOverlay::Slot()[SNew(SImage).Image(&Preview)]
+                        + SOverlay::Slot()
+                        [
+                            SNew(SBox).WidthOverride(CardWidth).HeightOverride(CardWidth * PreviewAspect)
+                            .Clipping(EWidgetClipping::ClipToBounds)
+                            [ SNew(SScaleBox).Stretch(EStretch::ScaleToFill)[SNew(SImage).Image(&Preview)] ]
+                        ]
                         + SOverlay::Slot().VAlign(VAlign_Bottom)
                         [
                             SNew(SBorder).BorderImage(Fill).BorderBackgroundColor(CardCaptionColor).Padding(10)

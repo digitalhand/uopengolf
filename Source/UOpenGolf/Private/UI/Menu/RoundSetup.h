@@ -2,25 +2,16 @@
 #pragma once
 
 #include "Play/OpenGolfRoundSetup.h"
+#include "OpenGolfAccountStyle.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/Input/SComboBox.h"
 
 class SVerticalBox;
-class SWrapBox;
 class SScrollBox;
 class UGolfCourseDefinition;
 class UOpenGolfOnlineSubsystem;
-struct FOpenGolfAccountStyle;
 
-/**
- * The page between a course card's Play and the round. Three tabs hold what the player chooses:
- * - Players: the signed-in player or the option to play signed out.
- * - Match: the Gimmie and its radius.
- * - Course: the green speed, the tees and the holes to play.
- * A sidebar beside them (under them on a narrow window) shows the course's information and the round's conditions,
- * above a fixed action bar. The wind is not a choice: the caller rolls one for the round
- * (RoundConditions::RollWind) and the page shows it. Every course gets the same page; a single-hole course has no hole
- * picker and a course with one tee set no tee picker.
- */
+/** The Club House opens between course selection and the first tee. */
 class SRoundSetup : public SCompoundWidget
 {
 public:
@@ -40,7 +31,7 @@ public:
     SLATE_ARGUMENT(const UGolfCourseDefinition*, Course)
     /** The choices the page opens with, including the round's rolled wind. */
     SLATE_ARGUMENT(OpenGolfPlay::FOpenGolfRoundSetup, Setup)
-    /** What Reset to defaults restores (RoundConditions::Defaults); give it the same wind as Setup to keep the weather. */
+    /** What Reset restores (RoundConditions::Defaults); give it the same wind as Setup to keep the weather. */
     SLATE_ARGUMENT(OpenGolfPlay::FOpenGolfRoundSetup, Defaults)
     /** The account service: Players shows its signed-in player. Players can also start a round signed out. */
     SLATE_ARGUMENT(TWeakObjectPtr<UOpenGolfOnlineSubsystem>, Online)
@@ -62,16 +53,15 @@ public:
     // Tags for tests and tools: chips are SChoiceChips::ChipName(<tag>, index).
     /** The tab chips, in ETab order. */
     static const FName TabTag;
-    /** The signed-in player's card on Players, and its avatar. */
+    /** The active player's card on Players, and its avatar. */
     static const FName PlayerTag;
     static const FName PlayerAvatarTag;
     static const FName HoleSetTag;
     static const FName GimmieTag;
     static const FName GimmieSwitchTag;
-    /** The tee set chips, in the first hole's order. */
+    /** The player's tee selector. */
     static const FName TeesTag;
-    static const FName FasterTag;
-    static const FName SlowerTag;
+    static const FName GreenSpeedTag;
     static const FName StartTag;
     static const FName ResetTag;
     /** The checkbox of hole Number. */
@@ -98,7 +88,7 @@ private:
     void ToggleHole(int32 Number);
     int32 HoleSetIndex() const;
 
-    const FOpenGolfAccountStyle* Style = nullptr;
+    FOpenGolfAccountStyle Style;
     TWeakObjectPtr<const UGolfCourseDefinition> Course;
     TWeakObjectPtr<UOpenGolfOnlineSubsystem> Online;
     OpenGolfPlay::FOpenGolfRoundSetup Setup;
@@ -106,7 +96,11 @@ private:
     FOnStart OnStart;
     FSimpleDelegate OnBack;
     FSlateBrush PreviewBrush;
-    TSharedPtr<SWrapBox> Columns;
+    FSlateBrush PlayerBorder;
+    FSlateBrush SeatBorder;
+    FSliderStyle SliderStyle;
+    TArray<FName> TeeOptions;
+    TSharedPtr<SComboBox<FName>> TeePicker;
     TSharedPtr<SScrollBox> Scroll;
     TSharedPtr<SWidget> StartButton;
     ETab Tab = ETab::Players;

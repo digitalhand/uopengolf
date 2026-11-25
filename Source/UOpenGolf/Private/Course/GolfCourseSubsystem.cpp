@@ -7,6 +7,7 @@
 #include "Interfaces/IPluginManager.h"
 #include "Algo/Sort.h"
 #include "Engine/AssetManager.h"
+#include "Engine/Texture2D.h"
 #include "Engine/StreamableManager.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -46,6 +47,7 @@ void UGolfCourseSubsystem::Deinitialize()
         Handle->CancelHandle();
     Handle.Reset();
     Courses.Empty();
+    InstalledPreviews.Empty();
     Super::Deinitialize();
 }
 
@@ -76,13 +78,14 @@ void UGolfCourseSubsystem::AddCourse(UGolfCourseDefinition& Course)
 {
     if (UAssetManager* Manager = UAssetManager::GetIfInitialized())
         Manager->RegisterSpecificPrimaryAsset(Course.GetPrimaryAssetId(), FAssetData(&Course));
-    Course.Preview.LoadSynchronous();
+    InstalledPreviews.Add(FSoftObjectPath(&Course), Course.Preview.LoadSynchronous());
     Courses.AddUnique(&Course);
     SortCourses();
 }
 
 void UGolfCourseSubsystem::RemoveCourse(const FSoftObjectPath& Definition)
 {
+    InstalledPreviews.Remove(Definition);
     Courses.RemoveAll([&](const TObjectPtr<UGolfCourseDefinition>& Course) { return !Course || FSoftObjectPath(Course) == Definition; });
 }
 

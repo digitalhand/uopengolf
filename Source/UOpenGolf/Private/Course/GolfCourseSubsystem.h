@@ -6,6 +6,7 @@
 #include "GolfCourseSubsystem.generated.h"
 
 class UGolfCourseDefinition;
+class UTexture2D;
 struct FStreamableHandle;
 
 /**
@@ -60,6 +61,9 @@ private:
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UGolfCourseDefinition>> Courses;
+    // Courses installed after startup are outside the original bundle load.
+    UPROPERTY(Transient)
+    TMap<FSoftObjectPath, TObjectPtr<UTexture2D>> InstalledPreviews;
     TSharedPtr<FStreamableHandle> Handle;
     bool bLoaded = false;
     /** The last setup started for each course, by its definition's asset name. */

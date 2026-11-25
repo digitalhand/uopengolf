@@ -75,13 +75,13 @@ definition with its preview when the game starts; the main menu's Courses browse
 The editor command `uopengolf.CreateCourseAssets` creates the bundled Savanna Range definition and imports its preview
 from `Assets/Images/Courses` only if they are missing.
 
-**Play** opens the course's **Round setup** page (`SRoundSetup`, filling the menu while the browser keeps its selection), and **Start round** travels to the
+**Play** opens the course's **Club House** (`SRoundSetup`, filling the menu while the browser keeps its selection), and **Start round** travels to the
 course's map with `?Course=<definition name>` and the setup's options.
 - **The page.** Players / Match / Course tabs (`SChoiceChips` driving an `SWidgetSwitcher`) hold the choices: the
-  signed-in player or a signed-out play message, the Gimmie and its radius, and the green stimp, tees and holes. A sidebar
+  player card and tees, the Gimmie and its radius, and the green speed slider and holes. A sidebar
   (`UI/Menu/RoundSetupPanels`: `SCourseInformation`, `SCourseConditions`) shows the definition's `Location`,
-  `ElevationM`, par, `Designer` and length from the picked tees, and the round's wind. The two columns share an
-  `SWrapBox`, so the sidebar follows the settings on a narrow window. The tabs and bottom action bar stay visible while the body scrolls.
+  `ElevationM`, par, `Designer` and length from the picked tees, and the round's wind. The two columns share a
+  `SClubHouseColumns` panel, so the sidebar follows the settings on a narrow window. The tabs and bottom action bar stay visible while the body scrolls.
 - **The setup.** `OpenGolfPlay::FOpenGolfRoundSetup` (OpenGolfCourse `Play/`): tee set, green stimp, Gimmie, the holes,
   and the round's wind (whole mph 0–13 and a whole world direction, clockwise from +X as the ball reads it).
   `ToOptions`/`FromOptions` carry it as `?TeeIndex=?Stimp=?WindMph=?WindFrom=?Gimmie=?Holes=1-9,12`.
@@ -331,7 +331,7 @@ by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
 | `Hud/` | The play HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, the hole map (`SHoleMapPanel`, `SHoleMinimap`, `HoleMapOverlay`), shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
 | `Club/` | Club picker and club-face glyph |
 | `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |
-| `Menu/` | `SMainMenu` (home with its launch buttons, pause, Settings, Shot history, dialogs, the final scorecard), the Courses browser (`SCourseBrowser`), the Round setup page (`SRoundSetup`) and display-mode options |
+| `Menu/` | `SMainMenu` (home with its launch buttons, pause, Settings, Shot history, dialogs, the final scorecard), the Courses browser (`SCourseBrowser`), the Club House (`SRoundSetup`) and display-mode options |
 
 A widget used by more than one area goes in `Common/`; a new screen or HUD feature gets its
 own folder. Raw-pointer Slate arguments always get a `nullptr` default, which

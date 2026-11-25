@@ -4,6 +4,7 @@
 #include "GolfCourseDefinition.h"
 #include "OpenGolfAccountStyle.h"
 #include "OpenGolfSettings.h"
+#include "Layout/ArrangedChildren.h"
 #include "Play/OpenGolfWindSetting.h"
 #include "UI/Common/HudStyle.h"
 #include "UI/Common/MenuStyle.h"
@@ -81,6 +82,51 @@ namespace RoundSetupPanelsDetail
         // clang-format on
     }
 } // namespace RoundSetupPanelsDetail
+
+void SClubHouseColumns::Construct(const FArguments&, const TSharedRef<SWidget>& Settings, const TSharedRef<SWidget>& Sidebar)
+{
+    Children.Add(Settings);
+    Children.Add(Sidebar);
+    SetCanTick(true);
+}
+
+bool SClubHouseColumns::FitsSideBySide(const FGeometry& Geometry)
+{
+    // Small windows also scale down their UI. Keep the columns readable at either scale.
+    return Geometry.GetLocalSize().X * FMath::Min(1.f, Geometry.GetAccumulatedLayoutTransform().GetScale()) >= SideBySideWidth;
+}
+
+void SClubHouseColumns::OnArrangeChildren(const FGeometry& Geometry, FArrangedChildren& Arranged) const
+{
+    const float Width = Geometry.GetLocalSize().X;
+    const bool bWide = FitsSideBySide(Geometry);
+    const float SidebarWidth = bWide ? FMath::Clamp(Width / 3.f, 320.f, 460.f) : Width;
+    const float SettingsWidth = bWide ? Width - SidebarWidth - 16.f : Width;
+    const auto Settings = Children[0];
+    const auto Sidebar = Children[1];
+    const float SettingsHeight = Settings->GetDesiredSize().Y;
+    const FVector2D SidebarPosition = bWide ? FVector2D(SettingsWidth + 16.f, 0) : FVector2D(0, SettingsHeight + 12.f);
+    Arranged.AddWidget(Geometry.MakeChild(Settings, FVector2D::ZeroVector, FVector2D(SettingsWidth, SettingsHeight)));
+    Arranged.AddWidget(Geometry.MakeChild(Sidebar, SidebarPosition, FVector2D(SidebarWidth, Sidebar->GetDesiredSize().Y)));
+}
+
+FVector2D SClubHouseColumns::ComputeDesiredSize(float) const
+{
+    const float SettingsHeight = Children[0]->GetDesiredSize().Y;
+    const float SidebarHeight = Children[1]->GetDesiredSize().Y;
+    return FVector2D(0, bSideBySide ? FMath::Max(SettingsHeight, SidebarHeight) : SettingsHeight + 12.f + SidebarHeight);
+}
+
+void SClubHouseColumns::Tick(const FGeometry& Geometry, double Time, float Delta)
+{
+    SPanel::Tick(Geometry, Time, Delta);
+    const bool bWide = FitsSideBySide(Geometry);
+    if (bWide != bSideBySide)
+    {
+        bSideBySide = bWide;
+        Invalidate(EInvalidateWidgetReason::Layout);
+    }
+}
 
 TSharedRef<SWidget> RoundSetupPanels::Section(const FOpenGolfAccountStyle& Style, const FText& Heading, const TSharedRef<SWidget>& Content)
 {

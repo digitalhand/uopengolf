@@ -13,6 +13,8 @@ The downloadable Hunter Ranch course (`Plugins/HunterRanch`, not part of the bas
 - **USDA NAIP 2022** aerial imagery (US public domain), used only to review tee and cup placement. It is cached
   outside Git under `Saved/CourseDesign/` and is never shipped.
 
+The Club House thumbnail is a game capture of the approach to hole 9. Its source image and UI texture live in the Hunter Ranch plugin.
+
 The orientation repair rebuilt the Unreal assets from the same geographic sources. The published layout and author corrections remain in east/north metres.
 
 The course uses the existing course-kit surfaces and a new procedural `M_Water` lake material (no textures) in

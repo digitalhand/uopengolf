@@ -18,12 +18,23 @@
 #include "UI/Menu/RoundSetupPanels.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
+#include "Engine/Texture2D.h"
+#include "Widgets/Input/SSlider.h"
 
 namespace RoundSetupMenuTestDetail
 {
     using namespace OpenGolfPlay;
     const TCHAR* const HunterPath = TEXT("/HunterRanch/Course/DA_HunterRanch.DA_HunterRanch");
     const TCHAR* const SavannaPath = TEXT("/Game/UOpenGolf/Courses/DA_SavannaRange.DA_SavannaRange");
+
+    // The test drives an unmounted page, so Slate has no window tick to refresh its bound attributes.
+    void Refresh(const TSharedRef<SWidget>& Widget)
+    {
+        Widget->UpdateAllAttributes();
+        FChildren* Children = Widget->GetChildren();
+        for (int32 Index = 0; Index < Children->Num(); ++Index)
+            Refresh(Children->GetChildAt(Index));
+    }
 
     bool Click(FAutomationTestBase& Test, const TSharedRef<SWidget>& Root, FName Tag)
     {
@@ -33,6 +44,7 @@ namespace RoundSetupMenuTestDetail
         if (!Test.TestTrue(FString::Printf(TEXT("%s is on the page"), *Tag.ToString()), Found.IsValid() && Found->GetTypeAsString() == TEXT("SButton")))
             return false;
         StaticCastSharedPtr<SButton>(Found)->SimulateClick();
+        Refresh(Root);
         return true;
     }
 
@@ -42,6 +54,7 @@ namespace RoundSetupMenuTestDetail
         if (!Test.TestTrue(FString::Printf(TEXT("%s is on the page"), *Tag.ToString()), Found.IsValid() && Found->GetTypeAsString() == TEXT("SCheckBox")))
             return false;
         StaticCastSharedPtr<SCheckBox>(Found)->ToggleCheckedState();
+        Refresh(Root);
         return true;
     }
 
@@ -105,14 +118,22 @@ bool FRoundSetupMenuTest::RunTest(const FString&)
         .OnStart_Lambda([&Started](const FOpenGolfRoundSetup& Setup) { Started = Setup; })
         .OnBack_Lambda([&bBack] { bBack = true; });
 
+    Refresh(Page);
+    TestNotNull(TEXT("Hunter Ranch has a loadable course preview"), Hunter->Preview.LoadSynchronous());
+    TestTrue(TEXT("Club House is the page title"), RenderedPlay::HasText(Page, TEXT("Club House")));
     TestTrue(TEXT("The page names the course"), RenderedPlay::HasText(Page, Hunter->DisplayName.ToString()));
     TArray<FString> ToolTips;
     RenderedPlay::WidgetsWithToolTips(Page, ToolTips);
     TestTrue(FString::Printf(TEXT("No tooltips on the page: %s"), *FString::Join(ToolTips, TEXT(", "))), ToolTips.IsEmpty());
 
     TestEqual(TEXT("The page opens on Players"), Page->GetTab(), ETab::Players);
-    TestTrue(TEXT("A signed-out player knows they can start"), RenderedPlay::HasText(Page, TEXT("You can play this round without signing in.")));
-    TestFalse(TEXT("Nobody signed in: no player"), Shown(Page, SRoundSetup::PlayerTag));
+    TestTrue(TEXT("The active card names the guest"), Shown(Page, SRoundSetup::PlayerTag) && RenderedPlay::HasText(Page, TEXT("Guest")));
+    TestTrue(TEXT("One open seat is shown"), RenderedPlay::HasText(Page, TEXT("Open seat")));
+    const auto TeePicker = StaticCastSharedPtr<SComboBox<FName>>(RenderedPlay::WithTag(Page, SRoundSetup::TeesTag));
+    if (!TestTrue(TEXT("The active player picks tees"), TeePicker.IsValid()))
+        return false;
+    const FString FirstDistance = TextOf(Page, SCourseInformation::ValueTag(SCourseInformation::EField::Distance));
+    TestEqual(TEXT("Total distance from the first tees"), FirstDistance, GolfSettings::RoundDistance(Hunter->TeeSetYards(FirstTees) * 0.9144f));
 
     // The sidebar shows on every tab: the course's information and the round's wind.
     TestTrue(TEXT("Course information"), RenderedPlay::HasText(Page, TEXT("Course information")));
@@ -136,16 +157,24 @@ bool FRoundSetupMenuTest::RunTest(const FString&)
     TestTrue(TEXT("The switch turns the Gimmie off"), Switch.IsValid() && Switch->OnKeyDown(FGeometry(), Space).IsEventHandled() && !Page->GetSetup().bGimmie);
     TestTrue(TEXT("And back on"), Switch.IsValid() && Switch->OnKeyDown(FGeometry(), Space).IsEventHandled() && Page->GetSetup().bGimmie);
 
-    // Course: green speed, tees, then the holes.
-    OpenTab(*this, Page, ETab::Course);
-    TestFalse(TEXT("Match's controls leave with their tab"), Shown(Page, SRoundSetup::GimmieSwitchTag));
-    Click(*this, Page, SRoundSetup::FasterTag);
-    TestEqual(TEXT("One step faster"), Page->GetSetup().GreenStimpFeet, 12);
-    const FString FirstDistance = TextOf(Page, SCourseInformation::ValueTag(SCourseInformation::EField::Distance));
-    TestEqual(TEXT("Total distance from the picked tees"), FirstDistance, GolfSettings::RoundDistance(Hunter->TeeSetYards(FirstTees) * 0.9144f));
-    Click(*this, Page, SChoiceChips::ChipName(SRoundSetup::TeesTag, 1));
-    TestEqual(TEXT("A tee chip picks the set"), Page->GetSetup().TeeIndex, 1);
+    OpenTab(*this, Page, ETab::Players);
+    TeePicker->SetSelectedItem(Hunter->Layout[0].Tees[1].SetName);
+    Refresh(Page);
+    TestEqual(TEXT("The player picks the second tee set"), Page->GetSetup().TeeIndex, 1);
     TestNotEqual(TEXT("The total distance follows the tees"), TextOf(Page, SCourseInformation::ValueTag(SCourseInformation::EField::Distance)), FirstDistance);
+
+    OpenTab(*this, Page, ETab::Course);
+    TestFalse(TEXT("Tees are on the player card"), Shown(Page, SRoundSetup::TeesTag));
+    const auto Slider = RenderedPlay::WithTag(Page, SRoundSetup::GreenSpeedTag);
+    if (!TestTrue(TEXT("Green speed has a slider"), Slider && Slider->GetTypeAsString() == TEXT("SSlider")))
+        return false;
+    auto Adjust = [&Slider](EUINavigation Direction, ENavigationGenesis Input)
+    {
+        Slider->OnNavigation(FGeometry(), FNavigationEvent(FModifierKeysState(), 0, Direction, Input));
+        Slider->UpdateAllAttributes();
+    };
+    Adjust(EUINavigation::Right, ENavigationGenesis::Keyboard);
+    TestEqual(TEXT("One step faster"), Page->GetSetup().GreenStimpFeet, 12);
 
     Click(*this, Page, SChoiceChips::ChipName(SRoundSetup::HoleSetTag, 2));
     TestEqual(TEXT("Back 9 picks holes 10-18"), Page->GetSetup().Holes, HolesFor(EOpenGolfHoleSet::Back, 18));
@@ -178,8 +207,12 @@ bool FRoundSetupMenuTest::RunTest(const FString&)
     Click(*this, Page, SRoundSetup::ResetTag);
     TestTrue(TEXT("Reset to defaults restores Game Defaults and every hole, and keeps the wind"), Page->GetSetup() == Defaults);
     for (int32 Step = 0; Step < 10; ++Step)
-        Click(*this, Page, SRoundSetup::FasterTag);
-    TestEqual(TEXT("The stepper stops at the fastest green"), Page->GetSetup().GreenStimpFeet, MaxRoundStimpFeet);
+        Adjust(EUINavigation::Right, ENavigationGenesis::Controller);
+    TestEqual(TEXT("The slider stops at the fastest green"), Page->GetSetup().GreenStimpFeet, MaxRoundStimpFeet);
+    for (int32 Step = 0; Step < 10; ++Step)
+        Adjust(EUINavigation::Left, ENavigationGenesis::Keyboard);
+    TestEqual(TEXT("The slider stops at the slowest green"), Page->GetSetup().GreenStimpFeet, MinRoundStimpFeet);
+    TestEqual(TEXT("Reset also resets the tee dropdown"), TeePicker->GetSelectedItem(), FirstTees);
     Click(*this, Page, PageHeader::BackTag());
     TestTrue(TEXT("Back leaves the page"), bBack);
 
@@ -208,7 +241,8 @@ bool FRoundSetupMenuTest::RunTest(const FString&)
         Session->Profile = MakeShared<FJsonObject>();
         Session->Profile->SetStringField(TEXT("display_name"), TEXT("Pat Putter"));
         const TSharedRef<SRoundSetup> Signed = SNew(SRoundSetup).Style(&Style).Course(Hunter).Setup(Defaults).Defaults(Defaults).Online(Session);
-        TestFalse(TEXT("The signed-out message goes away"), RenderedPlay::HasText(Signed, TEXT("You can play this round without signing in.")));
+        Refresh(Signed);
+        TestFalse(TEXT("The signed-out message goes away"), RenderedPlay::HasText(Signed, TEXT("Guest")));
         TestTrue(TEXT("Signed in: the player card"), Shown(Signed, SRoundSetup::PlayerTag));
         TestTrue(TEXT("The player's name"), RenderedPlay::HasText(Signed, TEXT("Pat Putter")));
         TestTrue(TEXT("The player's avatar"), Shown(Signed, SRoundSetup::PlayerAvatarTag));
@@ -228,6 +262,7 @@ bool FRoundSetupMenuTest::RunTest(const FString&)
     }
     FOpenGolfRoundSetup Still = RoundConditions::Defaults(*Savanna, Preferences);
     const TSharedRef<SRoundSetup> Single = SNew(SRoundSetup).Style(&Style).Course(Savanna).Setup(Still).Defaults(Still);
+    TestFalse(TEXT("A course without tee sets omits the field"), RenderedPlay::HasText(Single, TEXT("Tees")));
     OpenTab(*this, Single, ETab::Course);
     TestFalse(TEXT("No hole picker on a single hole"), RenderedPlay::WithTag(Single, SChoiceChips::ChipName(SRoundSetup::HoleSetTag, 0)).IsValid());
     TestTrue(TEXT("A single hole can always start"), Single->CanStart());
