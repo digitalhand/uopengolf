@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: MIT
-"""Build only new coastal materials, vegetation, and presets; preserve existing course assets."""
+"""Build only new course kit terrain materials, vegetation and presets; preserve existing course assets.
+
+Names follow Docs/ContentNaming.md: M_TerrainSurface and its MI_TerrainSurface_<Surface> instances, the
+DA_TerrainSurface_<Surface> presets, and the grass clumps SM_TerrainGrass_Tall and SM_TerrainGrass_Short with their
+DA_TerrainVegetation_Grass and DA_TerrainVegetation_Rough presets.
+"""
 from pathlib import Path
 import sys
 
@@ -38,17 +43,17 @@ def value_noise(cell_cm, seed=0):
 MACRO_VARIATION = value_noise(1900)
 
 
-def build_material(name="M_CoastalSurface"):
+def build_material(name="M_TerrainSurface"):
     material = assets.material(FOLDER, name)
     position = assets.node(material, ue.MaterialExpressionWorldPosition, "Position")
     size = assets.scalar(material, "TextureSizeCm", 120, "Surface")
     uv = assets.custom(material, "UV", "return P.xy / max(S, 1.0);",
                        {"P": (position, ""), "S": (size, "")}, ue.CustomMaterialOutputType.CMOT_FLOAT2)
     color = assets.node(material, ue.MaterialExpressionTextureSampleParameter2D, "TurfTexture",
-                        parameter_name="TurfTexture", texture=ue.load_asset("/OpenGolfCourse/Surfaces/T_Grass_Color"),
+                        parameter_name="TurfTexture", texture=ue.load_asset("/OpenGolfCourse/Surfaces/T_Grass_D"),
                         sampler_type=ue.MaterialSamplerType.SAMPLERTYPE_COLOR)
     normal = assets.node(material, ue.MaterialExpressionTextureSampleParameter2D, "TurfNormal",
-                         parameter_name="TurfNormal", texture=ue.load_asset("/OpenGolfCourse/Surfaces/T_Grass_NormalDX"),
+                         parameter_name="TurfNormal", texture=ue.load_asset("/OpenGolfCourse/Surfaces/T_Grass_N"),
                          sampler_type=ue.MaterialSamplerType.SAMPLERTYPE_NORMAL)
     assets.connect(uv, color, "UVs")
     assets.connect(uv, normal, "UVs")
@@ -76,7 +81,7 @@ def build_material(name="M_CoastalSurface"):
 
 
 def build_grass_material():
-    material = assets.material(FOLDER, "M_CoastalGrass")
+    material = assets.material(FOLDER, "M_TerrainGrass")
     material.set_editor_property("two_sided", True)
     material.set_editor_property("used_with_instanced_static_meshes", True)
     material.set_editor_property("tangent_space_normal", False)
@@ -94,7 +99,7 @@ def build_grass_material():
 
 
 def build_tee_material(parent):
-    tee = assets.material_instance(FOLDER, "MI_CoastalTee", parent)
+    tee = assets.material_instance(FOLDER, "MI_TerrainSurface_Tee", parent)
     for name, value in {"StripeContrast": 0, "NormalStrength": 0.08, "Roughness": 0.95, "Specular": 0.1}.items():
         assets.MAT.set_material_instance_scalar_parameter_value(tee, name, value)
     for name, color in (("LowColor", "486136"), ("HighColor", "617A43")):
@@ -103,9 +108,10 @@ def build_tee_material(parent):
 
 
 def main():
-    expected = [f"/OpenGolfCourse/Terrain/Presets/DA_Coastal{name}" for name in ("Fairway", "Green", "Fringe", "Rough", "Sand", "GrassVegetation", "RoughVegetation")]
+    expected = ([f"/OpenGolfCourse/Terrain/Presets/DA_TerrainSurface_{name}" for name in ("Fairway", "Green", "Fringe", "Rough", "Sand")] +
+                [f"/OpenGolfCourse/Terrain/Presets/DA_TerrainVegetation_{name}" for name in ("Grass", "Rough")])
     if all(assets.LIB.does_asset_exist(path) for path in expected):
-        ue.log("Coastal presets already exist; preserving their authored settings.")
+        ue.log("Terrain presets already exist; preserving their authored settings.")
         return
     previous_owner = assets.OWNER
     assets.OWNER = OWNER
@@ -120,7 +126,7 @@ def main():
             "Sand": ("B4A68C", "D1C2A5", 70, 0.12, 0),
         }
         for surface, (low, high, size, strength, stripes) in settings.items():
-            instance = assets.material_instance(FOLDER, f"MI_Coastal{surface}", parent)
+            instance = assets.material_instance(FOLDER, f"MI_TerrainSurface_{surface}", parent)
             for key, value in {"TextureSizeCm": size, "NormalStrength": strength, "StripeContrast": stripes,
                                "DetailStrength": 0.18 if surface == "Sand" else 0.5}.items():
                 assets.MAT.set_material_instance_scalar_parameter_value(instance, key, value)
@@ -130,17 +136,17 @@ def main():
             instance.set_editor_property("phys_material", ue.load_asset(f"/OpenGolfCourse/Surfaces/PM_{surface}"))
             assets.MAT.update_material_instance(instance)
             assets.save(instance)
-            preset = create_data(f"DA_Coastal{surface}", ue.OpenGolfSurfacePreset)
+            preset = create_data(f"DA_TerrainSurface_{surface}", ue.OpenGolfSurfacePreset)
             preset.set_editor_property("surface", getattr(ue.OpenFairwaySurface, surface.upper()))
             preset.set_editor_property("material", instance)
             assets.save(preset)
         grass_material = build_grass_material()
-        for name, spacing, scale, cull in (("CoastalGrass", 2.6, (0.7, 1.25), 130),
-                                           ("CoastalRough", 2.0, (0.8, 1.2), 65)):
-            mesh = assets.import_asset(f"SM_{name}.fbx", "Terrain/Vegetation", f"SM_{name}", mesh=True)
+        for mesh_name, name, spacing, scale, cull in (("SM_TerrainGrass_Tall", "Grass", 2.6, (0.7, 1.25), 130),
+                                                      ("SM_TerrainGrass_Short", "Rough", 2.0, (0.8, 1.2), 65)):
+            mesh = assets.import_asset(f"{mesh_name}.fbx", "Terrain/Vegetation", mesh_name, mesh=True)
             mesh.set_material(0, grass_material)
             assets.save(mesh)
-            preset = create_data(f"DA_{name}Vegetation", ue.OpenGolfVegetationPreset)
+            preset = create_data(f"DA_TerrainVegetation_{name}", ue.OpenGolfVegetationPreset)
             preset.set_editor_property("meshes", [mesh])
             preset.set_editor_property("surface", ue.OpenFairwaySurface.ROUGH)
             preset.set_editor_property("spacing_m", spacing)

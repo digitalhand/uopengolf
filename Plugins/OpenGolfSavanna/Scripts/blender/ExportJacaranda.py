@@ -12,7 +12,7 @@ size, and the trunk object used by the node group. Its textures stay in the down
 PolyHaven/jacaranda_tree/textures folder.
 
 Outputs go to Saved/AssetImport/OpenGolfSavanna/Jacaranda: SM_Jacaranda.fbx, the hidden ball-contact
-helpers SM_JacarandaCollision.fbx (trunk and main limbs) and SM_JacarandaCanopy.fbx (one convex hull
+helpers SM_Jacaranda_Collision.fbx (trunk and main limbs) and SM_Jacaranda_Canopy.fbx (one convex hull
 around the branches and leaves, with its UCX_ collision), texture copies
 (2K colour and normal maps, 1K masks) and export.json for ImportSavannaAssets.py.
 """
@@ -38,8 +38,8 @@ SPEC = tree_export.TreeSpec(
     mesh_name="SM_Jacaranda",
     # Hidden helpers for ball contact: the trunk and main limbs stop the ball; branches and leaves
     # only slow it, inside one convex canopy volume.
-    collision_name="SM_JacarandaCollision",
-    canopy_name="SM_JacarandaCanopy",
+    collision_name="SM_Jacaranda_Collision",
+    canopy_name="SM_Jacaranda_Canopy",
     trunk_material="jacaranda_tree_trunk",
     wood_materials=frozenset({"jacaranda_tree_trunk"}),
     canopy_materials=frozenset({"jacaranda_tree_branches", "jacaranda_tree_leaves"}),

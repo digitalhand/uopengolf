@@ -28,7 +28,7 @@ def build_flag():
 
 
 def build_pole():
-    pole = material(FLAG_FOLDER, "M_Pole")
+    pole = material(FLAG_FOLDER, "M_FlagstickPole")
     output(pole, vector(pole, "PoleColor", (0.8, 0.82, 0.84, 1.0), "Pole"), ue.MaterialProperty.MP_BASE_COLOR, "RGB")
     output(pole, scalar(pole, "PoleRoughness", 0.35, "Pole"), ue.MaterialProperty.MP_ROUGHNESS)
     return finish_material(pole)
@@ -100,4 +100,4 @@ def build_props():
         raise RuntimeError("Run inside the editor (or -ExecutePythonScript): LODs need editor subsystems.")
     editor.set_lods(golf_ball, options)
     save(golf_ball)
-    ue.log("Props built: SM_Flagstick with M_Pole, MI_Flag_Red on M_FlagCloth, SM_GolfBall with M_GolfBall")
+    ue.log("Props built: SM_Flagstick with M_FlagstickPole, MI_Flag_Red on M_FlagCloth, SM_GolfBall with M_GolfBall")

@@ -4,7 +4,7 @@ Open-licence trees, ground textures and understory for the public savanna range,
 
 ## Use
 
-Use the saved public map at `/Game/UOpenGolf/Maps/UOpenGolf`. Playing needs no Blender installation. Read the authoring reference before importing or rebuilding assets; a full import can reset tuned materials.
+Use the saved public map at `/Game/UOpenGolf/Maps/L_SavannaRange`. Playing needs no Blender installation. Read the authoring reference before importing or rebuilding assets; a full import can reset tuned materials.
 
 ## Reference
 

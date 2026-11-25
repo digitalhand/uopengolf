@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "TestMaps.h"
 #include "OpenGolfSettings.h"
 #include "Play/OpenGolfHoleRound.h"
 #include "OpenLaunchMonitorSubsystem.h"
@@ -144,7 +145,7 @@ private: FAutomationTestBase* Test;int32 Stage=0;TWeakObjectPtr<AUOpenGolfPlayer
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMenuReturnTest,"UOpenGolf.Menu.ReturnToMainMenu",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
 bool FMenuReturnTest::RunTest(const FString&)
 {
-    if(!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"),false,true))return false;
+    if(!FEditorFileUtils::LoadMap(TestMaps::Range,false,true))return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckReturnToMainMenu>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;
@@ -152,7 +153,7 @@ bool FMenuReturnTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMenuIsolationTest,"UOpenGolf.Menu.InputIsolation",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter)
 bool FMenuIsolationTest::RunTest(const FString&)
 {
-    if(!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"),false,true))return false;
+    if(!FEditorFileUtils::LoadMap(TestMaps::Range,false,true))return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckMenuIsolation>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;

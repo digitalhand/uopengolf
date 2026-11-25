@@ -1,0 +1,2 @@
+# Content paths (fnmatch patterns) that check_content_names.py lets break Docs/ContentNaming.md, one per line,
+# each with a reason after '#'. Keep this list empty: rename instead, unless code outside the project fixes a name.

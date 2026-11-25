@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "TestMaps.h"
 #include "Tests/PermissionTestAccess.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -84,7 +85,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FLaunchDirectionVisualTest, "UOpenGolf.Visual.L
 
 bool FLaunchDirectionVisualTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the range map."));
         return false;

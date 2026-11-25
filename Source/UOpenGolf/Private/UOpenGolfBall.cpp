@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfBall.h"
+#include "UOpenGolfAssetPaths.h"
 #include "OpenGolfSettings.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -16,7 +17,7 @@ AUOpenGolfBall::AUOpenGolfBall()
 {
     bDrawTracer = false;
     TraceChannel = ContactChannel;
-    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail"));
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(UOpenGolfAssetPaths::ShotTrailMaterial);
     static const TCHAR* RibbonNames[] = {TEXT("ShotTrail"), TEXT("ShotTrail1"), TEXT("ShotTrail2")};
     static_assert(UE_ARRAY_COUNT(RibbonNames) == UE_ARRAY_COUNT(Ribbons), "One name per tracer ribbon");
     for (int32 I = 0; I < UE_ARRAY_COUNT(Ribbons); ++I)

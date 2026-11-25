@@ -40,7 +40,7 @@ def course_mask_uv(material, position):
 
 
 def grass_material():
-    material = a.material("Materials", "M_SavannaGrass")
+    material = a.material("Grass/Materials", "M_SavannaGrass")
     for key, value in (("two_sided", True), ("tangent_space_normal", False), ("used_with_instanced_static_meshes", True),
                        ("used_with_nanite", True), ("blend_mode", ue.BlendMode.BLEND_MASKED), ("opacity_mask_clip_value", 0.4)):
         material.set_editor_property(key, value)

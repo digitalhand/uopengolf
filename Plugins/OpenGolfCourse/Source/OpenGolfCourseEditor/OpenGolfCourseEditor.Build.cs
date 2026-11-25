@@ -10,7 +10,7 @@ public class OpenGolfCourseEditor : ModuleRules
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "GeometryCore", "OpenGolfCourse" });
         PrivateDependencyModuleNames.AddRange(new[] {
             "UnrealEd", "Landscape", "MeshDescription", "StaticMeshDescription",
-            "AssetRegistry", "PhysicsCore", "OpenFairwayPhysics", "PCG", "RenderCore"
+            "AssetRegistry", "AssetTools", "PhysicsCore", "OpenFairwayPhysics", "PCG", "RenderCore"
         });
     }
 }

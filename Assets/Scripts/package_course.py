@@ -97,7 +97,7 @@ def main():
               f"-platform={args.platform}", "-clientconfig=Development", "-cook", "-stage", "-pak", "-iostore"]
     work = root / "Saved/CoursePackaging"
     registry = work / "Releases"
-    subprocess.run(common + ["-build", "-map=/Game/UOpenGolf/Maps/UOpenGolf", f"-createreleaseversion={release}",
+    subprocess.run(common + ["-build", "-map=/Game/UOpenGolf/Maps/L_SavannaRange", f"-createreleaseversion={release}",
                              f"-createreleaseversionroot={registry}", f"-stagingdirectory={work / 'Base'}"], check=True)
     with TemporaryDirectory(dir=work) as temp:
         subprocess.run(common + [f"-dlcname={args.course}", f"-basedonreleaseversion={release}",

@@ -29,6 +29,7 @@ For toolchain and graphics requirements, see [Development](Docs/Development.md).
 - [Tests and validation](Docs/Testing.md)
 - [CI and releases](Docs/Releases.md)
 - [Architecture](Docs/Architecture.md) and [plugins](Plugins/README.md)
+- [Content naming and layout](Docs/ContentNaming.md)
 - [Range assets](Docs/RangeAssets.md) and [Blender turf workflow](Docs/TurfWorkflow.md)
 - Physics: [how it works](Plugins/OpenFairwayPhysics/Docs/Reference.md) and [accuracy against reference shots](Plugins/OpenFairwayPhysics/Docs/Accuracy.md)
 - [Current status and remaining acceptance](Docs/PhasesStatus.md) and [asset licence roadmap](Docs/AssetLicenseRoadmap.md)

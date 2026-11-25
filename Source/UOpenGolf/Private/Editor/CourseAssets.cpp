@@ -82,7 +82,7 @@ namespace
         UPackage* Package = CreatePackage(*PackageName);
         auto* Course = NewObject<UGolfCourseDefinition>(Package, *Name, RF_Public | RF_Standalone);
         Course->DisplayName = FText::FromString(TEXT("Savanna Range"));
-        Course->Map = TSoftObjectPtr<UWorld>(FSoftObjectPath(TEXT("/Game/UOpenGolf/Maps/UOpenGolf.UOpenGolf")));
+        Course->Map = TSoftObjectPtr<UWorld>(FSoftObjectPath(TEXT("/Game/UOpenGolf/Maps/L_SavannaRange.L_SavannaRange")));
         Course->Preview = Preview;
         Course->Holes = 1;
         Course->Par = AUOpenGolfRange::Par;

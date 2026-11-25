@@ -66,7 +66,7 @@ class RunFolderNameTests(unittest.TestCase):
         self.assertFalse(is_run_folder("Build_01A180BF3EDD7F0386ED0462654019FB", prefixes=("Vegetation_",)))
 
     def test_course_tile_folders_carry_their_grid_position(self):
-        for name in ("CourseTile_-1_-1_01A20F3A24AE785298BF8625BD59E809", "CourseTile_12_0_01A20F3A25E776FBB5511E49FC30740B"):
+        for name in ("Tile_-1_-1_01A20F3A24AE785298BF8625BD59E809", "Tile_12_0_01A20F3A25E776FBB5511E49FC30740B"):
             self.assertTrue(is_run_folder(name, prefixes=COURSE_PREFIXES), name)
             self.assertFalse(is_run_folder(name), name)
 
@@ -76,66 +76,66 @@ class RunFolderNameTests(unittest.TestCase):
         self.assertFalse(is_run_folder("Water_1_1_01A20F3A24AE785298BF8625BD59E809", prefixes=COURSE_PREFIXES))
 
     def test_malformed_course_tile_names_are_not_run_folders(self):
-        for name in ("CourseTile_01A20F3A24AE785298BF8625BD59E809", "CourseTile_-1_01A20F3A24AE785298BF8625BD59E809",
-                     "CourseTile_a_1_01A20F3A24AE785298BF8625BD59E809", "CourseTile_1_1_01a20f3a24ae785298bf8625bd59e809",
-                     "CourseTile_1_1_"):
+        for name in ("Tile_01A20F3A24AE785298BF8625BD59E809", "Tile_-1_01A20F3A24AE785298BF8625BD59E809",
+                     "Tile_a_1_01A20F3A24AE785298BF8625BD59E809", "Tile_1_1_01a20f3a24ae785298bf8625bd59e809",
+                     "Tile_1_1_"):
             self.assertFalse(is_run_folder(name, prefixes=COURSE_PREFIXES), name)
 
 
 class RunFoldersTests(unittest.TestCase):
     def test_lists_only_run_folders_directly_under_the_root(self):
-        library = FakeLibrary([asset(BUILD, "SM_Surface_0"), asset(VEGETATION, "Points_0"), asset(VEGETATION, "PCG_Vegetation_0"),
+        library = FakeLibrary([asset(BUILD, "SM_Surface_00"), asset(VEGETATION, "DA_Points_00"), asset(VEGETATION, "PCG_Vegetation_00"),
                                asset(f"{ROOT}/Materials", "MI_Ground"), asset(ROOT, "DA_Range"),
-                               asset(f"{ROOT}/Nested/Build_01A1567C6ECD7869B99A610A61184ED9", "SM_Surface_0")], {})
+                               asset(f"{ROOT}/Nested/Build_01A1567C6ECD7869B99A610A61184ED9", "SM_Surface_00")], {})
         self.assertEqual(run_folders(library, ROOT), {BUILD, VEGETATION})
 
 
 class TileFolderTests(unittest.TestCase):
     def test_a_replaced_tile_goes_and_the_live_tile_stays(self):
-        tiles = "/HunterRanch/Course/Tiles"
-        live, old = f"{tiles}/CourseTile_0_0_01A20F3A24AE785298BF8625BD59E809", f"{tiles}/CourseTile_0_0_01A20F3A235772C394C27D0FAB511229"
-        live_mesh, old_mesh = asset(live, "SM_Rough"), asset(old, "SM_Rough")
-        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Course/Course"]})
+        tiles = "/HunterRanch/Course/Generated/Tiles"
+        live, old = f"{tiles}/Tile_0_0_01A20F3A24AE785298BF8625BD59E809", f"{tiles}/Tile_0_0_01A20F3A235772C394C27D0FAB511229"
+        live_mesh, old_mesh = asset(live, "SM_Rough_Tile_0_0"), asset(old, "SM_Rough_Tile_0_0")
+        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Course/L_HunterRanch"]})
         removed, kept = remove_unreferenced(library, [tiles], prefixes=COURSE_PREFIXES, log=lambda _line: None)
         self.assertEqual((removed, kept), ([old], [live]))
 
     def test_a_rebuilt_lake_goes_and_the_live_lake_stays(self):
-        water = "/HunterRanch/Course/Water"
+        water = "/HunterRanch/Course/Generated/Water"
         live, old = f"{water}/Water_01A20F3A24AE785298BF8625BD59E809", f"{water}/Water_01A20F3A235772C394C27D0FAB511229"
-        live_mesh, old_mesh = asset(live, "SM_Lake1"), asset(old, "SM_Lake1")
-        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Course/Course"]})
+        live_mesh, old_mesh = asset(live, "SM_Lake_01"), asset(old, "SM_Lake_01")
+        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Course/L_HunterRanch"]})
         removed, kept = remove_unreferenced(library, [water], prefixes=COURSE_PREFIXES, log=lambda _line: None)
         self.assertEqual((removed, kept), ([old], [live]))
 
 
 class ReferenceTests(unittest.TestCase):
     def test_references_inside_the_folder_do_not_count(self):
-        graph, points = asset(VEGETATION, "PCG_Vegetation_0"), asset(VEGETATION, "Points_0")
+        graph, points = asset(VEGETATION, "PCG_Vegetation_00"), asset(VEGETATION, "DA_Points_00")
         library = FakeLibrary([graph, points], {points.split(".")[0]: [graph.split(".")[0]]})
         self.assertFalse(referenced_from_outside(library, VEGETATION))
 
     def test_a_map_reference_keeps_the_folder(self):
-        mesh = asset(BUILD, "SM_Surface_0")
+        mesh = asset(BUILD, "SM_Surface_00")
         library = FakeLibrary([mesh], {mesh.split(".")[0]: [MAP]})
         self.assertTrue(referenced_from_outside(library, BUILD))
 
     def test_a_sibling_with_a_longer_name_is_outside(self):
-        mesh = asset(BUILD, "SM_Surface_0")
+        mesh = asset(BUILD, "SM_Surface_00")
         library = FakeLibrary([mesh], {mesh.split(".")[0]: [BUILD + "0/SM_Other"]})
         self.assertTrue(referenced_from_outside(library, BUILD))
 
 
 class LoadedTests(unittest.TestCase):
     def test_a_folder_with_any_loaded_asset_is_loaded(self):
-        graph, points = asset(VEGETATION, "PCG_Vegetation_0"), asset(VEGETATION, "Points_0")
+        graph, points = asset(VEGETATION, "PCG_Vegetation_00"), asset(VEGETATION, "DA_Points_00")
         self.assertTrue(loaded_in_memory(FakeLibrary([graph, points], {}, loaded=[points]), VEGETATION))
         self.assertFalse(loaded_in_memory(FakeLibrary([graph, points], {}), VEGETATION))
 
 
 class RemoveTests(unittest.TestCase):
     def library(self, undeletable=(), loaded=()):
-        current, old = asset(BUILD, "SM_Surface_0"), asset(OLD_BUILD, "SM_Surface_0")
-        graph, points = asset(VEGETATION, "PCG_Vegetation_0"), asset(VEGETATION, "Points_0")
+        current, old = asset(BUILD, "SM_Surface_00"), asset(OLD_BUILD, "SM_Surface_0")
+        graph, points = asset(VEGETATION, "PCG_Vegetation_00"), asset(VEGETATION, "DA_Points_00")
         return FakeLibrary([current, old, graph, points, asset(f"{ROOT}/Materials", "MI_Ground")],
                            {current.split(".")[0]: [MAP], points.split(".")[0]: [graph.split(".")[0]]}, undeletable, loaded)
 
@@ -166,7 +166,7 @@ class RemoveTests(unittest.TestCase):
 
     def test_a_run_still_loaded_in_this_session_is_kept_not_deleted(self):
         # The editor can still hold a run it just baked; deleting it then fails part-way and corrupts it.
-        library, lines = self.library(loaded=[asset(VEGETATION, "Points_0")]), []
+        library, lines = self.library(loaded=[asset(VEGETATION, "DA_Points_00")]), []
         removed, kept = remove_unreferenced(library, [ROOT], log=lines.append)
         self.assertEqual(removed, [OLD_BUILD])
         self.assertEqual(sorted(kept), sorted([BUILD, VEGETATION]))
@@ -174,7 +174,7 @@ class RemoveTests(unittest.TestCase):
         self.assertTrue(any(VEGETATION in line and "loaded" in line for line in lines))
 
     def test_a_referenced_build_is_reported_as_referenced_even_when_loaded(self):
-        library, lines = self.library(loaded=[asset(BUILD, "SM_Surface_0")]), []
+        library, lines = self.library(loaded=[asset(BUILD, "SM_Surface_00")]), []
         remove_unreferenced(library, [ROOT], log=lines.append)
         self.assertTrue(any(BUILD in line and "referenced" in line for line in lines))
 

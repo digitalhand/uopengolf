@@ -5,7 +5,7 @@ green keeps a fringe. Terrain, physics and outlines are unchanged: the first cut
     py "<project>/Plugins/OpenGolfSavanna/Scripts/FixTurfTransitions.py"
     py "<project>/Plugins/OpenGolfSavanna/Scripts/RemoveFirstCut.py"
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. FixTurfTransitions.py must run first: it rebuilds the turf
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped. FixTurfTransitions.py must run first: it rebuilds the turf
 materials without the first-cut layer and gives the fringe the first cut's colour. This script backs up the presets
 and instance it changes, re-creates DA_TurfRoughGrass so the rough reaches the fairway, drops DA_TurfFirstCutGrass
 from the course grass and re-places it. The first-cut presets, instances and meshes stay on disk as a rollback. The
@@ -33,10 +33,10 @@ import savanna_assets as s
 import turf_field as field
 import turf_shading as shading
 
-TERRAIN = '/OpenGolfSavanna/Terrain/CutTurf/'
+TERRAIN = '/OpenGolfSavanna/CutTurf/Presets/'
 FIRST_CUT_GRASS = TERRAIN + 'DA_TurfFirstCutGrass'
 ROUGH_GRASS = TERRAIN + 'DA_TurfRoughGrass'
-SURFACE_MATERIAL = '/OpenGolfSavanna/Materials/M_CutTurfSurface'
+SURFACE_MATERIAL = '/OpenGolfSavanna/CutTurf/Materials/M_CutTurfSurface'
 BACKUP = (FIRST_CUT_GRASS, ROUGH_GRASS, shading.MATERIALS + 'MI_TurfRough')
 
 

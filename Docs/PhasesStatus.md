@@ -1,5 +1,103 @@
 # Phase status
 
+## Content naming and layout · 2026-11-25
+
+### What changed
+
+The owner asked for meaningful, Epic-style names across the game, kept that way from now on. The rules are in
+[Content naming](ContentNaming.md).
+
+- **Rules and checks.**
+  - Name helpers: `asset_naming.py` (Python) and `OpenGolfAssetNames.h` (C++). Generators build their names with them.
+  - `Assets/Scripts/check_content_names.py` checks names and folders offline; `test_check_content_names` fails the
+    script tests on any new problem.
+  - `UOpenGolf.Content.Naming.Assets` checks each asset's prefix against its class and that no redirector is left.
+  - `UOpenGolf.Content.Naming.Actors` checks the labels in every project map.
+- **Hunter Ranch, rebuilt** with `build_course.py`:
+  - The map is `L_HunterRanch`, with `DA_HunterRanch` and `DA_HunterRanch_Terrain`.
+  - 460 ground squares sit under `Generated/Tiles/Tile_<x>_<y>_<GUID>/`, as meshes and actors such as
+    `SM_Rough_Tile_0_-10`, filed under `Terrain/<Surface>`. They were `CourseTile_<x>_<y>` actors with
+    `SM_Coastal*` meshes.
+  - The lake is `SM_Lake_01`.
+  - The hole 1 tree was recorded and placed back by `course_actors.py` as `BP_Tree_IslandTree02_Hole01`.
+  - Backup: `Saved/CourseDesign/Backups/20261125-181211-before-content-naming/`.
+- **Committed content renamed** by `Assets/Scripts/rename_content.py`, from the plan in `content_renames.py`: 330
+  assets moved.
+  - The startup map is `L_SavannaRange`.
+  - The course kit's "Coastal" surfaces are `M_TerrainSurface`, `MI_TerrainSurface_<Surface>` and
+    `DA_TerrainSurface_<Surface>`; its grass clumps are `SM_TerrainGrass_Tall` and `_Short`.
+  - Third-party textures take role suffixes (`T_Jacaranda_Leaves_N`, `T_Rock029_D`, `T_NE_Branch_N`).
+  - Tree parts are separated (`MI_Jacaranda_Leaves`, `SM_IslandTree02_Canopy`).
+  - Savanna tree presets are numbered within each kind (`DA_SavannaTree_Outer_00`).
+  - OpenGolfSavanna moved from type folders to feature folders: `CutTurf`, `Grass`, `Ground`, `Surfaces`,
+    `NatureEssentials`, `Shared`.
+  - `/Game/UOpenGolf/Art` became `Effects`, `M_Water` moved to `Water/`, and `M_Pole` became `M_FlagstickPole`.
+  - All 81 redirectors were fixed up and deleted.
+  - The unused club-face textures and two orphaned vegetation runs were deleted.
+  - Backup: `Saved/AssetBackups/20261125-180757-content-rename/`, taken after the moves and before the clean-up. The
+    untouched originals are in Git.
+- **Range labels.** The range map's actors were relabelled: `Landscape_West`, `SM_Fairway_Ground`, `Trees_01`–`38`,
+  `Colliders_SavannaTree_Near_00`, `RangeSettings`, `Environment_Daylight`, `TerrainArea_SavannaRange`.
+- **Code and scripts.**
+  - Every path in C++, the INI files, scripts, tests and docs was updated. The test map paths are in one header,
+    `TestMaps.h`.
+  - The Coastal tests became `UOpenGolf.Range.Terrain` and `UOpenGolf.Visual.RangeTerrain`, with
+    `-RangeCaptureLabel`, `-RangeCsvProfile` and `grass_stability.py --profile terrain`.
+- **Editor tool.** `UOpenGolfContentTools::FixUpRedirectors` is the engine's redirector fix-up without its report
+  dialog, which crashes a headless editor.
+- **Config.**
+  - The Asset Manager's map scan now points at `/Game/UOpenGolf/Maps`.
+  - OpenGolfOnline no longer claims a content folder.
+
+### Verified
+
+All runs: Linux, UE 5.8.4 Development editor, one headless editor at a time.
+
+- **Build.** The C++ builds with no warnings.
+- **Script tests.** All four suites pass: 168, 147, 88 and 54 tests. Before this change they were 153, 127, 88 and 54.
+- **Name check.** `check_content_names.py` reports no problems.
+- **Automation.** These suites passed:
+  - `UOpenGolf.Content.Naming` (2)
+  - `UOpenGolf.Smoke` (1)
+  - `UOpenGolf.Course` (33, including all five `HunterRanch` tests on the rebuilt course)
+  - `UOpenGolf.Training` (3)
+  - `UOpenGolf.Minimap` (11)
+  - `UOpenGolf.Environment` (2)
+  - `UOpenGolf.Physics` (24)
+  - `UOpenGolf.Hud`, `UOpenGolf.UI` and `UOpenGolf.Calibration` (1 each)
+  - `UOpenGolf.Online` (3)
+- **`UOpenGolf.Range`** passed 32 of 33.
+- **Rendered.** `UOpenGolf.Visual.RangeTerrain` and `UOpenGolf.Visual.HunterRanch` passed in an offscreen
+  rendered editor (`-RenderOffscreen -ResX=1792 -ResY=1087`). Captures:
+  `Saved/Automation/RangeTerrainReview/AfterNaming-20261125-182828` and
+  `Saved/Automation/HunterReview/AfterNaming-20261125-183011`.
+
+  A visual check of the tee, green, edge, bunker and Hunter Ranch hole 1, 9 and 12 views found no missing or
+  default materials. The hole 1 tree is in place. No shimmer comparison was made: renames change no asset data, and
+  no earlier capture of the same views survived to compare against.
+
+- **Packaging.** `ue.sh package` (Linux Development) cooked with no warnings or missing imports, and its 60-second
+  start check passed. The packaged game loaded `/Game/UOpenGolf/Maps/L_SavannaRange` (report
+  `Saved/Automation/20261125-103351-package-UNT9Fz`).
+
+### Failing and unverified
+
+- **Four failing tests.** None of them touches renamed content:
+  - `UOpenGolf.Range.WindControls`: the play bar has new controls.
+  - `UOpenGolf.Menu.RoundSetup`: chip lookups on the round-setup page fail; the page has changed.
+  - `UOpenGolf.Profile.Avatars`: textures report 0×0 under NullRHI.
+  - `UOpenGolf.LaunchMonitor.OpenConnect.ReconnectIsolation`: a network listener test.
+
+  No earlier report survived to show whether they failed before this change.
+- **DebugGame binaries.** They are not rebuilt; the owner's DebugGame editor needs a rebuild to load the new C++.
+- **Not checked:** a Hunter Ranch course pack cook (`package_course.py`), Windows, and shimmer and frame time after the change.
+- **Risks** of the rename (LFS growth, a stale DebugGame editor, the course pack and base game needing to ship
+  together, paths outside the repository) are in [Content naming](ContentNaming.md#risks-after-the-2026-11-25-rename).
+  Tree collider risks, and how to give a new tree its colliders by hand, are in
+  [Course vegetation](CourseDesign/course_vegetation.md#3c-add-colliders-to-another-species-by-hand-in-the-editor).
+- **Follow-up fix.** `ApplyVegetationWind.py` failed on any course-plugin tree in the wind list (the Hunter Ranch
+  island tree since 2026-11-24): its backup looked up only the base-game mounts. It now resolves every plugin with
+  content. Not run in the editor since the fix.
 ## Hunter Ranch tree: Island Tree 02 as a blue-oak stand-in · 2026-11-24
 
 ### What changed

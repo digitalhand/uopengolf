@@ -41,7 +41,7 @@ green 150 yards out (`AUOpenGolfRange::GreenDistanceM`). The green has no mowing
 mowing contrast is fixed at zero. It plays at stimp 10;
 `uopengolf.GreenStimp` changes the speed from the next shot.
 
-Select **Range settings** in the Outliner and open **Details → UOpenGolf → Wind** to edit
+Select **RangeSettings** in the Outliner and open **Details → UOpenGolf → Wind** to edit
 **Wind Speed (mph)** and **Wind From (degrees)**. These settings save with the map and
 drive the ball, flag, trees and tall grass during Play. The speed is the 10 m reading, as in a
 weather report: the ball meets the wind at its own height, and the flag, about 2 m up, flies at
@@ -70,7 +70,7 @@ keeps 0.9 roughness, and explicitly enables instanced static mesh support.
 
 ## Validate wind and flag movement
 
-1. Select **Range settings** in the Outliner. In Details, expand **UOpenGolf → Wind**
+1. Select **RangeSettings** in the Outliner. In Details, expand **UOpenGolf → Wind**
    or search for `Wind`.
 2. Set **Wind Speed (mph)** to **10** and **Wind From (degrees)** to **90** (from the right).
    Keep **Preview Wind in Editor** enabled and turn on viewport **Realtime** with **Ctrl+R**
@@ -85,7 +85,7 @@ keeps 0.9 roughness, and explicitly enables instanced static mesh support.
    even if console values remain from an earlier session. Setting speed to **0** restores
    calm air; the cloth falls beside the pole and settles.
 
-During Play, edit the same controls on the Play-world copy of **Range settings**. Those
+During Play, edit the same controls on the Play-world copy of **RangeSettings**. Those
 runtime edits do not save back to the source map. The spawned ball also exposes
 **OpenFairway → Air → Wind Speed Mph** and **Wind From Deg** for direct runtime inspection.
 A shot already in motion keeps the wind captured at launch, and the flag shows that same
@@ -204,8 +204,8 @@ Run only one editor at a time, and check again before measuring. Another editor 
 GPU time and shader-working files, so its presence invalidates a controlled FPS comparison.
 The first rendered run using the project-local cache may spend several minutes
 compiling shaders.
-For terrain and vegetation shimmer, use `UOpenGolf.Visual.CoastalTerrain` in Play
-and `Assets/Scripts/grass_stability.py --profile coastal`. The older RangeAssets views above
+For terrain and vegetation shimmer, use `UOpenGolf.Visual.RangeTerrain` in Play
+and `Assets/Scripts/grass_stability.py --profile terrain`. The older RangeAssets views above
 remain useful for the ball and flag; they are not the coastal shimmer baseline.
 Compare equal-sized sequences at fixed cameras and AA settings, including grass on/off
 and slow camera motion. See [phase status](PhasesStatus.md#rendered-stability)
@@ -219,7 +219,7 @@ For CPU measurements without screenshot encoding, set `UE_ROOT`, build the edito
 and run on an otherwise idle machine:
 
 ```powershell
-python Assets/Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/UOpenGolf --shot-trail --trail-timing
+python Assets/Scripts/check_range_render.py --map /Game/UOpenGolf/Maps/L_SavannaRange --shot-trail --trail-timing
 ```
 
 Timing mode sets and checks a 1280x720 render

@@ -3,11 +3,11 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/BuildSurfaceTextures.py" [fairway green bunker]
 
-Run FetchAmbientCG.py first. Every surface shares one parent, /OpenGolfSavanna/Materials/M_SavannaSurface,
+Run FetchAmbientCG.py first. Every surface shares one parent, /OpenGolfSavanna/Surfaces/Materials/M_SavannaSurface,
 built from the course kit's surface graph plus a roughness map, a normal fade with distance and a
 MacroStrength control. The kit's own turf parent is never changed. Each surface gets an instance in
-Materials/<Category> and a surface preset in Terrain, keeping its physical material, so play is unchanged:
-  fairway  Grass008 with the coastal fairway palette and mowing stripes
+Surfaces/Materials and a surface preset in Surfaces/Presets, keeping its physical material, so play is unchanged:
+  fairway  Grass008 with the course kit's fairway palette and mowing stripes
   green    Grass008 finer, lighter and without stripes or patchy macro variation
   bunker   Ground093C sand
 """
@@ -17,6 +17,7 @@ import unreal as ue
 
 PROJECT = Path(ue.Paths.project_dir()).resolve()
 sys.path.insert(0, str(PROJECT / 'Plugins/OpenGolfCourse/Scripts'))
+import asset_naming as names
 import course_assets as a
 import BuildTerrainAssets as terrain
 
@@ -47,8 +48,8 @@ SURFACES = {
 }
 
 
-def build_parent(textures):
-    terrain.FOLDER = 'Materials'
+def build_parent(textures, folder='Surfaces/Materials'):
+    terrain.FOLDER = folder
     parent = terrain.build_material(PARENT)
     # Fine normal detail fades with distance, so far turf does not shimmer.
     depth = a.node(parent, ue.MaterialExpressionPixelDepth, 'SurfaceDepth')
@@ -92,7 +93,7 @@ def import_textures(asset):
         raise RuntimeError(f'Run FetchAmbientCG.py {asset} first: {a.SOURCE} has no maps')
     textures = {}
     for role in TEXTURE_ROLES:
-        texture = a.import_asset(f'{asset}_2K-JPG_{role}.jpg', f'Textures/Surfaces/{asset}', f'T_{asset}_{role}')
+        texture = a.import_asset(f'{asset}_2K-JPG_{role}.jpg', f'Surfaces/Textures/{asset}', names.texture(asset, role))
         texture.set_editor_property('srgb', role == 'Color')
         if role == 'NormalDX':
             texture.set_editor_property('compression_settings', ue.TextureCompressionSettings.TC_NORMALMAP)
@@ -103,7 +104,7 @@ def import_textures(asset):
 
 
 def build_surface(name, spec, parent, textures):
-    folder = f"Materials/{spec['category']}"
+    folder = "Surfaces/Materials"
     instance = a.material_instance(folder, f"MI_{spec['category']}{spec['asset']}", parent)
     for role, parameter in TEXTURE_ROLES.items():
         a.MAT.set_material_instance_texture_parameter_value(instance, parameter, textures[role])
@@ -117,7 +118,7 @@ def build_surface(name, spec, parent, textures):
     instance.set_editor_property('phys_material', ue.load_asset(f"/OpenGolfCourse/Surfaces/{spec['physical']}"))
     a.MAT.update_material_instance(instance)
     a.save(instance)
-    preset = terrain.create_data(f"DA_{spec['category']}{spec['asset']}", ue.OpenGolfSurfacePreset, 'Terrain')
+    preset = terrain.create_data(f"DA_{spec['category']}{spec['asset']}", ue.OpenGolfSurfacePreset, 'Surfaces/Presets')
     preset.set_editor_property('surface', getattr(ue.OpenFairwaySurface, spec['surface']))
     preset.set_editor_property('material', instance)
     a.save(preset)

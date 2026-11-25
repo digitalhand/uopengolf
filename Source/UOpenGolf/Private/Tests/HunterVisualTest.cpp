@@ -5,6 +5,7 @@
 // the game thread for long, since a hole change builds one while the camera moves to the next tee.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Camera/CameraActor.h"
+#include "TestMaps.h"
 #include "Camera/CameraComponent.h"
 #include "Editor.h"
 #include "Engine/Texture2D.h"
@@ -208,7 +209,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHunterVisualTest, "UOpenGolf.Visual.HunterRanc
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::NonNullRHI)
 bool FHunterVisualTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/HunterRanch/Course/Course"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::HunterRanch, false, true))
         return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<HunterVisualTestDetail::FCaptureHunter>(this));

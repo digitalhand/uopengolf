@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "OpenFairwayBall.h"
+#include "TestMaps.h"
 #include "OpenFairway/GolfPhysics.h"
 #include "UOpenGolfGameMode.h"
 #include "UOpenGolfHUD.h"
@@ -39,7 +40,7 @@ bool FVerifyUOpenGolfStartup::Update()
         return false;
     }
     Test->TestEqual(TEXT("Startup map"), UWorld::RemovePIEPrefix(World->GetOutermost()->GetName()),
-        FString(TEXT("/Game/UOpenGolf/Maps/UOpenGolf")));
+        FString(TestMaps::Range));
     const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
     Test->TestNotNull(TEXT("Spawned HUD"), HUD);
     if (Test->TestNotNull(TEXT("Configured game mode"), Mode))
@@ -64,7 +65,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUOpenGolfStartupTest, "UOpenGolf.Smoke.UOpenGo
 bool FUOpenGolfStartupTest::RunTest(const FString& Parameters)
 {
     const FString StartupMap = UGameMapsSettings::GetGameDefaultMap();
-    if (!TestEqual(TEXT("Configured game startup map"), StartupMap, FString(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"))))
+    if (!TestEqual(TEXT("Configured game startup map"), StartupMap, FString(TestMaps::Range)))
     {
         return false;
     }

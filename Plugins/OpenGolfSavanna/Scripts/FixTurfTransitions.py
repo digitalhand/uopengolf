@@ -3,7 +3,7 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/FixTurfTransitions.py"
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. First export and bake the course field:
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped. First export and bake the course field:
     py "<project>/Plugins/OpenGolfSavanna/Scripts/ApplyCutTurf.py" --export-mask
     python3 Plugins/OpenGolfSavanna/Scripts/turf_mask.py \\
         Saved/AssetImport/OpenGolfSavanna/CutTurf/course-field.json \\
@@ -32,9 +32,9 @@ import turf_palette as palette
 import turf_shading as shading
 import savanna_assets as s
 
-MATERIALS = ['/OpenGolfSavanna/Materials/M_CutTurfSurface', '/OpenGolfSavanna/Materials/CutTurf/M_CutTurfBlades',
-             '/OpenGolfSavanna/Materials/CutTurf/M_CutTurfRough', field.FIELD_PATH]
-INSTANCES = ['/OpenGolfSavanna/Materials/CutTurf/MI_Turf' + f for f in
+MATERIALS = ['/OpenGolfSavanna/CutTurf/Materials/M_CutTurfSurface', '/OpenGolfSavanna/CutTurf/Materials/M_CutTurfBlades',
+             '/OpenGolfSavanna/CutTurf/Materials/M_CutTurfRough', field.FIELD_PATH]
+INSTANCES = ['/OpenGolfSavanna/CutTurf/Materials/MI_Turf' + f for f in
              ('Fairway', 'Collar', 'Green', 'Rough', 'FairwayBlades', 'CollarBlades', 'RoughBlades')]
 
 
@@ -78,7 +78,7 @@ def fix():
         with s.course_helpers('/OpenGolfSavanna', turf.CONTENT, turf.OWNER):
             turf.a.SOURCE = turf.SOURCE
             apply_turf.import_field(area.definition)
-            parent = ue.load_asset('/OpenGolfSavanna/Materials/M_CutTurfSurface')
+            parent = ue.load_asset('/OpenGolfSavanna/CutTurf/Materials/M_CutTurfSurface')
             turf.a.output(parent, shading.surface_color(parent), ue.MaterialProperty.MP_BASE_COLOR)
             parent.set_editor_property('tangent_space_normal', False)
             turf.a.output(parent, field.surface_normal(parent, 'Fairway', 'TurfNormal'), ue.MaterialProperty.MP_NORMAL)

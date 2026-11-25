@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "RangeTestMap.h"
+#include "TestMaps.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/AutomationTest.h"
 #include "OpenGolfTerrain.h"
 
 namespace
 {
-    TAutoConsoleVariable<FString> TestMap(TEXT("uopengolf.TestMap"), TEXT("/Game/UOpenGolf/Maps/UOpenGolf"),
-        TEXT("Map used by coastal terrain, visual and obstacle-contact tests."));
-    TAutoConsoleVariable<FString> CaptureLabel(TEXT("uopengolf.CoastalCaptureLabel"), TEXT(""),
-        TEXT("Folder label for coastal visual captures; empty uses the command line or Review."));
+    TAutoConsoleVariable<FString> TestMap(TEXT("uopengolf.TestMap"), TestMaps::Range,
+        TEXT("Map used by the range terrain, visual and obstacle-contact tests."));
+    TAutoConsoleVariable<FString> CaptureLabel(TEXT("uopengolf.RangeCaptureLabel"), TEXT(""),
+        TEXT("Folder label for range terrain captures; empty uses the command line or Review."));
 } // namespace
 
 FString GetRangeTestMap()

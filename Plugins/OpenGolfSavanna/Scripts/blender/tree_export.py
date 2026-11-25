@@ -6,8 +6,8 @@ and supplies the build() that makes its project from the Poly Haven source; run(
 never resaving it, and writes to spec.out:
 
 - <mesh>.fbx, the visible tree
-- <mesh>Collision.fbx, the hidden wood helper: the trunk and main limbs, which stop the ball
-- <mesh>Canopy.fbx, the hidden canopy helper: one convex hull around the branches and leaves, with its UCX_
+- <mesh>_Collision.fbx, the hidden wood helper: the trunk and main limbs, which stop the ball
+- <mesh>_Canopy.fbx, the hidden canopy helper: one convex hull around the branches and leaves, with its UCX_
   collision, which slows the ball
 - 8-bit texture copies (2K colour and normal maps, 1K masks) and export.json for ImportSavannaAssets.py
 

@@ -3,6 +3,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Course/RoundConditions.h"
+#include "TestMaps.h"
 #include "Editor.h"
 #include "Tests/PermissionTestAccess.h"
 #include "Tests/BundledCourse.h"
@@ -220,7 +221,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHolePlayTest, "UOpenGolf.Range.HolePlay",
 
 bool FHolePlayTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the range map."));
         return false;

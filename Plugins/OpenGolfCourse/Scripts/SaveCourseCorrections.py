@@ -5,7 +5,7 @@
 
 The source folder is the one prepare_course_site.py wrote; its recipe.json names the corrections file.
 Only differences from the prepared layout are stored, so the file stays small and survives a new import.
-The terrain definition is the DA_Ground asset beside the course, as build_course.py creates it.
+The terrain definition is DA_<Course>_Terrain beside the course definition DA_<Course>, as build_course.py creates it.
 """
 import argparse
 import json
@@ -37,6 +37,12 @@ def placed_regions(terrain, east_south):
                    "outline_m": [source_xy(p, 1, east_south) for p in region.get_editor_property("outline_m")]}
 
 
+def terrain_beside(course_path):
+    """/HunterRanch/Course/DA_HunterRanch[.DA_HunterRanch] -> /HunterRanch/Course/DA_HunterRanch_Terrain."""
+    package = course_path.split(".", 1)[0]
+    return f"{package}_Terrain"
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", required=True, type=Path)
@@ -46,9 +52,10 @@ def main(argv):
     if not recipe.get("corrections"):
         raise ValueError("The site recipe names no corrections file")
     course = ue.load_asset(args.course)
-    terrain = ue.load_asset(args.course.rsplit("/", 1)[0] + "/DA_Ground")
+    terrain_path = terrain_beside(args.course)
+    terrain = ue.load_asset(terrain_path)
     if not course or not terrain:
-        raise ValueError(f"Could not load {args.course} and the DA_Ground beside it")
+        raise ValueError(f"Could not load {args.course} and the {terrain_path} beside it")
     layout = json.loads((args.source / "source_layout.json").read_text())
     path = Path(recipe["corrections"])
     previous = json.loads(path.read_text()) if path.is_file() else None

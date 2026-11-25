@@ -37,8 +37,8 @@ SPEC = tree_export.TreeSpec(
     out=PROJECT / "Saved/AssetImport/HunterRanch/IslandTree02",
     tree="island_tree_02_geometry_nodes",
     mesh_name="SM_IslandTree02",
-    collision_name="SM_IslandTree02Collision",
-    canopy_name="SM_IslandTree02Canopy",
+    collision_name="SM_IslandTree02_Collision",
+    canopy_name="SM_IslandTree02_Canopy",
     # The scanned trunk holds the main limbs too; the twigs ("branches") and leaves only slow the ball.
     trunk_material="island_tree_02",
     wood_materials=frozenset({"island_tree_02"}),

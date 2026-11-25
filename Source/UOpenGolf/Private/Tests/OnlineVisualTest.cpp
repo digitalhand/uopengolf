@@ -4,6 +4,7 @@
 // abbreviated clubs.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "TestMaps.h"
 #include "Tests/RenderedPlay.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Editor.h"
@@ -398,7 +399,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FOnlineVisualTest, "UOpenGolf.Visual.Online",
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::NonNullRHI)
 bool FOnlineVisualTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<RenderedPlay::FStartInWindow>());
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FOnlineVisualCapture>(this));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Components/StaticMeshComponent.h"
+#include "TestMaps.h"
 #include "Editor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -16,7 +17,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCupThirtyFootTest, "UOpenGolf.Range.CupThirtyF
 
 bool FCupThirtyFootTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     UWorld* World = GEditor->GetEditorWorldContext().World();
     AUOpenGolfRange* Range = nullptr;

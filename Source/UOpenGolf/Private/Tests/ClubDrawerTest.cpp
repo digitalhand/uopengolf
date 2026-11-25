@@ -4,6 +4,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Engine/GameInstance.h"
+#include "TestMaps.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -142,7 +143,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FClubDrawerClickTest, "UOpenGolf.Visual.ClubDra
 
 bool FClubDrawerClickTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<RenderedPlay::FStartInWindow>());
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FPickClubsInDrawer>(*this));

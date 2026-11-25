@@ -23,15 +23,16 @@ PROJECT = Path(ue.Paths.project_dir()).resolve()
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import savanna_assets as s
+import asset_naming as names  # On the path once savanna_assets is imported.
 
 s = importlib.reload(s)
 a = s.a
 EXPORT = PROJECT / "Saved/AssetImport/NatureEssentials/export.json"
 CATEGORY = "NatureEssentials"
-TEXTURES, MATERIALS, MESHES = (f"{kind}/{CATEGORY}" for kind in ("Textures", "Materials", "Meshes"))
-CARD = "/OpenGolfSavanna/Materials/M_SavannaCard"
-SOLID = "/OpenGolfSavanna/Materials/M_SavannaSolid"
-WHITE_MASK = "/OpenGolfSavanna/Materials/T_WhiteMask"
+TEXTURES, MATERIALS, MESHES = (f"{CATEGORY}/{kind}" for kind in ("Textures", "Materials", "Meshes"))
+CARD = "/OpenGolfSavanna/Shared/Materials/M_SavannaCard"
+SOLID = "/OpenGolfSavanna/Shared/Materials/M_SavannaSolid"
+WHITE_MASK = "/OpenGolfSavanna/Shared/Textures/T_WhiteMask"
 # Straw tufts against the red soil; the grass material shades by blade-texture brightness.
 GRASS_COLORS = {"DryColor": "A99468", "GreenColor": "6F7A45"}
 # Dry oak litter is greyer than the pack's autumn leaves.
@@ -49,7 +50,7 @@ def grass_material():
     metres), TerrainFrame (origin x, y in cm and forward x, y) and UseCourseMask = 1 to turn the
     grass green near play. Wind is the course kit's vegetation wind, off until an instance turns it on.
     """
-    material = a.material("Materials", "M_SavannaUnderstoryGrass")
+    material = a.material(MATERIALS, "M_SavannaUnderstoryGrass")
     for key, value in (("two_sided", True), ("tangent_space_normal", False), ("used_with_instanced_static_meshes", True),
                        ("blend_mode", ue.BlendMode.BLEND_MASKED), ("opacity_mask_clip_value", 0.4)):
         material.set_editor_property(key, value)
@@ -83,20 +84,22 @@ def grass_material():
     return a.finish_material(material)
 
 
-def import_texture(path, role, normal=None, reuse=False):
-    # The pack's normal maps are OpenGL.
-    return s.import_texture(path, TEXTURES, role, normal, opengl_normals=True, reuse=reuse, prefix="T_NE_")
+def import_texture(material, path, role, normal=None, reuse=False):
+    """The pack's file names carry hashes and bit depths, and each texture serves one material, so the texture is
+    named after it: T_NE_Branch_N (Docs/ContentNaming.md). The pack's normal maps are OpenGL."""
+    name = f"T_{material}_{names.texture_suffix(role)}"
+    return s.import_texture(path, TEXTURES, role, normal, opengl_normals=True, reuse=reuse, name=name)
 
 
-def material_textures(roles, reuse=False):
+def material_textures(material, roles, reuse=False):
     """One material's textures by parameter name."""
-    normal = import_texture(roles["normal"], "normal", reuse=reuse) if "normal" in roles else None
-    textures = {"Albedo": import_texture(roles["albedo"], "albedo", reuse=reuse)}
+    normal = import_texture(material, roles["normal"], "normal", reuse=reuse) if "normal" in roles else None
+    textures = {"Albedo": import_texture(material, roles["albedo"], "albedo", reuse=reuse)}
     if normal:
         textures["Normal"] = normal
     for role, parameter in (("roughness", "Roughness"), ("ao", "AmbientOcclusion"), ("opacity", "Opacity")):
         if role in roles:
-            textures[parameter] = import_texture(roles[role], role, normal, reuse=reuse)
+            textures[parameter] = import_texture(material, roles[role], role, normal, reuse=reuse)
     return textures
 
 
@@ -104,7 +107,7 @@ def build_materials(manifest, kinds, reuse=False):
     card, solid, grass = s.required(CARD), s.required(SOLID), grass_material()
     result = {}
     for name, roles in manifest["materials"].items():
-        textures = material_textures(roles, reuse)
+        textures = material_textures(name, roles, reuse)
         if name == "NE_Grass":
             colors = {key: a.linear_color(value) for key, value in GRASS_COLORS.items()}
             result[name] = s.instance(MATERIALS, "MI_" + name, grass, {"BladeAtlas": textures["Albedo"]}, colors)
@@ -154,8 +157,8 @@ def main(argv):
     manifest, kinds = load_manifest()
     if "--textures-only" in argv:
         with s.savanna_helpers():
-            textures = {texture.get_path_name() for roles in manifest["materials"].values()
-                        for texture in material_textures(roles).values()}
+            textures = {texture.get_path_name() for name, roles in manifest["materials"].items()
+                        for texture in material_textures(name, roles).values()}
         ue.log(f"NE_IMPORT_COMPLETE textures={len(textures)} textures_only=True")
         return
     with s.savanna_helpers():

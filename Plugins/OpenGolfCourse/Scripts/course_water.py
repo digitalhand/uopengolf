@@ -9,7 +9,7 @@ import unreal as ue
 
 import course_assets as assets
 
-FOLDER = "Materials"
+FOLDER = "Water"
 NAME = "M_Water"
 DEEP_COLOUR = "26392F"
 EDGE_COLOUR = "4A5A3E"

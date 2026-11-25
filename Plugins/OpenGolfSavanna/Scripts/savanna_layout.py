@@ -31,7 +31,8 @@ def tree_patches(prefix="SavannaTree"):
     rng = random.Random(61019)
 
     def patch(kind, x, y, rx, ry):
-        name = f"{prefix}{kind}{len(result):02d}"
+        # Numbered within its kind (Docs/ContentNaming.md): SavannaTree_Near_00, SavannaTree_Outer_00, ...
+        name = f"{prefix}_{kind}_{sum(1 for p in result if p[1] == kind):02d}"
         phase = rng.random() * math.tau
         points = []
         for i in range(12):

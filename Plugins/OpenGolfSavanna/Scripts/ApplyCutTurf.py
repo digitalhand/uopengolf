@@ -26,8 +26,8 @@ import turf_field as field
 import turf_palette as palette
 import turf_shading as shading
 
-MAP = '/Game/UOpenGolf/Maps/UOpenGolf'
-GENERATED = '/Game/UOpenGolf/Terrain/Savanna/CutTurf'
+MAP = '/Game/UOpenGolf/Maps/L_SavannaRange'
+GENERATED = '/Game/UOpenGolf/Terrain/Generated'  # With the range's other generated runs.
 FIELD_SOURCE = turf.SOURCE / 'T_CourseSurfaceField.tga'
 FIELD_SPEC = turf.SOURCE / 'course-field.json'
 
@@ -68,7 +68,7 @@ def import_field(definition):
         raise RuntimeError('Export the course outlines with --export-mask and bake them with turf_mask.py first')
     if json.loads(FIELD_SPEC.read_text()) != mask_spec(definition):
         raise RuntimeError('The course outlines changed: export and bake the course field again')
-    texture = a.import_asset(str(FIELD_SOURCE),'Textures/CutTurf','T_CourseSurfaceField')
+    texture = a.import_asset(str(FIELD_SOURCE),'CutTurf/Textures','T_CourseSurfaceField')
     # Uncompressed 8-bit channels keep the distance steps small; block compression would quantize the edges.
     for key,value in {'srgb':False,'compression_settings':ue.TextureCompressionSettings.TC_VECTOR_DISPLACEMENTMAP,
                        'mip_gen_settings':ue.TextureMipGenSettings.TMGS_SIMPLE_AVERAGE,
@@ -80,7 +80,7 @@ def import_field(definition):
 def rough_material(source):
     """Savanna ground under the rough band; the shared field draws the rough and the fairway edge, and the savanna
     ground's own rough weight fades the rough out into the desert."""
-    parent = duplicate(s.required('/OpenGolfSavanna/Materials/M_SavannaGround'),'Materials/CutTurf','M_CutTurfRough')
+    parent = duplicate(s.required('/OpenGolfSavanna/Ground/Materials/M_SavannaGround'),'CutTurf/Materials','M_CutTurfRough')
     ground = a.node(parent,ue.MaterialExpressionCustom,'GroundColor')
     weight = a.node(parent,ue.MaterialExpressionCustom,'RoughWeight')
     a.output(parent,field.field_color(parent,(ground,''),(weight,'')),ue.MaterialProperty.MP_BASE_COLOR)
@@ -91,7 +91,7 @@ def rough_material(source):
     a.output(parent,normal,ue.MaterialProperty.MP_NORMAL)
     rough_map = a.node(parent, ue.MaterialExpressionTextureSampleParameter2D, 'FirstCutRoughnessMap',
                        parameter_name='FirstCutRoughnessMap',
-                       texture=ue.load_asset('/OpenGolfSavanna/Textures/CutTurf/FirstCut/T_TurfFirstCut_Roughness'),
+                       texture=ue.load_asset('/OpenGolfSavanna/CutTurf/Textures/FirstCut/T_TurfFirstCut_R'),
                        sampler_type=ue.MaterialSamplerType.SAMPLERTYPE_MASKS)
     a.connect(a.node(parent, ue.MaterialExpressionCustom, 'FirstCutReliefUV'), rough_map, 'UVs')
     roughness = a.custom(parent, 'TurfFieldGroundRoughness', 'return lerp(R,max(0.9,T),W);',
@@ -100,7 +100,7 @@ def rough_material(source):
                         ue.CustomMaterialOutputType.CMOT_FLOAT1)
     a.output(parent, roughness, ue.MaterialProperty.MP_ROUGHNESS)
     a.finish_material(parent)
-    instance = duplicate(source,'Materials/CutTurf','MI_TurfRough')
+    instance = duplicate(source,'CutTurf/Materials','MI_TurfRough')
     a.MAT.set_material_instance_parent(instance,parent)
     for name,rgb in palette.ROUGH_UNDERLAY.items():
         a.MAT.set_material_instance_vector_parameter_value(instance,name,ue.LinearColor(*rgb,1.0))
@@ -126,7 +126,7 @@ def apply(export_mask=False):
         old_rough = definition.default_surface.material
         import_field(definition)
         new_rough = rough_material(old_rough)
-        rough_preset = duplicate(definition.default_surface,'Terrain/CutTurf','DA_TurfRough')
+        rough_preset = duplicate(definition.default_surface,'CutTurf/Presets','DA_TurfRough')
         rough_preset.set_editor_property('material',new_rough)
         a.save(rough_preset)
         rough = rough_grass()
@@ -147,8 +147,8 @@ def apply(export_mask=False):
         if not ue.EditorAssetLibrary.save_loaded_asset(definition) or not ue.get_editor_subsystem(ue.LevelEditorSubsystem).save_current_level():
             raise RuntimeError('Could not save the applied turf')
         ue.log('OPEN_GOLF_CUT_TURF_APPLIED')
-    grass = [rough.get_path_name()] + [f'/OpenGolfSavanna/Terrain/CutTurf/DA_Turf{f}Grass' for f in ('Fairway','Collar')]
-    surfaces = [f'/OpenGolfSavanna/Terrain/CutTurf/DA_Turf{f}' for f in ('Fairway','Collar','Green')]
+    grass = [rough.get_path_name()] + [f'/OpenGolfSavanna/CutTurf/Presets/DA_Turf{f}Grass' for f in ('Fairway','Collar')]
+    surfaces = [f'/OpenGolfSavanna/CutTurf/Presets/DA_Turf{f}' for f in ('Fairway','Collar','Green')]
     # No boundary preset: the 50 mm rough meets the fairway directly, like a mowing line.
     course.apply(MAP,GENERATED,grass,None,surfaces,finished=finish)
 

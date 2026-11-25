@@ -3,6 +3,7 @@
 // and a ball that stops in the lake costs a penalty stroke and is replayed from where it was hit.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Editor.h"
+#include "TestMaps.h"
 #include "FileHelpers.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -20,7 +21,7 @@
 namespace HunterRoundTestDetail
 {
     const TCHAR* const CoursePath = TEXT("/HunterRanch/Course/DA_HunterRanch.DA_HunterRanch");
-    const TCHAR* const MapPath = TEXT("/HunterRanch/Course/Course");
+    const TCHAR* const MapPath = TestMaps::HunterRanch;
 
     AUOpenGolfGameMode* PlayingMode()
     {

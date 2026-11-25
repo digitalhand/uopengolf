@@ -21,7 +21,7 @@ import course_assets as a
 import BuildTerrainAssets as terrain
 import vegetation_wind_assignments as wind
 
-MESHES = '/OpenGolfSavanna/Meshes/Grass/Medium/SM_GrassMedium_30cm_'
+MESHES = '/OpenGolfSavanna/Grass/Medium/Meshes/SM_GrassMedium_30cm_'
 TILES = ((1.0, '1m', 'ABCD'), (0.5, '50cm', 'AB'), (0.25, '25cm', 'AB'))
 # Ground cover fades out from 75% of its cull distance onto the matching ground colour.
 # The tiles' material sways them (vegetation_wind_assignments.py) until they fade out.
@@ -65,7 +65,7 @@ def build():
                   'DA_BoundaryGrass': ('meshes', [load(f'Edge_{v}') for v in 'AB'])}
         presets = []
         for name, settings in PRESETS.items():
-            preset = terrain.create_data(name, ue.OpenGolfVegetationPreset, 'Terrain')
+            preset = terrain.create_data(name, ue.OpenGolfVegetationPreset, 'Grass/Presets')
             field, value = meshes[name]
             preset.set_editor_property('meshes', [])
             preset.set_editor_property('tiles', [])

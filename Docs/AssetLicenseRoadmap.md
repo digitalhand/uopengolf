@@ -16,7 +16,7 @@ The downloadable Hunter Ranch course (`Plugins/HunterRanch`, not part of the bas
 The orientation repair rebuilt the Unreal assets from the same geographic sources. The published layout and author corrections remain in east/north metres.
 
 The course uses the existing course-kit surfaces and a new procedural `M_Water` lake material (no textures) in
-`Plugins/OpenGolfCourse/Content/Materials/`. On 2026-11-24 the course gained its tree: Poly Haven's
+`Plugins/OpenGolfCourse/Content/Water/`. On 2026-11-24 the course gained its tree: Poly Haven's
 [Island Tree 02](https://polyhaven.com/a/island_tree_02) (CC0), a stand-in for the native blue oak, in
 `Plugins/HunterRanch/Content/Vegetation/Trees/IslandTree02/` with its notice in `Plugins/HunterRanch/NOTICE.md`.
 No other third-party art was added.

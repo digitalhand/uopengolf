@@ -80,7 +80,16 @@ void AUOpenGolfRange::BuildDefaultLayout()
     Flagstick->SetMobility(EComponentMobility::Movable);
 
     if (!AOpenGolfEnvironment::Find(GetWorld()))
-        GetWorld()->SpawnActor<AOpenGolfEnvironment>();
+    {
+        auto* Environment = GetWorld()->SpawnActor<AOpenGolfEnvironment>();
+#if WITH_EDITOR
+        if (Environment)
+        {
+            Environment->SetActorLabel(TEXT("Environment_Daylight"));
+            Environment->SetFolderPath(TEXT("Range/Lighting"));
+        }
+#endif
+    }
     for (const auto& Actor : LayoutActors)
         Actor->RegisterAllComponents();
     RefreshPresentation();

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "TestMaps.h"
 #include "Tests/RenderedPlay.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Editor.h"
@@ -149,7 +150,7 @@ private:FAutomationTestBase* Test;int32 Stage=0;bool bOpened=false;double WaitUn
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FMenuVisualTest,"UOpenGolf.Visual.Menu",EAutomationTestFlags::EditorContext|EAutomationTestFlags::EngineFilter|EAutomationTestFlags::NonNullRHI)
 bool FMenuVisualTest::RunTest(const FString&)
 {
-    if(!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"),false,true))return false;
+    if(!FEditorFileUtils::LoadMap(TestMaps::Range,false,true))return false;
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<RenderedPlay::FStartInWindow>());
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FMenuVisualCapture>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());return true;

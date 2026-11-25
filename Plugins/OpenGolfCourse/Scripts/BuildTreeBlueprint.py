@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
 """Build or update a placeable tree Blueprint: the visible tree with its hidden wood and canopy (editor only).
 
-    py "<project>/Plugins/OpenGolfCourse/Scripts/BuildTreeBlueprint.py" --tree /Course/.../SM_Tree
-        --wood /Course/.../SM_TreeCollision --canopy /Course/.../SM_TreeCanopy --blueprint /Course/.../BP_Tree_X
-        [--wind-distance-cm 15000]
+    py "<project>/Plugins/OpenGolfCourse/Scripts/BuildTreeBlueprint.py" --tree /<Course>/.../SM_<Species>
+        --wood /<Course>/.../SM_<Species>_Collision --canopy /<Course>/.../SM_<Species>_Canopy
+        --blueprint /<Course>/Vegetation/Trees/BP_Tree_<Species> [--wind-distance-cm 15000]
 
 The parts and their collision, tags and visibility are in tree_blueprint_rules.py. The wood mesh must collide on its
 triangles and the canopy must have a convex hull (ImportSavannaAssets.py sets both). The Blueprint is created when
 missing; an existing one is updated only when this script made it, so placed copies keep working. Completion is
-logged as OPEN_GOLF_TREE_BLUEPRINT_COMPLETE.
+logged as OPEN_GOLF_TREE_BLUEPRINT_COMPLETE. Building the same actor by hand is described in
+Docs/CourseDesign/course_vegetation.md (step 3c).
 """
 from pathlib import Path
 import importlib

@@ -50,8 +50,8 @@ class AssignmentsTest(unittest.TestCase):
     def test_still_vegetation_stays_still(self):
         for mesh in ("SM_NE_Litter_A", "SM_NE_MossDead_A", "SM_NE_RockDark_A", "SM_NE_Seedling_A"):
             self.assertIsNone(assign.mesh_wind_distance_m(f"{assign.NE}/{mesh}"))
-        self.assertIsNone(assign.mesh_wind_distance_m("/OpenGolfSavanna/Meshes/CutTurf/Fairway/SM_CutTurf_Fairway_00"))
-        self.assertIsNone(assign.mesh_wind_distance_m(f"{assign.JACARANDA}/Meshes/SM_JacarandaCanopy"))
+        self.assertIsNone(assign.mesh_wind_distance_m("/OpenGolfSavanna/CutTurf/Meshes/Fairway/SM_TurfFairway_50cm_A"))
+        self.assertIsNone(assign.mesh_wind_distance_m(f"{assign.JACARANDA}/Meshes/SM_Jacaranda_Canopy"))
 
     def test_bounds_cover_every_placed_scale(self):
         # The material's offset bound is sized for its largest instance; a larger one would be clamped.
@@ -64,11 +64,11 @@ class AssignmentsTest(unittest.TestCase):
 
     def test_hunter_ranch_tree_sways_and_its_helpers_stay_still(self):
         self.assertEqual(assign.mesh_wind_distance_m(f"{assign.ISLAND_TREE}/Meshes/SM_IslandTree02"), 150.0)
-        for helper in ("SM_IslandTree02Collision", "SM_IslandTree02Canopy"):
+        for helper in ("SM_IslandTree02_Collision", "SM_IslandTree02_Canopy"):
             self.assertIsNone(assign.mesh_wind_distance_m(f"{assign.ISLAND_TREE}/Meshes/{helper}"))
-        leaves = assign.MATERIALS[f"{assign.ISLAND_TREE}/Materials/MI_IslandTree02Leaves"]
+        leaves = assign.MATERIALS[f"{assign.ISLAND_TREE}/Materials/MI_IslandTree02_Leaves"]
         self.assertEqual((leaves.profile, leaves.flutter), ("BroadleafTree", True))
-        for wood in ("MI_IslandTree02", "MI_IslandTree02Branches"):
+        for wood in ("MI_IslandTree02_Trunk", "MI_IslandTree02_Branches"):
             self.assertFalse(assign.MATERIALS[f"{assign.ISLAND_TREE}/Materials/{wood}"].flutter, wood)
         self.assertGreaterEqual(leaves.max_scale, assign.ISLAND_TREE_MAX_SCALE)
 

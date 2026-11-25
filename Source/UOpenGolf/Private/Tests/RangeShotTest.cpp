@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "LaunchMonitorTypes.h"
+#include "TestMaps.h"
 #include "OpenFairwayBall.h"
 #include "UOpenGolfGameMode.h"
 
@@ -184,7 +185,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUOpenGolfRangeShotTest, "UOpenGolf.Range.Shot"
 
 bool FUOpenGolfRangeShotTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
     {
         AddError(TEXT("Could not load the startup map."));
         return false;
@@ -369,7 +370,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeRecordedShotsTest, "UOpenGolf.Range.Recor
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRangeRecordedShotsTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true)) return false;
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true)) return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FReplayRecordedShots>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());
@@ -380,7 +381,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeFrameRatesTest, "UOpenGolf.Range.FrameRat
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRangeFrameRatesTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true)) return false;
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true)) return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckRangeFrameRates>(this));
     ADD_LATENT_AUTOMATION_COMMAND(FEndPlayMapCommand());

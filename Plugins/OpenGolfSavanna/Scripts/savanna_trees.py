@@ -21,8 +21,8 @@ import vegetation_wind_assignments as wind
 
 layout, wood, wind = [importlib.reload(module) for module in (layout, wood, wind)]
 SOURCE = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_Jacaranda"
-PROXY = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_JacarandaCollision"
-CANOPY = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_JacarandaCanopy"
+PROXY = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_Jacaranda_Collision"
+CANOPY = "/OpenGolfSavanna/Trees/Jacaranda/Meshes/SM_Jacaranda_Canopy"
 CANOPY_TAG = "OpenGolf.Terrain.TreeCanopy"
 # The trunk material is the trunk and main limbs; the branch material is the outer branches and twigs.
 WOOD = {"jacaranda_tree_trunk"}

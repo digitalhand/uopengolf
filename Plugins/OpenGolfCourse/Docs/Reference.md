@@ -19,7 +19,7 @@ type. Its content mounts at `/OpenGolfCourse/`.
 | `Surfaces/MI_Fairway`, `MI_Rough`, `MI_Green` | Turf instances; each points at its physical material, so assigning one sets look and physics together |
 | `Surfaces/MF_MowStripes` | Mowing-band mask for any direction and band width, filtered against moire |
 | `Surfaces/T_Grass_*` | ambientCG Grass 004 color, normal and roughness maps |
-| `Flagstick/SM_Flagstick`, `M_Pole` | Seven-foot, half-inch pole |
+| `Flagstick/SM_Flagstick`, `M_FlagstickPole` | Seven-foot, half-inch pole |
 | `Flagstick/M_FlagCloth`, `MI_Flag_Red` | Two-sided flag cloth material (`FlagColor`, `FlagRoughness`) and its red instance |
 | `Ball/SM_GolfBall`, `M_GolfBall`, `MF_BallMarking` | Dimpled ball (three LODs) with an alignment line and a logo dot |
 | `UOpenGolfFlagstickComponent` (C++) | The pole plus a simulated 20 x 14 inch cloth flag (`FOpenGolfFlagCloth`); no collision; `SetWind` flies it |
@@ -75,7 +75,7 @@ ball's reference height and roughness. `GetMotion()` reports the flag's averaged
 while it simulates. It samples every cloth substep, so the flap rate does not depend on the frame
 rate; droop reads 0 when a gale flaps the fly end above the hoist.
 
-The public range exposes wind on **Range settings → Details → UOpenGolf → Wind**. Set
+The public range exposes wind on **RangeSettings → Details → UOpenGolf → Wind**. Set
 **Wind Speed (mph)** to 10 and **Wind From (degrees)** to 90. With **Preview Wind in Editor**
 and viewport Realtime enabled, the flag should extend downwind and flap after 5–10 seconds
 before Play. The wind settings save with the map and also drive the ball during Play.
@@ -295,7 +295,8 @@ broader rebuild is intended.
 
 **Editable Blender sources** are kept outside the repository, in `OpenGolfCourse/` under the
 Blender art root:
-`SM_GolfBall.blend`, `SM_Flagstick.blend`, and `Coastal/` for the coastal grass. The putting-disc,
+`SM_GolfBall.blend`, `SM_Flagstick.blend`, and `TerrainGrass/` for the kit's grass clumps
+(`PrepareTerrainGrass.py`; it moves sources from the older `Coastal/` folder on first run). The putting-disc,
 green-surround and grass-clump sources there served the retired flat range and are no longer exported.
 - The art root is `--art-root PATH`, else `$UOPENGOLF_BLENDER_ROOT`, else
   `~/Code/3D/blender/uopengolf`; see `Scripts/art_root.py`.
@@ -399,8 +400,14 @@ Scripts/
   vegetation_wind_assets.py  MPC_Wind, MF_VegetationWind, add_vegetation_wind, apply_profile
   hole_layout.py          Hole layout geometry: outlines, feature mounds, green grades (pure)
   course_hole.py          Applies a hole layout to a terrain definition; stands the flag at the pin
+  asset_naming.py         Asset, folder and actor names (Docs/ContentNaming.md); every generator uses it (pure)
+  build_course.py         Builds a downloadable course's map, terrain, ground squares and lakes
+  course_actors.py        Records a course's hand-placed actors and restores them after a full rebuild
+  generated_folders.py    Removes generated build folders that the saved map no longer uses
+  BuildTreeBlueprint.py   Builds a placeable tree actor with its wood and canopy colliders (tree_blueprint_rules.py)
 Source/OpenGolfCourse/
   Public/OpenGolfCourse.h               Asset paths
+  Public/OpenGolfAssetNames.h           Generated asset, actor and folder names (asset_naming.py's C++ twin)
   Public/OpenGolfFlagstickComponent.h   Flagstick component (pole + cloth flag)
   Public/OpenGolfFlagCloth.h            Flag cloth solver and its droop/flap readings
   Public/OpenGolfWindSubsystem.h        A world's wind and MPC_Wind
@@ -411,6 +418,9 @@ Source/OpenGolfCourse/
   Public/Play/OpenGolfWindSetting.h     The HUD's wind setting and direction names
   Public/Play/OpenGolfLieRules.h        Lie penalties by surface and kind of club
   Private/Tests/                        Asset, cloth, wind and play tests
+Source/OpenGolfCourseEditor/            Editor only
+  Public/OpenGolfTerrainBuilder.h       Terrain, course-square, lake and vegetation builders
+  Public/OpenGolfContentTools.h         Redirector fix-up for scripts, without the engine's dialog
 ```
 
 ## Course grass
@@ -462,9 +472,9 @@ without changing anything. A full `RebuildVegetation` keeps the layer; after a t
 place it again with `RebuildCourseGrass` so it follows the new ground.
 
 Validate with `UOpenGolf.Course.Terrain.TiledGrass` and `UOpenGolf.Course.Terrain.BoundaryGrass`,
-saved-terrain contact and rollout checks, then `UOpenGolf.Visual.CoastalTerrain`. Compare
+saved-terrain contact and rollout checks, then `UOpenGolf.Visual.RangeTerrain`. Compare
 stationary tee/edge/close grass-on and grass-off sequences using
-`Scripts/grass_stability.py --profile coastal`, and inspect slow camera movement. Keep
+`Scripts/grass_stability.py --profile terrain`, and inspect slow camera movement. Keep
 camera, resolution, AA and editor count the same before and after.
 
 ## Vegetation wind

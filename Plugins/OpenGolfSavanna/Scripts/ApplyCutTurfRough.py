@@ -3,7 +3,7 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/ApplyCutTurfRough.py"
 
-Open /Game/UOpenGolf/Maps/UOpenGolf with Play stopped. First export, bake and refresh the Rough family and
+Open /Game/UOpenGolf/Maps/L_SavannaRange with Play stopped. First export, bake and refresh the Rough family and
 rebuild the turf field with FixTurfTransitions.py (Docs/TurfWorkflow.md). This script backs up the presets and
 instances it changes, installs DA_TurfRoughGrass in place of DA_TurfTallRough, removes the boundary strip
 (DA_TurfRoughEdge) and re-places the course grass. The old presets stay on disk as a rollback. The map is saved
@@ -32,11 +32,11 @@ import turf_field as field
 import turf_palette as palette
 import turf_shading as shading
 
-TERRAIN = '/OpenGolfSavanna/Terrain/CutTurf/'
+TERRAIN = '/OpenGolfSavanna/CutTurf/Presets/'
 TALL_ROUGH = TERRAIN + 'DA_TurfTallRough'
 ROUGH_EDGE = TERRAIN + 'DA_TurfRoughEdge'
 ROUGH_GRASS = TERRAIN + 'DA_TurfRoughGrass'
-ROUGH_MATERIAL = '/OpenGolfSavanna/Materials/CutTurf/M_CutTurfRough'
+ROUGH_MATERIAL = '/OpenGolfSavanna/CutTurf/Materials/M_CutTurfRough'
 BACKUP = (TALL_ROUGH, ROUGH_EDGE, ROUGH_GRASS, ROUGH_MATERIAL, shading.MATERIALS + 'MI_TurfRough',
           shading.MATERIALS + 'MI_TurfRoughBlades')
 
@@ -55,7 +55,7 @@ def backup():
 def check_ready():
     """The Rough family must be imported and the rough ground rebuilt with the rough as its lowest field layer."""
     missing = [path for path in (shading.MATERIALS + 'MI_TurfRoughBlades',
-                                 '/OpenGolfSavanna/Textures/CutTurf/Rough/T_TurfRough_Color')
+                                 '/OpenGolfSavanna/CutTurf/Textures/Rough/T_TurfRough_D')
                if not ue.load_asset(path)]
     if missing:
         raise RuntimeError('Run BuildCutTurf.py --refresh after exporting and baking the Rough family; missing '

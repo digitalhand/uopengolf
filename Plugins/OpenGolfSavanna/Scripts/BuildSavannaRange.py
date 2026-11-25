@@ -3,13 +3,13 @@
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/BuildSavannaRange.py" [--map PATH] [--course FOLDER] [--generated FOLDER]
 
-Defaults convert the public range, /Game/UOpenGolf/Maps/UOpenGolf, with course assets in
+Defaults convert the public range, /Game/UOpenGolf/Maps/L_SavannaRange, with course assets in
 /Game/UOpenGolf/Terrain/Savanna. Build the savanna assets first (ImportSavannaAssets.py for the
 grass, BuildSurfaceTextures.py, BuildSavannaGrassPresets.py, BuildSavannaGround.py,
 ImportNatureEssentials.py). The script:
 
 1. backs up the map and its terrain definition;
-2. copies the map's definition to <course>/DA_SavannaRange the first time and switches the map to it;
+2. copies the map's definition to <course>/DA_SavannaRange_Terrain the first time and switches the map to it;
 3. lays out the par-4 hole (savanna_hole.py: the green 400 yards out with its contour and flag, the fairway bunker on
    the left of the landing area, a greenside bunker), sets the Grass008/Ground093C surfaces, the savanna ground
    (course mask, rough and outer-ground instances) and 36 seeded jacaranda patches, and drops
@@ -48,15 +48,15 @@ ground, course_hole, vegetation, s, hole_spec, layout, trees, understory = [impo
 LIB = ue.EditorAssetLibrary
 OWNER = "OpenGolfSavanna.Course.v1"
 SURFACES = {
-    ue.OpenFairwaySurface.FAIRWAY: "/OpenGolfSavanna/Terrain/DA_FairwayGrass008",
-    ue.OpenFairwaySurface.GREEN: "/OpenGolfSavanna/Terrain/DA_GreenGrass008",
-    ue.OpenFairwaySurface.SAND: "/OpenGolfSavanna/Terrain/DA_BunkerGround093C",
+    ue.OpenFairwaySurface.FAIRWAY: "/OpenGolfSavanna/Surfaces/Presets/DA_FairwayGrass008",
+    ue.OpenFairwaySurface.GREEN: "/OpenGolfSavanna/Surfaces/Presets/DA_GreenGrass008",
+    ue.OpenFairwaySurface.SAND: "/OpenGolfSavanna/Surfaces/Presets/DA_BunkerGround093C",
 }
 COURSE = "/Game/UOpenGolf/Terrain/Savanna"
 ROUGH_MASK = "T_SavannaRoughMask"
-ROUGH_SOURCE = "/OpenGolfCourse/Terrain/Presets/DA_CoastalRough"
-COURSE_GRASS = ["/OpenGolfSavanna/Terrain/DA_RoughGrassDense"]
-BOUNDARY_GRASS = "/OpenGolfSavanna/Terrain/DA_BoundaryGrass"
+ROUGH_SOURCE = "/OpenGolfCourse/Terrain/Presets/DA_TerrainSurface_Rough"
+COURSE_GRASS = ["/OpenGolfSavanna/Grass/Presets/DA_RoughGrassDense"]
+BOUNDARY_GRASS = "/OpenGolfSavanna/Grass/Presets/DA_BoundaryGrass"
 TREE_PREFIX = "SavannaTree"
 
 
@@ -107,7 +107,7 @@ def set_ground(definition, course, mount):
     mask, minimum, maximum = ground.course_mask(definition, f"{folder}/Materials", ROUGH_MASK)
     instances = []
     for name, native in (("MI_SavannaRough", 0), ("MI_SavannaNative", 1)):
-        instance = s.a.material_instance(f"{folder}/Materials", name, s.required("/OpenGolfSavanna/Materials/M_SavannaGround"))
+        instance = s.a.material_instance(f"{folder}/Materials", name, s.required("/OpenGolfSavanna/Ground/Materials/M_SavannaGround"))
         ground.configure_ground(instance, native, mask, minimum, maximum)
         instance.set_editor_property("override_phys_material", True)
         instance.set_editor_property("phys_material", s.required("/OpenGolfCourse/Surfaces/PM_Rough"))
@@ -248,7 +248,7 @@ def main(argv):
     source_map = vegetation.map_file(args.map)
     shutil.copy2(source_map, backup / source_map.name)
     current = area.get_editor_property("definition")
-    definition_path = f"{args.course}/DA_SavannaRange"
+    definition_path = f"{args.course}/DA_SavannaRange_Terrain"
     _, definition_content = content_dir(current.get_path_name())
     definition_file = definition_content / (current.get_path_name().split(".")[0].split("/", 2)[2] + ".uasset")
     if definition_file.exists():

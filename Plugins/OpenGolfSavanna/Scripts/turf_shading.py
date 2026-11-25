@@ -8,7 +8,7 @@ import course_assets as a
 import turf_field as field
 import turf_palette as palette
 
-MATERIALS = '/OpenGolfSavanna/Materials/CutTurf/'
+MATERIALS = '/OpenGolfSavanna/CutTurf/Materials/'
 # The fairway's first cut was removed on 2026-11-23; its MI_TurfFirstCut* instances and presets stay on disk as a
 # rollback and are no longer configured.
 GROUND_FAMILIES = ('Fairway', 'Collar', 'Green')

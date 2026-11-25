@@ -3,6 +3,7 @@
 // chosen before play are the ones the round plays, the wind is fixed in the world, and the round is played in daylight.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Course/RoundConditions.h"
+#include "TestMaps.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
@@ -19,7 +20,7 @@ namespace RoundSelectionTestDetail
 {
     using namespace OpenGolfPlay;
     const TCHAR* const CoursePath = TEXT("/HunterRanch/Course/DA_HunterRanch.DA_HunterRanch");
-    const TCHAR* const MapPath = TEXT("/HunterRanch/Course/Course");
+    const TCHAR* const MapPath = TestMaps::HunterRanch;
 
     AUOpenGolfGameMode* PlayingMode()
     {

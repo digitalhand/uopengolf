@@ -9,6 +9,7 @@
 #include "FileHelpers.h"
 #include "Framework/Docking/TabManager.h"
 #include "GolfCourseDefinition.h"
+#include "OpenGolfAssetNames.h"
 #include "OpenGolfTerrain.h"
 #include "OpenGolfTerrainBuilder.h"
 #include "PlayInEditorDataTypes.h"
@@ -148,7 +149,7 @@ namespace CourseDesigner
             const FBox2D Before(Ring);
             Ring[Vertex] = P;
             FBox2D Bounds = Before + FBox2D(Ring);
-            const FString Folder = FPackageName::GetLongPackagePath(Course->GetOutermost()->GetName()) / TEXT("Tiles");
+            const FString Folder = FPackageName::GetLongPackagePath(Course->GetOutermost()->GetName()) / OpenGolfAssetNames::GeneratedFolder / TEXT("Tiles");
             FString Error;
             for (int32 Y = FMath::FloorToInt(Bounds.Min.Y/64); Y <= FMath::FloorToInt(Bounds.Max.Y/64); ++Y)
                 for (int32 X = FMath::FloorToInt(Bounds.Min.X/64); X <= FMath::FloorToInt(Bounds.Max.X/64); ++X)
@@ -290,8 +291,9 @@ namespace CourseDesigner
             if (!Layout->Ready() || !FEditorFileUtils::SaveDirtyPackages(false, true, true)) return;
             const FString Root = FPackageName::GetLongPackagePath(Layout->Course->GetOutermost()->GetName());
             auto* Python=IPythonScriptPlugin::Get();
+            const FString Generated = Root / OpenGolfAssetNames::GeneratedFolder;
             const bool Ok=Python && Python->ExecPythonCommand(*FString::Printf(TEXT("\"%s\" --course --root %s/Tiles --root %s/Water --apply"),
-                *(Scripts()/TEXT("generated_folders.py")), *Root, *Root));
+                *(Scripts()/TEXT("generated_folders.py")), *Generated, *Generated));
             Layout->Status=Ok ? TEXT("Saved. Replaced ground squares were removed; see the Output Log.") : TEXT("Saved, but old ground squares could not be checked. See Output Log.");
         }
         void SaveCorrections()

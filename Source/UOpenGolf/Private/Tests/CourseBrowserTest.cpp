@@ -2,6 +2,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Tests/RenderedPlay.h"
+#include "TestMaps.h"
 #include "Tests/HoleMapContent.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "Engine/GameViewportClient.h"
@@ -369,7 +370,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FCourseMenuTest, "UOpenGolf.Visual.CourseBrowse
 
 bool FCourseMenuTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<RenderedPlay::FStartInWindow>());
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FVisitCourse>(*this));

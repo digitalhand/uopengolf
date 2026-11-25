@@ -412,7 +412,7 @@ in with a phone without opening Settings (see below). It disappears once you are
 
 ### Settings
 
-Wind controls on **Range settings** save with the map. Changes made during Play do not
+Wind controls on **RangeSettings** save with the map. Changes made during Play do not
 save back to the map. The settings menu saves supported preferences when you apply them. Console values can
 remain between Play sessions in the same editor process.
 
@@ -423,7 +423,7 @@ remain between Play sessions in the same editor process.
 | Recording folder | `Documents/UOpenGolf/Saved/ShotRecordings` | **Settings › Data & system**: type a folder, or **Browse** on Windows |
 | Selected test shot | First preset (low wood) | **P**, then pick one |
 | 3D grass and ground cover | On | Console: `uopengolf.Grass3D 0` (off) or `1` (on); see [Range assets](RangeAssets.md) |
-| Wind speed | 0 mph (calm) | In Play: click the wind indicator (up to 30 mph). Saved with the map: select **Range settings → Details → UOpenGolf → Wind → Wind Speed (mph)** |
+| Wind speed | 0 mph (calm) | In Play: click the wind indicator (up to 30 mph). Saved with the map: select **RangeSettings → Details → UOpenGolf → Wind → Wind Speed (mph)** |
 | Wind direction | 0° (headwind) | In Play: the wind controls' **Direction**. Saved with the map: **Wind From (degrees)**: `90` from the right, `180` tailwind, `270` from the left |
 | Editor flag preview | On | **Preview Wind in Editor**; viewport Realtime must be enabled |
 | Green speed | Stimp 10 ft | **Settings › Game Defaults › Stimp** (Training, and the starting choice for a round); a round's own on its [round setup](#round-setup). Console: `uopengolf.GreenStimp 8` to `15`; applies from the next shot |

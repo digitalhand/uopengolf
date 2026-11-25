@@ -16,7 +16,7 @@ loaded the material in that editor session: rebuilding deletes its expressions.
 """
 import unreal as u
 
-DEST = '/Game/UOpenGolf/Art'
+DEST = '/Game/UOpenGolf/Effects'
 NAME = 'M_TargetRingLine'
 PATH = f'{DEST}/{NAME}'
 OWNER = 'UOpenGolf.TrainingRings.v1'

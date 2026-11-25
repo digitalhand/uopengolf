@@ -239,7 +239,7 @@ explicit override. No replay-specific surface override is used.
 The course kit owns the CC0 grass textures, golf ball, waving flagstick and turf
 materials, with editable Blender sources (see the
 [OpenGolfCourse README](../Plugins/OpenGolfCourse/README.md)). The game keeps the tracer
-material in `Content/UOpenGolf/Art/`. The ball subclass
+material in `Content/UOpenGolf/Effects/`. The ball subclass
 normalizes the visual mesh's actual bounds to a 42.67 mm diameter and owns a
 collision-free procedural ribbon with a translucent material. It samples the
 simulated path and fades during rollout; launch/reset clears the ribbon. CPU buffers

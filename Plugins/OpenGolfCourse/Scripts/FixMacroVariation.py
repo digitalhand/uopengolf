@@ -39,7 +39,7 @@ def repair(path):
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("materials", nargs="*", default=["/OpenGolfCourse/Terrain/Materials/M_CoastalSurface"])
+    parser.add_argument("materials", nargs="*", default=["/OpenGolfCourse/Terrain/Materials/M_TerrainSurface"])
     for path in parser.parse_args(argv).materials:
         repair(path)
     ue.log("OPEN_GOLF_MACRO_VARIATION_COMPLETE")

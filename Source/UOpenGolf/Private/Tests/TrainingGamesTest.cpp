@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Editor.h"
+#include "UOpenGolfAssetPaths.h"
+#include "TestMaps.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "Hole/OpenGolfCupComponent.h"
@@ -39,9 +41,9 @@ namespace TrainingGamesTestDetail
             const auto* Tint = Cast<UMaterialInstanceDynamic>(Mesh->GetMaterial(Section));
             return Tint && Tint->Parent ? Tint->Parent->GetPathName() : FString();
         };
-        Test.TestEqual(TEXT("The fill uses the tracer material"), ParentPath(0), FString(TEXT("/Game/UOpenGolf/Art/M_ShotTrail.M_ShotTrail")));
+        Test.TestEqual(TEXT("The fill uses the tracer material"), ParentPath(0), FString(UOpenGolfAssetPaths::ShotTrailMaterial));
         Test.TestEqual(TEXT("The edge uses the screen-width line material"), ParentPath(1),
-            FString(TEXT("/Game/UOpenGolf/Art/M_TargetRingLine.M_TargetRingLine")));
+            FString(UOpenGolfAssetPaths::TargetRingLineMaterial));
 
         const double Radius = Drill.GetRadiusFeet() * TrainingScoring::CmPerFoot;
         const double Edge = UTargetRings::EdgeWidthCm(Drill.GetPinYards() * CmPerYard);
@@ -477,7 +479,7 @@ namespace TrainingGamesTestDetail
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTrainingGamesTest, "UOpenGolf.Range.TrainingGames", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FTrainingGamesTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<TrainingGamesTestDetail::FPlayDistancePractice>(*this));

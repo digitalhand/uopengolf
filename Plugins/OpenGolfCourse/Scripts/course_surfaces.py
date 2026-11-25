@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Surface assets: physical materials, mowing stripes and turf materials."""
 import unreal as ue
+import asset_naming as names
 
 from course_assets import (connect, custom, finish_function, finish_material, function_call, function_input,
                            function_output, import_asset, linear_color, load_or_create, material, material_function,
@@ -144,7 +145,7 @@ def import_textures():
     for slot, suffix, sampler in (("Color", "Color", ue.MaterialSamplerType.SAMPLERTYPE_COLOR),
                                   ("Normal", "NormalDX", ue.MaterialSamplerType.SAMPLERTYPE_NORMAL),
                                   ("Roughness", "Roughness", ue.MaterialSamplerType.SAMPLERTYPE_MASKS)):
-        texture = import_asset(f"Grass004_2K-JPG_{suffix}.jpg", FOLDER, f"T_Grass_{suffix}")
+        texture = import_asset(f"Grass004_2K-JPG_{suffix}.jpg", FOLDER, names.texture("Grass", suffix))
         texture.set_editor_property("srgb", slot == "Color")
         if slot == "Normal":
             texture.set_editor_property("compression_settings", ue.TextureCompressionSettings.TC_NORMALMAP)

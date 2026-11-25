@@ -8,7 +8,7 @@ from Assets.Scripts.check_package_start import validate_start_log
 
 
 INIT = "LogInit: Display: Starting Game.\n"
-LOADED = "[2026.10.17-12.00.00:000][  0]LogLoad: Took 0.41 seconds to LoadMap(/Game/UOpenGolf/Maps/UOpenGolf)\n"
+LOADED = "[2026.10.17-12.00.00:000][  0]LogLoad: Took 0.41 seconds to LoadMap(/Game/UOpenGolf/Maps/L_SavannaRange)\n"
 
 
 class PackageStartLogTests(unittest.TestCase):

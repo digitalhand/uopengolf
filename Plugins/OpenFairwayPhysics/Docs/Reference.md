@@ -372,7 +372,7 @@ The catalog (`SurfaceCatalog`, `Private/OpenFairway/Surfaces.cpp`):
   `FirstImpactTangentInMps`, `FirstImpactTangentOutMps` (negative after spin-back) and `bFirstImpactSpinback`.
 - **Slopes and break.** The actor uses each contact's normal, so a contoured green breaks putts; `Simulate` takes a
   planar `GroundNormal`. Grain and firmness are not modelled.
-- **Building greens.** A green is ground whose material carries `PM_Green` (`MI_Green`, `MI_CoastalGreen` in
+- **Building greens.** A green is ground whose material carries `PM_Green` (`MI_Green`, `MI_TerrainSurface_Green` in
   OpenGolfCourse) or a component tagged `OpenFairway.Surface.Green`. The terrain builder sets `PM_<Surface>` on each
   region mesh; a green painted as a Landscape layer needs that layer's physical material set to `PM_Green`.
 

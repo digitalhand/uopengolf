@@ -5,6 +5,7 @@
 #include "Serialization/MemoryReader.h"
 #include "ScopedTransaction.h"
 #include "OpenGolfTerrain.h"
+#include "OpenGolfAssetNames.h"
 #include "OpenGolfCourse.h"
 #include "OpenFairwayPhysicalMaterial.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -45,18 +46,24 @@ namespace
             *FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension()), Args);
     }
 
-    UOpenFairwayPhysicalMaterial* Physical(const UOpenGolfSurfacePreset* Surface)
+    /** The preset's OpenFairway surface by name, such as "Rough": names its ground meshes, actors and physical material. */
+    FString SurfaceName(const UOpenGolfSurfacePreset* Surface)
     {
-        const FString Name = StaticEnum<EOpenFairwaySurface>()->GetNameStringByValue(static_cast<int64>(Surface->Surface));
-        return LoadObject<UOpenFairwayPhysicalMaterial>(nullptr, *OpenGolfCourse::SurfacePhysicalMaterialPath(Name));
+        return StaticEnum<EOpenFairwaySurface>()->GetNameStringByValue(static_cast<int64>(Surface->Surface));
     }
 
-    void OwnActor(AActor* Actor, AOpenGolfTerrainArea* Area, const FString& Label)
+    UOpenFairwayPhysicalMaterial* Physical(const UOpenGolfSurfacePreset* Surface)
+    {
+        return LoadObject<UOpenFairwayPhysicalMaterial>(nullptr, *OpenGolfCourse::SurfacePhysicalMaterialPath(SurfaceName(Surface)));
+    }
+
+    /** Owns, tags, labels and files a generated actor (Docs/ContentNaming.md#actors). */
+    void OwnActor(AActor* Actor, AOpenGolfTerrainArea* Area, const FString& Label, const FString& Folder)
     {
         Actor->SetOwner(Area);
         Actor->Tags.AddUnique(GeneratedTag);
         Actor->SetActorLabel(Label);
-        Actor->SetFolderPath(FName(*FString::Printf(TEXT("Terrain/%s"), *Area->GetActorLabel())));
+        Actor->SetFolderPath(FName(*Folder));
     }
 
     uint16 EncodeHeight(double HeightM)
@@ -78,7 +85,7 @@ namespace
         FActorSpawnParameters Params;
         Params.ObjectFlags |= RF_Transactional;
         ALandscape* Land = Area->GetWorld()->SpawnActor<ALandscape>(Params);
-        OwnActor(Land, Area, Label);
+        OwnActor(Land, Area, Label, TEXT("Terrain/Landscape"));
         Land->SetActorLocation(Area->GetActorTransform().TransformPosition(FVector(Minimum.X * 100, Minimum.Y * 100, 0)));
         Land->SetActorRotation(Area->GetActorRotation());
         Land->SetActorScale3D(FVector(D.LandscapeSpacingM * 100, D.LandscapeSpacingM * 100, 100));
@@ -298,7 +305,7 @@ bool UOpenGolfTerrainBuilder::BuildTerrain(AOpenGolfTerrainArea* Area, const FSt
     TArray<TPair<UOpenGolfSurfacePreset*, UStaticMesh*>> Meshes;
     for (int32 I = 0; I < Surfaces.Num(); ++I)
     {
-        auto* Mesh = MakeMesh(*Area->Definition, Surfaces[I], Points, Triangles, Folder / FString::Printf(TEXT("SM_Surface_%d"), I));
+        auto* Mesh = MakeMesh(*Area->Definition, Surfaces[I], Points, Triangles, Folder / OpenGolfAssetNames::SurfaceMesh(I));
         if (!Mesh)
         {
             Error = TEXT("A surface mesh could not be built or saved. The existing terrain was preserved.");
@@ -310,7 +317,7 @@ bool UOpenGolfTerrainBuilder::BuildTerrain(AOpenGolfTerrainArea* Area, const FSt
     for (auto [Preset, Mesh] : Meshes)
     {
         auto* Actor = Area->GetWorld()->SpawnActor<AStaticMeshActor>();
-        OwnActor(Actor, Area, FString::Printf(TEXT("Terrain %s"), *Preset->GetName()));
+        OwnActor(Actor, Area, OpenGolfAssetNames::GroundLabel(SurfaceName(Preset)), OpenGolfAssetNames::SurfaceFolder(SurfaceName(Preset)));
         Actor->SetActorTransform(Area->GetActorTransform());
         auto* Component = Actor->GetStaticMeshComponent();
         Component->SetStaticMesh(Mesh);
@@ -320,10 +327,10 @@ bool UOpenGolfTerrainBuilder::BuildTerrain(AOpenGolfTerrainArea* Area, const FSt
         Created.Add(Actor);
     }
     const auto& D = *Area->Definition;
-    Created.Add(MakeLandscape(Area, D.MinimumM, FVector2D(D.DetailMinimumM.X, D.MaximumM.Y), TEXT("Coastal ground west")));
-    Created.Add(MakeLandscape(Area, FVector2D(D.DetailMaximumM.X, D.MinimumM.Y), D.MaximumM, TEXT("Coastal ground east")));
-    Created.Add(MakeLandscape(Area, FVector2D(D.DetailMinimumM.X, D.MinimumM.Y), FVector2D(D.DetailMaximumM.X, D.DetailMinimumM.Y), TEXT("Coastal ground south")));
-    Created.Add(MakeLandscape(Area, FVector2D(D.DetailMinimumM.X, D.DetailMaximumM.Y), FVector2D(D.DetailMaximumM.X, D.MaximumM.Y), TEXT("Coastal ground north")));
+    Created.Add(MakeLandscape(Area, D.MinimumM, FVector2D(D.DetailMinimumM.X, D.MaximumM.Y), OpenGolfAssetNames::KindLabel(TEXT("Landscape"), TEXT("West"))));
+    Created.Add(MakeLandscape(Area, FVector2D(D.DetailMaximumM.X, D.MinimumM.Y), D.MaximumM, OpenGolfAssetNames::KindLabel(TEXT("Landscape"), TEXT("East"))));
+    Created.Add(MakeLandscape(Area, FVector2D(D.DetailMinimumM.X, D.MinimumM.Y), FVector2D(D.DetailMaximumM.X, D.DetailMinimumM.Y), OpenGolfAssetNames::KindLabel(TEXT("Landscape"), TEXT("South"))));
+    Created.Add(MakeLandscape(Area, FVector2D(D.DetailMinimumM.X, D.DetailMaximumM.Y), FVector2D(D.DetailMaximumM.X, D.MaximumM.Y), OpenGolfAssetNames::KindLabel(TEXT("Landscape"), TEXT("North"))));
     Area->Modify();
     for (AActor* Actor : Area->GeneratedActors)
         if (IsValid(Actor))
@@ -408,7 +415,7 @@ static bool ReplaceSurfaceMeshes(AOpenGolfTerrainArea* Area, const FString& Outp
     TArray<UStaticMesh*> Meshes;
     for (int32 I = 0; I < Surfaces.Num(); ++I)
     {
-        UStaticMesh* Mesh = MakeMesh(*Area->Definition, Surfaces[I], Points, Triangles, Folder / FString::Printf(TEXT("SM_Surface_%d"), I));
+        UStaticMesh* Mesh = MakeMesh(*Area->Definition, Surfaces[I], Points, Triangles, Folder / OpenGolfAssetNames::SurfaceMesh(I));
         if (!Mesh)
         {
             Error = TEXT("A surface mesh could not be built or saved. The existing ground was preserved.");
@@ -476,13 +483,6 @@ bool UOpenGolfTerrainBuilder::ImportElevation(UOpenGolfTerrainDefinition* Defini
 
 namespace
 {
-    /** Mesh name for a surface preset: DA_CoastalRough becomes SM_CoastalRough. */
-    FString SurfaceMeshName(const UOpenGolfSurfacePreset& Preset)
-    {
-        const FString Name = Preset.GetName();
-        return TEXT("SM_") + (Name.StartsWith(TEXT("DA_")) ? Name.RightChop(3) : Name);
-    }
-
     /** Destroys the area's generated actors tagged Tag, which a rebuild replaces, and forgets any already gone. */
     void RemoveTagged(AOpenGolfTerrainArea* Area, FName Tag)
     {
@@ -495,10 +495,11 @@ namespace
         });
     }
 
-    void SpawnGround(AOpenGolfTerrainArea* Area, UStaticMesh* Mesh, UOpenGolfSurfacePreset* Preset, FName Tag, bool bCollision)
+    /** A ground actor showing Mesh, labelled with the mesh's name and keyed for rebuilds by Tag. */
+    void SpawnGround(AOpenGolfTerrainArea* Area, UStaticMesh* Mesh, UOpenGolfSurfacePreset* Preset, FName Tag, bool bCollision, const FString& Folder)
     {
         auto* Actor = Area->GetWorld()->SpawnActor<AStaticMeshActor>();
-        OwnActor(Actor, Area, Tag.ToString());
+        OwnActor(Actor, Area, Mesh->GetName(), Folder);
         Actor->Tags.Add(Tag);
         Actor->SetActorTransform(Area->GetActorTransform());
         auto* Component = Actor->GetStaticMeshComponent();
@@ -527,10 +528,11 @@ bool UOpenGolfTerrainBuilder::BuildCourseTile(AOpenGolfTerrainArea* Area, FIntPo
     TMap<UOpenGolfSurfacePreset*, TArray<FIndex3i>> Groups;
     for (int32 I = 0; I < Ground.Triangles.Num(); ++I)
         Groups.FindOrAdd(Ground.Surfaces[I]).Add(Ground.Triangles[I]);
-    const FName Tag(*FString::Printf(TEXT("CourseTile_%d_%d"), Tile.X, Tile.Y));
+    const FName Tag(*OpenGolfAssetNames::TileTag(Tile));
     // A new folder per build: the square's previous meshes stay intact until the map stops using them.
-    const FString Folder = OutputFolder / (Tag.ToString() + TEXT("_") + FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    const FString Folder = OutputFolder / OpenGolfAssetNames::TileFolder(Tile, FGuid::NewGuid());
     TArray<TPair<UOpenGolfSurfacePreset*, UStaticMesh*>> Built;
+    TSet<FString> Names;
     for (const auto& [Preset, Triangles] : Groups)
     {
         if (!Preset || !Preset->Material || !Physical(Preset))
@@ -538,7 +540,12 @@ bool UOpenGolfTerrainBuilder::BuildCourseTile(AOpenGolfTerrainArea* Area, FIntPo
             Error = TEXT("A tile surface is missing its visual or physical material.");
             return false;
         }
-        auto* Mesh = MakeMesh(*Area->Definition, Preset, Ground.Points, Triangles, Folder / SurfaceMeshName(*Preset), true);
+        // Two presets of one surface in a square (a tee and a fairway, say) get variants: SM_Fairway_Tile_0_0_02.
+        FString Name = OpenGolfAssetNames::TileMesh(SurfaceName(Preset), Tile);
+        for (int32 Number = 2; Names.Contains(Name); ++Number)
+            Name = OpenGolfAssetNames::TileMesh(SurfaceName(Preset), Tile) + TEXT("_") + OpenGolfAssetNames::Variant(Number);
+        Names.Add(Name);
+        auto* Mesh = MakeMesh(*Area->Definition, Preset, Ground.Points, Triangles, Folder / Name, true);
         if (!Mesh)
         {
             Error = TEXT("Could not save the new tile meshes.");
@@ -549,7 +556,7 @@ bool UOpenGolfTerrainBuilder::BuildCourseTile(AOpenGolfTerrainArea* Area, FIntPo
     Area->Modify();
     RemoveTagged(Area, Tag);
     for (const auto& [Preset, Mesh] : Built)
-        SpawnGround(Area, Mesh, Preset, Tag, true);
+        SpawnGround(Area, Mesh, Preset, Tag, true, OpenGolfAssetNames::SurfaceFolder(SurfaceName(Preset)));
     Area->MarkPackageDirty();
     return true;
 }
@@ -634,7 +641,7 @@ bool UOpenGolfTerrainBuilder::BuildWaterSurface(AOpenGolfTerrainArea* Area, cons
         }
         Description.CreatePolygon(Group, Corners);
     }
-    const FString PackageName = OutputFolder / (TEXT("Water_") + FGuid::NewGuid().ToString(EGuidFormats::Digits)) / (TEXT("SM_") + Name);
+    const FString PackageName = OutputFolder / OpenGolfAssetNames::WaterFolder(FGuid::NewGuid()) / OpenGolfAssetNames::FeatureMesh(Name);
     UPackage* Package = CreatePackage(*PackageName);
     auto* Mesh = NewObject<UStaticMesh>(Package, *FPackageName::GetLongPackageAssetName(PackageName), RF_Public | RF_Standalone);
     Mesh->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Water")));
@@ -647,10 +654,10 @@ bool UOpenGolfTerrainBuilder::BuildWaterSurface(AOpenGolfTerrainArea* Area, cons
         Error = TEXT("Could not save the water mesh.");
         return false;
     }
-    const FName Tag(*(TEXT("CourseWater_") + Name));
+    const FName Tag(*(TEXT("Water_") + Name));
     Area->Modify();
     RemoveTagged(Area, Tag);
-    SpawnGround(Area, Mesh, nullptr, Tag, false);
+    SpawnGround(Area, Mesh, nullptr, Tag, false, TEXT("Water"));
     Area->MarkPackageDirty();
     return true;
 }

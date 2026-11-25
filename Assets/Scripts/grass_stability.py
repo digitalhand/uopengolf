@@ -7,7 +7,7 @@ largest difference exceeds a threshold. The primary figure averages every consec
 pair, which is far less noisy than one first-vs-last pair (also printed, matching the
 original Windows measurements). View0 is the tee with
 grass, View1 the same camera without grass, View4 the grass closeup and View5 the edge.
-The coastal profile also measures a fixed tree-canopy box in the views that show trees, with
+The terrain profile (UOpenGolf.Visual.RangeTerrain) also measures a fixed tree-canopy box in the views that show trees, with
 the share of pixels that sparkle (change by more than 16/255). Requires Pillow. Example:
 
     python3 Assets/Scripts/grass_stability.py Saved/Screenshots/RangeAssets --sequence 20261016-010000
@@ -24,10 +24,10 @@ DEFAULT_THRESHOLD = 3
 DEFAULT_BANDS = 20
 SPARKLE_THRESHOLD = 16
 VIEW_NAMES = {0: "TeeGrassOn", 1: "TeeGrassOff", 4: "GrassClose", 5: "GrassEdge"}
-COASTAL_VIEW_NAMES = {0: "TeeGrassOn", 1: "TeeGrassOff", 4: "EdgeGrassOn", 5: "EdgeGrassOff", 6: "CloseGrassOn", 7: "CloseGrassOff"}
-# Tree-canopy boxes (left, top, right, bottom fractions) in the coastal views that show trees, chosen
+TERRAIN_VIEW_NAMES = {0: "TeeGrassOn", 1: "TeeGrassOff", 4: "EdgeGrassOn", 5: "EdgeGrassOff", 6: "CloseGrassOn", 7: "CloseGrassOff"}
+# Tree-canopy boxes (left, top, right, bottom fractions) in the terrain views that show trees, chosen
 # on 2026-10-27 from the savanna range. The worst band grows with canopy area; a fixed box does not.
-COASTAL_CANOPY_BOXES = {0: ("Tee", (0.0, 0.38, 1.0, 0.52)), 3: ("Green", (0.45, 0.16, 0.95, 0.34)),
+TERRAIN_CANOPY_BOXES = {0: ("Tee", (0.0, 0.38, 1.0, 0.52)), 3: ("Green", (0.45, 0.16, 0.95, 0.34)),
                         4: ("Edge", (0.38, 0.19, 0.75, 0.40)), 8: ("Bunker", (0.0, 0.0, 1.0, 0.18))}
 
 
@@ -130,14 +130,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("directory", type=Path, help="Saved/Screenshots/RangeAssets")
     parser.add_argument("--sequence", help="sequence id prefix (default: newest)")
-    parser.add_argument("--profile", choices=("range", "coastal"), default="range", help="capture view numbering (default: range)")
+    parser.add_argument("--profile", choices=("range", "terrain"), default="range", help="capture view numbering (default: range)")
     parser.add_argument("--crop", type=float, default=DEFAULT_CROP_FRACTION, help="lower fraction of rows to compare")
     parser.add_argument("--threshold", type=int, default=DEFAULT_THRESHOLD, help="levels above which a pixel counts as changed")
     args = parser.parse_args()
     try:
         sequence = args.sequence or latest_sequence(args.directory)
         print(f"Sequence {sequence} (lower {args.crop:.0%} of rows, changed > {args.threshold}/255)")
-        views = COASTAL_VIEW_NAMES if args.profile == "coastal" else VIEW_NAMES
+        views = TERRAIN_VIEW_NAMES if args.profile == "terrain" else VIEW_NAMES
         for view, name in views.items():
             try:
                 frames = find_sequence(args.directory, sequence, view)
@@ -152,9 +152,9 @@ def main():
                   f"changed {result.changed_percent:.3f}% (first-vs-last {ends.changed_percent:.3f}%)")
             (top, bottom), worst = worst_band(frames, threshold=args.threshold)
             print(f"  {'':<17} worst band rows {top:.0%}-{bottom:.0%}: changed {worst.changed_percent:.3f}%")
-        if args.profile == "coastal":
+        if args.profile == "terrain":
             print(f"Tree canopy boxes (changed > {args.threshold}/255, sparkle > {SPARKLE_THRESHOLD}/255)")
-            for view, (name, box) in COASTAL_CANOPY_BOXES.items():
+            for view, (name, box) in TERRAIN_CANOPY_BOXES.items():
                 try:
                     frames = find_sequence(args.directory, sequence, view)
                 except FileNotFoundError:

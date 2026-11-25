@@ -4,6 +4,7 @@
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 
 #include "Editor.h"
+#include "TestMaps.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "HAL/PlatformTime.h"
@@ -149,7 +150,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FFastForwardPlayTest, "UOpenGolf.Range.FastForw
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FFastForwardPlayTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FastForwardPlayTestDetail::FCheckFastForward>(this));

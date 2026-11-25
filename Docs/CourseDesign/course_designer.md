@@ -101,11 +101,20 @@ OPENGOLF_DESIGN_SOURCE=$PWD/Saved/CourseDesign/HunterRanch OPENGOLF_DESIGN_DEST=
   -DisablePlugins=ModelContextProtocol -ExecutePythonScript=$PWD/Plugins/OpenGolfCourse/Scripts/build_course.py
 ```
 
-It creates the course map, the terrain definition (`DA_Ground`), the ground squares, a water surface for each lake,
-the range controller with daylight and flag, and the course definition with every hole, tee set, cup, boundary and
-lake. The definition also gets the round setup's Course information: the site recipe's `location` and `designer`,
+It creates, named by [Content naming](../ContentNaming.md):
+
+- the course map `L_<Course>` (`/HunterRanch/Course/L_HunterRanch`);
+- the terrain definition `DA_<Course>_Terrain`;
+- the ground squares, `Generated/Tiles/Tile_<x>_<y>_<GUID>/SM_<Surface>_Tile_<x>_<y>`, each actor labelled like its
+  mesh and filed under `Terrain/<Surface>` in the Outliner;
+- a water surface for each lake, `Generated/Water/Water_<GUID>/SM_Lake_<NN>`, filed under `Water`;
+- the range controller (`RangeSettings`) with daylight (`Environment_Daylight`) and flag;
+- the course definition `DA_<Course>` with every hole, tee set, cup, boundary and lake. Its name is the course's ID
+  in menus, saved setups and downloads, so keep it once the course is published. The definition also gets the round setup's Course information: the site recipe's `location` and `designer`,
 and the elevation, which preparing the site measures as the median ground height inside the course boundary. Move an
-existing build out of the way first; the builder refuses a folder that already has assets.
+existing build out of the way first; the builder refuses a folder that already has assets. Record hand-placed actors
+before you do, with `course_actors.py --record <file> --map <map>`, and put them back after the build with
+`course_actors.py --restore <file>`.
 
 ## 5. Edit and play in the Course Designer
 
@@ -171,8 +180,9 @@ Rough farther out is out of play and mostly seen from a distance, so the coarser
 download and its memory smaller.
 
 Each surface of each square is one mesh with its own collision, so a square has one to five meshes. A rebuilt
-square or lake goes to a new folder (`CourseTile_<x>_<y>_<GUID>` or `Water_<GUID>`), and **Save** removes the folders
-the map no longer uses.
+square or lake goes to a new folder (`Generated/Tiles/Tile_<x>_<y>_<GUID>` or `Generated/Water/Water_<GUID>`), and
+**Save** removes the folders the map no longer uses. The `Tile_<x>_<y>` actor tag, not the label, tells a rebuild which
+actors to replace.
 
 ## Checklist for the next course
 
@@ -215,7 +225,7 @@ Recorded 2026-11-24 from `Saved/CourseDesign/HunterRanch` and `/HunterRanch/Cour
 | Author corrections | Hole 2 White tee; hole 10 Silver and Red tees |
 | Ground squares | 64 m; 460 squares within two squares of the boundary's bounding box |
 | Ground meshes | 722 (one per surface per square); 60 MB, of which rough is 38 MB |
-| Course content | 84 MB, mostly the ground squares and the 23 MB elevation grid in `DA_Ground` |
+| Course content | 84 MB, mostly the ground squares and the 23 MB elevation grid in `DA_HunterRanch_Terrain` |
 | Course information | Paso Robles, California; designed by Ken Hunter Jr. and Mike McGinnis; 263 m (863 ft), the median ground inside the boundary |
 
 Mapped route lengths are within about 4 % of the published yardages. Hole 2's White tee measures about 30 yd longer

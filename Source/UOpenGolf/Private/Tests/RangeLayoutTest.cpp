@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "UOpenGolfRange.h"
+#include "TestMaps.h"
 #include "OpenGolfEnvironment.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PostProcessComponent.h"
@@ -23,7 +24,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeLayoutTest, "UOpenGolf.Range.EditableLayo
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRangeLayoutTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     UWorld* World = GEditor->GetEditorWorldContext().World();
     TArray<AUOpenGolfRange*> Ranges;
@@ -168,7 +169,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPlayableBoundsTest, "UOpenGolf.Range.PlayableB
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FPlayableBoundsTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<FCheckPlayableBounds>(this));

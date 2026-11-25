@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "UOpenGolfRange.h"
+#include "TestMaps.h"
 #include "Editor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -131,7 +132,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FRangeWindSettingsTest, "UOpenGolf.Range.WindSe
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FRangeWindSettingsTest::RunTest(const FString& Parameters)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/Game/UOpenGolf/Maps/UOpenGolf"), false, true))
+    if (!FEditorFileUtils::LoadMap(TestMaps::Range, false, true))
         return false;
     AUOpenGolfRange* Range = nullptr;
     for (TActorIterator<AUOpenGolfRange> It(GEditor->GetEditorWorldContext().World()); It; ++It)

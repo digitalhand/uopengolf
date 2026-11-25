@@ -4,6 +4,9 @@
 Run headless with OPENGOLF_DESIGN_SOURCE (the folder prepare_course_site.py wrote) and OPENGOLF_DESIGN_DEST
 (an empty content folder, such as /HunterRanch/Course) set, or from the Course Designer's Build button.
 The author corrections named in the source's recipe.json are applied over the prepared layout.
+
+Names follow Docs/ContentNaming.md (asset_naming.py): the map L_<Course>, the course definition DA_<Course>, the
+terrain DA_<Course>_Terrain, and the ground squares and lakes under Generated/ (SM_Rough_Tile_0_-10, SM_Lake_01).
 """
 import json
 import math
@@ -16,10 +19,12 @@ import unreal as ue
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from course_coordinates import AXES_TAG, EAST_SOUTH, GRID_FILE, unreal_xy  # noqa: E402
+import asset_naming as names  # noqa: E402
 import course_corrections  # noqa: E402
 import course_water  # noqa: E402
 
 PRESETS = {"rough": "Rough", "fairway": "Fairway", "green": "Green", "bunker": "Sand", "tee": "Fairway"}
+PRESET_FOLDER = "/OpenGolfCourse/Terrain/Presets"
 # Sample spacing in metres. The elevation grid is 1 m, so finer spacing on greens and bunkers keeps their edges
 # and contours smooth rather than adding new height detail.
 SPACING_M = {"rough": 2.0, "fairway": 1.0, "tee": 1.0, "green": 0.5, "bunker": 0.5}
@@ -61,8 +66,17 @@ def apply_information(course, recipe, layout):
     course.set_editor_property("elevation_m", layout.get("elevation_m") or 0.0)
 
 
+def preset_path(surface):
+    """The course kit's surface preset, such as /OpenGolfCourse/Terrain/Presets/DA_TerrainSurface_Rough."""
+    return f"{PRESET_FOLDER}/{names.join('DA_', 'TerrainSurface', surface)}"
+
+
+def course_name(layout):
+    return names.pascal(layout["name"])
+
+
 def terrain_definition(root, layout, presets, source):
-    terrain = asset(root, "DA_Ground", ue.OpenGolfTerrainDefinition)
+    terrain = asset(root, names.course_terrain(course_name(layout)), ue.OpenGolfTerrainDefinition)
     terrain.set_editor_property("default_surface", presets["rough"])
     outline = [unreal_xy(point) for point in layout["boundary_m"]]
     min_tile = [math.floor(min(p[i] for p in outline) / TILE_M) - MARGIN_TILES for i in range(2)]
@@ -122,30 +136,34 @@ def build(source, root):
     level = ue.get_editor_subsystem(ue.LevelEditorSubsystem)
     actors = ue.get_editor_subsystem(ue.EditorActorSubsystem)
     library = ue.EditorAssetLibrary
-    map_path = root + "/Course"
+    map_path = f"{root}/{names.course_map(course_name(layout))}"
     if library.list_assets(root, recursive=True):
         raise ValueError("Choose an empty destination to preserve existing course edits.")
     if ue.EditorLoadingAndSavingUtils.get_dirty_map_packages() or ue.EditorLoadingAndSavingUtils.get_dirty_content_packages():
         raise ValueError("Save your editor changes before building a new course.")
     if not level.new_level(map_path):
         raise RuntimeError("Could not create " + map_path)
-    presets = {k: ue.load_asset("/OpenGolfCourse/Terrain/Presets/DA_Coastal" + v) for k, v in PRESETS.items()}
+    presets = {k: ue.load_asset(preset_path(v)) for k, v in PRESETS.items()}
+    if not all(presets.values()):
+        raise RuntimeError(f"Missing course kit surface presets in {PRESET_FOLDER}")
     terrain, min_tile, max_tile = terrain_definition(root, layout, presets, source)
     area = actors.spawn_actor_from_class(ue.OpenGolfTerrainArea, ue.Vector())
+    area.set_actor_label(f"TerrainArea_{course_name(layout)}")
     area.set_editor_property("definition", terrain)
     tiles = [(col, row) for row in range(min_tile[1], max_tile[1]) for col in range(min_tile[0], max_tile[0])]
     with ue.ScopedSlowTask(len(tiles), "Building course ground") as task:
         for col, row in tiles:
             task.enter_progress_frame(1)
-            require(ue.OpenGolfTerrainBuilder.build_course_tile(area, ue.IntPoint(col, row), root + "/Tiles"), f"Tile {col},{row}")
-    water_material = ue.load_asset("/OpenGolfCourse/Materials/M_Water") or course_water.material()
+            require(ue.OpenGolfTerrainBuilder.build_course_tile(area, ue.IntPoint(col, row), names.generated_tiles(root)), f"Tile {col},{row}")
+    water_material = ue.load_asset(f"/OpenGolfCourse/{course_water.FOLDER}/{course_water.NAME}") or course_water.material()
     for index, lake in enumerate(layout["water"], start=1):
         require(ue.OpenGolfTerrainBuilder.build_water_surface(area, [ue.Vector2D(*unreal_xy(p)) for p in lake["outline_m"]], water_material,
-                                                               root + "/Water", f"Lake{index}"), f"Water {lake['id']}")
+                                                               names.generated_water(root), names.lake(index)), f"Water {lake['id']}")
     controller = actors.spawn_actor_from_class(ue.UOpenGolfRange, position(layout["holes"][0]["tees_m"][next(iter(layout["holes"][0]["tees_m"]))]))
+    controller.set_actor_label("RangeSettings")
     controller.set_editor_property("terrain", area)
     controller.build_default_layout()
-    course = asset(root, "DA_" + re.sub(r"[^A-Za-z0-9_]", "", layout["name"]), ue.GolfCourseDefinition)
+    course = asset(root, names.course_definition(course_name(layout)), ue.GolfCourseDefinition)
     course.set_editor_property("display_name", layout["name"])
     library.set_metadata_tag(course, AXES_TAG, EAST_SOUTH)
     apply_information(course, json.loads((source / "recipe.json").read_text()), layout)
