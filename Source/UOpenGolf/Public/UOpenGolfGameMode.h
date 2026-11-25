@@ -14,6 +14,7 @@ class ATrainingSession;
 class UGolfGimmieIndicator;
 class AUOpenGolfRange;
 class UGolfCourseDefinition;
+enum class EGolfPenalty : uint8;
 struct FLaunchMonitorClubData;
 struct FLaunchMonitorShot;
 
@@ -60,12 +61,22 @@ public:
     const UGolfCourseDefinition* GetCourse() const { return Course; }
     /** A scored course round (Hole mode), as opposed to Training. */
     bool IsCourseRound() const { return PlayMode == EOpenGolfPlayMode::Hole; }
-    /** A course round whose ball has dropped: no more shots are taken and the scorecard follows. */
-    bool IsRoundComplete() const { return IsCourseRound() && Round.bHoled; }
+    /**
+     * A course round whose last hole is on the scorecard. Shots stop when the last ball drops; the round completes
+     * after the hole-out pause, once that hole's score is recorded, so the final card always has every hole.
+     */
+    bool IsRoundComplete() const;
+    int32 GetTeeIndex() const { return TeeIndex; }
+    float GetOpeningAimDeg() const { return OpeningAimDeg; }
+    float GetHoleLengthM() const;
+    const TArray<FOpenGolfHoleRound>& GetCompletedHoles() const { return CompletedHoles; }
+    /** The penalty taken in the last PenaltyNoticeS seconds, for the HUD to explain the replay; None otherwise. */
+    EGolfPenalty GetRecentPenalty() const;
+    static constexpr float PenaltyNoticeS = 4.0f;
     /** Par for the round: the course's in a course round, the range's in Training. */
     int32 GetPar() const;
     /** The hole being played, from 1. Every course is a single hole for now. */
-    int32 GetHoleNumber() const { return 1; }
+    int32 GetHoleNumber() const { return HoleIndex + 1; }
 
     DECLARE_MULTICAST_DELEGATE(FOnRoundComplete);
     /** A course round has ended and its hole-out banner has been shown for HoleOutDelayS. */
@@ -219,6 +230,16 @@ private:
     FTimerHandle ResetTimer;
     FTimerHandle AddressTimer;
     EOpenGolfPlayMode PlayMode = EOpenGolfPlayMode::Range;
+    void ActivateCourseHole();
+    int32 HoleIndex = 0;
+    int32 StartingHole = 0;
+    int32 TeeIndex = 0;
+    FName TeeSet;
+    FVector PreviousLie = FVector::ZeroVector;
+    EGolfPenalty LastPenalty{};  // None
+    double LastPenaltyTime = -1;
+    float OpeningAimDeg = 0;
+    TArray<FOpenGolfHoleRound> CompletedHoles;
     FOpenGolfHoleRound Round;
     FVector PracticeOrigin = FVector::ZeroVector;
     bool bAddressReady = true;

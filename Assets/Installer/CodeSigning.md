@@ -6,7 +6,7 @@ existing `.sha256` file stays.
 
 | Platform | Status | What is signed |
 | --- | --- | --- |
-| Linux (`.deb`, `.tar.gz`) | GPG, by hand at release time | `SHA256SUMS`, which lists every release file, signed as `SHA256SUMS.asc` |
+| Linux (`.deb`, `.rpm`, `.tar.gz`) | GPG, by hand at release time | `SHA256SUMS`, which lists every release file, signed as `SHA256SUMS.asc`. In-game `.deb` and `.rpm` updates [require it](#in-game-updates-check-the-signature). The `.rpm` itself is not signed with `rpmsign` |
 | Windows (`Setup.exe`, `.zip`) | Authenticode signing [pending](#windows-pending) | Listed in the same `SHA256SUMS` in the meantime |
 
 ### How Linux signing works
@@ -25,6 +25,37 @@ existing `.sha256` file stays.
 - **Signing is done by hand**, on your own machine. Do it after the workflows have filled
   the draft release and before you publish it. CI never holds the key; see
   [Not covered here](#not-covered-here).
+- **The game checks it too.** An in-game update of a `.deb` or `.rpm` install runs as root,
+  so it installs only what this key signed; see
+  [In-game updates check the signature](#in-game-updates-check-the-signature).
+
+### In-game updates check the signature
+
+The `.deb` and `.rpm` install the public half of the release key as
+`/usr/share/uopengolf/release-signing-key.gpg`. The builders convert
+`Assets/Installer/release-signing-key.asc` at build time. When the game updates a package install,
+it downloads `SHA256SUMS` and `SHA256SUMS.asc` with the package. The root installer
+(`Assets/Installer/install-update`) runs `gpgv` against that key and installs the package only
+if its SHA-256 and file name are in the signed list. Without that check, any program running as
+the player could raise the game's genuine password prompt for a package of its own.
+
+What this means for releases:
+
+- **Sign before you publish.** Players only see published releases. A release without
+  `SHA256SUMS.asc` shows `.deb` and `.rpm` players the release page instead of an update. If you
+  re-sign after a platform changes, players who started an update in between see "the checksum
+  list isn't signed" and can try again.
+- **Extending the expiry is safe.** A copy that shipped the old expiry date still accepts
+  signatures from the same key made after that date: gpgv reports `EXPKEYSIG` with `VALIDSIG`, and
+  the installer accepts that. This was checked with gpg 2.4 on 2026-11-24. Still commit the renewed
+  key, so new releases ship it.
+- **A new key or a new signing subkey strands older copies.** Their keyring doesn't have it, so
+  their in-game update fails with "the checksum list isn't signed by the UOpenGolf release key".
+  If you can, sign one release with the old subkey and ship the new key in it first. After a
+  compromise, tell `.deb` and `.rpm` players to install the next release by hand.
+- **Revocation doesn't reach installed copies.** Their keyring only changes when they update,
+  so a stolen signing subkey still verifies on copies that haven't updated yet. That's one more
+  reason to keep the primary key offline.
 
 ### Release key
 

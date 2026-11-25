@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from generated_folders import is_run_folder, loaded_in_memory, referenced_from_outside, remove_unreferenced, run_folders
+from generated_folders import COURSE_PREFIXES, is_run_folder, loaded_in_memory, referenced_from_outside, remove_unreferenced, run_folders
 
 ROOT = "/Game/Range/Generated"
 BUILD = f"{ROOT}/Build_01A180BF3EDD7F0386ED0462654019FB"
@@ -65,6 +65,22 @@ class RunFolderNameTests(unittest.TestCase):
     def test_prefixes_can_be_narrowed(self):
         self.assertFalse(is_run_folder("Build_01A180BF3EDD7F0386ED0462654019FB", prefixes=("Vegetation_",)))
 
+    def test_course_tile_folders_carry_their_grid_position(self):
+        for name in ("CourseTile_-1_-1_01A20F3A24AE785298BF8625BD59E809", "CourseTile_12_0_01A20F3A25E776FBB5511E49FC30740B"):
+            self.assertTrue(is_run_folder(name, prefixes=COURSE_PREFIXES), name)
+            self.assertFalse(is_run_folder(name), name)
+
+    def test_course_lake_folders_are_run_folders(self):
+        self.assertTrue(is_run_folder("Water_01A20F3A24AE785298BF8625BD59E809", prefixes=COURSE_PREFIXES))
+        self.assertFalse(is_run_folder("Water_01A20F3A24AE785298BF8625BD59E809"))
+        self.assertFalse(is_run_folder("Water_1_1_01A20F3A24AE785298BF8625BD59E809", prefixes=COURSE_PREFIXES))
+
+    def test_malformed_course_tile_names_are_not_run_folders(self):
+        for name in ("CourseTile_01A20F3A24AE785298BF8625BD59E809", "CourseTile_-1_01A20F3A24AE785298BF8625BD59E809",
+                     "CourseTile_a_1_01A20F3A24AE785298BF8625BD59E809", "CourseTile_1_1_01a20f3a24ae785298bf8625bd59e809",
+                     "CourseTile_1_1_"):
+            self.assertFalse(is_run_folder(name, prefixes=COURSE_PREFIXES), name)
+
 
 class RunFoldersTests(unittest.TestCase):
     def test_lists_only_run_folders_directly_under_the_root(self):
@@ -72,6 +88,24 @@ class RunFoldersTests(unittest.TestCase):
                                asset(f"{ROOT}/Materials", "MI_Ground"), asset(ROOT, "DA_Range"),
                                asset(f"{ROOT}/Nested/Build_01A1567C6ECD7869B99A610A61184ED9", "SM_Surface_0")], {})
         self.assertEqual(run_folders(library, ROOT), {BUILD, VEGETATION})
+
+
+class TileFolderTests(unittest.TestCase):
+    def test_a_replaced_tile_goes_and_the_live_tile_stays(self):
+        tiles = "/HunterRanch/Draft/Tiles"
+        live, old = f"{tiles}/CourseTile_0_0_01A20F3A24AE785298BF8625BD59E809", f"{tiles}/CourseTile_0_0_01A20F3A235772C394C27D0FAB511229"
+        live_mesh, old_mesh = asset(live, "SM_Rough"), asset(old, "SM_Rough")
+        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Draft/Course"]})
+        removed, kept = remove_unreferenced(library, [tiles], prefixes=COURSE_PREFIXES, log=lambda _line: None)
+        self.assertEqual((removed, kept), ([old], [live]))
+
+    def test_a_rebuilt_lake_goes_and_the_live_lake_stays(self):
+        water = "/HunterRanch/Draft/Water"
+        live, old = f"{water}/Water_01A20F3A24AE785298BF8625BD59E809", f"{water}/Water_01A20F3A235772C394C27D0FAB511229"
+        live_mesh, old_mesh = asset(live, "SM_Lake1"), asset(old, "SM_Lake1")
+        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Draft/Course"]})
+        removed, kept = remove_unreferenced(library, [water], prefixes=COURSE_PREFIXES, log=lambda _line: None)
+        self.assertEqual((removed, kept), ([old], [live]))
 
 
 class ReferenceTests(unittest.TestCase):

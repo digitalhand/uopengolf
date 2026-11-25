@@ -23,6 +23,10 @@ the external tools and import paths described here have not been tested together
 
 ## Recommended starting point
 
+**Current path (2026-11-24):** build real courses with the [Course Designer](course_designer.md) in Unreal. It
+prepares public elevation and map data, reviews the layout on aerial imagery, builds a playable map and packages the
+course as a download. The manual workflows below remain useful background and an alternative for hand-shaped terrain.
+
 For a concrete real-course walkthrough, see [Recreating Hunter Ranch in Paso Robles](course_hunter_ranch.md), including a step-by-step workflow and PlantUML sequence diagram.
 
 For detailed tool instructions, follow the [17-part Hunter Ranch companion series](hunter_ranch_workflow.md#read-and-work-in-order), covering data acquisition, QGIS, Blender, Unreal, environment work and validation.

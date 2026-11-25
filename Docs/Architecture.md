@@ -12,7 +12,8 @@ binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D
 to turn the aim) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
 actions and one mapping context built in code (no input assets); a HUD panel that holds keyboard
 focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no player pawn. A course round supports a par 4 and gimmies; Training places practice lies. `UOpenGolf`
-is the saved range map used for editor and game startup, and the project's only map. A world
+is the saved range map used for editor and game startup and the bundled course; each downloadable course has its own
+map in its content plugin (see [Downloadable courses](#downloadable-courses)). A world
 without a range controller gets one with daylight and a flag; the ground always comes from a
 terrain area.
 
@@ -68,6 +69,34 @@ console or HUD set. There is no ball placement, recording or wind panel in a rou
 waits `HoleOutDelayS` for the banner, then broadcasts `OnRoundComplete`; the player controller listens and opens the
 menu, which shows the final scorecard (**Play again** or **Courses**).
 
+**Multi-hole courses.** A definition's `Layout` lists its holes in playing order: par, one tee per published tee set
+(`FGolfCourseTee`: set name, position and scorecard yardage), the cup and the aim points between them. The Courses
+browser picks a tee set (`?TeeIndex=`); the GameMode keeps one world loaded for the round, moves the range's tee and cup
+to each hole (`AUOpenGolfRange::SetCourseHole`), opens each hole along its first aim point, and frames the hole map
+around the route. After each hole-out it records the score and advances; after the last hole the scorecard shows the
+front and back nine. `InBoundsCm` and `Water` give the course's boundary and lakes: a ball at rest outside the boundary
+or in a lake costs one stroke and is replayed from where it was hit (`UGolfCourseDefinition::PenaltyAt`), and the HUD
+says why. A ball that carries a lake and lands beyond it plays on. A definition with an empty `Layout` plays as a
+single hole from the range's own tee and cup.
+
+### Downloadable courses
+
+A course pack is a content-only plugin (for example `Plugins/HunterRanch`, category **Golf courses**) cooked separately
+from the base game into `Course.pak`/`.utoc`/`.ucas` by `Assets/Scripts/package_course.py`, which also writes a static
+`catalog.json` (version, game version, files, sizes and SHA-256) and publishes the course's derived layout data beside
+each pack. `UCourseDownloads` reads the catalog from `[CourseDownloads] BaseUrl`, stages each file under
+`Saved/InstalledCourses/<id>`, checks its hash, then mounts the pack; `UGolfCourseSubsystem::AddCourse` lists it at
+once. An update of a course already mounted, and an uninstall, finish at the next start, because a mounted pack's files
+stay open. Installed courses play offline. In the editor, course plugins are scanned directly, so a draft plays without
+packaging. `Assets/Scripts/check_course_install.py` exercises the catalog, install, offline play and removal on a
+packaged build.
+
+Imported courses are built by the Course Designer (**Tools → Golf → Course Designer**) from a site recipe under
+`Assets/Data/CourseDesign`; see [Course Designer](CourseDesign/course_designer.md). Their ground is built in 64 m
+squares (`OpenGolfTerrainTiles`): each square is triangulated with every surface outline as a constrained edge, so
+surface borders follow the outlines exactly and greens keep a finer spacing, and neighbouring squares share identical
+edge vertices.
+
 **Lie rules.** A definition's `LieRules` points at a `UOpenGolfLieRules` asset from the OpenGolfCourse plugin
 ([Lie rules](../Plugins/OpenGolfCourse/Docs/Reference.md#lie-rules)); when it is empty, the round plays the class
 default, which is the standard. Courses can share one tuned asset.
@@ -95,16 +124,30 @@ The capture is set up as a map, not the game view: no fog, clouds or cloud shado
 field, bloom, lens flares, vignette or grain. It adds a slight saturation and contrast lift. Exposure still comes from
 the range's post-process volume.
 
-`UOpenGolfRangeHoleMap.cpp` finishes the picture on the CPU, once per capture. It reads the capture back and uses two
-`FHoleMapField` grids sampled every 3 m over the frame:
+`UOpenGolfRangeHoleMap.cpp` finishes the picture on the CPU, once per capture, without holding up the game thread. A
+hole change builds a new map while the camera moves to the next tee, so no step of the build may stall a frame:
+
+1. On the game thread, the range frames the hole, samples its heights (about 1 ms), copies the play regions near the
+   frame into an `FOpenGolfPlayDistance`, renders the capture and queues a GPU copy of it (`FHoleMapReadback`).
+2. A frame or two later the copy has landed. A worker task (`UE::Tasks`) then samples the distance from play and
+   finishes the picture. It works only on copies, so the range can drop it at any time.
+3. The range creates the texture and publishes the picture, frame and heights together. Until then the minimap keeps
+   the previous map, so it never mixes two holes. A map that `InvalidateHoleMap` made stale while it was being built
+   is dropped.
+
+The log line `Hole map published …` gives each step's time and the longest game-thread step
+(`GetHoleMapGameThreadMs`). The finishing uses two `FHoleMapField` grids sampled every 3 m over the frame:
 
 - **Ground height:** read from the terrain definition's `HeightAt`, the analytic ground that the Landscape and
   detail mesh are built from. It is sampled in parallel. A course without a definition falls back to
   `AOpenGolfTerrainArea::GroundAt` traces on the ball's contact channel, on the game thread. The field drives the
   hillshade (lit from the map's top left), the contour lines (1 m apart, wider on steep ground, every fifth darker)
   and the elevation labels.
-- **Distance from play:** taken from the terrain definition, also in parallel. Ground farther than about 25 m from
-  play is desaturated and darkened, so the hole stands out.
+- **Distance from play:** from the terrain definition's regions that are not rough, also in parallel. Ground farther
+  than about 25 m from play is desaturated and darkened, fully from 60 m, so the hole stands out.
+  `FOpenGolfPlayDistance` skips regions by their bounds and stops at 66 m (`HoleMapLook::PlayDistanceCapCm`): beyond
+  that every pixel is fully dimmed anyway, so the picture does not change. On Hunter Ranch's 228 regions the uncapped
+  scan of every region took 0.6–1.3 s per hole.
 
 `HoleMapCompositor` builds a mip chain averaged in linear light and uploads it as a transient trilinear `UTexture2D`,
 so zoomed-out views do not alias. The ground is sampled again only when the frame changes. Look constants are in

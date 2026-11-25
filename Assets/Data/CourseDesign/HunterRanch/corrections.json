@@ -1,0 +1,29 @@
+{
+  "attribution": "Derived from OpenStreetMap data, \u00a9 OpenStreetMap contributors",
+  "license": "Open Database License 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)",
+  "holes": {
+    "2": {
+      "tees_m": {
+        "White": [
+          638.0,
+          -380.0
+        ]
+      },
+      "reviewed": "2026-11-24: no separate White tee box is visible on the 2022 aerial and the yardage point fell on a wooded bank; placed at the front of the back tee box. It measures about 30 yd longer than the published 397 yd."
+    },
+    "10": {
+      "tees_m": {
+        "Silver": [
+          224.0,
+          -51.0
+        ],
+        "Red": [
+          222.0,
+          -53.0
+        ]
+      },
+      "reviewed": "2026-11-24: the yardage points fell on the bank above the cart path; moved to the level mown area south of the path, which measures 283-286 route yards against 287-291 published."
+    }
+  },
+  "regions": {}
+}

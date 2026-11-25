@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MIT
 #include "OpenGolfTerrainBuilder.h"
+#include "OpenGolfTerrainTiles.h"
+#include "Misc/FileHelper.h"
+#include "Serialization/MemoryReader.h"
+#include "ScopedTransaction.h"
 #include "OpenGolfTerrain.h"
 #include "OpenGolfCourse.h"
 #include "OpenFairwayPhysicalMaterial.h"
@@ -166,8 +170,12 @@ namespace
         return !Triangles.IsEmpty();
     }
 
+    /**
+     * A ground mesh for Preset. The detail area keeps only triangles on Preset and matches the Landscape's height steps
+     * at its border; a course square (bTile) passes triangles already sorted by surface and has no Landscape beside it.
+     */
     UStaticMesh* MakeMesh(const UOpenGolfTerrainDefinition& D, UOpenGolfSurfacePreset* Preset, const TArray<FVector2D>& Points,
-        const TArray<FIndex3i>& Triangles, const FString& PackageName)
+        const TArray<FIndex3i>& Triangles, const FString& PackageName, bool bTile = false)
     {
         FMeshDescription Description;
         FStaticMeshAttributes Attributes(Description);
@@ -184,7 +192,7 @@ namespace
         for (auto T : Triangles)
         {
             const FVector2D P = (Points[T.A] + Points[T.B] + Points[T.C]) / 3;
-            if (D.SurfaceAt(P) != Preset)
+            if (!bTile && D.SurfaceAt(P) != Preset)
                 continue;
             const FVector2D AB = Points[T.B] - Points[T.A], AC = Points[T.C] - Points[T.A];
             if (AB.X * AC.Y - AB.Y * AC.X > 0)
@@ -202,8 +210,8 @@ namespace
                     ID = Description.CreateVertex();
                     Vertices.Add(Index, ID);
                     double Z = D.HeightAt(V);
-                    if (FMath::IsNearlyEqual(V.X, D.DetailMinimumM.X) || FMath::IsNearlyEqual(V.X, D.DetailMaximumM.X) ||
-                        FMath::IsNearlyEqual(V.Y, D.DetailMinimumM.Y) || FMath::IsNearlyEqual(V.Y, D.DetailMaximumM.Y))
+                    if (!bTile && (FMath::IsNearlyEqual(V.X, D.DetailMinimumM.X) || FMath::IsNearlyEqual(V.X, D.DetailMaximumM.X) ||
+                        FMath::IsNearlyEqual(V.Y, D.DetailMinimumM.Y) || FMath::IsNearlyEqual(V.Y, D.DetailMaximumM.Y)))
                         Z = (static_cast<int32>(EncodeHeight(Z)) - 32768) / 128.0;
                     Positions[ID] = FVector3f(V.X * 100, V.Y * 100, Z * 100);
                 }
@@ -222,6 +230,15 @@ namespace
         UPackage* Package = CreatePackage(*PackageName);
         auto* Mesh = NewObject<UStaticMesh>(Package, *FPackageName::GetLongPackageAssetName(PackageName), RF_Public | RF_Standalone);
         Mesh->GetStaticMaterials().Add(FStaticMaterial(Preset->Material, TEXT("Surface")));
+        if (bTile)
+        {
+            // Keep the elevation grid's normals, which agree along every square and surface edge; recomputed normals
+            // would only see one side. Course lighting is dynamic, so no lightmap UVs either.
+            FMeshBuildSettings& Settings = Mesh->AddSourceModel().BuildSettings;
+            Settings.bRecomputeNormals = false;
+            Settings.bRecomputeTangents = false;
+            Settings.bGenerateLightmapUVs = false;
+        }
         UStaticMesh::FBuildMeshDescriptionsParams Params;
         Params.bBuildSimpleCollision = false;
         Params.bFastBuild = false;
@@ -418,4 +435,222 @@ bool UOpenGolfTerrainBuilder::RebuildSurfaceMeshes(AOpenGolfTerrainArea* Area, c
         return true;
     UE_LOG(LogTemp, Error, TEXT("OpenGolf surface rebuild failed; the existing ground was kept: %s"), *Error);
     return false;
+}
+
+bool UOpenGolfTerrainBuilder::ImportElevation(UOpenGolfTerrainDefinition* Definition, const FString& Filename, FString& Error)
+{
+    TArray<uint8> Bytes;
+    if (!Definition || IFileManager::Get().FileSize(*Filename) > 64000036 ||
+        !FFileHelper::LoadFileToArray(Bytes, *Filename) || Bytes.Num() < 36 || FMemory::Memcmp(Bytes.GetData(), "OGE1", 4))
+    {
+        Error = TEXT("Select a terrain definition and a prepared course elevation file.");
+        return false;
+    }
+    FMemoryReader Reader(Bytes);
+    Reader.Seek(4);
+    FIntPoint Size;
+    double X, Y, Spacing;
+    Reader << Size.X << Size.Y << X << Y << Spacing;
+    if (Size.X < 2 || Size.Y < 2 || int64(Size.X) * Size.Y != (Bytes.Num() - 36) / 4 || (Bytes.Num() - 36) % 4)
+    {
+        Error = TEXT("The elevation grid has the wrong size.");
+        return false;
+    }
+    auto* Candidate = DuplicateObject<UOpenGolfTerrainDefinition>(Definition, GetTransientPackage());
+    Candidate->ElevationSize = Size;
+    Candidate->ElevationOriginM = FVector2D(X, Y);
+    Candidate->ElevationSpacingM = Spacing;
+    Candidate->ElevationM.SetNumUninitialized(Size.X * Size.Y);
+    Reader.Serialize(Candidate->ElevationM.GetData(), Bytes.Num() - 36);
+    if (!Candidate->ValidateElevation(Error))
+        return false;
+    FScopedTransaction Transaction(NSLOCTEXT("OpenGolfCourse", "ImportElevation", "Import course elevation"));
+    Definition->Modify();
+    Definition->ElevationSize = Size;
+    Definition->ElevationOriginM = Candidate->ElevationOriginM;
+    Definition->ElevationSpacingM = Candidate->ElevationSpacingM;
+    Definition->ElevationM = MoveTemp(Candidate->ElevationM);
+    Definition->PostEditChange();
+    return true;
+}
+
+namespace
+{
+    /** Mesh name for a surface preset: DA_CoastalRough becomes SM_CoastalRough. */
+    FString SurfaceMeshName(const UOpenGolfSurfacePreset& Preset)
+    {
+        const FString Name = Preset.GetName();
+        return TEXT("SM_") + (Name.StartsWith(TEXT("DA_")) ? Name.RightChop(3) : Name);
+    }
+
+    /** Destroys the area's generated actors tagged Tag, which a rebuild replaces, and forgets any already gone. */
+    void RemoveTagged(AOpenGolfTerrainArea* Area, FName Tag)
+    {
+        Area->GeneratedActors.RemoveAll([Area, Tag](AActor* Actor)
+        {
+            if (!IsValid(Actor)) return true;
+            if (Actor->GetOwner() != Area || !Actor->ActorHasTag(Tag)) return false;
+            Area->GetWorld()->DestroyActor(Actor);
+            return true;
+        });
+    }
+
+    void SpawnGround(AOpenGolfTerrainArea* Area, UStaticMesh* Mesh, UOpenGolfSurfacePreset* Preset, FName Tag, bool bCollision)
+    {
+        auto* Actor = Area->GetWorld()->SpawnActor<AStaticMeshActor>();
+        OwnActor(Actor, Area, Tag.ToString());
+        Actor->Tags.Add(Tag);
+        Actor->SetActorTransform(Area->GetActorTransform());
+        auto* Component = Actor->GetStaticMeshComponent();
+        Component->SetStaticMesh(Mesh);
+        Component->SetCollisionProfileName(bCollision ? TEXT("BlockAll") : TEXT("NoCollision"));
+        Component->SetCanEverAffectNavigation(false);
+        if (Preset)
+            Component->SetPhysMaterialOverride(Physical(Preset));
+        else
+            Component->SetCastShadow(false);
+        Area->GeneratedActors.Add(Actor);
+    }
+}
+
+bool UOpenGolfTerrainBuilder::BuildCourseTile(AOpenGolfTerrainArea* Area, FIntPoint Tile, const FString& OutputFolder, FString& Error)
+{
+    if (!IsValid(Area) || !Area->Definition || !Area->GetWorld() || Area->GetWorld()->IsGameWorld() ||
+        !FPackageName::IsValidLongPackageName(OutputFolder))
+    {
+        Error = TEXT("Select an editor terrain area with a definition and a valid content folder.");
+        return false;
+    }
+    OpenGolfTerrainTiles::FTile Ground;
+    if (!OpenGolfTerrainTiles::Triangulate(*Area->Definition, Tile, Ground, Error))
+        return false;
+    TMap<UOpenGolfSurfacePreset*, TArray<FIndex3i>> Groups;
+    for (int32 I = 0; I < Ground.Triangles.Num(); ++I)
+        Groups.FindOrAdd(Ground.Surfaces[I]).Add(Ground.Triangles[I]);
+    const FName Tag(*FString::Printf(TEXT("CourseTile_%d_%d"), Tile.X, Tile.Y));
+    // A new folder per build: the square's previous meshes stay intact until the map stops using them.
+    const FString Folder = OutputFolder / (Tag.ToString() + TEXT("_") + FGuid::NewGuid().ToString(EGuidFormats::Digits));
+    TArray<TPair<UOpenGolfSurfacePreset*, UStaticMesh*>> Built;
+    for (const auto& [Preset, Triangles] : Groups)
+    {
+        if (!Preset || !Preset->Material || !Physical(Preset))
+        {
+            Error = TEXT("A tile surface is missing its visual or physical material.");
+            return false;
+        }
+        auto* Mesh = MakeMesh(*Area->Definition, Preset, Ground.Points, Triangles, Folder / SurfaceMeshName(*Preset), true);
+        if (!Mesh)
+        {
+            Error = TEXT("Could not save the new tile meshes.");
+            return false;
+        }
+        Built.Emplace(Preset, Mesh);
+    }
+    Area->Modify();
+    RemoveTagged(Area, Tag);
+    for (const auto& [Preset, Mesh] : Built)
+        SpawnGround(Area, Mesh, Preset, Tag, true);
+    Area->MarkPackageDirty();
+    return true;
+}
+
+bool UOpenGolfTerrainBuilder::BuildWaterSurface(AOpenGolfTerrainArea* Area, const TArray<FVector2D>& OutlineM, UMaterialInterface* Material,
+    const FString& OutputFolder, const FString& Name, FString& Error)
+{
+    FText NameProblem;
+    if (!IsValid(Area) || !Area->Definition || !Area->GetWorld() || Area->GetWorld()->IsGameWorld() || !Material ||
+        OutlineM.Num() < 3 || !FPackageName::IsValidLongPackageName(OutputFolder) || Name.IsEmpty() || !FName(*Name).IsValidObjectName(NameProblem))
+    {
+        Error = TEXT("Water needs an editor terrain area, a material, an outline and a valid content folder and name.");
+        return false;
+    }
+    const auto& D = *Area->Definition;
+    // Lidar ground models flatten lakes to one surface height; the median inside the outline ignores the banks.
+    TArray<FVector2D> Points;
+    TArray<FIndex2i> Edges;
+    for (int32 I = 0; I < OutlineM.Num(); ++I)
+    {
+        const FVector2D A = OutlineM[I], B = OutlineM[(I + 1) % OutlineM.Num()];
+        const int32 Steps = FMath::Max(1, FMath::CeilToInt(FVector2D::Distance(A, B) / 2));
+        for (int32 K = 0; K < Steps; ++K)
+            Points.Add(FMath::Lerp(A, B, static_cast<double>(K) / Steps));
+    }
+    for (int32 I = 0; I < Points.Num(); ++I)
+        Edges.Emplace(I, (I + 1) % Points.Num());
+    TArray<double> Heights;
+    const FBox2D Box(OutlineM);
+    for (double Y = Box.Min.Y + 2; Y < Box.Max.Y; Y += 4)
+        for (double X = Box.Min.X + 2; X < Box.Max.X; X += 4)
+            if (UOpenGolfTerrainDefinition::Contains(OutlineM, FVector2D(X, Y)) && UOpenGolfTerrainDefinition::DistanceToOutline(OutlineM, FVector2D(X, Y)) > 1)
+            {
+                Points.Emplace(X, Y);
+                Heights.Add(D.HeightAt(FVector2D(X, Y)));
+            }
+    if (Heights.IsEmpty())
+    {
+        Error = TEXT("The water outline is too small to find its surface height.");
+        return false;
+    }
+    Heights.Sort();
+    const float LevelCm = static_cast<float>((Heights[Heights.Num() / 2] + 0.05) * 100);
+    UE::Geometry::FDelaunay2 Delaunay;
+    Delaunay.bAutomaticallyFixEdgesToDuplicateVertices = true;
+    if (!Delaunay.Triangulate(Points, Edges))
+    {
+        Error = TEXT("Could not triangulate the water outline.");
+        return false;
+    }
+    FMeshDescription Description;
+    FStaticMeshAttributes Attributes(Description);
+    Attributes.Register();
+    Attributes.GetVertexInstanceUVs().SetNumChannels(1);
+    const FPolygonGroupID Group = Description.CreatePolygonGroup();
+    Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Water");
+    TMap<int32, FVertexID> Vertices;
+    for (FIndex3i T : Delaunay.GetTriangles())
+    {
+        if (!UOpenGolfTerrainDefinition::Contains(OutlineM, (Points[T.A] + Points[T.B] + Points[T.C]) / 3))
+            continue;
+        const FVector2D AB = Points[T.B] - Points[T.A], AC = Points[T.C] - Points[T.A];
+        if (AB.X * AC.Y - AB.Y * AC.X > 0)
+            Swap(T.B, T.C);
+        TArray<FVertexInstanceID> Corners;
+        for (int32 Index : {T.A, T.B, T.C})
+        {
+            FVertexID ID;
+            if (const FVertexID* Found = Vertices.Find(Index))
+                ID = *Found;
+            else
+            {
+                ID = Vertices.Add(Index, Description.CreateVertex());
+                Attributes.GetVertexPositions()[ID] = FVector3f(Points[Index].X * 100, Points[Index].Y * 100, LevelCm);
+            }
+            const FVertexInstanceID VI = Description.CreateVertexInstance(ID);
+            Attributes.GetVertexInstanceNormals()[VI] = FVector3f::UpVector;
+            Attributes.GetVertexInstanceTangents()[VI] = FVector3f::ForwardVector;
+            Attributes.GetVertexInstanceBinormalSigns()[VI] = 1;
+            Attributes.GetVertexInstanceUVs().Set(VI, 0, FVector2f(Points[Index] / 10));
+            Corners.Add(VI);
+        }
+        Description.CreatePolygon(Group, Corners);
+    }
+    const FString PackageName = OutputFolder / (TEXT("Water_") + FGuid::NewGuid().ToString(EGuidFormats::Digits)) / (TEXT("SM_") + Name);
+    UPackage* Package = CreatePackage(*PackageName);
+    auto* Mesh = NewObject<UStaticMesh>(Package, *FPackageName::GetLongPackageAssetName(PackageName), RF_Public | RF_Standalone);
+    Mesh->GetStaticMaterials().Add(FStaticMaterial(Material, TEXT("Water")));
+    UStaticMesh::FBuildMeshDescriptionsParams Params;
+    Params.bBuildSimpleCollision = false;
+    Mesh->BuildFromMeshDescriptions({&Description}, Params);
+    FStaticMeshCompilingManager::Get().FinishCompilation({Mesh});
+    if (Description.Triangles().Num() == 0 || !SaveAsset(Mesh))
+    {
+        Error = TEXT("Could not save the water mesh.");
+        return false;
+    }
+    const FName Tag(*(TEXT("CourseWater_") + Name));
+    Area->Modify();
+    RemoveTagged(Area, Tag);
+    SpawnGround(Area, Mesh, nullptr, Tag, false);
+    Area->MarkPackageDirty();
+    return true;
 }

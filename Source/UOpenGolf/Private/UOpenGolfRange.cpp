@@ -35,7 +35,7 @@ namespace
 AUOpenGolfRange::AUOpenGolfRange()
 {
     PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.TickInterval = 0.25f;
+    PrimaryActorTick.TickInterval = IdleTickIntervalS;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Tee"));
     RootComponent->SetMobility(EComponentMobility::Static);
     Cup = CreateDefaultSubobject<UOpenGolfCupComponent>(TEXT("Cup"));
@@ -116,9 +116,21 @@ FVector AUOpenGolfRange::GetCupLocation() const
     return IsValid(Flagstick) ? Flagstick->GetComponentLocation() : GetTeeLocation();
 }
 
+void AUOpenGolfRange::SetCourseHole(FVector TeeLocation, FVector CupLocation, const TArray<FVector>& Routing)
+{
+    CourseRouting = Routing;
+    CourseTee = TeeLocation;
+    FVector Ground, Normal = FVector::UpVector;
+    if (IsValid(Terrain) && Terrain->GroundAt(CupLocation, Ground, Normal, AUOpenGolfBall::ContactChannel))
+        CupLocation = Ground;
+    OriginalCup = {CupLocation, Normal};
+    Cup->PlaceOnSurface(OriginalCup, Flagstick);
+    InvalidateHoleMap();
+}
+
 FVector AUOpenGolfRange::GetTeeLocation() const
 {
-    const FVector Origin = GetActorLocation();
+    const FVector Origin = CourseTee.Get(GetActorLocation());
     if (!IsValid(Terrain))
         return Origin;
     // The player controller asks every frame and the ground is fixed during Play; editing can rebuild it.

@@ -18,10 +18,12 @@ struct FOpenGolfAccountStyle;
  * par and length and a Play button. The cards are built when the course list has loaded and filtered by name as the
  * search changes; the menu page around them is never rebuilt for either.
  */
+class UCourseDownloads;
+
 class SCourseBrowser : public SCompoundWidget
 {
 public:
-    DECLARE_DELEGATE_OneParam(FOnPlay, const UGolfCourseDefinition&);
+    DECLARE_DELEGATE_TwoParams(FOnPlay, const UGolfCourseDefinition&, int32);
 
     // Pointer arguments need a default: SLATE_ARGUMENT leaves them uninitialized when a caller omits them.
     SLATE_BEGIN_ARGS(SCourseBrowser) : _Style(nullptr), _Courses(nullptr) {}
@@ -44,11 +46,17 @@ private:
     /** One card per course, with a fresh preview brush each; called when the course list has loaded. */
     void RebuildCards();
     TSharedRef<SWidget> MakeCard(const UGolfCourseDefinition& Course, const FSlateBrush& Preview);
+    /** A course's tee set picker and Play, then Update and Uninstall for a downloaded course. */
+    TSharedRef<SWidget> MakeCardActions(const UGolfCourseDefinition& Course);
+    /** A card for a catalog course that is not installed: its name, size and Download. */
+    TSharedRef<SWidget> MakeDownloadCard(const FString& Id, const FString& Name, const FString& Detail);
     bool MatchesSearch(const UGolfCourseDefinition& Course) const;
 
     const FOpenGolfAccountStyle* Style = nullptr;
     TWeakObjectPtr<UGolfCourseSubsystem> Courses;
     FOnPlay OnPlay;
+    TWeakObjectPtr<UCourseDownloads> Downloads;
+    FDelegateHandle DownloadHandle;
     FDelegateHandle LoadedHandle;
     TSharedPtr<SWrapBox> Cards;
     TSharedPtr<STextBlock> InstalledCount;

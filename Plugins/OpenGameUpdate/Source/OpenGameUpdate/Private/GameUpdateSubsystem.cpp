@@ -3,21 +3,27 @@
 #include "Async/Async.h"
 #include "GameUpdateFormat.h"
 #include "GameUpdateHash.h"
+#include "GameUpdateInstall.h"
 #include "GameUpdateLog.h"
+#include "GameUpdateRelease.h"
 #include "GameUpdateSource.h"
 #include "GameUpdateVersion.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/PlatformTime.h"
+#include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Guid.h"
 #include "Misc/Paths.h"
 
 namespace
 {
-    bool LaunchDetached(const FString& Path, const FString& Arguments)
+    /** Where Linux's helper records how the update went, for the next start. */
+    const TCHAR* ResultFileName = TEXT("result");
+
+    bool LaunchDetached(const FString& Program, const FString& Arguments)
     {
-        FProcHandle Process = FPlatformProcess::CreateProc(*Path, *Arguments, true, false, false, nullptr, 0, nullptr, nullptr);
+        FProcHandle Process = FPlatformProcess::CreateProc(*Program, *Arguments, true, false, false, nullptr, 0, nullptr, nullptr);
         const bool bStarted = Process.IsValid();
         FPlatformProcess::CloseProc(Process);
         return bStarted;
@@ -42,9 +48,35 @@ void UGameUpdateSubsystem::Initialize(FSubsystemCollectionBase& Collection)
     Super::Initialize(Collection);
     const FGameUpdateConfig Loaded = FGameUpdateConfig::Load();
     Configure(Loaded, GameUpdate::MakeGitHubSource(Loaded));
-    // An installer from an earlier update is no longer needed. One still running keeps its own file.
+    // An installer from an earlier update is no longer needed. One still running keeps its own file: Windows locks
+    // it, and Linux's helper records its process id while it works.
     if (!Config.InstallDir.IsEmpty() && !Config.DownloadDir.IsEmpty())
-        IFileManager::Get().DeleteDirectory(*Config.DownloadDir, false, true);
+    {
+        ReadLastResult();
+        if (GameUpdate::IsHelperRunning(Config.DownloadDir))
+        {
+            UE_LOG(LogGameUpdate, Log, TEXT("An update is still being installed; its download is kept."));
+        }
+        else
+        {
+            IFileManager::Get().DeleteDirectory(*Config.DownloadDir, false, true);
+        }
+    }
+}
+
+void UGameUpdateSubsystem::ReadLastResult()
+{
+    FString Text;
+    if (!FFileHelper::LoadFileToString(Text, *(Config.DownloadDir / ResultFileName))) return;
+    LastInstallFailure = GameUpdate::ParseHelperFailure(Text);
+    if (LastInstallFailure.IsEmpty())
+    {
+        UE_LOG(LogGameUpdate, Log, TEXT("The last update finished: %s"), *Text.TrimStartAndEnd());
+    }
+    else
+    {
+        UE_LOG(LogGameUpdate, Warning, TEXT("The last update didn't install: %s"), *LastInstallFailure);
+    }
 }
 
 void UGameUpdateSubsystem::Deinitialize()
@@ -60,7 +92,13 @@ void UGameUpdateSubsystem::Configure(const FGameUpdateConfig& InConfig, TSharedR
     Source = InSource;
     Launcher = InLauncher ? MoveTemp(InLauncher) : FLaunchInstaller(&LaunchDetached);
     // Checked once here: CanInstall is read every frame by UI.
-    bInstallDirWritable = CanWriteTo(Config.InstallDir);
+    // A system package's folder belongs to root; its installer runs elevated instead.
+    bInstallDirWritable = Config.InstallKind != EGameUpdateInstallKind::Package && CanWriteTo(Config.InstallDir);
+    bInstallParentWritable = Config.InstallKind == EGameUpdateInstallKind::Archive && bInstallDirWritable
+        && CanWriteTo(FPaths::GetPath(GameUpdate::WithoutTrailingSlash(Config.InstallDir)));
+    bHasHelper = FPaths::FileExists(Config.UpdateHelper);
+    bHasPkexec = FPaths::FileExists(Config.Pkexec);
+    bHasPackageInstaller = FPaths::FileExists(Config.PackageInstaller);
     State = EGameUpdateState::Idle;
     bAvailable = false;
     Latest = {};
@@ -102,10 +140,29 @@ void UGameUpdateSubsystem::Check()
 
 FString UGameUpdateSubsystem::GetInstallBlocker() const
 {
-    if (!PLATFORM_WINDOWS) return TEXT("Updating from the game works on Windows only.");
-    if (!bInstallDirWritable) return TEXT("The game's folder can't be written to.");
-    if (!Latest.HasInstaller()) return TEXT("This release has no installer.");
+    switch (Config.InstallKind)
+    {
+    case EGameUpdateInstallKind::None:
+        return TEXT("Updating from the game isn't available for this copy.");
+    case EGameUpdateInstallKind::Installer:
+        if (!bInstallDirWritable) return TEXT("The game's folder can't be written to.");
+        break;
+    case EGameUpdateInstallKind::Archive:
+        if (!bInstallDirWritable) return TEXT("The game's folder can't be written to.");
+        if (!bInstallParentWritable) return TEXT("The folder that holds the game can't be written to.");
+        if (!bHasHelper) return TEXT("The game's update helper is missing. Reinstall the game.");
+        break;
+    case EGameUpdateInstallKind::Package:
+        if (!bHasPkexec) return TEXT("pkexec isn't installed, so the update can't ask for the administrator password.");
+        if (!bHasPackageInstaller || !bHasHelper) return TEXT("The game's update helper is missing. Reinstall the game.");
+        break;
+    }
+    if (!Latest.HasInstaller()) return Config.InstallKind == EGameUpdateInstallKind::Installer
+        ? TEXT("This release has no installer.") : TEXT("This release has no download for this kind of install.");
     if (Latest.Sha256.IsEmpty()) return TEXT("The installer's checksum couldn't be read.");
+    // The root installer only accepts a package the release key signed for.
+    if (Config.InstallKind == EGameUpdateInstallKind::Package && !Latest.IsSigned())
+        return TEXT("This release isn't signed, so it can't be installed as administrator.");
     return {};
 }
 
@@ -117,13 +174,65 @@ bool UGameUpdateSubsystem::CanInstall() const
 void UGameUpdateSubsystem::DownloadAndInstall()
 {
     if (IsBusy() || !CanInstall()) return;
+    LastInstallFailure.Empty();  // A new attempt replaces the earlier result.
+    if (GameUpdate::IsHelperRunning(Config.DownloadDir))
+    {
+        SetState(EGameUpdateState::Failed, TEXT("An update is already being installed. Try again once the game restarts."));
+        return;
+    }
     const FString Dir = Config.DownloadDir / Latest.Version;
     IFileManager::Get().DeleteDirectory(*Config.DownloadDir, false, true);
-    IFileManager::Get().MakeDirectory(*Dir, true);
+    // On Linux a package is installed as root from here, so no other account may write to it.
+    if (!GameUpdate::MakePrivateDirectory(Config.DownloadDir) || !IFileManager::Get().MakeDirectory(*Dir, true))
+    {
+        SetState(EGameUpdateState::Failed, TEXT("Could not create the download folder."));
+        return;
+    }
     DownloadPath = Dir / Latest.InstallerName;
+    SumsPath = Dir / Config.ChecksumListAsset;
+    SignaturePath = Dir / Config.ChecksumSignatureAsset;
     Received = 0;
     DownloadStarted = FPlatformTime::Seconds();
     SetState(EGameUpdateState::Downloading);
+    if (Config.InstallKind == EGameUpdateInstallKind::Package)
+        DownloadSignedList();
+    else
+        DownloadInstaller();
+}
+
+void UGameUpdateSubsystem::DownloadSignedList()
+{
+    // Both are a few hundred bytes, so a release that can't be installed fails before the package downloads.
+    const TWeakObjectPtr<UGameUpdateSubsystem> Weak(this);
+    const auto Then = [Weak](TFunction<void(UGameUpdateSubsystem&)> Next)
+    {
+        return [Weak, Next = MoveTemp(Next)](bool bOk, const FString& Error)
+        {
+            UGameUpdateSubsystem* This = Weak.Get();
+            if (!This) return;
+            if (!bOk) { This->SetState(EGameUpdateState::Failed, Error); return; }
+            Next(*This);
+        };
+    };
+    Source->Download(Latest.SumsUrl, SumsPath, [](int64) {}, Then([Then](UGameUpdateSubsystem& This)
+    {
+        This.Source->Download(This.Latest.SumsSignatureUrl, This.SignaturePath, [](int64) {}, Then([](UGameUpdateSubsystem& This)
+        {
+            // The root installer checks the signature; this catches a list that names another file early.
+            FString Sums;
+            if (!FFileHelper::LoadFileToString(Sums, *This.SumsPath)
+                || GameUpdate::ParseChecksum(Sums, This.Latest.InstallerName) != This.Latest.Sha256)
+            {
+                This.SetState(EGameUpdateState::Failed, TEXT("The release's signed checksum list doesn't match its download."));
+                return;
+            }
+            This.DownloadInstaller();
+        }));
+    }));
+}
+
+void UGameUpdateSubsystem::DownloadInstaller()
+{
     const TWeakObjectPtr<UGameUpdateSubsystem> Weak(this);
     Source->Download(Latest.InstallerUrl, DownloadPath,
         [Weak](int64 Bytes) { if (UGameUpdateSubsystem* This = Weak.Get()) This->Received = Bytes; },
@@ -155,7 +264,7 @@ void UGameUpdateSubsystem::OnVerified(uint32 ForGeneration, const FString& Hash)
         SetState(EGameUpdateState::Failed, TEXT("The download was damaged and has been deleted. Try again."));
         return;
     }
-    if (!Launcher(DownloadPath, Config.Arguments()))
+    if (!Launch())
     {
         SetState(EGameUpdateState::Failed, TEXT("Could not start the installer."));
         return;
@@ -163,6 +272,32 @@ void UGameUpdateSubsystem::OnVerified(uint32 ForGeneration, const FString& Hash)
     UE_LOG(LogGameUpdate, Log, TEXT("Started the %s installer."), *Latest.Version);
     SetState(EGameUpdateState::Installing);
     OnReadyToRestart.Broadcast();
+}
+
+bool UGameUpdateSubsystem::Launch()
+{
+    if (Config.InstallKind == EGameUpdateInstallKind::Installer) return Launcher(DownloadPath, Config.Arguments());
+    FGameUpdateHelperLaunch Helper;
+    Helper.Helper = Config.UpdateHelper;
+    Helper.Kind = Config.InstallKind;
+    Helper.File = DownloadPath;
+    Helper.InstallDir = Config.InstallDir;
+    Helper.Version = Latest.Version;
+    Helper.Pid = FPlatformProcess::GetCurrentProcessId();
+    Helper.Pkexec = Config.Pkexec;
+    Helper.PackageInstaller = Config.PackageInstaller;
+    Helper.Sums = SumsPath;
+    Helper.Signature = SignaturePath;
+    Helper.ResultFile = Config.DownloadDir / ResultFileName;
+    Helper.RestartProgram = FPlatformProcess::ExecutablePath();
+    Helper.RestartArguments = FCommandLine::GetOriginal();
+    const FString Arguments = GameUpdate::LinuxHelperArguments(Helper);
+    if (Arguments.IsEmpty())
+    {
+        UE_LOG(LogGameUpdate, Warning, TEXT("A path for the update helper contains a double quote."));
+        return false;
+    }
+    return Launcher(TEXT("/bin/sh"), Arguments);
 }
 
 void UGameUpdateSubsystem::Cancel()

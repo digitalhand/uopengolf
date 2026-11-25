@@ -13,3 +13,7 @@
 # Unreal assets are stored in Git LFS (migrated 2026-10-27); -text also marks them binary.
 *.uasset filter=lfs diff=lfs merge=lfs -text
 *.umap filter=lfs diff=lfs merge=lfs -text
+# Linux package scripts without an extension, run as-is on Linux.
+Assets/Installer/uopengolf text eol=lf
+Assets/Installer/install-update text eol=lf
+*.policy text eol=lf

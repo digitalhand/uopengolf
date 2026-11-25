@@ -7,7 +7,7 @@ public class UOpenGolf : ModuleRules
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "UMG", "OpenLaunchMonitor", "OpenFairwayPhysics", "OpenGolfCourse", "OpenGolfEnvironment" });
-        PrivateDependencyModuleNames.AddRange(new[] { "InputCore", "EnhancedInput", "Json", "Slate", "SlateCore", "RenderCore", "ProceduralMeshComponent", "OpenGolfOnline", "OpenGameUpdate",
+        PrivateDependencyModuleNames.AddRange(new[] { "Projects", "HTTP", "InputCore", "EnhancedInput", "Json", "Slate", "SlateCore", "RenderCore", "RHI", "ProceduralMeshComponent", "OpenGolfOnline", "OpenGameUpdate",
             // UGameMapsSettings: leaving a round travels to the game's default map.
             "EngineSettings" });
         // The native folder picker in Settings › Data & system.
@@ -18,7 +18,7 @@ public class UOpenGolf : ModuleRules
 
         if (Target.bBuildEditor)
         {
-            PrivateDependencyModuleNames.AddRange(new[] { "UnrealEd", "UMGEditor", "AssetRegistry", "AssetTools" });
+            PrivateDependencyModuleNames.AddRange(new[] { "DesktopPlatform", "PythonScriptPlugin", "ToolMenus", "OpenGolfCourseEditor", "UnrealEd", "UMGEditor", "AssetRegistry", "AssetTools" });
         }
     }
 }

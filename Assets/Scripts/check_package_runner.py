@@ -127,11 +127,13 @@ def find_iscc() -> Path | None:
 
 def check_tools(engine: Path, system: str) -> None:
     commands = ["git", "tasklist.exe", "powershell", "taskkill.exe"] if system == "Windows" else [
-        "git", "python3", "bash", "timeout", "tar", "sha256sum", "find", "ps", "dpkg-deb",
+        "git", "python3", "bash", "timeout", "tar", "sha256sum", "find", "ps", "dpkg-deb", "rpmbuild",
     ]
     for command in commands:
         if not shutil.which(command):
-            raise ValueError(f"Missing {command}. Install it and add it to the runner's PATH.")
+            # Ubuntu's rpm package builds the Fedora/openSUSE package on the same runner.
+            hint = " On Ubuntu: sudo apt install rpm." if command == "rpmbuild" else ""
+            raise ValueError(f"Missing {command}. Install it and add it to the runner's PATH.{hint}")
     try:
         run(["git", "lfs", "version"])
     except ValueError as error:

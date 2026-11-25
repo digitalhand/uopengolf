@@ -42,15 +42,22 @@ is needed. Launch **UOpenGolf** from the application menu. If your desktop does 
 package installer, run `sudo apt install ./UOpenGolf-<version>-Linux-amd64.deb` from the
 download folder, replacing `<version>` with the downloaded version. Install a newer `.deb`
 the same way after closing the game. Remove it through your package manager or
-`sudo apt remove uopengolf`; your settings and recordings are kept. The `.tar.gz` remains
-available for portable use without administrator access. See [Ubuntu installer](Releases.md#ubuntu-installer).
+`sudo apt remove uopengolf`; your settings and recordings are kept. See [Ubuntu installer](Releases.md#ubuntu-installer).
+
+On Fedora or openSUSE (x86_64), download `UOpenGolf-<version>-Linux-x86_64.rpm` and run
+`sudo dnf install ./UOpenGolf-<version>-Linux-x86_64.rpm` (Fedora) or
+`sudo zypper install --allow-unsigned-rpm ./UOpenGolf-<version>-Linux-x86_64.rpm` (openSUSE). See
+[Fedora and openSUSE installer](Releases.md#fedora-and-opensuse-installer). On any other distribution, extract the
+`.tar.gz` into a folder you own and run `UOpenGolf.sh`; it needs no administrator access.
 
 The game checks for a newer release each time it starts. When one exists, the home and pause pages show
 **Update to v…**, and the version in the corner says it is available. **Settings › Data & system › Updates** checks on
 demand. The update screen shows what's new and the download size; **Download and install** shows a progress bar, then the
 game closes, installs the update and starts again. Your settings, sign-in and recordings are kept. Leaving the update
-screen cancels a download. Where the game can't update its own folder, and on Linux, the button opens the release page
-instead.
+screen cancels a download. On Linux, a game installed from the `.deb` or `.rpm` asks for your administrator password
+after it closes, because the package manager installs the update; cancel the prompt and the current version starts
+again. A `.tar.gz` folder updates without a password. Where the game can't update its own folder, the button opens the
+release page instead.
 
 ### Controls
 
@@ -173,6 +180,22 @@ bunker right of the green.
   close view through the hole-out banner.
 - After the banner, the final scorecard shows par, strokes and score relative to par (**E** for level, otherwise
   such as **+1** or **-2**). Choose **Play again** for a fresh round or **Courses** to return to the browser.
+
+### Downloaded courses and 18-hole rounds
+
+Courses that are not part of the game appear in **Courses** as cards with **Download** when a course catalog is
+configured. A downloaded course plays straight away and keeps playing offline. Its card adds **Update** when a newer
+version is published and **Uninstall**; an update and an uninstall finish the next time the game starts.
+
+Hunter Ranch (Paso Robles, California) is the first downloadable course: 18 holes, par 72, from the club's published
+scorecard. It is a draft, and its tees and cups are estimates (see [Course Designer](CourseDesign/course_designer.md#limits)).
+
+- Select the card, choose the tees with **Tees** (Blue, White, Combo, Silver or Red; each shows its total length), then
+  **Play**.
+- Each hole opens along its line of play, so the first aim follows a dogleg. After each hole-out the score is kept and
+  the next hole starts; after hole 18 the scorecard shows holes 1–9, 10–18 and the total.
+- A ball that comes to rest in a lake or out of bounds costs one penalty stroke and is replayed from where it was
+  hit; the line under the hole tiles says which. A ball that carries a lake and lands beyond it plays on.
 
 #### Lie penalties
 

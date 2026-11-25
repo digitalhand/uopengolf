@@ -7,6 +7,8 @@
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
+#include "Course/GolfCourseSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "GolfCourseDefinition.h"
 #include "Misc/AutomationTest.h"
 #include "OpenFairwayBall.h"
@@ -69,7 +71,13 @@ namespace
                     Training == HomeTrainingButton.Pin() && RenderedPlay::PointOn(*Training).Equals(HomeTrainingPosition, 0.5));
                 Test.TestTrue(TEXT("Courses appears to the right of the menu buttons"),
                     RenderedPlay::PointOn(*Card, {0, 0.5}).X > RenderedPlay::PointOn(*Training, {1, 0.5}).X);
-                Test.TestTrue(TEXT("The browser counts the installed course"), RenderedPlay::HasText(Root, TEXT("1 installed")));
+                {
+                    // Course plugins such as Hunter Ranch are listed beside the bundled course in the editor.
+                    const auto* Courses = World->GetGameInstance()->GetSubsystem<UGolfCourseSubsystem>();
+                    const int32 Installed = Courses ? Courses->GetCourses().Num() : 0;
+                    Test.TestTrue(TEXT("The browser counts the installed courses"), Installed >= 1 &&
+                        RenderedPlay::HasText(Root, FString::Printf(TEXT("%d installed"), Installed)));
+                }
                 const TSharedPtr<SWidget> SearchBox = RenderedPlay::WithTag(Root, TEXT("CourseSearch"));
                 if (!Test.TestTrue(TEXT("Search is present and enabled"), SearchBox && SearchBox->IsEnabled()))
                     return true;

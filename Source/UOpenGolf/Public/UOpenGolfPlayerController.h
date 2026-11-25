@@ -102,7 +102,7 @@ public:
     /** A course round whose ball has dropped; see AUOpenGolfGameMode::IsRoundComplete. */
     bool IsRoundComplete() const;
     /** Travels to Course's map for a fresh round. */
-    void StartCourse(const UGolfCourseDefinition& Course);
+    void StartCourse(const UGolfCourseDefinition& Course, int32 TeeIndex = 0);
     /** Ends the round and opens the main menu at the Courses browser. */
     void ReturnToCourses();
 

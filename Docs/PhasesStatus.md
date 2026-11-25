@@ -1,5 +1,154 @@
 # Phase status
 
+## Hunter Ranch downloadable course and Course Designer · 2026-11-24
+
+### What changed
+
+A Codex session began the [Course Designer](CourseDesign/course_designer.md) and a downloadable Hunter Ranch
+on 2026-11-24. This entry closes out that draft and makes it accurate to play. Owner decisions:
+- one map per downloadable course, with Savanna kept as the startup map
+- a public catalog, with the host chosen later
+- keep the OpenStreetMap data and publish the derived layout under ODbL
+
+**Layout data.**
+- Fairways that the map stores as multipolygons are now read; that is 21 fairways previously missing.
+- Lakes come from `natural=water`, `water=pond` and `golf=water_hazard`. Only one of the ten mapped lakes lies inside
+  the course boundary; the other nine are vineyard ponds.
+- Outlines are smoothed and cleaned so none cross.
+- One cup per green is chosen on flat ground at least 4 m from the edge.
+- Tee sets are placed by published yardage, then moved onto nearby level ground, each with a tee pad.
+- Author fixes live in `Assets/Data/CourseDesign/HunterRanch/corrections.json`. `review_course_layout.py` draws every
+  hole over NAIP 2022 aerial imagery and checks tees, cups and route lengths. Holes 2 (White) and 10 (Silver, Red)
+  needed tee corrections. Hole 2's White tee measures about 30 yd longer than published, because no separate tee box
+  is visible.
+
+**Ground.**
+- `OpenGolfTerrainTiles` triangulates each 64 m square with every outline as a constrained edge, so surface borders
+  follow the outlines.
+- Spacing: greens and bunkers 0.5 m, tees and fairways 1 m, rough 2 m. Before this, every surface used a 4 m grid.
+- Neighbouring squares share identical edge vertices.
+- The lake has a flat water surface (`M_Water`, procedural).
+- `ImportElevation` now checks only the elevation grid (`ValidateElevation`); the legacy single-area budget does not
+  apply to squares.
+
+**Play.**
+- A ball at rest in a lake or out of bounds costs a stroke and is replayed (`PenaltyAt`), and the HUD status line
+  says why.
+- The Courses card has a tee-set picker and one **Play** button.
+
+**Downloads.**
+- A new course mounts and plays without a restart.
+- An update of a mounted course and an uninstall finish at the next start.
+- Downloaded courses show **Update** and **Uninstall** on their card; catalog courses get a **Download** card.
+- `package_course.py` publishes the ODbL layout beside each pack.
+- `check_course_install.py` accepts Unreal's exit code 1 after `-TestExit`.
+
+**Designer.**
+- Paths come from the site recipe.
+- **Save** removes replaced ground squares and lakes (`generated_folders.py --course`).
+- **Save corrections** writes edits back to the corrections file.
+
+### Verified
+
+- Python: 105 course-script tests and 153 `Assets/Scripts` tests pass (4 skipped).
+- C++: Development editor and game builds pass, including a full build with `-DisableAdaptiveUnity`.
+- `UOpenGolf.Course` (23 tests) and `Range.HolePlay` passed on Codex's snapshot before these changes.
+- After all changes: `UOpenGolf.Course` (26 tests) and `Range.HolePlay` pass.
+- `Visual.CourseBrowser` passes after one fix. It expected exactly "1 installed", but course plugins are listed in the
+  editor too, so it now expects the subsystem's own count.
+- New or changed tests pass: `Course.Terrain.Tiles`, `Course.Terrain.Definition`, `Course.Play.Penalties`,
+  `Course.HunterRanch.Round` and `Course.HunterRanch.Water`.
+  - Round checks every hole's cup surface, tees, ground and opening aim, then plays 1 to 18.
+  - Water chips a real ball into the lake and checks the penalty stroke and the replay.
+- The draft builds headless in 38 s: 460 squares, 721 meshes, 228 surfaces, 1 lake. The content is 100 MB
+  (38 MB before).
+- Packaged Linux (Development): `check_course_install.py` passes absent, install (mounted and played in the same
+  session), offline play, uninstall and absent, for `draft3` and again for `draft4` after the last fix. Each pack is 92 MB;
+  the base package holds no course content.
+- Rendered (off screen, 1792×1087, one editor): `UOpenGolf.Visual.HunterRanch` captured tee, approach and green
+  views of holes 1, 9 and 12, 20 frames each, in `Saved/Automation/HunterReview/`. Surface borders follow the outlines
+  smoothly and bunkers sit in the ground.
+  - Still views changed by a mean of 0.13–0.15 grey levels per frame, with no pixel changing by more than 8, so there
+    is no visible shimmer.
+  - The green views pan 5 cm per frame and kept changes above 8 levels to 0.02–0.17 % of pixels.
+  - Every view logged 8.3 ms per frame. That is the 120 fps cap, not a GPU measurement.
+  - Only hole 1 shows its flag, because the capture plays hole 1.
+  - No before/after pair exists: this is a new map, and Codex's 4 m draft is kept in `Saved/CourseDesign/Backups/`.
+
+### Still unverified
+
+- Owner visual review. The draft has no trees, uses the coastal surfaces, and the coastal environment's sea shows on
+  the horizon, which is wrong for inland Paso Robles.
+- Windows packs, S3/CloudFront hosting, and the full automation suite after these changes.
+- DebugGame builds; the owner rebuilds those.
+- Tee and cup positions are estimates. Green contours come from 1 m lidar, with no hand shaping.
+- Pack size: 92 MB may need coarser rough beyond the boundary, or Nanite.
+
+### Follow-up: tee pads, performance and review fixes · 2026-11-24
+
+The owner noticed that hole 2's White tee had no tee turf. A cloud review of the branch ran at the same time.
+
+**Fixed.**
+- Tee pads were built at the tees estimated from the map, before the author's corrections moved them. Hole 2 White
+  sat in rough, and hole 10 Silver and Red sat on fairway. Site preparation now builds each pad at the corrected tee.
+  The layout review and `Course.HunterRanch.Round` both check that every tee of every set is on a tee pad. On the old
+  layout the review flags exactly those three tees; after preparing again it is clean.
+- `IsRoundComplete` turned true when the last ball dropped, 5 s before that hole reached the scorecard. Opening the
+  menu in that window cached a final card without the last hole. The round now completes once its last hole is
+  recorded.
+- The Courses card totalled yards by tee index, but the round finds each hole's tee by set name.
+  `FGolfCourseHole::FindTee` and `UGolfCourseDefinition::TeeSetYards` now serve both (`Course.Play.TeeSets`).
+- A rebuilt lake left its old `Water_<GUID>` folder behind. **Save** now cleans lakes as well as ground squares
+  (`generated_folders.py --course`, renamed from `--tiles`).
+- The update panel kept showing an earlier helper failure after a new attempt failed. A new attempt now clears it.
+  This is part of the Linux update work, and no test covers it.
+
+**Performance.**
+- Rough is built at 2 m within the play area (the boundary grown by 25 m) and at 4 m beyond it, where 54 of the
+  ground's 76 MB was rough.
+- Ground meshes keep the elevation grid's normals instead of recomputing them per mesh, which could not see across
+  square edges, and skip lightmap UVs, which dynamic lighting never uses.
+- Not changed: Nanite for the ground, and the 0.5 m spacing along every square edge. Nanite may open cracks at square
+  edges at a distance, and coarser edges need a change to how neighbouring squares agree on edge points. Both need a
+  rendered comparison first.
+
+**Verified.**
+- 115 course-script tests pass, as do the Development editor and game builds, including `-DisableAdaptiveUnity`.
+- The draft was rebuilt headless in 26 s, after backing up the old one to
+  `Saved/CourseDesign/Backups/Draft-20261124-164752`. It has 460 squares and 722 meshes.
+- Sizes: rough fell from 54.0 to 37.6 MB, the ground squares from 76 to 60 MB, and the whole draft from 100 to 84 MB.
+- Unreal reports the ground meshes' build settings: normals and tangents are not recomputed, there are no lightmap
+  UVs, and there is one UV channel.
+- `UOpenGolf.Course` passes 28 tests, including the new `Course.Play.TeeSets` and the tee-pad check in
+  `Course.HunterRanch.Round`. `Range.HolePlay` passes.
+- Rendered, off screen, with one editor: all 180 `Visual.HunterRanch` frames match the earlier review in
+  `Saved/Automation/HunterReview/`, to a mean of 0.7 grey levels or less below the horizon. The coarser rough
+  beyond the play area does not show in these views. Holes 2 and 10, whose tees moved, are not among the captured
+  holes.
+
+**Still unverified.**
+- Owner review of holes 2 and 10 in Play.
+- A new pack. The 92 MB `draft4` pack predates these changes; the next pack needs a new version.
+
+### Follow-up: stall at each hole change · 2026-11-24
+
+The owner saw lag after holing out, while the camera moved to the next hole. The DebugGame editor's log showed that
+the hole map (the minimap's picture) was rebuilt on the game thread at every hole change. On Hunter Ranch this took
+0.7–1.5 s, and on Savanna about 0.3 s.
+
+Most of that time went on the distance-from-play field: 558–1330 ms on Hunter Ranch. Every 3 m sample measured its
+distance to all 228 surfaces, and walked each outline up to three times.
+
+**Changed.**
+- `FOpenGolfPlayDistance` measures distance from play only up to 66 m, the farthest the dimming can tell apart.
+- It measures only from the surfaces within reach of the hole's frame.
+- One pass over each outline now answers both questions, inside or not and how far (`DistanceFromOutline`). This also
+  speeds up grass scatter.
+- The capture is read back from the GPU without waiting for it (`FHoleMapReadback`).
+- A worker thread builds the distance field, dims, shades and contours the picture, and builds its mips.
+- The game thread then publishes the picture, frame and heights together, so the minimap never mixes two holes.
+- A result made stale by a newer hole change is dropped.
+
 ## Player badge, short club label, avatars · 2026-11-24
 
 ### What changed

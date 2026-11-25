@@ -9,10 +9,11 @@ Supports Launch Monitor, and OpenAPI Connectivity
 
 ## Get started
 
-Install from [Releases](https://github.com/digitalhand/uopengolf/releases) 
-- Native debian .deb package.
-- Native .exe Windows 64 installation. 
-    - Includes auto-update. 
+Install from [Releases](https://github.com/digitalhand/uopengolf/releases). Every install updates itself from the game.
+- Native Ubuntu/Debian `.deb` package.
+- Native Fedora/openSUSE `.rpm` package.
+- Portable `.tar.gz` for any Linux distribution.
+- Native .exe Windows 64 installation.
 
 - For developers. All code and assets are fully open source, most using MIT license. See below [Build and editor setup](Docs/Development.md)
 

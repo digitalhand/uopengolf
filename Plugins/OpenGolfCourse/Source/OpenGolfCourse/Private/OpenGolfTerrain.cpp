@@ -83,6 +83,23 @@ double UOpenGolfTerrainDefinition::DistanceToOutline(const TArray<FVector2D>& Ou
     return Distance;
 }
 
+double UOpenGolfTerrainDefinition::DistanceFromOutline(const TArray<FVector2D>& Outline, FVector2D Point)
+{
+    // The same edge distance as DistanceToOutline and the same crossing test as Contains, in one walk round the outline.
+    double Distance = TNumericLimits<double>::Max();
+    bool bInside = false;
+    for (int32 I = 0, J = Outline.Num() - 1; I < Outline.Num(); J = I++)
+    {
+        const FVector2D A = Outline[I], Edge = Outline[(I + 1) % Outline.Num()] - A;
+        const double T = Edge.SizeSquared() > UE_SMALL_NUMBER ? FMath::Clamp(FVector2D::DotProduct(Point - A, Edge) / Edge.SizeSquared(), 0.0, 1.0) : 0;
+        Distance = FMath::Min(Distance, (Point - A - Edge * T).Size());
+        const FVector2D B = Outline[J];
+        if ((A.Y > Point.Y) != (B.Y > Point.Y) && Point.X < (B.X - A.X) * (Point.Y - A.Y) / (B.Y - A.Y) + A.X)
+            bInside = !bInside;
+    }
+    return Outline.Num() >= 3 && (Distance < 0.00001 || bInside) ? 0.0 : Distance;
+}
+
 bool UOpenGolfTerrainDefinition::Contains(const TArray<FVector2D>& Outline, FVector2D Point)
 {
     if (Outline.Num() < 3)
@@ -99,6 +116,27 @@ bool UOpenGolfTerrainDefinition::Contains(const TArray<FVector2D>& Outline, FVec
     return Inside;
 }
 
+bool UOpenGolfTerrainDefinition::ValidateElevation(FString& Error) const
+{
+    auto Fail = [&Error](const TCHAR* Message)
+    { Error = Message; return false; };
+    Error.Reset();
+    if (!Finite(MinimumM) || !Finite(MaximumM))
+        return Fail(TEXT("Terrain needs finite bounds."));
+    if (ElevationM.IsEmpty() && ElevationSize == FIntPoint::ZeroValue)
+        return true;
+    if (ElevationSize.X < 2 || ElevationSize.Y < 2 || int64(ElevationSize.X) * ElevationSize.Y != ElevationM.Num() ||
+        !Finite(ElevationOriginM) || !FMath::IsFinite(ElevationSpacingM) || ElevationSpacingM <= 0)
+        return Fail(TEXT("Invalid elevation grid dimensions or spacing."));
+    const FVector2D Last = ElevationOriginM + FVector2D(ElevationSize.X - 1, ElevationSize.Y - 1) * ElevationSpacingM;
+    if (ElevationOriginM.X > MinimumM.X || ElevationOriginM.Y > MinimumM.Y || Last.X < MaximumM.X || Last.Y < MaximumM.Y)
+        return Fail(TEXT("The elevation grid must cover the terrain bounds."));
+    for (const float H : ElevationM)
+        if (!FMath::IsFinite(H))
+            return Fail(TEXT("Elevation contains missing samples."));
+    return true;
+}
+
 bool UOpenGolfTerrainDefinition::Validate(FString& Error) const
 {
     auto Fail = [&Error](const TCHAR* Message)
@@ -108,6 +146,8 @@ bool UOpenGolfTerrainDefinition::Validate(FString& Error) const
         return Fail(TEXT("Terrain needs a default surface and finite bounds."));
     if (!FMath::IsFinite(LandscapeSpacingM) || !FMath::IsFinite(DetailSpacingM) || LandscapeSpacingM < 0.25f || DetailSpacingM < 0.25f)
         return Fail(TEXT("Terrain sample spacing must be at least 0.25 meters."));
+    if (!ValidateElevation(Error))
+        return false;
     const double Tile = LandscapeSpacingM * 63;
     for (int32 Axis = 0; Axis < 2; ++Axis)
     {
@@ -174,7 +214,7 @@ double UOpenGolfTerrainDefinition::DistanceFromPlay(FVector2D PointM) const
     double Distance = TNumericLimits<double>::Max();
     for (const auto& Region : Regions)
         if (Region.Surface && Region.Surface->Surface != EOpenFairwaySurface::Rough)
-            Distance = FMath::Min(Distance, Contains(Region.OutlineM, PointM) ? 0.0 : DistanceToOutline(Region.OutlineM, PointM));
+            Distance = FMath::Min(Distance, DistanceFromOutline(Region.OutlineM, PointM));
     return Distance;
 }
 
@@ -304,6 +344,19 @@ double UOpenGolfTerrainDefinition::HeightAt(FVector2D PointM) const
         // Level across the box, then ease back to the contours over one half-side.
         const double T = FMath::Clamp(Tee / LevelTeeHalfSizeM.GetMax(), 0.0, 1.0);
         Height *= T * T * (3 - 2 * T);
+    }
+    if (ElevationSize.X >= 2 && ElevationSize.Y >= 2 && ElevationSpacingM > 0 &&
+        int64(ElevationSize.X) * ElevationSize.Y == ElevationM.Num())
+    {
+        const FVector2D Grid = (PointM - ElevationOriginM) / ElevationSpacingM;
+        const double X = FMath::Clamp(Grid.X, 0.0, double(ElevationSize.X - 1));
+        const double Y = FMath::Clamp(Grid.Y, 0.0, double(ElevationSize.Y - 1));
+        const int32 Col = FMath::Min(FMath::FloorToInt(X), ElevationSize.X - 2);
+        const int32 Row = FMath::Min(FMath::FloorToInt(Y), ElevationSize.Y - 2);
+        const int32 South = Row * ElevationSize.X + Col;
+        const int32 North = South + ElevationSize.X;
+        Height += FMath::Lerp(FMath::Lerp(ElevationM[South], ElevationM[South + 1], X - Col),
+            FMath::Lerp(ElevationM[North], ElevationM[North + 1], X - Col), Y - Row);
     }
     return Height;
 }

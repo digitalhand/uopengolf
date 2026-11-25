@@ -6,9 +6,10 @@ public class OpenGolfCourseEditor : ModuleRules
     public OpenGolfCourseEditor(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "OpenGolfCourse" });
+        // GeometryCore is public: OpenGolfTerrainTiles.h returns its triangle index type.
+        PublicDependencyModuleNames.AddRange(new[] { "Core", "CoreUObject", "Engine", "GeometryCore", "OpenGolfCourse" });
         PrivateDependencyModuleNames.AddRange(new[] {
-            "UnrealEd", "Landscape", "GeometryCore", "MeshDescription", "StaticMeshDescription",
+            "UnrealEd", "Landscape", "MeshDescription", "StaticMeshDescription",
             "AssetRegistry", "PhysicsCore", "OpenFairwayPhysics", "PCG", "RenderCore"
         });
     }

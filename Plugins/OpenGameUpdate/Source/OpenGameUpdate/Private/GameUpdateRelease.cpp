@@ -43,6 +43,10 @@ namespace GameUpdate
                 }
                 else if (Name == Checksum)
                     R.ChecksumUrl = Url;
+                else if (!Config.ChecksumListAsset.IsEmpty() && Name == Config.ChecksumListAsset)
+                    R.SumsUrl = Url;
+                else if (!Config.ChecksumSignatureAsset.IsEmpty() && Name == Config.ChecksumSignatureAsset)
+                    R.SumsSignatureUrl = Url;
             }
         Out = MoveTemp(R);
         return true;

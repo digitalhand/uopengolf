@@ -3,6 +3,7 @@
 #include "OpenGolfSettings.h"
 #include "GolfGimmieIndicator.h"
 #include "GolfCourseDefinition.h"
+#include "Kismet/GameplayStatics.h"
 #include "Course/CourseClubs.h"
 #include "Course/GolfCourseSubsystem.h"
 
@@ -38,6 +39,16 @@ void AUOpenGolfGameMode::InitGame(const FString& MapName, const FString& Options
 {
     Super::InitGame(MapName, Options, ErrorMessage);
     Course = UGolfCourseSubsystem::FindCourse(Options);
+    if (Course && !Course->Layout.IsEmpty() && !Course->Layout[0].Tees.IsEmpty())
+    {
+#if WITH_EDITOR
+        if (GetWorld()->WorldType == EWorldType::PIE)
+            HoleIndex = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("PreviewHole"), 1)-1, 0, Course->Layout.Num()-1);
+#endif
+        TeeIndex = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("TeeIndex"), 0), 0, Course->Layout[0].Tees.Num() - 1);
+        TeeSet = Course->Layout[0].Tees[TeeIndex].SetName;
+    }
+    StartingHole = HoleIndex;
     PlayMode = Course ? EOpenGolfPlayMode::Hole : EOpenGolfPlayMode::Range;
     if (Course)
         UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Course round: %s."), *Course->DisplayName.ToString());
@@ -45,7 +56,42 @@ void AUOpenGolfGameMode::InitGame(const FString& MapName, const FString& Options
 
 int32 AUOpenGolfGameMode::GetPar() const
 {
+    if (Course && Course->Layout.IsValidIndex(HoleIndex))
+        return Course->Layout[HoleIndex].Par;
     return Course ? Course->Par : AUOpenGolfRange::Par;
+}
+
+bool AUOpenGolfGameMode::IsRoundComplete() const
+{
+    return IsCourseRound() && Round.bHoled && (!Course || HoleIndex + 1 >= Course->Layout.Num()) &&
+        CompletedHoles.Num() == HoleIndex - StartingHole + 1;
+}
+
+EGolfPenalty AUOpenGolfGameMode::GetRecentPenalty() const
+{
+    const UWorld* World = GetWorld();
+    return World && LastPenaltyTime >= 0 && World->GetTimeSeconds() - LastPenaltyTime < PenaltyNoticeS ? LastPenalty : EGolfPenalty::None;
+}
+
+float AUOpenGolfGameMode::GetHoleLengthM() const
+{
+    if (Course && Course->Layout.IsValidIndex(HoleIndex))
+        if (const auto* Tee = Course->Layout[HoleIndex].FindTee(TeeSet))
+            return Tee->PublishedYards * 0.9144f;
+    return Course ? Course->LengthM : AUOpenGolfRange::HoleDistanceM;
+}
+
+void AUOpenGolfGameMode::ActivateCourseHole()
+{
+    if (!Course || !Course->Layout.IsValidIndex(HoleIndex) || !Range || !Ball)
+        return;
+    const auto& Hole = Course->Layout[HoleIndex];
+    const auto* Tee = Hole.FindTee(TeeSet);
+    if (!ensure(Tee)) return;
+    Range->SetCourseHole(Tee->PositionCm, Hole.CupCm, Hole.RoutingCm);
+    Ball->SetCups({Range->GetCup()->GetCupDescriptor()});
+    OpeningAimDeg = OpenGolfPlay::BearingDeg(Tee->PositionCm, Hole.RoutingCm.IsEmpty() ? Hole.CupCm : Hole.RoutingCm[0], 0);
+    ResetToTeeForPlay();
 }
 
 void AUOpenGolfGameMode::StartPlay()
@@ -110,6 +156,7 @@ void AUOpenGolfGameMode::StartPlay()
     // Spawn the range before players start so the controller can find the ball.
     GolfSettings::ApplyRuntime(World);
     Super::StartPlay();
+    ActivateCourseHole();
     if (Ball && Range && Range->GetCup())
         Ball->SetCups({Range->GetCup()->GetCupDescriptor()});
 }
@@ -214,7 +261,7 @@ void AUOpenGolfGameMode::PlaceOnTee()
             PresentedBall->ResetShotTrail();
         // A hole starts down the target line; on the range the aim stays set across shots.
         if (PlayMode == EOpenGolfPlayMode::Hole)
-            Ball->AimYawDeg = 0.0f;
+            Ball->AimYawDeg = OpeningAimDeg;
         if (Training) Training->LeaveFinishedBall();
         Ball->PlaceAt(Range->GetTeeLocation() + FVector::UpVector * 10.0f);
         SelectClubForLie();
@@ -235,6 +282,9 @@ bool AUOpenGolfGameMode::SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDe
     PlayMode = Mode;
     if (!IsCourseRound()) CreateTrainingSession();
     Course = Mode == EOpenGolfPlayMode::Hole ? InCourse : nullptr;
+    HoleIndex = 0;
+    CompletedHoles.Reset();
+    if (Course && !Course->Layout.IsEmpty()) ActivateCourseHole();
     UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Play mode: %s."), Mode == EOpenGolfPlayMode::Hole ? TEXT("hole") : TEXT("range"));
     ResetBallToTee();
     return true;
@@ -407,6 +457,18 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
         if (Round.bHoled || LastScoredShot == Result.ShotNumber) return;
         LastScoredShot = Result.ShotNumber;
         Round.RecordStroke(bShotFromGreen, Result.bHoled);
+        const EGolfPenalty Penalty = !Result.bHoled && Course && Ball ? Course->PenaltyAt(Ball->GetActorLocation()) : EGolfPenalty::None;
+        if (Penalty != EGolfPenalty::None)
+        {
+            // Stroke and distance: one penalty stroke, then play again from where the last shot was hit.
+            LastPenalty = Penalty;
+            LastPenaltyTime = GetWorld()->GetTimeSeconds();
+            Round.RecordStroke(false, false);
+            Ball->PlaceAt(PreviousLie);
+            SelectClubForLie();
+            bAddressReady = true;
+            return;
+        }
         Round.TryConcede(GetDistanceToCupM(), SessionGimmieFeet, Result.Surface == EOpenFairwaySurface::Green);
         if (Round.bHoled)
         {
@@ -430,8 +492,16 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
 
 void AUOpenGolfGameMode::FinishRound()
 {
+    if (!IsCourseRound() || !Round.bHoled || CompletedHoles.Num() != HoleIndex - StartingHole)
+        return;
+    CompletedHoles.Add(Round);
     if (IsRoundComplete())
         OnRoundComplete.Broadcast();
+    else
+    {
+        ++HoleIndex;
+        ActivateCourseHole();
+    }
 }
 
 void AUOpenGolfGameMode::ResetAfterShot()
@@ -490,9 +560,9 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
         Reject(TEXT("Shot needs ball speed and vertical launch angle"));
         return;
     }
-    if (IsRoundComplete())
+    if (IsCourseRound() && Round.bHoled)
     {
-        Reject(TEXT("The course round is complete"));
+        Reject(TEXT("The hole is complete"));
         return;
     }
     if (PlayMode == EOpenGolfPlayMode::Range && Training)
@@ -540,6 +610,7 @@ void AUOpenGolfGameMode::HandleShot(const FLaunchMonitorShot& Shot)
             ShotRecording::IsRecordable(Shot,LaunchMonitor->GetConnectionState()));
     }
     // Range mode hits from the tee; Hole mode from wherever the ball lies.
+    PreviousLie = Ball->GetActorLocation();
     if (Ball->Launch(PlayedLaunch))
     {
         bAddressReady = false;

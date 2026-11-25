@@ -7,22 +7,32 @@ ground, but nothing deleted them, so every rebuild added its folders to Git LFS 
 remove_unreferenced after saving the level: the asset registry then matches the saved map, so a folder
 it still uses is kept. Only folders named exactly as the builder names them are considered.
 
+A downloadable course's ground is built in squares: each square goes to CourseTile_<x>_<y>_<GUID>, and moving
+an outline rebuilds the squares it touches into new folders. Each lake goes to Water_<GUID> the same way. Pass
+--course to clean those instead.
+
 A run baked in this editor session stays loaded, because the engine still holds its point data, and
 force-deleting a loaded package fails part-way and leaves it corrupt. Such a folder is kept and logged;
 the next rebuild, or this script run after restarting the editor, removes it.
 
     py "<project>/Plugins/OpenGolfCourse/Scripts/generated_folders.py" --root /Game/UOpenGolf/Terrain/Generated [--root ...] [--apply]
+    py "<project>/Plugins/OpenGolfCourse/Scripts/generated_folders.py" --course --root /HunterRanch/Draft/Tiles --root /HunterRanch/Draft/Water [--apply]
 
 Without --apply it only lists what it would remove. Save every open level first.
 """
 import re
 
 PREFIXES = ("Build_", "Vegetation_")
+COURSE_PREFIXES = ("CourseTile_", "Water_")
+GUID = "[0-9A-F]{32}"
+# A course tile folder also carries the square's grid position before its GUID.
+TILE_POSITION = r"-?\d+_-?\d+_"
 
 
 def is_run_folder(name, prefixes=PREFIXES):
     """True for a folder name the builder gives a run: a prefix and a 32-digit upper-case GUID."""
-    return any(re.fullmatch(re.escape(prefix) + "[0-9A-F]{32}", name) for prefix in prefixes)
+    return any(re.fullmatch(re.escape(prefix) + (TILE_POSITION if prefix == "CourseTile_" else "") + GUID, name)
+               for prefix in prefixes)
 
 
 def run_folders(library, root, prefixes=PREFIXES):
@@ -91,15 +101,17 @@ def main(argv):
     import unreal as ue
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--root", action="append", required=True, help="Content folder holding Build_ and Vegetation_ folders")
+    parser.add_argument("--root", action="append", required=True, help="Content folder holding Build_ and Vegetation_ (or CourseTile_ and Water_) folders")
     parser.add_argument("--apply", action="store_true", help="Delete; without it the folders are only listed")
+    parser.add_argument("--course", action="store_true", help="Clean the ground squares and lakes of a downloadable course")
     args = parser.parse_args(argv)
     if ue.get_editor_subsystem(ue.UnrealEditorSubsystem).get_game_world():
         raise RuntimeError("Stop Play before removing generated folders")
     dirty = ue.EditorLoadingAndSavingUtils.get_dirty_map_packages()
     if dirty:
         raise RuntimeError(f"Save the open levels first; unsaved: {[p.get_name() for p in dirty]}")
-    removed, kept = remove_unreferenced(ue.EditorAssetLibrary, args.root, apply=args.apply, log=ue.log)
+    prefixes = COURSE_PREFIXES if args.course else PREFIXES
+    removed, kept = remove_unreferenced(ue.EditorAssetLibrary, args.root, prefixes=prefixes, apply=args.apply, log=ue.log)
     ue.log(f"OPEN_GOLF_GENERATED_FOLDERS {'removed' if args.apply else 'would_remove'}={len(removed)} kept={len(kept)}")
 
 

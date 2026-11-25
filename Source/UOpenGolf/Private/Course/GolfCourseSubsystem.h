@@ -43,8 +43,14 @@ public:
     /** The URL options that start a round of Course. */
     static FString TravelOptions(const UGolfCourseDefinition& Course);
 
+    /** Lists a course installed while the game runs, with its menu preview; the caller refreshes the browser. */
+    void AddCourse(UGolfCourseDefinition& Course);
+    /** Takes an uninstalled course off the list for the rest of the session. */
+    void RemoveCourse(const FSoftObjectPath& Definition);
+
 private:
     void HandleLoaded();
+    void SortCourses();
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UGolfCourseDefinition>> Courses;

@@ -87,10 +87,10 @@ TSharedRef<SWidget> SMainMenu::BuildCourseBrowser()
     return SNew(SCourseBrowser).Style(&Style)
         .Courses(Instance ? Instance->GetSubsystem<UGolfCourseSubsystem>() : nullptr)
         .Visibility_Lambda([this] { return bCoursesVisible ? EVisibility::Visible : EVisibility::Collapsed; })
-        .OnPlay_Lambda([this](const UGolfCourseDefinition& Course)
+        .OnPlay_Lambda([this](const UGolfCourseDefinition& Course, int32 TeeIndex)
         {
             if (Controller.IsValid())
-                Controller->StartCourse(Course);
+                Controller->StartCourse(Course, TeeIndex);
         });
 }
 
@@ -107,11 +107,29 @@ void SMainMenu::BuildFinalScore(TSharedRef<SVerticalBox> Body)
         const FString Line = FString::Printf(TEXT("Hole %d   ·   Par %d   ·   %d %s   ·   %s"), Mode->GetHoleNumber(), Round.Par,
             Round.Strokes, Round.Strokes == 1 ? TEXT("stroke") : TEXT("strokes"), *Round.ScoreToPar());
         Body->AddSlot().AutoHeight().Padding(0, 0, 0, 20)[Text(Line, ScorecardLineSize)];
+        const auto& Scores = Mode->GetCompletedHoles();
+        if (Scores.Num() > 1)
+        {
+            int32 Total = 0;
+            int32 Nine = 0;
+            for (int32 Index = 0; Index < Scores.Num(); ++Index)
+            {
+                Nine += Scores[Index].Strokes;
+                Total += Scores[Index].Strokes;
+                if (Index == 8 || Index == Scores.Num() - 1)
+                {
+                    const FString Row = FString::Printf(TEXT("Holes %d–%d   ·   %d strokes"), Index < 9 ? 1 : 10, Index + 1, Nine);
+                    Body->AddSlot().AutoHeight()[Text(Row, ScorecardLineSize)];
+                    Nine = 0;
+                }
+            }
+            Body->AddSlot().AutoHeight()[Text(FString::Printf(TEXT("Total   ·   %d strokes"), Total), ScorecardLineSize)];
+        }
         const TWeakObjectPtr<const UGolfCourseDefinition> Again(Course);
-        AddMenuButton(Body, TEXT("Play again"), [this, Again]
+        AddMenuButton(Body, TEXT("Play again"), [this, Again, TeeIndex = Mode->GetTeeIndex()]
         {
             if (Controller.IsValid() && Again.IsValid())
-                Controller->StartCourse(*Again);
+                Controller->StartCourse(*Again, TeeIndex);
         }, true);
     }
     AddMenuButton(Body, TEXT("Courses"), [this] { if (Controller.IsValid()) Controller->ReturnToCourses(); });

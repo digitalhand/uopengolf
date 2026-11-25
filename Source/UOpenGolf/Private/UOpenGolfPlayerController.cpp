@@ -98,6 +98,8 @@ namespace
     // The aim turns around the target line on the range, and around the line to the cup on the hole.
     float AimCenterDeg(const AUOpenGolfGameMode& Mode, const AOpenFairwayBall& Ball)
     {
+        if (Mode.IsCourseRound() && Mode.IsBallOnTee())
+            return Mode.GetOpeningAimDeg();
         return (Mode.IsCourseRound() || Mode.IsPractice() || Mode.IsDrillActive()) ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
     }
 } // namespace
@@ -337,9 +339,9 @@ bool AUOpenGolfPlayerController::IsRoundComplete() const
     return Mode && Mode->IsRoundComplete();
 }
 
-void AUOpenGolfPlayerController::StartCourse(const UGolfCourseDefinition& Course)
+void AUOpenGolfPlayerController::StartCourse(const UGolfCourseDefinition& Course, int32 TeeIndex)
 {
-    UGameplayStatics::OpenLevelBySoftObjectPtr(this, Course.Map, true, UGolfCourseSubsystem::TravelOptions(Course));
+    UGameplayStatics::OpenLevelBySoftObjectPtr(this, Course.Map, true, UGolfCourseSubsystem::TravelOptions(Course) + FString::Printf(TEXT("?TeeIndex=%d"), TeeIndex));
 }
 
 void AUOpenGolfPlayerController::ShowFinishedRound()

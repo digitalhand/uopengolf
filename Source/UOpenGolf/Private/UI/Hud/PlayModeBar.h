@@ -48,7 +48,8 @@ private:
     FText StrokeText;
     FText ToPinText;
     FText PuttsText;
-    FText OverCupText;
+    /** One status line under the tiles: a ball over the cup, or why the last shot is replayed. */
+    FText StatusText;
     FText BannerTitle;
     FText BannerDetail;
     float BannerOpacity = 0.0f;
