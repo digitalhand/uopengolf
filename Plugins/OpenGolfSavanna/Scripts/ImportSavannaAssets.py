@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""Import a savanna export manifest into /OpenGolfSavanna.
+"""Import an export manifest into /OpenGolfSavanna, or into the course plugin the manifest names.
 
     py "<project>/Plugins/OpenGolfSavanna/Scripts/ImportSavannaAssets.py" <export.json> [--materials-only | --textures-only] [--meshes=A,B]
 
@@ -18,6 +18,11 @@ distance instead of thinning to shimmering specks.
 A mesh entry with `nanite: false` and a `collision` mode is a hidden ball-contact helper: "complex"
 collides on its triangles (a tree's wood) and "convex" keeps the FBX's single UCX_ hull (a canopy
 volume that overlap queries can see inside).
+
+A manifest with "mount", "content_dir" and "owner" (import_destination.py) imports into that plugin instead, for
+art only one course uses, so its course pack carries it. Its material instances use this plugin's shared parents,
+which the base game already has; they are loaded, never rebuilt. A material's "settings" (for example a Tint)
+override the instance defaults below.
 """
 from pathlib import Path
 import importlib
@@ -28,10 +33,11 @@ import unreal as ue
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import import_destination as destination
 import savanna_assets as s
 import turf_palette as palette
 
-s = importlib.reload(s)
+s, destination = [importlib.reload(m) for m in (s, destination)]
 a = s.a
 # Tree canopies keep their leaf normals much further out than ground cover does.
 CARD_SETTINGS = {"NormalStrength": 1.0, "NormalFadeStartCm": 3000.0, "NormalFadeEndCm": 8000.0, "AOStrength": 0.0,
@@ -69,10 +75,20 @@ def layer_textures(layer, folder, suffix, reuse):
     return textures
 
 
+def shared_parents(kinds):
+    """This plugin's card and solid parents, as they are, for another plugin's instances."""
+    if not kinds <= {"card", "solid", "textures"}:
+        raise RuntimeError(f"Only card and solid materials import outside {s.MOUNT}, not {sorted(kinds)}")
+    return {"card": s.required(f"{s.MOUNT}/Materials/M_SavannaCard"), "solid": s.required(f"{s.MOUNT}/Materials/M_SavannaSolid")}
+
+
 def build_materials(manifest, folder, reuse):
-    s.white_mask(s.PROJECT / "Saved/AssetImport/OpenGolfSavanna/defaults")
     kinds = {entry["kind"] for entry in manifest["materials"].values()}
-    parents = {"card": s.card_material(), "solid": s.solid_material()}
+    if not destination.is_savanna(a.MOUNT):
+        parents = shared_parents(kinds)
+    else:
+        s.white_mask(s.PROJECT / "Saved/AssetImport/OpenGolfSavanna/defaults")
+        parents = {"card": s.card_material(), "solid": s.solid_material()}
     if "grass" in kinds:
         import savanna_grass
         parents["grass"] = importlib.reload(savanna_grass).grass_material()
@@ -98,6 +114,7 @@ def build_materials(manifest, folder, reuse):
             settings["VertexBlend"] = 1.0
         if entry["kind"] == "card":
             settings["OpacityFromAlbedoAlpha"] = 1.0 if "opacity_alpha" in layers[0] else 0.0
+        settings = destination.instance_settings(settings, entry.get("settings"))
         result[name] = s.instance(target["Materials"], instance_name(name), parents[entry["kind"]], textures, settings)
     return result
 
@@ -119,7 +136,7 @@ def existing_materials(manifest, folder):
     for name, entry in manifest["materials"].items():
         if entry["kind"] == "textures":
             continue
-        path = f"/OpenGolfSavanna/{folders(entry, folder)['Materials']}/{instance_name(name)}"
+        path = f"{a.MOUNT}/{folders(entry, folder)['Materials']}/{instance_name(name)}"
         material = ue.EditorAssetLibrary.load_asset(path)
         if not material:
             raise RuntimeError(f"Import the materials first: {path} is missing")
@@ -153,7 +170,7 @@ def configure_helper(mesh, item):
 def adopt_wood_proxy(manifest, folder, item):
     """Older wood proxies were duplicated from the tree in Unreal, so they lack the importer's owner tag.
     Adopt one only when its tree names it as the wood proxy."""
-    path = f"/OpenGolfSavanna/{folders(manifest['materials'][item['materials'][0]], folder)['Meshes']}/{item['name']}"
+    path = f"{a.MOUNT}/{folders(manifest['materials'][item['materials'][0]], folder)['Meshes']}/{item['name']}"
     library = ue.EditorAssetLibrary
     if item["kind"] != "tree_complex" or not library.does_asset_exist(path):
         return
@@ -182,7 +199,7 @@ def import_meshes(manifest, folder, materials, only=None):
         slots = mesh.get_editor_property("static_materials")
         for index, slot in enumerate(slots):
             slot_name = str(slot.get_editor_property("material_slot_name"))
-            key = next((name for name in materials if slot_name == name or slot_name.startswith(name + "_")), None)
+            key = destination.material_for_slot(slot_name, list(materials))
             if not key:
                 raise RuntimeError(f"{item['name']}: no material for slot {slot_name}")
             mesh.set_material(index, materials[key])
@@ -200,10 +217,13 @@ def import_meshes(manifest, folder, materials, only=None):
                 mesh.set_editor_property("nanite_settings", nanite)
         meshes.append(a.save(mesh))
         proxy = ue.EditorAssetLibrary.get_metadata_tag(mesh, "OpenGolf.WoodProxy")
+        wood_item = helpers.get("tree_complex")
+        if not proxy and wood_item and item.get("kind") == "tree":
+            # A new tree: check its wood helper lines up and tag the tree with it, as a reimport would.
+            proxy = f"{a.MOUNT}/{target['Meshes']}/{wood_item['name']}"
         if proxy and not item.get("collision"):
             import tree_wood_collision
             wood = importlib.reload(tree_wood_collision)
-            wood_item = helpers.get("tree_complex")
             if not wood_item:
                 raise RuntimeError(f"{item['name']} has a wood proxy, but the manifest has no collision mesh; "
                                    "re-export the tree")
@@ -224,18 +244,19 @@ def main(argv):
     if only and not only <= {item["name"] for item in manifest["meshes"]}:
         raise RuntimeError(f"--meshes names a mesh the manifest does not have: {sorted(only)}")
     folder = manifest.get("folder", manifest.get("category"))
+    mount, content_dir, owner = destination.destination(manifest, s.PROJECT)
     if "--textures-only" in argv:
-        with s.savanna_helpers():
+        with s.course_helpers(mount, content_dir, owner):
             textures = import_textures(manifest, folder)
         ue.log(f"SAVANNA_IMPORT_COMPLETE folder={folder} textures={len(textures)} textures_only=True")
         return
-    with s.savanna_helpers():
+    with s.course_helpers(mount, content_dir, owner):
         materials = existing_materials(manifest, folder) if only else build_materials(manifest, folder, reuse)
         meshes = [] if reuse else import_meshes(manifest, folder, materials, only)
         # Rebuilt instances get their wind back (vegetation_wind_assignments.py).
         import ApplyVegetationWind
         importlib.reload(ApplyVegetationWind).apply_materials([mi.get_path_name() for mi in materials.values()])
-    ue.log(f"SAVANNA_IMPORT_COMPLETE folder={folder} meshes={len(meshes)} materials={len(materials)} materials_only={reuse}")
+    ue.log(f"SAVANNA_IMPORT_COMPLETE mount={mount} folder={folder} meshes={len(meshes)} materials={len(materials)} materials_only={reuse}")
 
 
 if __name__ == "__main__":

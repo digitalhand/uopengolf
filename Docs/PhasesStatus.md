@@ -1,11 +1,231 @@
 # Phase status
 
+## Hunter Ranch tree: Island Tree 02 as a blue-oak stand-in · 2026-11-24
+
+### What changed
+
+No open-licence blue oak model was found on Poly Haven or Sketchfab. The owner chose Poly Haven's Island Tree 02
+(CC0) for now; the guide is [Course vegetation](CourseDesign/course_vegetation.md#3-get-a-tree-actor).
+
+- **Source.** `FetchPolyHaven.py island_tree_02` pins the `.blend` and its 10 textures.
+- **Exporter.** The jacaranda's Blender exporter is now the shared `blender/tree_export.py` (`TreeSpec`). The
+  course's `Plugins/HunterRanch/Scripts/ExportIslandTree.py` builds `<art root>/IslandTree02/IslandTree02.blend`:
+  - 9 m tall at scale 1
+  - leaves at 0.9 times and their density at 2.6 times the source's, after scaling
+  - 921,882 triangles: trunk 27,298, twigs 198,725, leaves 695,859
+- **Colour.** The leaf `Tint` (1.051, 0.954, 3.583) and `Saturation` 0.387 are fitted to the foliage colour of the
+  owner's reference photo (`export_rules.chromatic_tint`, `fit_saturation`). A tint alone would need about 5.75 times
+  on the leaves' weak blue channel.
+- **Import.** `ImportSavannaAssets.py` imports a manifest into the plugin it names (`import_destination.py`), using
+  the savanna's shared card and solid parents, and applies its material settings. It now matches mesh slots by
+  exact name, then the longest prefix. The old first-prefix match gave all three island tree slots the trunk
+  material.
+- **Assets.** The assets are in `/HunterRanch/Vegetation/Trees/IslandTree02/` (69 MB), with wind registered as
+  `BroadleafTree` (150 m hold-still).
+- **Blueprint.** `BuildTreeBlueprint.py` with `tree_blueprint_rules.py` made `BP_Tree_IslandTree02`.
+- **Hole 1.** The owner's hand-placed `SM_Jacaranda_Hole1` (scenery only, pitched 10°) was replaced by
+  `BP_Tree_IslandTree02_Hole1` at the same X/Y and yaw, upright on the ground and sunk 10 cm. The map was saved;
+  its backup is `Saved/CourseDesign/Backups/20261125-064948-hole1-tree/`.
+
+### Verified
+
+- Linux, UE 5.8.4, Blender 5.0.1, the owner's DebugGame editor (one editor).
+- Script tests passed:
+  - OpenGolfSavanna scripts 88/88, including the import destination and slot tests
+  - Blender rules 54/54, including the tint and saturation tests
+  - OpenGolfCourse scripts 127/127, including the Blueprint rule tests
+- The jacaranda re-exported through the shared exporter matches its pre-change export: same manifest, same textures
+  and same FBX sizes.
+- MCP checks:
+  - `SM_IslandTree02` has Nanite with Preserve Area.
+  - The wood helper collides on its triangles, with Nanite off; the canopy has one convex hull.
+  - The leaf, twig and trunk slots each have their own instance, with savanna parents.
+  - The Blueprint's parts have the profiles `NoCollision`, `BlockAll` and `OverlapAll`, the right tags and the right
+    visibility.
+  - Nothing changed under `/OpenGolfSavanna`.
+- Look: Blender previews and editor captures of hole 1 are in `Saved/Automation/IslandTree02/`. The crown colour
+  share (1.06, 1.00, 0.84) is close to the photo's (0.98, 1.03, 0.81). Its brightness relative to the ground is
+  0.29, against the photo's 0.17.
+
+### Still unverified
+
+- Shots into the trunk and crown in Play.
+- `UOpenGolf.Course.HunterRanch` and `UOpenGolf.Visual.HunterRanch` after the change.
+- Shimmer and slow-motion sequences, wind at 10 and 20 mph, frame time, and the pack install check.
+- The editor captures are look checks, not shimmer evidence.
+- The hole 1 tree is in `Course.umap`, not a vegetation level.
+
+## Full-width course lobby · 2026-11-24
+
+The round lobby now fills the menu. The course preview and tabs stay above the scrolling settings, and the selected holes, par, distance and start button stay at the bottom. Course information moves under the settings on a narrow window. Back returns to the selected card and search.
+
+- UE 5.8.4 on Linux. The Development game and both the Development and DebugGame editors built successfully.
+- The rendered course browser test now exercises the same lobby from 800×600 through 2560×1080. With Hunter Ranch installed it also exercises the hole picker at 150% text and high contrast. The interactive editor was open after the build. The new automation and rendered captures are pending.
+
+## Hunter Ranch course orientation · 2026-11-24
+
+The course builder now maps east to +X and south to +Y. Terrain, playable surfaces, boundaries,
+the lake, tees, cups and aim points share that conversion. Saved author corrections use geographic
+east/north for both older maps and newly built maps.
+
+- Rebuilt `/HunterRanch/Course/Course` from cached public sources on Linux with UE 5.8.4.
+  The map contains 460 terrain squares, 228 surface regions and one lake. The previous plugin and
+  corrections are backed up under `Saved/CourseDesign/Backups/HunterAxes/`.
+- All 5,760,000 exported heights match the north-up source at the expected sample centres.
+  Route lengths match for all 18 holes. Reading the old and rebuilt assets reproduced the same
+  correction data, including hole 2 White and hole 10 Silver and Red.
+- The Development editor built successfully. All 120 course-script tests passed.
+  The asset-script suite ran 153 tests with four existing skips.
+
+## Round setup tabs, course information and random wind · 2026-11-24
+
+### What changed
+
+The owner sent three screenshots of another simulator's match setup as the model for the round setup page. The rule
+was to take the structure without copying it, and to offer only what the game supports. Owner decisions:
+- tabs **Players · Match · Course**, with the holes at the bottom of Course rather than in their own tab;
+- Players shows the signed-in player, or nothing;
+- a sidebar with **Course information** (location, elevation, par, designer, total distance) and **Course conditions**;
+- no wind choice: each round gets a random wind of 0–13 mph from any direction, fixed for the round;
+- no time of day: rounds are played in daylight;
+- elevation is shown only and does not change ball flight;
+- the remaining "draft" names are renamed.
+
+**Page.**
+- `SRoundSetup` has Players / Match / Course tabs.
+  - Players shows the signed-in player's avatar and name.
+  - Match has the Gimmie switch and the 3 / 6 ft radius.
+  - Course has the green speed, tee chips and the holes.
+- The sidebar (`SCourseInformation`, `SCourseConditions`) shares an `SWrapBox` with the tabs, so it moves under them
+  on a narrow window. Reset to defaults and Start round sit at its foot.
+- The wind slider, quick picks, direction pad and time-of-day chips are gone.
+
+**Wind and daylight.**
+- `FOpenGolfRoundSetup::RollWind` picks a whole speed from 0 to 13 mph and a whole direction from 0 to 359°.
+  The direction is world-fixed (clockwise from +X).
+- The wind is rolled when the page opens, on Play again, and by the game mode when a travel URL carries none.
+- `?Time=` is gone, and old URLs that carry it are ignored.
+- Rounds set the sky's Day preset after `BeginPlay`.
+- The definition's `WindMph` / `WindFromDeg` are removed.
+
+**Course information.**
+- `UGolfCourseDefinition` gains `Location`, `Designer` and `ElevationM`.
+- `prepare_course_site.py` measures the elevation as the median ground inside the course boundary
+  (`GroundGrid.elevation_inside`); for Hunter Ranch that is 263.0 m.
+- The builder copies the elevation from the layout and the `location` / `designer` from the site recipe.
+- Hunter Ranch's recipe now gives "Paso Robles, California" and "Ken Hunter Jr. and Mike McGinnis".
+
+**Names.**
+- `build_course_draft.py` → `build_course.py`, `course_layout_draft.py` → `course_layout.py` (`draft()` →
+  `make_layout()`), and `test_course_layout_draft.py` → `test_course_layout.py`.
+- The builder no longer adds " (draft)" to the display name. Its log marker is `COURSE_BUILD_COMPLETE`.
+- The Course Designer says **Build course** and defaults to `/<Course>/Course`.
+- Tests, packaging and docs use `/HunterRanch/Course/`.
+
+### Verified
+
+- RED before the code:
+  - the plugin test did not compile without `RollWind` / `RoundWindRelativeFromDeg`;
+  - the page test did not compile without the panels header;
+  - the elevation tests failed with `AttributeError`.
+- The Development editor build, the full `-DisableAdaptiveUnity` editor build and the Development game-target build pass
+  with no warnings.
+- The script suites pass: 117 tests in `Plugins/OpenGolfCourse/Scripts`, and 153 in `Assets/Scripts` with 4 existing
+  skips.
+- `elevation_inside` on the staged Hunter Ranch ground gives 263.0 m, matching an independent GDAL check
+  (median 263.0 m, range 245.7–284.7 m inside the boundary).
+
+### Still unverified
+
+- The Hunter Ranch orientation repair rebuilt the course at the new package path with the round setup information.
+  See the orientation entry above for checks against the rebuilt map.
+- **Automation:** `Course.Play.RoundSetup`, `Menu.RoundSetup`, `Course.HunterRanch.BackNine` / `.PickedHoles` /
+  `.RolledWind` / `.Round`, `Range.HolePlay`, `Visual.CourseBrowser` (narrow and wide captures), and every suite still
+  pending from the entry below.
+- The rendered look of the tabs and sidebar, and gamepad navigation between the tabs and the sidebar.
+- **Course pack:** the Hunter Ranch pack must be re-cooked, because the definition's properties changed and its path
+  moves.
+
+## Round setup, fairway speed and Space fast-forward · 2026-11-24
+
+### What changed
+
+The owner asked for a reusable way to set a course round's conditions before play, a game-wide fairway speed, and a way
+to fast-forward a long roll. Owner decisions:
+- a full **Round setup** page opened by a course card's Play;
+- the wind fixed over the course and picked against the first played hole's tee shot;
+- a Space tap skips to where the ball stops, and a hold plays it fast while held;
+- the speed-up uses the game clock (global time dilation).
+
+**Round setup.**
+- `OpenGolfPlay::FOpenGolfRoundSetup` (OpenGolfCourse `Play/`) holds a course round's setup:
+  - tees and green stimp (8–15);
+  - wind: any whole mph from 0 to 25 on a slider, with None, Calm 3 mph and Windy 15 mph as quick picks;
+  - wind direction in 45° steps;
+  - Gimmie on/off at 3 or 6 ft;
+  - time of day: Morning, Midday or Sunset;
+  - the holes, as all, front 9, back 9 or any ticked set.
+- The setup travels in the URL. The game mode reads it in `StartPlay` and plays the holes in ascending order.
+- The range holds the setup's wind in world space: the chosen direction turned by the first tee shot's bearing.
+- The environment's preset is set after `BeginPlay`.
+- `SRoundSetup` and `SChoiceChips` are new. The tee-set button moved from the course card to the page.
+- Each row puts its control under the label, and the chips and hole boxes wrap, so no label is cut off on a narrow page.
+  **Reset to defaults** sits beside **Start round**. Both follow owner feedback from a first look at the page.
+- The final scorecard sums each nine played by the real hole numbers.
+- **Play again** reuses the setup. `UGolfCourseSubsystem` remembers each course's last setup for the session.
+
+**Fairway speed.**
+- Game Defaults › **Fairway speed** offers 6, 7.4 (standard), 8, 9 and 10 ft on the stimpmeter, for every fairway in
+  Training and rounds.
+- At 7.4 ft the fairway is the fitted catalog value, bit for bit. Other readings scale it by the green's stimp solve,
+  which now also takes grass form drag.
+- The disabled "Fairway firmness" and "Time of day" placeholder rows are gone from Game Defaults.
+
+**Gimmie.** The choices are Off, 3 ft and 6 ft everywhere. Saved 5, 8 and 10 ft become 6 ft.
+
+**Fast-forward.**
+- `UShotFastForward` sits on the player controller. While the ball is on the ground, holding Space plays at 4x and a
+  tap plays at 60x until rest. It is back to 1x on rest, on cup capture, on a new shot, when the ball leaves `Rollout`,
+  and with a menu or drill dialog open.
+- The ball's 12-steps-per-frame cap scales with the dilation.
+- The world's `MaxGlobalTimeDilation` is raised to the skip rate at runtime (the engine default is 20).
+- There is no on-screen hint or caption for Space (owner request).
+
+### Verified
+
+- Development editor build, full `-DisableAdaptiveUnity` editor build and Development game-target build pass with no
+  warnings (Linux, 5.8.4).
+- The new headless tests failed to compile before the code existed (RED). Those were `Course.Play.RoundSetup`,
+  `Course.Play.FastForward`, `Physics.FairwayStimp` and the `Menu.PreferenceValidation` additions. The game-side tests
+  (`Menu.RoundSetup`, `Course.HunterRanch.BackNine`/`.PickedHoles`, `Range.FastForward`, the `Range.FrameRates` case and
+  the `Visual.CourseBrowser` step) were written before their code, but no build ran in between.
+- A Python mirror of `StepGround` and the stimp solve shows these readings:
+
+  | Case | Reads | Note |
+  | --- | --- | --- |
+  | Fitted fairway | 7.397 ft | |
+  | 6, 8, 9, 10 ft settings | within 0.005 m of target | |
+  | Stimp-10 green | 9.97 ft | rolling friction 0.07466, matching the documented 0.0747 |
+
+### Still unverified
+
+- **No automation test has run yet.** The owner's DebugGame editor was open, so no second editor was started; every
+  suite listed above, plus `UOpenGolf.Course` and `UOpenGolf.Range`, is pending.
+- Rendered look of the Round setup page (`Visual.CourseBrowser` saves `Menu/RoundSetup-narrow.png`) and gamepad focus
+  on the page.
+- A real round with the setup's wind and time of day, and the Python fairway numbers in the engine.
+- Fast-forward feel in a real round:
+  - fast grass sway during a skip;
+  - the tracer's coarser points at 60x;
+  - Space after a mouse click on a HUD button.
+- The DebugGame rebuild, Windows and packaged builds.
+
 ## Hunter Ranch downloadable course and Course Designer · 2026-11-24
 
 ### What changed
 
 A Codex session began the [Course Designer](CourseDesign/course_designer.md) and a downloadable Hunter Ranch
-on 2026-11-24. This entry closes out that draft and makes it accurate to play. Owner decisions:
+on 2026-11-24. This entry finishes that work and makes it accurate to play. Owner decisions:
 - one map per downloadable course, with Savanna kept as the startup map
 - a public catalog, with the host chosen later
 - keep the OpenStreetMap data and publish the derived layout under ODbL

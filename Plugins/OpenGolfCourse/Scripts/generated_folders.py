@@ -16,7 +16,7 @@ force-deleting a loaded package fails part-way and leaves it corrupt. Such a fol
 the next rebuild, or this script run after restarting the editor, removes it.
 
     py "<project>/Plugins/OpenGolfCourse/Scripts/generated_folders.py" --root /Game/UOpenGolf/Terrain/Generated [--root ...] [--apply]
-    py "<project>/Plugins/OpenGolfCourse/Scripts/generated_folders.py" --course --root /HunterRanch/Draft/Tiles --root /HunterRanch/Draft/Water [--apply]
+    py "<project>/Plugins/OpenGolfCourse/Scripts/generated_folders.py" --course --root /HunterRanch/Course/Tiles --root /HunterRanch/Course/Water [--apply]
 
 Without --apply it only lists what it would remove. Save every open level first.
 """

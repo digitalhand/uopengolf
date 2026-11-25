@@ -39,7 +39,7 @@ public:
         {
             const FKey Keys[] = {EKeys::C, EKeys::T, EKeys::H, EKeys::P, EKeys::Tab, EKeys::R, EKeys::B, EKeys::W,
                 EKeys::LeftMouseButton, EKeys::RightMouseButton, EKeys::F9, EKeys::Escape, EKeys::A, EKeys::D, EKeys::LeftShift,
-                EKeys::RightShift};
+                EKeys::RightShift, EKeys::SpaceBar};
             for (const FKey& Key : Keys)
                 Test->TestTrue(Key.ToString() + TEXT(" is a play key"), Controller->GetKeyMapping()->GetMappings().ContainsByPredicate(
                                                                          [&Key](const FEnhancedActionKeyMapping& Mapping) { return Mapping.Key == Key; }));

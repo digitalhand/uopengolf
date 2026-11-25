@@ -62,6 +62,16 @@ class AssignmentsTest(unittest.TestCase):
             placed = trees if assign.JACARANDA in path else understory if "NatureEssentials" in path else assign.PRESET_MAX_SCALE
             self.assertGreaterEqual(entry.max_scale, placed, path)
 
+    def test_hunter_ranch_tree_sways_and_its_helpers_stay_still(self):
+        self.assertEqual(assign.mesh_wind_distance_m(f"{assign.ISLAND_TREE}/Meshes/SM_IslandTree02"), 150.0)
+        for helper in ("SM_IslandTree02Collision", "SM_IslandTree02Canopy"):
+            self.assertIsNone(assign.mesh_wind_distance_m(f"{assign.ISLAND_TREE}/Meshes/{helper}"))
+        leaves = assign.MATERIALS[f"{assign.ISLAND_TREE}/Materials/MI_IslandTree02Leaves"]
+        self.assertEqual((leaves.profile, leaves.flutter), ("BroadleafTree", True))
+        for wood in ("MI_IslandTree02", "MI_IslandTree02Branches"):
+            self.assertFalse(assign.MATERIALS[f"{assign.ISLAND_TREE}/Materials/{wood}"].flutter, wood)
+        self.assertGreaterEqual(leaves.max_scale, assign.ISLAND_TREE_MAX_SCALE)
+
     def test_object_paths_match_their_package(self):
         self.assertEqual(assign.mesh_wind_distance_m(f"{assign.JACARANDA}/Meshes/SM_Jacaranda.SM_Jacaranda"), 150.0)
         self.assertEqual(assign.mesh_wind_distance_m(f"{assign.GRASS_MEDIUM}EdgeRamp_A.SM_GrassMedium_30cm_EdgeRamp_A"), 90.0)

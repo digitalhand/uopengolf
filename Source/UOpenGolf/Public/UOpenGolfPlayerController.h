@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GameFramework/PlayerController.h"
+#include "Play/OpenGolfRoundSetup.h"
 #include "Play/OpenGolfWindSetting.h"
 #include "UOpenGolfPlayerController.generated.h"
 
@@ -12,6 +13,7 @@ class SMainMenu;
 class UGolfCourseDefinition;
 class UInputAction;
 class UInputMappingContext;
+class UShotFastForward;
 struct FInputActionValue;
 struct FKey;
 
@@ -33,8 +35,8 @@ struct UOPENGOLF_API FOpenGolfCustomShot
 /**
  * Play controls, course travel and the shot camera. Keys: C connect, T disconnect, H hit selected shot, P presets, Tab
  * next club, R tee up the ball again, B place the ball in Training (then click the ground), hold A/D to turn the aim
- * left/right, W the wind controls (Training), F9 record shots on/off, Escape menu (or cancel placing, or close the wind
- * controls). A course round opens the final scorecard when the game mode announces OnRoundComplete. The camera
+ * left/right, W the wind controls (Training), F9 record shots on/off, hold Space to fast-forward a rolling ball or tap
+ * it to skip to where it stops (UShotFastForward), Escape menu (or cancel placing, or close the wind controls). A course round opens the final scorecard when the game mode announces OnRoundComplete. The camera
  * waits behind the ball along the aim line, holds that view for half a second after the hit, then follows low behind the
  * ball in flight and at rest, then glides back to the address view when the ball is ready for the next shot. On or near
  * the green the address view is lower and closer, looking along the putt. Within 8 ft of the cup the follow view slowly
@@ -47,7 +49,10 @@ class UOPENGOLF_API AUOpenGolfPlayerController : public APlayerController
     GENERATED_BODY()
 
 public:
+    AUOpenGolfPlayerController();
     bool IsMainMenuOpen() const { return bMainMenuOpen; }
+    /** Space on a rolling ball. */
+    const UShotFastForward* GetFastForward() const { return FastForward; }
     /** The menu is the pause menu (Training was entered) rather than the main menu. */
     bool IsPauseMenu() const;
     void SetMainMenuOpen(bool bOpen);
@@ -101,8 +106,8 @@ public:
     bool IsCourseRound() const;
     /** A course round whose ball has dropped; see AUOpenGolfGameMode::IsRoundComplete. */
     bool IsRoundComplete() const;
-    /** Travels to Course's map for a fresh round. */
-    void StartCourse(const UGolfCourseDefinition& Course, int32 TeeIndex = 0);
+    /** Travels to Course's map for a fresh round played with Setup (its tees, conditions and holes). */
+    void StartCourse(const UGolfCourseDefinition& Course, const OpenGolfPlay::FOpenGolfRoundSetup& Setup);
     /** Ends the round and opens the main menu at the Courses browser. */
     void ReturnToCourses();
 
@@ -231,6 +236,9 @@ private:
 
     UPROPERTY()
     TObjectPtr<ACameraActor> ShotCamera;
+
+    UPROPERTY(VisibleAnywhere, Category = "UOpenGolf")
+    TObjectPtr<UShotFastForward> FastForward;
 
     // Glide back to the tee view after the ball is teed up again.
     FVector ReturnStartLocation = FVector::ZeroVector;

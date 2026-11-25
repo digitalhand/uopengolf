@@ -72,6 +72,7 @@ release page instead.
 | **R** | In free Training, reset the ball to its tee or practice lie |
 | **B** | In free Training, place the ball, then click the ground where it should go (right-click or Escape cancels) |
 | **W** | In Training, open or close the wind controls under the wind indicator (the same as clicking the indicator) |
+| **Space** | While the ball rolls on the ground (not in the air): hold to play the roll four times faster, or tap to skip to where it stops. The ball stops in the same place either way, and the game is back at normal speed the moment it rests or drops into the cup. Nothing on screen marks it. In F6 mode Space presses the focused HUD button instead |
 | **A** / **D** | Turn the aim line left / right: a tap turns exactly 0.25° (0.1° with **Shift**), a hold starts slowly and speeds up to 20°/s (with **Shift**, stays at 2°/s), up to 45° either way (from the target line on the range, from the line to the cup on the hole), while the ball waits for the shot. The camera turns with it, the aim stays set across shots, and Offline is measured from it. Use it to hit into the rough |
 | **~** | Unreal console, for the [settings](#settings) below |
 | **Escape** | During a drill, open or dismiss the drill dialog. In free Training, close the current tool or open the pause menu |
@@ -159,7 +160,8 @@ the tee. The tiles keep the last shot until the next one.
 
 ### Playing the hole
 
-Open **Courses**, select **Savanna Range**, and choose **Play**. Wind is fixed at 3 mph from right to left. The pin is 400 yards
+Open **Courses**, select **Savanna Range**, and choose **Play**, then **Start round** on the [round setup](#round-setup). Its wind
+starts at 3 mph from right to left. The pin is 400 yards
 out on a gently contoured green, with a fairway bunker on the left of the landing area and a
 bunker right of the green.
 
@@ -181,6 +183,41 @@ bunker right of the green.
 - After the banner, the final scorecard shows par, strokes and score relative to par (**E** for level, otherwise
   such as **+1** or **-2**). Choose **Play again** for a fresh round or **Courses** to return to the browser.
 
+### Round setup
+
+**Play** on a course card opens the course's **Round setup** page, named after the course. Every course has the same
+full-width lobby. **Back to courses**, **Escape**, or controller **Back** returns to your selected card and search. The page remembers your choices for each course until the game
+closes.
+
+Three tabs hold the choices:
+
+| Tab | Row | Choices | Starts at |
+| --- | --- | --- | --- |
+| Players | | Your avatar and name when signed in. You can also play signed out. | |
+| Match | Gimmie | On or off | **Settings › Game Defaults › Gimmie radius** |
+| Match | Gimmie radius | 3 ft or 6 ft | **Settings › Game Defaults › Gimmie radius** |
+| Course | Green speed | Stimp 8–15 ft, from **Slower** to **Faster**: 8–9 Slow, 10–11 Medium, 12–13 Fast, 14–15 Tour | **Settings › Game Defaults › Stimp** |
+| Course | Tees | The course's tee sets (only when it has more than one) | The first set |
+| Course | Holes to play | **All**, **Front 9** or **Back 9** (on courses with more than nine holes), or tick the holes to play; **Custom** shows a hand-picked set. A line under the boxes adds up the holes, par and length | All |
+
+Course details sit beside the settings on wide windows and follow them in the same scrolling area on narrow windows.
+
+- **Course information:** where the course is, its elevation, par, designer, and its total length from the picked
+  tees. Elevation is information only; the ball flies the same on every course.
+- **Course conditions:** the round's wind. It is not a choice: each round gets a random wind from calm to 13 mph,
+  from any direction. It stays fixed over the whole course, as it does outside, so it plays differently on each hole.
+  The panel names it against the tee shot of the first hole you picked, such as "Right to left · hole 1".
+
+The bottom bar stays visible while you scroll. It shows the selected holes, par and distance. **Reset to defaults** restores the starting choices and keeps the wind. **Start round** begins play.
+
+- Rounds are played in daylight.
+- Holes play in order of their numbers. With nothing ticked, **Start round** waits and the page says why. The
+  final scorecard adds up each nine you played (**Front 9**, **Back 9**) and the total against par for the holes played.
+- **Play again** on the final scorecard starts another round with the same choices and a new wind.
+- The wind indicator shows the round's wind for the hole you are on, and the HUD's wind controls stay closed in a round.
+- Fairway speed is not part of the setup: one value in **Settings › Game Defaults** applies to every course and to
+  Training.
+
 ### Downloaded courses and 18-hole rounds
 
 Courses that are not part of the game appear in **Courses** as cards with **Download** when a course catalog is
@@ -188,12 +225,12 @@ configured. A downloaded course plays straight away and keeps playing offline. I
 version is published and **Uninstall**; an update and an uninstall finish the next time the game starts.
 
 Hunter Ranch (Paso Robles, California) is the first downloadable course: 18 holes, par 72, from the club's published
-scorecard. It is a draft, and its tees and cups are estimates (see [Course Designer](CourseDesign/course_designer.md#limits)).
+scorecard. Its tees and cups are placed from map data (see [Course Designer](CourseDesign/course_designer.md#limits)).
 
-- Select the card, choose the tees with **Tees** (Blue, White, Combo, Silver or Red; each shows its total length), then
-  **Play**.
+- Select the card and choose **Play**. On the [round setup](#round-setup), pick the tees (Blue, White, Combo, Silver or
+  Red), the green speed, the Gimmie and the holes, then **Start round**.
 - Each hole opens along its line of play, so the first aim follows a dogleg. After each hole-out the score is kept and
-  the next hole starts; after hole 18 the scorecard shows holes 1–9, 10–18 and the total.
+  the next picked hole starts; after the last one the scorecard shows each nine played and the total.
 - A ball that comes to rest in a lake or out of bounds costs one penalty stroke and is replayed from where it was
   hit; the line under the hole tiles says which. A ball that carries a lake and lands beyond it plays on.
 
@@ -389,7 +426,9 @@ remain between Play sessions in the same editor process.
 | Wind speed | 0 mph (calm) | In Play: click the wind indicator (up to 30 mph). Saved with the map: select **Range settings → Details → UOpenGolf → Wind → Wind Speed (mph)** |
 | Wind direction | 0° (headwind) | In Play: the wind controls' **Direction**. Saved with the map: **Wind From (degrees)**: `90` from the right, `180` tailwind, `270` from the left |
 | Editor flag preview | On | **Preview Wind in Editor**; viewport Realtime must be enabled |
-| Green speed | Stimp 10 ft | Console: `uopengolf.GreenStimp 8` to `15`; applies from the next shot |
+| Green speed | Stimp 10 ft | **Settings › Game Defaults › Stimp** (Training, and the starting choice for a round); a round's own on its [round setup](#round-setup). Console: `uopengolf.GreenStimp 8` to `15`; applies from the next shot |
+| Fairway speed | Standard (7.4 ft, the calibrated fairway) | **Settings › Game Defaults › Fairway speed**: 6, 7.4, 8, 9 or 10 ft on the stimpmeter, for every fairway in the game from the next shot |
+| Gimmie radius | Off | **Settings › Game Defaults › Gimmie radius**: Off, 3 ft or 6 ft (earlier 5, 8 and 10 ft choices became 6 ft); a round's own on its round setup |
 | Auto-reconnect after a dropped link | On, up to twelve attempts | `UOpenLaunchMonitorSubsystem::bAutoReconnect` |
 | Left-handed | Off | `UOpenLaunchMonitorSubsystem::SetLeftHanded` |
 

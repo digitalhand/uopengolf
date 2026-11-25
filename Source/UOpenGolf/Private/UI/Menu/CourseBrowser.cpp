@@ -160,34 +160,12 @@ TSharedRef<SWidget> SCourseBrowser::MakeDownloadCard(const FString& Id, const FS
 TSharedRef<SWidget> SCourseBrowser::MakeCardActions(const UGolfCourseDefinition& Course)
 {
     const TWeakObjectPtr<const UGolfCourseDefinition> Weak(&Course);
-    const TSharedRef<int32> TeeIndex = MakeShared<int32>(0);
-    const int32 TeeCount = Course.Layout.IsEmpty() ? 0 : Course.Layout[0].Tees.Num();
     const TSharedRef<SVerticalBox> Actions = SNew(SVerticalBox);
-    if (TeeCount > 1)
-    {
-        // One button steps through the scorecard's tee sets; Play starts from the one shown.
-        Actions->AddSlot().AutoHeight().Padding(0, 0, 0, 6)
-        [
-            SNew(SButton).ButtonStyle(&Style->Button).Tag(TEXT("CourseTees"))
-            .OnClicked_Lambda([TeeIndex, TeeCount] { *TeeIndex = (*TeeIndex + 1) % TeeCount; return FReply::Handled(); })
-            [
-                SNew(STextBlock).Font(HudStyle::Font("Regular", MenuStyle::BodySize)).ColorAndOpacity(Style->TextColor)
-                .Text_Lambda([Weak, TeeIndex]
-                {
-                    const UGolfCourseDefinition* Picked = Weak.Get();
-                    if (!Picked || !Picked->Layout[0].Tees.IsValidIndex(*TeeIndex))
-                        return FText::GetEmpty();
-                    const FName SetName = Picked->Layout[0].Tees[*TeeIndex].SetName;
-                    return FText::FromString(FString::Printf(TEXT("Tees: %s  ·  %s"), *SetName.ToString(),
-                        *GolfSettings::RoundDistance(Picked->TeeSetYards(SetName) * 0.9144f)));
-                })
-            ]
-        ];
-    }
-    Actions->AddSlot().AutoHeight()[MakeButton(*Style, FText::FromString(TEXT("Play")), [this, Weak, TeeIndex]
+    // The tees and the round's conditions are picked on the Round setup page that Play opens.
+    Actions->AddSlot().AutoHeight()[MakeButton(*Style, FText::FromString(TEXT("Play")), [this, Weak]
     {
         if (const UGolfCourseDefinition* Picked = Weak.Get())
-            OnPlay.ExecuteIfBound(*Picked, *TeeIndex);
+            OnPlay.ExecuteIfBound(*Picked);
     }, true)];
     const FCoursePack* Pack = Downloads.IsValid() ? Downloads->FindInstalledDefinition(Course.GetPathName()) : nullptr;
     if (!Pack)

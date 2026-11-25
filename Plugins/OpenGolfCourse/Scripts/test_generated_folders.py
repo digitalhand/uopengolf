@@ -92,18 +92,18 @@ class RunFoldersTests(unittest.TestCase):
 
 class TileFolderTests(unittest.TestCase):
     def test_a_replaced_tile_goes_and_the_live_tile_stays(self):
-        tiles = "/HunterRanch/Draft/Tiles"
+        tiles = "/HunterRanch/Course/Tiles"
         live, old = f"{tiles}/CourseTile_0_0_01A20F3A24AE785298BF8625BD59E809", f"{tiles}/CourseTile_0_0_01A20F3A235772C394C27D0FAB511229"
         live_mesh, old_mesh = asset(live, "SM_Rough"), asset(old, "SM_Rough")
-        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Draft/Course"]})
+        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Course/Course"]})
         removed, kept = remove_unreferenced(library, [tiles], prefixes=COURSE_PREFIXES, log=lambda _line: None)
         self.assertEqual((removed, kept), ([old], [live]))
 
     def test_a_rebuilt_lake_goes_and_the_live_lake_stays(self):
-        water = "/HunterRanch/Draft/Water"
+        water = "/HunterRanch/Course/Water"
         live, old = f"{water}/Water_01A20F3A24AE785298BF8625BD59E809", f"{water}/Water_01A20F3A235772C394C27D0FAB511229"
         live_mesh, old_mesh = asset(live, "SM_Lake1"), asset(old, "SM_Lake1")
-        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Draft/Course"]})
+        library = FakeLibrary([live_mesh, old_mesh], {live_mesh.split(".")[0]: ["/HunterRanch/Course/Course"]})
         removed, kept = remove_unreferenced(library, [water], prefixes=COURSE_PREFIXES, log=lambda _line: None)
         self.assertEqual((removed, kept), ([old], [live]))
 

@@ -104,4 +104,21 @@ namespace OpenFairway
          */
         OPENFAIRWAYPHYSICS_API float RollingFriction(float StimpFeet, float Viscosity = GrassViscosity);
     } // namespace GreenSpeed
+
+    /**
+     * Fairway speed as a stimp reading, one setting for the whole game. The standard is the fitted fairway
+     * (SurfaceCatalog), which reads about 7.4 ft; another reading scales its rolling friction by the stimp solve with the
+     * fairway's grass drag, so the fitted roll-out is kept unless the reading changes. Only the fairway follows it.
+     */
+    namespace FairwaySpeed
+    {
+        constexpr float StandardStimpFeet = 7.4f;
+        constexpr float MinStimpFeet = 5.0f;
+        constexpr float MaxStimpFeet = 12.0f;
+
+        /** Within the range; 0, below-zero and broken readings play the standard. */
+        OPENFAIRWAYPHYSICS_API float Clamp(float StimpFeet);
+        /** The fairway's rolling friction at this reading: exactly the fitted value at the standard. */
+        OPENFAIRWAYPHYSICS_API float RollingFriction(float StimpFeet);
+    } // namespace FairwaySpeed
 } // namespace OpenFairway

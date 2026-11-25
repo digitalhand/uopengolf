@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Rendered review of the Hunter Ranch draft: tee, approach and green views of holes 1, 9 and 12, each held still for
+// Rendered review of Hunter Ranch: tee, approach and green views of holes 1, 9 and 12, each held still for
 // 20 frames to show shimmer, with a slow sideways pan at each green. Frame times are recorded but are provisional:
 // captures run off screen and save a file every frame. Also checks that building the hole's minimap picture never holds
 // the game thread for long, since a hole change builds one while the camera moves to the next tee.
@@ -7,15 +7,19 @@
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Editor.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "FileHelpers.h"
 #include "GolfCourseDefinition.h"
 #include "HAL/FileManager.h"
+#include "ImageUtils.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "OpenGolfTerrain.h"
+#include "Serialization/BulkDataScopedLock.h"
 #include "ShaderCompiler.h"
 #include "Tests/AutomationEditorCommon.h"
 #include "UOpenGolfGameMode.h"
@@ -25,7 +29,7 @@
 
 namespace HunterVisualTestDetail
 {
-    const TCHAR* const CoursePath = TEXT("/HunterRanch/Draft/DA_HunterRanch.DA_HunterRanch");
+    const TCHAR* const CoursePath = TEXT("/HunterRanch/Course/DA_HunterRanch.DA_HunterRanch");
     constexpr int32 Holes[] = {1, 9, 12};
     constexpr int32 FramesPerView = 20;
     constexpr double PanCmPerFrame = 5;
@@ -53,6 +57,11 @@ namespace HunterVisualTestDetail
             const FVector2D Aim(Hole.RoutingCm.IsEmpty() ? Hole.CupCm : Hole.RoutingCm[0]);
             const FVector2D Forward = (Aim - Tee).GetSafeNormal();
             Result.Add({FString::Printf(TEXT("Hole%02d-Tee"), Number), OnGround(D, Tee - Forward * 300, 170), OnGround(D, Aim, 0)});
+            if (Number == 1)
+            {
+                const FVector2D AboveFairway = Tee + Forward * 8500;
+                Result.Add({TEXT("Hole01-Flyover"), OnGround(D, AboveFairway, 1850), OnGround(D, Cup, 0)});
+            }
             const FVector2D Last(Hole.RoutingCm.IsEmpty() ? Hole.Tees[0].PositionCm : Hole.RoutingCm.Last());
             const FVector2D Back = (Last - Cup).GetSafeNormal();
             Result.Add({FString::Printf(TEXT("Hole%02d-Approach"), Number), OnGround(D, Cup + Back * 11000, 200), OnGround(D, Cup, 0)});
@@ -99,6 +108,12 @@ namespace HunterVisualTestDetail
         {
             if (Range.IsHoleMapBuilding() || !Range.GetHoleMapTexture())
                 return false;
+            const FTexture2DMipMap& Mip = Range.GetHoleMapTexture()->GetPlatformData()->Mips[0];
+            const TBulkDataScopedReadLock<uint8> Lock(Mip.BulkData);
+            const auto* Pixels = reinterpret_cast<const FColor*>(Lock.GetData());
+            TArray64<uint8> Png;
+            FImageUtils::PNGCompressImageArray(Mip.SizeX, Mip.SizeY, {Pixels, int64(Mip.SizeX) * Mip.SizeY}, Png);
+            Test->TestTrue(TEXT("Hole 1 map saved"), FFileHelper::SaveArrayToFile(Png, *(Directory / TEXT("Hole01-Map.png"))));
             const double Ms = Range.GetHoleMapGameThreadMs();
             Test->AddInfo(FString::Printf(TEXT("Hole map: longest game-thread step %.1f ms"), Ms));
             Test->TestTrue(TEXT("Building the hole map never holds the game thread for 100 ms"), Ms > 0 && Ms < 100);
@@ -193,7 +208,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHunterVisualTest, "UOpenGolf.Visual.HunterRanc
     EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter | EAutomationTestFlags::NonNullRHI)
 bool FHunterVisualTest::RunTest(const FString&)
 {
-    if (!FEditorFileUtils::LoadMap(TEXT("/HunterRanch/Draft/Course"), false, true))
+    if (!FEditorFileUtils::LoadMap(TEXT("/HunterRanch/Course/Course"), false, true))
         return false;
     ADD_LATENT_AUTOMATION_COMMAND(FStartPIECommand(false));
     FAutomationTestFramework::Get().EnqueueLatentCommand(MakeShared<HunterVisualTestDetail::FCaptureHunter>(this));

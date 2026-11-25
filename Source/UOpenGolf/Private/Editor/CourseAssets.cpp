@@ -87,9 +87,6 @@ namespace
         Course->Holes = 1;
         Course->Par = AUOpenGolfRange::Par;
         Course->LengthM = AUOpenGolfRange::HoleDistanceM;
-        // A light crosswind from the right, the same for every round.
-        Course->WindMph = 3.0f;
-        Course->WindFromDeg = 90.0f;
         SaveAsset(*Course);
     }
 

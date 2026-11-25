@@ -13,8 +13,17 @@ The downloadable Hunter Ranch course (`Plugins/HunterRanch`, not part of the bas
 - **USDA NAIP 2022** aerial imagery (US public domain), used only to review tee and cup placement. It is cached
   outside Git under `Saved/CourseDesign/` and is never shipped.
 
+The orientation repair rebuilt the Unreal assets from the same geographic sources. The published layout and author corrections remain in east/north metres.
+
 The course uses the existing course-kit surfaces and a new procedural `M_Water` lake material (no textures) in
-`Plugins/OpenGolfCourse/Content/Materials/`. No other third-party art was added.
+`Plugins/OpenGolfCourse/Content/Materials/`. On 2026-11-24 the course gained its tree: Poly Haven's
+[Island Tree 02](https://polyhaven.com/a/island_tree_02) (CC0), a stand-in for the native blue oak, in
+`Plugins/HunterRanch/Content/Vegetation/Trees/IslandTree02/` with its notice in `Plugins/HunterRanch/NOTICE.md`.
+No other third-party art was added.
+
+Art used only by a downloadable course goes in that course's plugin, with its notices in the plugin's `NOTICE.md`
+(owner decision, 2026-11-24). A course pack carries only its own plugin, so it can reference shared art only when the
+base game already contains it. See [Course vegetation](CourseDesign/course_vegetation.md#where-things-live).
 
 ## Cut-turf rough — 2026-11-20
 

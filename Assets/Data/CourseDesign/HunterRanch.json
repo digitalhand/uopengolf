@@ -1,5 +1,7 @@
 {
   "name": "Hunter Ranch",
+  "location": "Paso Robles, California",
+  "designer": "Ken Hunter Jr. and Mike McGinnis",
   "crs": "EPSG:26910",
   "origin_m": [
     715200,

@@ -150,11 +150,13 @@ namespace OpenFairway
     FSurfaceSettings FResolvedShotParams::ResolveSurface(ESurface Surface, const FBallPhysicsProfile& Profile) const
     {
         const FSurfacePhysicsSettings& Base = SurfaceCatalog::Get(Surface);
-        // A green's rolling friction is its stimp speed, solved with its grass drag; both are set on the profile, as is sand's.
+        // A green's rolling friction is its stimp speed, solved with its grass drag; both are set on the profile, as are
+        // the fairway's stimp and sand's rolling friction.
         const bool bGreen = Surface == ESurface::Green;
-        const float BaseRolling = bGreen                       ? GreenSpeed::RollingFriction(Profile.GreenStimpFeet, Profile.GreenGrassViscosity)
-                                  : Surface == ESurface::Sand ? FMath::Max(0.0f, Profile.SandRollingFriction)
-                                                              : Base.RollingFriction;
+        const float BaseRolling = bGreen                          ? GreenSpeed::RollingFriction(Profile.GreenStimpFeet, Profile.GreenGrassViscosity)
+                                  : Surface == ESurface::Fairway ? FairwaySpeed::RollingFriction(Profile.FairwayStimpFeet)
+                                  : Surface == ESurface::Sand    ? FMath::Max(0.0f, Profile.SandRollingFriction)
+                                                                 : Base.RollingFriction;
         const float BaseViscosity = bGreen ? Profile.GreenGrassViscosity : Base.GrassViscosity;
 
         FSurfaceSettings Settings;

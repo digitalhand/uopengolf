@@ -2,6 +2,8 @@
 #include "Course/GolfCourseSubsystem.h"
 #include "GolfCourseDefinition.h"
 #include "Course/CourseDownloads.h"
+#include "Course/RoundConditions.h"
+#include "OpenGolfSettings.h"
 #include "Interfaces/IPluginManager.h"
 #include "Algo/Sort.h"
 #include "Engine/AssetManager.h"
@@ -101,4 +103,20 @@ const UGolfCourseDefinition* UGolfCourseSubsystem::FindCourse(const FString& Opt
 FString UGolfCourseSubsystem::TravelOptions(const UGolfCourseDefinition& Course)
 {
     return FString::Printf(TEXT("%s=%s"), PlayOption, *Course.GetPrimaryAssetId().PrimaryAssetName.ToString());
+}
+
+OpenGolfPlay::FOpenGolfRoundSetup UGolfCourseSubsystem::LastSetup(const UGolfCourseDefinition& Course) const
+{
+    if (const OpenGolfPlay::FOpenGolfRoundSetup* Remembered = Setups.Find(Course.GetFName()))
+    {
+        OpenGolfPlay::FOpenGolfRoundSetup Setup = *Remembered;
+        Setup.Validate(RoundConditions::HoleCount(Course), RoundConditions::TeeCount(Course));
+        return Setup;
+    }
+    return RoundConditions::Defaults(Course, GolfSettings::Get());
+}
+
+void UGolfCourseSubsystem::RememberSetup(const UGolfCourseDefinition& Course, const OpenGolfPlay::FOpenGolfRoundSetup& Setup)
+{
+    Setups.Add(Course.GetFName(), Setup);
 }

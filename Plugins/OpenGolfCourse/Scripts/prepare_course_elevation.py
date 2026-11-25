@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 from osgeo import gdal
 
+from course_coordinates import unreal_xy
+
 
 def prepare(source, destination, origin):
     gdal.UseExceptions()
@@ -32,13 +34,12 @@ def prepare(source, destination, origin):
     samples = samples * (1 if scale is None else scale) + (band.GetOffset() or 0) - origin[2]
     if samples.min() < -256 or samples.max() > 255.99:
         raise ValueError("Choose a vertical origin that fits the Landscape height range.")
-    first_x = west + spacing / 2 - origin[0]
-    first_y = north - (height - 0.5) * spacing - origin[1]
+    first_x, first_y = unreal_xy((west + spacing / 2 - origin[0], north - spacing / 2 - origin[1]))
     with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as stream:
         temp = Path(stream.name)
         try:
             stream.write(struct.pack("<4siiddd", b"OGE1", width, height, first_x, first_y, spacing))
-            stream.write(samples[::-1].astype("<f4").tobytes())
+            stream.write(samples.astype("<f4").tobytes())
             stream.close()
             os.replace(temp, destination)
         finally:

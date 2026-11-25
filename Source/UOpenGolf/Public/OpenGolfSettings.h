@@ -23,6 +23,8 @@ namespace GolfSettings
         int32 CalculatedSpin = 0, Reconnect = 1, Stimp = 10, GimmieFeet = 0, WindMph = -1;
         /** Course rounds pick the club for each shot from its lie and distance (0/1). */
         int32 AutoClub = 1;
+        /** Fairway speed for the whole game, in tenths of a stimp foot: 60, 74 (the fitted standard), 80, 90 or 100. */
+        int32 FairwayStimpTenths = 74;
         /** Launch-monitor provider (ELaunchMonitorProvider: 0 Square Home, 1 Open Connect), its TCP port, and LAN access (0/1). */
         int32 Provider = 0, OpenConnectPort = LaunchMonitorDefaultOpenConnectPort, OpenConnectLan = 0;
         void Validate();
@@ -31,6 +33,8 @@ namespace GolfSettings
         bool operator==(const FPreferences& Other) const;
         bool operator!=(const FPreferences& Other) const { return !(*this == Other); }
     };
+    /** The preferences' fairway speed as a stimp reading in feet (AOpenFairwayBall::FairwayStimpFeet). */
+    UOPENGOLF_API float FairwayStimpFeet(const FPreferences& P);
     UOPENGOLF_API FString DiagnosticPath(const FPreferences& P);
     UOPENGOLF_API FString RecordingPath(const FPreferences& P);
     UOPENGOLF_API FString ValidateDataDirectories(const FPreferences& P);

@@ -20,9 +20,10 @@ import xml.etree.ElementTree as ET
 
 from osgeo import gdal
 
+from course_coordinates import GRID_FILE
 import course_corrections
 from prepare_course_elevation import prepare
-from course_layout_draft import WATER_KINDS, draft, rings_from_ways
+from course_layout import WATER_KINDS, make_layout, rings_from_ways
 from ground_grid import GroundGrid
 
 WATER_TAGS = {"natural": ("water",), "water": ("pond", "lake", "reservoir"), "golf": WATER_KINDS}
@@ -133,10 +134,12 @@ def build(site_path, config, folder):
                            xRes=spacing, yRes=spacing, resampleAlg="bilinear", dstNodata=-999999)
         raster.FlushCache()
         raster = None
-        prepare(stage / "ground.tif", stage / "ground.oge", config["origin_m"])
+        prepare(stage / "ground.tif", stage / GRID_FILE, config["origin_m"])
         ground = GroundGrid.open(stage / "ground.tif", config["origin_m"])
         recipe = recipe_record(site_path, config)
-        result = draft(config, features, ground.slope, course_corrections.read(recipe))
+        result = make_layout(config, features, ground.slope, course_corrections.read(recipe))
+        # Information for the round setup's Course information: the median ground inside the boundary.
+        result["elevation_m"] = ground.elevation_inside(result["boundary_m"], config["origin_m"]) if result["boundary_m"] else None
         (stage / "source.geojson").write_text(json.dumps(features), encoding="utf-8")
         (stage / "source_layout.json").write_text(json.dumps(result), encoding="utf-8")
         (stage / "route_review.json").write_text(json.dumps(review, indent=2), encoding="utf-8")

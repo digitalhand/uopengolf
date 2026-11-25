@@ -123,6 +123,7 @@ private:
     friend struct FOpenGolfPermissionTestAccess;
     friend class FOpenGolfPlayerSettingsTest;
     friend class FOpenGolfPlayerBadgeTest;
+    friend class FRoundSetupMenuTest;
 #endif
     friend class FOpenGolfPanelHeadingTest;
 #if WITH_DEV_AUTOMATION_TESTS

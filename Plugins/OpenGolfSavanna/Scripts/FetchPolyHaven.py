@@ -40,6 +40,32 @@ ASSETS = {
         ("textures/jacaranda_tree_trunk_nor_gl_2k.png", _JACARANDA + "trunk_nor_gl_2k.png", "d594c65dc554b88081689346d00ea751", 20503957),
         ("textures/jacaranda_tree_trunk_rough_2k.png", _JACARANDA + "trunk_rough_2k.png", "df7d8846780826e8686f2b1b7a36f0c9", 6375484),
     ],
+    # Hunter Ranch's tree (ExportIslandTree.py in the course plugin): the .blend keeps the geometry-node leaves
+    # and twigs; these are the textures it opens, including the trunk's EXR normal and roughness.
+    "island_tree_02": [
+        ("island_tree_02_2k.blend", _MODELS + "blend/2k/island_tree_02/island_tree_02_2k.blend",
+         "a2c339169748f43a127de6e993909251", 38797376),
+        ("textures/island_tree_02_branches_diff_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_branches_diff_2k.png",
+         "f288bf34ce29dde5e1675374edb9cd04", 19963299),
+        ("textures/island_tree_02_branches_nor_gl_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_branches_nor_gl_2k.png",
+         "98af2803beca2055fde16a4ca8f2151a", 20594936),
+        ("textures/island_tree_02_branches_rough_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_branches_rough_2k.png",
+         "f2c70d75834aa97f7ef173c119f92f8d", 4730461),
+        ("textures/island_tree_02_diff_2k.jpg", _MODELS + "jpg/2k/island_tree_02/island_tree_02_diff_2k.jpg",
+         "1593cf55910abff0a418b2799870471a", 2684467),
+        ("textures/island_tree_02_leaves_alpha_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_leaves_alpha_2k.png",
+         "063774afef8fe1d35ce52d56bf41bf81", 139077),
+        ("textures/island_tree_02_leaves_diff_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_leaves_diff_2k.png",
+         "d54fd06a5611278810df55d427cc4b1b", 6428036),
+        ("textures/island_tree_02_leaves_nor_gl_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_leaves_nor_gl_2k.png",
+         "3d3d53270e1a5d6be297307c7ab8629c", 10109651),
+        ("textures/island_tree_02_leaves_rough_2k.png", _MODELS + "png/2k/island_tree_02/island_tree_02_leaves_rough_2k.png",
+         "a49ed311f1d7f504a17d917ffbc83bd1", 2723975),
+        ("textures/island_tree_02_nor_gl_2k.exr", _MODELS + "exr/2k/island_tree_02/island_tree_02_nor_gl_2k.exr",
+         "b5067ab2c01d1fef4244c6770da9e960", 8745504),
+        ("textures/island_tree_02_rough_2k.exr", _MODELS + "exr/2k/island_tree_02/island_tree_02_rough_2k.exr",
+         "643e4642606416145ba90d578ac423f2", 3207462),
+    ],
     # Rough grass. Each .blend is a geometry-node tuft set; its "include" textures (jpg/exr) are the
     # ones the project opens with, and the PNG maps are the sources ExportPolyHavenGrass.py exports.
     # Ground under the grass tiles: a dense leafy turf seen from above, so gaps between blades read as

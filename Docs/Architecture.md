@@ -9,7 +9,7 @@ strokes and putts. In range mode, the GameMode returns a stopped ball to the tee
 its last shot result until the next launch. The HUD
 adds a Slate widget (`SRangeHud`) with shot tiles and a course header with a settings button; the player controller
 binds keys (C connect, T disconnect, H replay shot, Tab next club, R tee up, A/D held
-to turn the aim) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
+to turn the aim, Space to fast-forward a rolling ball) and runs the shot camera along the ball's aim line. The keys are Enhanced Input
 actions and one mapping context built in code (no input assets); a HUD panel that holds keyboard
 focus hands its keys to the controller (`ForwardUIKey`), so they act as they would from the viewport. There is no player pawn. A course round supports a par 4 and gimmies; Training places practice lies. `UOpenGolf`
 is the saved range map used for editor and game startup and the bundled course; each downloadable course has its own
@@ -53,6 +53,18 @@ finished game's result waits `AUOpenGolfGameMode::AddressDelayS`, so the player 
 stopped. The overhead map always captures the full hole using the original cup. Its live pin and
 elevation use the active cup.
 
+### Fast-forward
+
+`UShotFastForward`, a component on the player controller, owns Space. Its tap and hold rules are
+`OpenGolfPlay::FOpenGolfFastForward` (OpenGolfCourse `Play/`, real time). While the ball rolls on the ground
+(`Rollout`, not in the cup), holding plays the world at 4x and a tap at 60x until rest. It is global time dilation, so the
+camera's interpolation, the cup drop, the flag and world timers keep in step. `AOpenFairwayBall::Tick` multiplies its
+12-steps-per-frame cap by the dilation, so the speed-up holds at low frame rates, and the fixed 120 Hz step stops the ball
+where it would at normal speed. The component sets the world's `MaxGlobalTimeDilation` to at least the skip rate, and
+returns it to 1x synchronously on `OnBallAtRest` and `OnBallHoled`, so rest timers start in real time. It also drops to
+1x on a new shot number, when the ball leaves `Rollout`, and while the menu or drill dialog is open. Vegetation sway uses
+the material `Time` node, so it runs fast during a skip.
+
 ### Courses and rounds
 
 Each installed course is a `UGolfCourseDefinition` data asset (primary asset type `GolfCourse`) in
@@ -63,18 +75,36 @@ definition with its preview when the game starts; the main menu's Courses browse
 The editor command `uopengolf.CreateCourseAssets` creates the bundled Savanna Range definition and imports its preview
 from `Assets/Images/Courses` only if they are missing.
 
-**Play** travels to the course's map with `?Course=<definition name>`. The GameMode reads the option in `InitGame`;
-with a known course it runs a round (Hole mode) at the course's par, and the range holds the course's wind whatever the
-console or HUD set. There is no ball placement, recording or wind panel in a round. When the ball drops, the GameMode
-waits `HoleOutDelayS` for the banner, then broadcasts `OnRoundComplete`; the player controller listens and opens the
-menu, which shows the final scorecard (**Play again** or **Courses**).
+**Play** opens the course's **Round setup** page (`SRoundSetup`, filling the menu while the browser keeps its selection), and **Start round** travels to the
+course's map with `?Course=<definition name>` and the setup's options.
+- **The page.** Players / Match / Course tabs (`SChoiceChips` driving an `SWidgetSwitcher`) hold the choices: the
+  signed-in player or a signed-out play message, the Gimmie and its radius, and the green stimp, tees and holes. A sidebar
+  (`UI/Menu/RoundSetupPanels`: `SCourseInformation`, `SCourseConditions`) shows the definition's `Location`,
+  `ElevationM`, par, `Designer` and length from the picked tees, and the round's wind. The two columns share an
+  `SWrapBox`, so the sidebar follows the settings on a narrow window. The tabs and bottom action bar stay visible while the body scrolls.
+- **The setup.** `OpenGolfPlay::FOpenGolfRoundSetup` (OpenGolfCourse `Play/`): tee set, green stimp, Gimmie, the holes,
+  and the round's wind (whole mph 0–13 and a whole world direction, clockwise from +X as the ball reads it).
+  `ToOptions`/`FromOptions` carry it as `?TeeIndex=?Stimp=?WindMph=?WindFrom=?Gimmie=?Holes=1-9,12`.
+- **The wind is rolled, not chosen.** `RoundConditions::RollWind` rolls it when the page opens and on **Play again**;
+  the GameMode rolls one when the URL carries none (a round started from the command line or the Course Designer).
+  Reset to defaults keeps it. The page and the in-round Settings row read it against a tee shot
+  (`OpenGolfPlay::RoundWindRelativeFromDeg`).
+- **Starting the round.** The GameMode keeps the options from `InitGame` and reads them in `StartPlay`, once the
+  preferences are loaded, with `RoundConditions::Defaults` (Game Defaults' stimp and Gimmie, the first tees, all holes)
+  for anything missing. With a known course it runs a round (Hole mode), and the range holds the setup's wind
+  (`AUOpenGolfGameMode::GetRoundWind`) whatever the console or HUD set. Rounds are played in daylight: the map's
+  `AOpenGolfEnvironment` gets its Day preset after `Super::StartPlay`, once its own `BeginPlay` reset has run.
+- `UGolfCourseSubsystem` remembers each course's last setup for the session. There is no ball placement, recording or
+  wind panel in a round. When the ball drops, the GameMode waits `HoleOutDelayS` for the banner, then broadcasts
+  `OnRoundComplete`; the player controller listens and opens the menu, which shows the final scorecard (**Play again**
+  or **Courses**).
 
 **Multi-hole courses.** A definition's `Layout` lists its holes in playing order: par, one tee per published tee set
-(`FGolfCourseTee`: set name, position and scorecard yardage), the cup and the aim points between them. The Courses
-browser picks a tee set (`?TeeIndex=`); the GameMode keeps one world loaded for the round, moves the range's tee and cup
-to each hole (`AUOpenGolfRange::SetCourseHole`), opens each hole along its first aim point, and frames the hole map
-around the route. After each hole-out it records the score and advances; after the last hole the scorecard shows the
-front and back nine. `InBoundsCm` and `Water` give the course's boundary and lakes: a ball at rest outside the boundary
+(`FGolfCourseTee`: set name, position and scorecard yardage), the cup and the aim points between them. The round setup
+picks a tee set and the holes; the GameMode keeps one world loaded for the round, plays the picked holes in ascending
+order (`HoleOrder`), moves the range's tee and cup to each (`AUOpenGolfRange::SetCourseHole`), opens each hole along its
+first aim point, and frames the hole map around the route. After each hole-out it records the score with the hole's
+number and advances; after the last picked hole the scorecard sums each nine played and the total against par. `InBoundsCm` and `Water` give the course's boundary and lakes: a ball at rest outside the boundary
 or in a lake costs one stroke and is replayed from where it was hit (`UGolfCourseDefinition::PenaltyAt`), and the HUD
 says why. A ball that carries a lake and lands beyond it plays on. A definition with an empty `Layout` plays as a
 single hole from the range's own tee and cup.
@@ -297,11 +327,11 @@ by path from `Private` (`#include "UI/Club/ClubPicker.h"`):
 
 | Folder | Contents |
 | --- | --- |
-| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, `FHudPen` (outlined lines for self-drawn widgets), icon button, slider, switch, status glyph, HUD tooltip, page header |
+| `Common/` | Styles and shared widgets: `HudStyle`, `MenuStyle`, `HudScale`, `HudLayers`, `FHudPen` (outlined lines for self-drawn widgets), icon button, slider, switch, choice chips (`SChoiceChips`), status glyph, HUD tooltip, page header |
 | `Hud/` | The play HUD: `SRangeHud` (shot tiles and course header), club and play toolbar, recording, and hole tiles, the hole map (`SHoleMapPanel`, `SHoleMinimap`, `HoleMapOverlay`), shot formatting, ball-ready glow, test-shot list, keyboard/gamepad navigation (`FHudNavigation`) |
 | `Club/` | Club picker and club-face glyph |
 | `Wind/` | Wind indicator, its controls and readout, the `uopengolf.WindDebug` overlay, and the UMG wrapper `UOpenGolfWindIndicator` (its UCLASS header stays in `Public/`) |
-| `Menu/` | `SMainMenu` (home with its launch buttons, pause, Settings, Shot history, dialogs, the final scorecard), the Courses browser (`SCourseBrowser`) and display-mode options |
+| `Menu/` | `SMainMenu` (home with its launch buttons, pause, Settings, Shot history, dialogs, the final scorecard), the Courses browser (`SCourseBrowser`), the Round setup page (`SRoundSetup`) and display-mode options |
 
 A widget used by more than one area goes in `Common/`; a new screen or HUD feature gets its
 own folder. Raw-pointer Slate arguments always get a `nullptr` default, which

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// The Hunter Ranch draft in Play: every hole's tees and cup sit on playable ground, a round runs 1 to 18,
+// Hunter Ranch in Play: every hole's tees and cup sit on playable ground, a round runs 1 to 18,
 // and a ball that stops in the lake costs a penalty stroke and is replayed from where it was hit.
 #if WITH_EDITOR && WITH_DEV_AUTOMATION_TESTS
 #include "Editor.h"
@@ -19,8 +19,8 @@
 
 namespace HunterRoundTestDetail
 {
-    const TCHAR* const CoursePath = TEXT("/HunterRanch/Draft/DA_HunterRanch.DA_HunterRanch");
-    const TCHAR* const MapPath = TEXT("/HunterRanch/Draft/Course");
+    const TCHAR* const CoursePath = TEXT("/HunterRanch/Course/DA_HunterRanch.DA_HunterRanch");
+    const TCHAR* const MapPath = TEXT("/HunterRanch/Course/Course");
 
     AUOpenGolfGameMode* PlayingMode()
     {

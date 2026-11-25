@@ -11,7 +11,7 @@ alternative for hand-shaped terrain. Hunter Ranch (Paso Robles, California) is t
 - [1. Write the site recipe](#1-write-the-site-recipe)
 - [2. Prepare the site](#2-prepare-the-site)
 - [3. Review the layout on the aerial](#3-review-the-layout-on-the-aerial)
-- [4. Build the draft map](#4-build-the-draft-map)
+- [4. Build the course map](#4-build-the-course-map)
 - [5. Edit and play in the Course Designer](#5-edit-and-play-in-the-course-designer)
 - [6. Test](#6-test)
 - [7. Package and publish](#7-package-and-publish)
@@ -47,6 +47,7 @@ Copy `Assets/Data/CourseDesign/HunterRanch.json` and change:
 - `aerial`: an image service for review (optional).
 - `hole_count`, `par` and `tee_yards`: from the club's scorecard, one list per tee set, longest set first.
 - `corrections`: the corrections file, relative to the recipe.
+- `location` and `designer`: where the course is and who designed it, for the round setup's Course information.
 
 ## 2. Prepare the site
 
@@ -56,7 +57,7 @@ python3 Plugins/OpenGolfCourse/Scripts/prepare_course_site.py Assets/Data/Course
 
 The Course Designer's **Prepare site data…** button runs the same command. It:
 
-- clips and resamples the elevation to a 1 m grid
+- clips and resamples the elevation to a 1 m grid and writes the Unreal copy to `ground_east_south.oge`
 - reads fairways, greens, bunkers, tees, hole routes and lakes from the map data, including multipolygon fairways
 - cleans the outlines so none cross. A fairway grows a collar around a green or tee that crosses it and steps back
   from a bunker; a bunker or tee gives way to a green.
@@ -68,6 +69,10 @@ The Course Designer's **Prepare site data…** button runs the same command. It:
 
 `source_layout.json` keeps the tee and cup positions estimated from the map data. **Save corrections** compares the
 course against these estimates, so your corrections stay in `corrections.json` and are never folded into the map data.
+
+For an older prepared site, run **Prepare site data…** once before rebuilding. The map builder
+requires the east/south elevation grid. Source outlines and saved corrections use east/north.
+See [Course import coordinates](README.md#course-import-coordinates) for the tee-view landmark check.
 
 ## 3. Review the layout on the aerial
 
@@ -85,33 +90,35 @@ Fix each problem in `corrections.json` (keyed by hole number and map feature ID)
 what you checked. After correcting a tee, prepare the site again (step 2) so its tee pad moves with it, then run the
 review again. Repeat until it is clean. For Hunter Ranch, holes 2 and 10 needed tee corrections on 2026-11-24.
 
-## 4. Build the draft map
+## 4. Build the course map
 
-The Course Designer's **Build new draft** button builds into an empty content folder, such as `/HunterRanch/Draft`.
+The Course Designer's **Build course** button builds into an empty content folder, such as `/HunterRanch/Course`.
 Without an editor open, run the same script headless:
 
 ```bash
-OPENGOLF_DESIGN_SOURCE=$PWD/Saved/CourseDesign/HunterRanch OPENGOLF_DESIGN_DEST=/HunterRanch/Draft \
+OPENGOLF_DESIGN_SOURCE=$PWD/Saved/CourseDesign/HunterRanch OPENGOLF_DESIGN_DEST=/HunterRanch/Course \
   <engine>/Engine/Binaries/Linux/UnrealEditor $PWD/UOpenGolf.uproject -nullrhi -unattended -nosound \
-  -DisablePlugins=ModelContextProtocol -ExecutePythonScript=$PWD/Plugins/OpenGolfCourse/Scripts/build_course_draft.py
+  -DisablePlugins=ModelContextProtocol -ExecutePythonScript=$PWD/Plugins/OpenGolfCourse/Scripts/build_course.py
 ```
 
 It creates the course map, the terrain definition (`DA_Ground`), the ground squares, a water surface for each lake,
 the range controller with daylight and flag, and the course definition with every hole, tee set, cup, boundary and
-lake. Move an existing draft out of the way first; the builder refuses a folder that already has assets.
+lake. The definition also gets the round setup's Course information: the site recipe's `location` and `designer`,
+and the elevation, which preparing the site measures as the median ground height inside the course boundary. Move an
+existing build out of the way first; the builder refuses a folder that already has assets.
 
 ## 5. Edit and play in the Course Designer
 
 Open **Tools → Golf → Course Designer**, enter the course definition (for example
-`/HunterRanch/Draft/DA_HunterRanch`) and choose **Open course**.
+`/HunterRanch/Course/DA_HunterRanch`) and choose **Open course**.
 
 - Pick a hole and tee set. Drag a yellow marker to move the tee, an aim point or the cup, or drag an outline vertex
   to reshape a surface. Moving an outline rebuilds only the ground squares it touches. **Ctrl+Z** undoes an edit.
 - Dragging a tee moves only the tee, not its tee pad. Either drag the pad's outline too, or save corrections, prepare
-  the site again and build a new draft.
+  the site again and build again.
 - **Play hole** starts Play on the selected hole and tee set.
 - **Save** saves the map, course and terrain, then removes ground squares and lakes that the saved map no longer uses.
-- **Save corrections** writes your changes into `corrections.json`, so the next draft build and the next import keep them.
+- **Save corrections** writes your changes into `corrections.json`, so the next build and the next import keep them.
 
 ## 6. Test
 
@@ -125,7 +132,7 @@ the lake and checks the penalty stroke and the replay.
 ## 7. Package and publish
 
 ```bash
-python3 Assets/Scripts/package_course.py --engine <engine> --platform Linux --version draft3 --host Saved/CourseHosting
+python3 Assets/Scripts/package_course.py --engine <engine> --platform Linux --version 1.3 --host Saved/CourseHosting
 python3 Assets/Scripts/check_course_install.py Saved/CoursePackaging/Base/Linux/UOpenGolf.sh Saved/CourseHosting Saved/Automation/CourseInstall
 ```
 
@@ -183,7 +190,7 @@ before moving on.
    Yardage estimates put tees on banks, paths and wooded slopes; a tee box that is not visible on the aerial usually
    shares the next longer set's box. Record each fix in `corrections.json` with a `reviewed` note.
 5. **Prepare again after corrections**, so tee pads follow the corrected tees, then review until `checks.json` is clean.
-6. **Back up and build the draft.** Back up an existing draft folder to `Saved/CourseDesign/Backups/`, empty it, and
+6. **Back up and build.** Back up an existing course folder to `Saved/CourseDesign/Backups/`, empty it, and
    build. Close other editors first: two editors on one project break each other's shader compiles.
 7. **Test.** Run `UOpenGolf.Course.HunterRanch` (or a copy of those tests for the new course). They check that every
    tee is on its tee pad, dry and in bounds, that every cup is on its green, and that a full round and a lake
@@ -197,7 +204,7 @@ before moving on.
 
 ## Hunter Ranch as built
 
-Recorded 2026-11-24 from `Saved/CourseDesign/HunterRanch` and `/HunterRanch/Draft`.
+Recorded 2026-11-24 from `Saved/CourseDesign/HunterRanch` and `/HunterRanch/Course`.
 
 | Item | Value |
 | --- | --- |
@@ -209,6 +216,7 @@ Recorded 2026-11-24 from `Saved/CourseDesign/HunterRanch` and `/HunterRanch/Draf
 | Ground squares | 64 m; 460 squares within two squares of the boundary's bounding box |
 | Ground meshes | 722 (one per surface per square); 60 MB, of which rough is 38 MB |
 | Course content | 84 MB, mostly the ground squares and the 23 MB elevation grid in `DA_Ground` |
+| Course information | Paso Robles, California; designed by Ken Hunter Jr. and Mike McGinnis; 263 m (863 ft), the median ground inside the boundary |
 
 Mapped route lengths are within about 4 % of the published yardages. Hole 2's White tee measures about 30 yd longer
 than published, because no separate White tee box is visible on the aerial.
@@ -217,5 +225,7 @@ than published, because no separate White tee box is visible on the aerial.
 
 - Tee and cup positions are estimates from map data, elevation and aerial review, not surveys.
 - Green contours come from 1 m lidar. No green is shaped by hand yet.
-- The draft uses the course kit's coastal surfaces, and it has no trees or regional rough yet.
+- The course uses the course kit's coastal surfaces and has no regional rough yet. Its tree is Island Tree 02, a
+  stand-in for the native blue oak, with one sample near hole 1. To add trees and grass by hand, see
+  [Course vegetation](course_vegetation.md).
 - Only Linux packs have been built and tested. Windows packs and hosting on S3 and CloudFront are still to come.

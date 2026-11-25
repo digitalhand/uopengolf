@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: MIT
 import unittest
 
-from export_rules import EXPORT_LIMITS, export_size, faces_with_materials, farthest_points, is_colour, principled_roles
+from export_rules import (EXPORT_LIMITS, chromatic_tint, export_size, faces_with_materials, farthest_points, fit_saturation,
+                          is_colour, luminance, principled_roles)
 
 
 class ExportSizeTests(unittest.TestCase):
@@ -61,6 +62,58 @@ class TreeHelperTests(unittest.TestCase):
 
     def test_few_points_are_kept(self):
         self.assertEqual(farthest_points([(0, 0, 0), (1, 0, 0)], 64), [(0, 0, 0), (1, 0, 0)])
+
+
+class ChromaticTintTests(unittest.TestCase):
+    def tinted(self, colour, tint):
+        return [c * k for c, k in zip(colour, tint)]
+
+    def test_same_hue_needs_no_tint(self):
+        self.assertEqual(chromatic_tint((0.2, 0.4, 0.1), (0.1, 0.2, 0.05)), (1.0, 1.0, 1.0))
+
+    def test_tint_gives_the_target_hue_at_the_source_brightness(self):
+        leaf, target = (0.20, 0.30, 0.10), (0.12, 0.18, 0.09)  # within the clamp
+        result = self.tinted(leaf, chromatic_tint(leaf, target))
+        self.assertAlmostEqual(luminance(result), luminance(leaf), places=3)
+        for got, want in zip(result, target):
+            self.assertAlmostEqual(got / luminance(result), want / luminance(target), places=2)
+
+    def test_extreme_shifts_are_clamped_and_keep_the_brightness(self):
+        leaf = (0.30, 0.30, 0.01)
+        tint = chromatic_tint(leaf, (0.1, 0.1, 0.4), low=0.5, high=1.6)
+        self.assertLessEqual(max(tint) / min(tint), 1.6 / 0.5 + 1e-6)
+        self.assertAlmostEqual(luminance(self.tinted(leaf, tint)), luminance(leaf), places=3)
+
+    def test_black_or_missing_channels_are_refused(self):
+        with self.assertRaises(ValueError):
+            chromatic_tint((0.0, 0.0, 0.0), (0.1, 0.2, 0.1))
+        with self.assertRaises(ValueError):
+            chromatic_tint((0.2, 0.3, 0.0), (0.1, 0.2, 0.1))
+
+
+class SaturationFitTests(unittest.TestCase):
+    def chroma(self, rgb):
+        return [c / luminance(rgb) for c in rgb]
+
+    def desaturated(self, colour, saturation):
+        luma = luminance(colour)
+        return [luma + saturation * (c - luma) for c in colour]
+
+    def test_a_tint_that_reaches_the_target_keeps_full_saturation(self):
+        leaf, target = (0.20, 0.30, 0.10), (0.12, 0.18, 0.09)
+        self.assertEqual(fit_saturation(leaf, chromatic_tint(leaf, target), target), 1.0)
+
+    def test_a_clamped_tint_is_completed_by_desaturating(self):
+        leaf, target = (0.1191, 0.1374, 0.0174), (0.0939, 0.0983, 0.0773)
+        tint = chromatic_tint(leaf, target, 0.5, 3.5)
+        tinted = [c * k for c, k in zip(leaf, tint)]
+        saturation = fit_saturation(leaf, tint, target)
+        self.assertTrue(0.2 < saturation < 0.6, saturation)
+        for got, want in zip(self.chroma(self.desaturated(tinted, saturation)), self.chroma(target)):
+            self.assertAlmostEqual(got, want, delta=0.06)
+
+    def test_a_grey_target_removes_the_colour(self):
+        self.assertEqual(fit_saturation((0.2, 0.3, 0.1), (1.0, 1.0, 1.0), (0.2, 0.2, 0.2)), 0.0)
 
 
 if __name__ == "__main__":

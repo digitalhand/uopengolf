@@ -93,6 +93,7 @@ void SMainMenu::Construct(const FArguments& Args)
         .BorderBackgroundColor(HudStyle::LaunchTileColor()).Padding(32)
         [SNew(SOverlay)
             +SOverlay::Slot()[SNew(SVerticalBox)
+                .Visibility_Lambda([this]{return IsRoundSetupOpen() && Route == ERoute::Home ? EVisibility::Collapsed : EVisibility::Visible;})
                 +SVerticalBox::Slot().AutoHeight().Padding(0,0,0,20)
                     [SNew(SBox).IsEnabled_Lambda([this]{return !bConfirmDisplay && Dialog.IsEmpty();})[BuildTopBar()]]
                 +SVerticalBox::Slot().FillHeight(1)[SAssignNew(Content,SBox).Tag(TEXT("MenuPageHost"))
@@ -103,6 +104,9 @@ void SMainMenu::Construct(const FArguments& Args)
                             FString Label=ShotDisplay::VersionLabel(ShotDisplay::ProjectVersion());
                             if(const UGameUpdateSubsystem* U=Updater(); U&&U->IsUpdateAvailable())Label+=FString::Printf(TEXT("  ·  v%s available"),*U->GetLatest().Version);
                             return FText::FromString(Label);})]]
+            +SOverlay::Slot()[SAssignNew(RoundSetupHost,SBox)
+                .Visibility_Lambda([this]{return IsRoundSetupOpen() && Route == ERoute::Home ? EVisibility::Visible : EVisibility::Collapsed;})
+                .IsEnabled_Lambda([this]{return !bConfirmDisplay && Dialog.IsEmpty();})]
             +SOverlay::Slot()[SAssignNew(ModalContent,SBox)
                 .Visibility_Lambda([this]{return bConfirmDisplay || !Dialog.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;})]]];
     const UOpenGolfOnlineSubsystem* Online=OnlineService();
@@ -247,6 +251,10 @@ void SMainMenu::Back()
     {
         if(Dirty()) Dialog=TEXT("Unsaved changes"); else { if(bReturnToTraining){Resume();return;} Route=SettingsParent; }
         Rebuild();
+    }
+    else if (Route == ERoute::Home && bCoursesVisible && IsRoundSetupOpen())
+    {
+        CloseRoundSetup();
     }
     else if (Route == ERoute::Home && bCoursesVisible)
     {

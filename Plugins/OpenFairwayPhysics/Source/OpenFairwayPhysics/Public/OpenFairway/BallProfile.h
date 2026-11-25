@@ -46,6 +46,8 @@ namespace OpenFairway
         float GreenStimpFeet = GreenSpeed::DefaultStimpFeet;
         /** Speed-dependent grass drag of every green; the stimp's rolling friction is solved with it. */
         float GreenGrassViscosity = GreenSpeed::GrassViscosity;
+        /** Speed of the fairway as a stimp reading in feet (FairwaySpeed); the standard keeps the fitted fairway. */
+        float FairwayStimpFeet = FairwaySpeed::StandardStimpFeet;
         /** Forward speed a sand impact removes per m/s the ball drives into the sand, so a shallow full-shot landing stays near its pitch mark. */
         float SandPlowRatio = 2.5f;
         /**

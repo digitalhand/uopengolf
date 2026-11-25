@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 import course_corrections
-from course_layout_draft import CUP_FALLBACK_EDGE_M, CUP_MAX_SLOPE, YARD_M, _point, _polygon, route_length_m
+from course_layout import CUP_FALLBACK_EDGE_M, CUP_MAX_SLOPE, YARD_M, _point, _polygon, route_length_m
 from ground_grid import GroundGrid
 
 TEE_MAX_SLOPE = 0.05

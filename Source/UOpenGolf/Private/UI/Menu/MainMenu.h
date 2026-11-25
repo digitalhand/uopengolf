@@ -7,6 +7,7 @@
 #include "Styling/SlateTypes.h"
 #include "OpenGolfAccountStyle.h"
 class AUOpenGolfPlayerController;
+class UGolfCourseDefinition;
 class SOpenGolfAccountPanel;
 struct FOpenGolfDisplayNameDraft;
 class UOpenGolfOnlineSubsystem;
@@ -74,8 +75,16 @@ private:
     const FButtonStyle* LaunchStyle(bool bHighlighted) const;
     /** Shows or hides the Courses browser beside the launch buttons and moves the highlight to match. */
     void SetCoursesVisible(bool bVisible);
-    /** SCourseBrowser, shown while bCoursesVisible; its Play starts a round. */
+    /** The Courses browser keeps its search and selection while the lobby is open. */
     TSharedRef<SWidget> BuildCourseBrowser();
+    /** Opens the full-width lobby for the selected course. */
+    void OpenRoundSetup(const UGolfCourseDefinition& Course);
+    /** Back to the browser from the Round setup page. */
+    void CloseRoundSetup();
+    bool IsRoundSetupOpen() const { return SetupCourse.IsValid(); }
+    TSharedPtr<SBox> RoundSetupHost;
+    TWeakPtr<SWidget> BrowserFocus;
+    TWeakObjectPtr<const UGolfCourseDefinition> SetupCourse;
     /** After a course round: the course, strokes against par, Play again and Courses. */
     void BuildFinalScore(TSharedRef<SVerticalBox> Body);
     bool bCoursesVisible = false;

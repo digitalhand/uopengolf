@@ -37,6 +37,10 @@ matching completed tests; an empty or failed run is not a pass.
 | Bluetooth or Open Connect | `UOpenGolf.LaunchMonitor`; hardware checks remain separate |
 | Terrain, flag cloth or vegetation wind | `UOpenGolf.Course` and `UOpenGolf.Range.CoastalTerrain` |
 | Course definitions, round scoring or travel | `UOpenGolf.Course` (its `Catalog` test checks the bundled course against the range) and `UOpenGolf.Range.HolePlay`; with rendering (`-Rendered`), `UOpenGolf.Visual.CourseBrowser` |
+| Round setup (tabs, course information, random wind, picked holes, scorecard) | `UOpenGolf.Course.Play.RoundSetup` (headless rules and the wind roll), `UOpenGolf.Menu.RoundSetup` (the page through its buttons), `UOpenGolf.Course.HunterRanch.BackNine`, `.PickedHoles` and `.RolledWind` (Play), and with rendering `UOpenGolf.Visual.CourseBrowser` (800×600 through 2560×1080, tab and footer hit tests, and large-text captures with Hunter Ranch installed) |
+| Course building scripts | `python3 -m unittest discover -s Plugins/OpenGolfCourse/Scripts -p 'test_*.py'` (layout, elevation, folders) |
+| Fast-forward (Space) | `UOpenGolf.Course.Play.FastForward` (tap and hold rules), `UOpenGolf.Range.FastForward` (Play), `UOpenGolf.Range.FrameRates` (the dilated step cap) and `UOpenGolf.Range.InputBindings` |
+| Fairway speed or Gimmie choices | `UOpenGolf.Physics.FairwayStimp`, `UOpenGolf.Menu.PreferenceValidation` and `UOpenGolf.Menu.GimmieScoring` |
 | Hole minimap | `UOpenGolf.Minimap` (framing, ground fields, compositing and labels run headless; `RenderedClick` needs rendering, `-Rendered`) and `UOpenGolf.Range.Aim` for the map's target |
 | In-game updates | `OpenGameUpdate` (run with `-Filter OpenGameUpdate`); the installer by hand, see [In-game updates](Releases.md#in-game-updates) |
 | Ubuntu packaging | `python3 -B -m unittest Assets.Scripts.test_build_deb Assets.Scripts.test_check_package_runner`; requires `dpkg-deb` |

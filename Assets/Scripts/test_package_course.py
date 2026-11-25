@@ -8,8 +8,8 @@ import unittest
 from Assets.Scripts.package_course import layout_files, publish
 
 
-def entry(version="draft3", platform="Linux"):
-    return {"id": "HunterRanch", "name": "Hunter Ranch", "definition": "/HunterRanch/Draft/DA_HunterRanch.DA_HunterRanch",
+def entry(version="1.3", platform="Linux"):
+    return {"id": "HunterRanch", "name": "Hunter Ranch", "definition": "/HunterRanch/Course/DA_HunterRanch.DA_HunterRanch",
             "version": version, "platform": platform, "game_version": "0.2.0", "files": []}
 
 
@@ -37,16 +37,16 @@ class PublishTests(unittest.TestCase):
         catalog = json.loads((self.host / "catalog.json").read_text())
         files = catalog["courses"][0]["files"]
         self.assertEqual([f["name"] for f in files], ["Course.pak", "Course.utoc", "Course.ucas"])
-        cas = self.host / "HunterRanch/draft3/Linux/Course.ucas"
+        cas = self.host / "HunterRanch/1.3/Linux/Course.ucas"
         self.assertEqual(files[2]["size"], 30)
         self.assertEqual(files[2]["sha256"], hashlib.sha256(cas.read_bytes()).hexdigest())
 
     def test_the_derived_layout_is_published_beside_the_pack(self):
         publish(self.paks, self.host, entry(), self.layout)
         course = json.loads((self.host / "catalog.json").read_text())["courses"][0]
-        self.assertEqual(course["layout"], "HunterRanch/draft3/layout/")
+        self.assertEqual(course["layout"], "HunterRanch/1.3/layout/")
         self.assertIn("OpenStreetMap", course["attribution"])
-        published = sorted(p.name for p in (self.host / "HunterRanch/draft3/layout").iterdir())
+        published = sorted(p.name for p in (self.host / "HunterRanch/1.3/layout").iterdir())
         self.assertEqual(published, ["LICENSE.md", "corrections.json", "source.geojson", "source_layout.json"])
 
     def test_a_second_platform_shares_the_layout_and_both_stay_listed(self):
@@ -61,11 +61,11 @@ class PublishTests(unittest.TestCase):
             publish(self.paks, self.host, entry(), self.layout)
 
     def test_a_newer_version_replaces_the_catalog_entry_but_keeps_old_files(self):
-        publish(self.paks, self.host, entry("draft3"), self.layout)
-        publish(self.paks, self.host, entry("draft4"), self.layout)
+        publish(self.paks, self.host, entry("1.3"), self.layout)
+        publish(self.paks, self.host, entry("1.4"), self.layout)
         courses = json.loads((self.host / "catalog.json").read_text())["courses"]
-        self.assertEqual([c["version"] for c in courses], ["draft4"])
-        self.assertTrue((self.host / "HunterRanch/draft3/Linux/Course.pak").is_file())
+        self.assertEqual([c["version"] for c in courses], ["1.4"])
+        self.assertTrue((self.host / "HunterRanch/1.3/Linux/Course.pak").is_file())
 
 
 class LayoutFileTests(unittest.TestCase):

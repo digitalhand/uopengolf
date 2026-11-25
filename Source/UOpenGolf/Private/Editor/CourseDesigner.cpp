@@ -173,11 +173,11 @@ namespace CourseDesigner
                 + SVerticalBox::Slot().AutoHeight()[SNew(SHorizontalBox)
                     + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Prepare site data…"), [this]{ Prepare(); })]
                     + SHorizontalBox::Slot().FillWidth(1)[SAssignNew(Destination, SEditableTextBox)
-                        .HintText(FText::FromString(TEXT("Empty content folder for the new draft, such as /<Course>/Draft")))]
-                    + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Build new draft"), [this]{ Build(); })]]
+                        .HintText(FText::FromString(TEXT("Empty content folder for the new course, such as /<Course>/Course")))]
+                    + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Build course"), [this]{ Build(); })]]
                 + SVerticalBox::Slot().AutoHeight()[SNew(SHorizontalBox)
                     + SHorizontalBox::Slot().FillWidth(1)[SAssignNew(Path, SEditableTextBox)
-                        .HintText(FText::FromString(TEXT("Course definition, such as /<Course>/Draft/DA_<Course>")))]
+                        .HintText(FText::FromString(TEXT("Course definition, such as /<Course>/Course/DA_<Course>")))]
                     + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Open course"), [this]{ Open(); })]
                     + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Play hole"), [this]{ Play(); })]
                     + SHorizontalBox::Slot().AutoWidth()[Button(TEXT("Save"), [this]{ Save(); })]
@@ -216,9 +216,9 @@ namespace CourseDesigner
             Source = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("CourseDesign") / Name);
             // A course's content plugin mounts at /<recipe name>, as Plugins/HunterRanch does for HunterRanch.json.
             if (Destination->GetText().IsEmpty())
-                Destination->SetText(FText::FromString(TEXT("/") + Name + TEXT("/Draft")));
+                Destination->SetText(FText::FromString(TEXT("/") + Name + TEXT("/Course")));
             if (Path->GetText().IsEmpty())
-                Path->SetText(FText::FromString(FString::Printf(TEXT("/%s/Draft/DA_%s"), *Name, *Name)));
+                Path->SetText(FText::FromString(FString::Printf(TEXT("/%s/Course/DA_%s"), *Name, *Name)));
             const FString Script = Scripts() / TEXT("prepare_course_site.py");
             const FString Args = FString::Printf(TEXT("\"%s\" \"%s\" \"%s\""), *Script, *Site, *Source);
             const FString Override = FPlatformMisc::GetEnvironmentVariable(TEXT("OPENGOLF_GIS_PYTHON"));
@@ -258,8 +258,8 @@ namespace CourseDesigner
             FPlatformMisc::SetEnvironmentVar(TEXT("OPENGOLF_DESIGN_SOURCE"),*Source);
             FPlatformMisc::SetEnvironmentVar(TEXT("OPENGOLF_DESIGN_DEST"),*Target);
             auto* Python=IPythonScriptPlugin::Get();
-            const bool Ok=Python && Python->ExecPythonCommand(*(Scripts()/TEXT("build_course_draft.py")));
-            Layout->Status=Ok ? TEXT("Draft built. Open its course definition to edit.") : TEXT("Draft build failed. See Output Log.");
+            const bool Ok=Python && Python->ExecPythonCommand(*(Scripts()/TEXT("build_course.py")));
+            Layout->Status=Ok ? TEXT("Course built. Open its course definition to edit.") : TEXT("Course build failed. See Output Log.");
         }
         TSharedRef<SWidget> Button(const TCHAR* Text, TFunction<void()> Action)
         {
@@ -301,7 +301,7 @@ namespace CourseDesigner
             auto* Python=IPythonScriptPlugin::Get();
             const bool Ok=Python && Python->ExecPythonCommand(*FString::Printf(TEXT("\"%s\" --source \"%s\" --course %s"),
                 *(Scripts()/TEXT("SaveCourseCorrections.py")), *SourceFolder(CoursePath), *CoursePath));
-            Layout->Status=Ok ? TEXT("Corrections saved. The next draft build keeps them.") : TEXT("Could not save corrections. See Output Log.");
+            Layout->Status=Ok ? TEXT("Corrections saved. The next build keeps them.") : TEXT("Could not save corrections. See Output Log.");
         }
         void Play()
         {

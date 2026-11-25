@@ -223,11 +223,13 @@ void AUOpenGolfRange::ApplyWindSettings()
     WindSpeedMph = FMath::IsFinite(WindSpeedMph) ? FMath::Max(0.0f, WindSpeedMph) : 0.0f;
     WindFromDeg = FMath::IsFinite(WindFromDeg) ? FRotator::ClampAxis(WindFromDeg) : 0.0f;
     const AUOpenGolfGameMode* Mode = World->GetAuthGameMode<AUOpenGolfGameMode>();
-    // A course round keeps its course's wind, whatever the console, Details or the HUD set.
-    if (const UGolfCourseDefinition* Course = Mode ? Mode->GetCourse() : nullptr)
+    // A course round keeps the wind picked in its setup, whatever the console, Details or the HUD set.
+    float RoundMph = 0.0f;
+    float RoundFromDeg = 0.0f;
+    if (Mode && Mode->GetRoundWind(RoundMph, RoundFromDeg))
     {
-        WindSpeedMph = Course->WindMph;
-        WindFromDeg = Course->WindFromDeg;
+        WindSpeedMph = RoundMph;
+        WindFromDeg = RoundFromDeg;
     }
     AOpenFairwayBall* Ball = Mode ? Mode->GetBall() : nullptr;
     if (!Ball)

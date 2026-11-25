@@ -6,6 +6,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Course/CourseClubs.h"
 #include "Course/GolfCourseSubsystem.h"
+#include "Course/RoundConditions.h"
 
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
@@ -39,16 +40,8 @@ void AUOpenGolfGameMode::InitGame(const FString& MapName, const FString& Options
 {
     Super::InitGame(MapName, Options, ErrorMessage);
     Course = UGolfCourseSubsystem::FindCourse(Options);
-    if (Course && !Course->Layout.IsEmpty() && !Course->Layout[0].Tees.IsEmpty())
-    {
-#if WITH_EDITOR
-        if (GetWorld()->WorldType == EWorldType::PIE)
-            HoleIndex = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("PreviewHole"), 1)-1, 0, Course->Layout.Num()-1);
-#endif
-        TeeIndex = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("TeeIndex"), 0), 0, Course->Layout[0].Tees.Num() - 1);
-        TeeSet = Course->Layout[0].Tees[TeeIndex].SetName;
-    }
-    StartingHole = HoleIndex;
+    // The round's setup is read in StartPlay, once the player's preferences (its defaults) are loaded.
+    RoundOptions = Options;
     PlayMode = Course ? EOpenGolfPlayMode::Hole : EOpenGolfPlayMode::Range;
     if (Course)
         UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Course round: %s."), *Course->DisplayName.ToString());
@@ -63,8 +56,57 @@ int32 AUOpenGolfGameMode::GetPar() const
 
 bool AUOpenGolfGameMode::IsRoundComplete() const
 {
-    return IsCourseRound() && Round.bHoled && (!Course || HoleIndex + 1 >= Course->Layout.Num()) &&
-        CompletedHoles.Num() == HoleIndex - StartingHole + 1;
+    // A course without a layout, or Hole mode without a course, is a single hole.
+    return IsCourseRound() && Round.bHoled && CompletedHoles.Num() == FMath::Max(HoleOrder.Num(), 1);
+}
+
+bool AUOpenGolfGameMode::GetRoundWind(float& OutMph, float& OutWorldFromDeg) const
+{
+    if (!Course)
+        return false;
+    OutMph = RoundSetup.WindMph();
+    OutWorldFromDeg = RoundSetup.WindFromDeg;
+    return true;
+}
+
+void AUOpenGolfGameMode::ReadRoundSetup(const OpenGolfPlay::FOpenGolfRoundSetup* Setup)
+{
+    HoleOrder.Reset();
+    OrderPosition = 0;
+    HoleIndex = 0;
+    TeeIndex = 0;
+    TeeSet = NAME_None;
+    RoundSetup = {};
+    if (!Course)
+        return;
+    const int32 HoleCount = RoundConditions::HoleCount(*Course);
+    const int32 TeeCount = RoundConditions::TeeCount(*Course);
+    if (Setup)
+    {
+        RoundSetup = *Setup;
+        RoundSetup.Validate(HoleCount, TeeCount);
+    }
+    else
+    {
+        // A travel URL without a wind (a round started from the command line or the Course Designer) rolls its own.
+        OpenGolfPlay::FOpenGolfRoundSetup Defaults = RoundConditions::Defaults(*Course, GolfSettings::Get());
+        RoundConditions::RollWind(Defaults);
+        RoundSetup = OpenGolfPlay::FOpenGolfRoundSetup::FromOptions(RoundOptions, Defaults, HoleCount, TeeCount);
+    }
+    TeeIndex = RoundSetup.TeeIndex;
+    TeeSet = RoundConditions::TeeSetName(*Course, TeeIndex);
+    HoleOrder = RoundConditions::HoleOrder(RoundSetup, *Course);
+#if WITH_EDITOR
+    // The Course Designer's preview plays from its hole to the last.
+    if (!Setup && HoleCount > 0 && GetWorld()->WorldType == EWorldType::PIE && UGameplayStatics::HasOption(RoundOptions, TEXT("PreviewHole")))
+    {
+        HoleOrder.Reset();
+        for (int32 Index = FMath::Clamp(UGameplayStatics::GetIntOption(RoundOptions, TEXT("PreviewHole"), 1) - 1, 0, HoleCount - 1); Index < HoleCount; ++Index)
+            HoleOrder.Add(Index);
+    }
+#endif
+    HoleIndex = HoleOrder.IsEmpty() ? 0 : HoleOrder[0];
+    UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Round setup:%s."), *RoundSetup.ToOptions().Replace(TEXT("?"), TEXT(" ")));
 }
 
 EGolfPenalty AUOpenGolfGameMode::GetRecentPenalty() const
@@ -97,6 +139,7 @@ void AUOpenGolfGameMode::ActivateCourseHole()
 void AUOpenGolfGameMode::StartPlay()
 {
     GolfSettings::Load();
+    ReadRoundSetup(nullptr);
     if (auto* Online = GetGameInstance()->GetSubsystem<UOpenGolfOnlineSubsystem>())
     {
         TWeakObjectPtr<UOpenGolfOnlineSubsystem> WeakOnline(Online);
@@ -156,6 +199,9 @@ void AUOpenGolfGameMode::StartPlay()
     // Spawn the range before players start so the controller can find the ball.
     GolfSettings::ApplyRuntime(World);
     Super::StartPlay();
+    // Every actor's BeginPlay has run, so the sky's own reset to its defaults is behind us. Rounds are played in daylight.
+    if (Course)
+        RoundConditions::ApplyDaylight(World);
     ActivateCourseHole();
     if (Ball && Range && Range->GetCup())
         Ball->SetCups({Range->GetCup()->GetCupDescriptor()});
@@ -269,7 +315,7 @@ void AUOpenGolfGameMode::PlaceOnTee()
 }
 
 #if WITH_DEV_AUTOMATION_TESTS
-bool AUOpenGolfGameMode::SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDefinition* InCourse)
+bool AUOpenGolfGameMode::SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDefinition* InCourse, const OpenGolfPlay::FOpenGolfRoundSetup* Setup)
 {
     if (Ball && Ball->IsMoving())
         return false;
@@ -282,8 +328,13 @@ bool AUOpenGolfGameMode::SetPlayMode(EOpenGolfPlayMode Mode, const UGolfCourseDe
     PlayMode = Mode;
     if (!IsCourseRound()) CreateTrainingSession();
     Course = Mode == EOpenGolfPlayMode::Hole ? InCourse : nullptr;
-    HoleIndex = 0;
+    OpenGolfPlay::FOpenGolfRoundSetup Defaults = Course ? RoundConditions::Defaults(*Course, GolfSettings::Get()) : OpenGolfPlay::FOpenGolfRoundSetup();
+    if (Course && !Setup)
+        RoundConditions::RollWind(Defaults);
+    ReadRoundSetup(Setup ? Setup : &Defaults);
     CompletedHoles.Reset();
+    CompletedHoleNumbers.Reset();
+    if (Course) RoundConditions::ApplyDaylight(GetWorld());
     if (Course && !Course->Layout.IsEmpty()) ActivateCourseHole();
     UE_LOG(LogUOpenGolfGameMode, Log, TEXT("Play mode: %s."), Mode == EOpenGolfPlayMode::Hole ? TEXT("hole") : TEXT("range"));
     ResetBallToTee();
@@ -492,14 +543,15 @@ void AUOpenGolfGameMode::HandleBallAtRest(const FOpenFairwayShotResult& Result)
 
 void AUOpenGolfGameMode::FinishRound()
 {
-    if (!IsCourseRound() || !Round.bHoled || CompletedHoles.Num() != HoleIndex - StartingHole)
+    if (!IsCourseRound() || !Round.bHoled || CompletedHoles.Num() != OrderPosition)
         return;
     CompletedHoles.Add(Round);
+    CompletedHoleNumbers.Add(HoleIndex + 1);
     if (IsRoundComplete())
         OnRoundComplete.Broadcast();
-    else
+    else if (HoleOrder.IsValidIndex(OrderPosition + 1))
     {
-        ++HoleIndex;
+        HoleIndex = HoleOrder[++OrderPosition];
         ActivateCourseHole();
     }
 }
@@ -644,11 +696,17 @@ void AUOpenGolfGameMode::HandleClubData(const FLaunchMonitorClubData& ClubData)
 
 void AUOpenGolfGameMode::StartSessionDefaults()
 {
-    SessionGimmieFeet = GolfSettings::Get().GimmieFeet;
-    if (Ball) Ball->GreenStimpFeet = GolfSettings::Get().Stimp;
-    // A course round plays its own fixed wind (the range holds it there); Training starts from the preference.
-    if (Range && Course) Range->SetWind(Course->WindMph, Course->WindFromDeg);
-    else if (Range) Range->SetWind(GolfSettings::Get().WindMph >= 0 ? GolfSettings::Get().WindMph : MapWindMph, MapWindFromDeg);
+    // A course round plays the conditions picked in its setup; Training plays Game Defaults.
+    const GolfSettings::FPreferences& Preferences = GolfSettings::Get();
+    SessionGimmieFeet = Course ? RoundSetup.AppliedGimmieFeet() : Preferences.GimmieFeet;
+    if (Ball)
+    {
+        Ball->GreenStimpFeet = Course ? RoundSetup.GreenStimpFeet : Preferences.Stimp;
+        Ball->FairwayStimpFeet = GolfSettings::FairwayStimpFeet(Preferences);
+    }
+    // A course round's wind is fixed (the range holds it there); Training starts from the preference.
+    if (Range && Course) Range->SetWind(RoundSetup.WindMph(), RoundSetup.WindFromDeg);
+    else if (Range) Range->SetWind(Preferences.WindMph >= 0 ? Preferences.WindMph : MapWindMph, MapWindFromDeg);
     if (!GimmieIndicator)
     {
         // The game mode is an AInfo, hidden in game, so its own components never render; the ring gets a visible host.

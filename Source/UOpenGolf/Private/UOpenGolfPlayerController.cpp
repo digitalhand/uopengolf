@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #include "UOpenGolfPlayerController.h"
+#include "ShotFastForward.h"
 #include "Course/GolfCourseSubsystem.h"
 #include "GameMapsSettings.h"
 #include "GolfCourseDefinition.h"
@@ -103,6 +104,11 @@ namespace
         return (Mode.IsCourseRound() || Mode.IsPractice() || Mode.IsDrillActive()) ? OpenGolfPlay::BearingDeg(Ball.GetActorLocation(), Mode.GetCupLocation(), Ball.AimYawDeg) : 0.0f;
     }
 } // namespace
+
+AUOpenGolfPlayerController::AUOpenGolfPlayerController()
+{
+    FastForward = CreateDefaultSubobject<UShotFastForward>(TEXT("FastForward"));
+}
 
 void AUOpenGolfPlayerController::BeginPlay()
 {
@@ -251,6 +257,11 @@ void AUOpenGolfPlayerController::SetupInputComponent()
     KeyMapping->MapKey(FineAim, EKeys::RightShift);
     Input->BindAction(FineAim, ETriggerEvent::Started, this, &ThisClass::StartFineAim);
     Input->BindAction(FineAim, ETriggerEvent::Completed, this, &ThisClass::StopFineAim);
+    // Space speeds up a rolling ball while held; a tap skips to where it stops.
+    UInputAction* Fast = MakeAction(TEXT("IA_FastForward"), EInputActionValueType::Boolean);
+    KeyMapping->MapKey(Fast, EKeys::SpaceBar);
+    Input->BindAction(Fast, ETriggerEvent::Started, FastForward.Get(), &UShotFastForward::Press);
+    Input->BindAction(Fast, ETriggerEvent::Completed, FastForward.Get(), &UShotFastForward::Release);
 }
 
 void AUOpenGolfPlayerController::StartTurn(const FInputActionValue& Value)
@@ -339,9 +350,9 @@ bool AUOpenGolfPlayerController::IsRoundComplete() const
     return Mode && Mode->IsRoundComplete();
 }
 
-void AUOpenGolfPlayerController::StartCourse(const UGolfCourseDefinition& Course, int32 TeeIndex)
+void AUOpenGolfPlayerController::StartCourse(const UGolfCourseDefinition& Course, const OpenGolfPlay::FOpenGolfRoundSetup& Setup)
 {
-    UGameplayStatics::OpenLevelBySoftObjectPtr(this, Course.Map, true, UGolfCourseSubsystem::TravelOptions(Course) + FString::Printf(TEXT("?TeeIndex=%d"), TeeIndex));
+    UGameplayStatics::OpenLevelBySoftObjectPtr(this, Course.Map, true, UGolfCourseSubsystem::TravelOptions(Course) + Setup.ToOptions());
 }
 
 void AUOpenGolfPlayerController::ShowFinishedRound()

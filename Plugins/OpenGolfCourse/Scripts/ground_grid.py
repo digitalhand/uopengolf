@@ -49,3 +49,25 @@ class GroundGrid:
         if None in (east, west, north, south):
             return float("inf")
         return math.hypot((east - west) / (2 * h), (north - south) / (2 * h))
+
+    def elevation_inside(self, outline, origin, step_m=5.0):
+        """Metres above sea level: the median ground inside outline (local metres), sampled every step_m.
+
+        origin is the course origin [east, north, height] the grid was opened with. None when no ground falls inside.
+        """
+        stride = max(1, round(step_m / self.spacing))
+        rows, cols = self.samples.shape
+        row_index, col_index = np.mgrid[0:rows:stride, 0:cols:stride]
+        x = self.first_x + col_index * self.spacing
+        y = self.first_y - row_index * self.spacing
+        inside = np.zeros(x.shape, dtype=bool)
+        # Even-odd ray casting against every edge of the outline.
+        for (x0, y0), (x1, y1) in zip(outline, outline[1:] + outline[:1]):
+            if y0 == y1:
+                continue
+            crosses = (y0 > y) != (y1 > y)
+            inside ^= crosses & (x < x0 + (y - y0) * (x1 - x0) / (y1 - y0))
+        heights = self.samples[row_index, col_index][inside]
+        heights = heights[~np.isnan(heights)]
+        return round(float(np.median(heights)) + origin[2], 1) if heights.size else None
+

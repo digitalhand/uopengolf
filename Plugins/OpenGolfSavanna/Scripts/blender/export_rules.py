@@ -57,3 +57,40 @@ def farthest_points(points, count):
         chosen.append(points[index])
         nearest = [min(d, sum((a - b) ** 2 for a, b in zip(p, points[index]))) for d, p in zip(nearest, points)]
     return chosen
+
+
+# Rec. 709 weights, for linear RGB.
+LUMA = (0.2126, 0.7152, 0.0722)
+
+
+def luminance(rgb):
+    return sum(weight * channel for weight, channel in zip(LUMA, rgb))
+
+
+def chromatic_tint(source_rgb, target_rgb, low=0.5, high=1.6):
+    """Per-channel multiplier (linear RGB) that gives source the target's hue and saturation at the source's own
+    brightness, for a material Tint. Each channel stays within [low, high] before the brightness is restored, so a
+    far-off target only moves the colour part of the way. A photo's brightness depends on its light, a texture's
+    does not, so only the colour is taken from the target."""
+    if any(channel <= 0 for channel in source_rgb) or luminance(target_rgb) <= 0:
+        raise ValueError("Both colours need light in every source channel")
+    source_luma, target_luma = luminance(source_rgb), luminance(target_rgb)
+    tint = [min(high, max(low, (t / target_luma) / (s / source_luma))) for s, t in zip(source_rgb, target_rgb)]
+    scale = source_luma / luminance([s * k for s, k in zip(source_rgb, tint)])
+    return tuple(round(k * scale, 4) for k in tint)
+
+
+def fit_saturation(source_rgb, tint, target_rgb):
+    """Saturation (0-1) that takes source x tint closest to the target's colour, for a material that blends a colour
+    toward its own grey: c' = luma + s (c - luma). It completes a clamped tint, and turns a bright texture into a
+    dull foliage colour, without multiplying a weak channel further."""
+    tinted = [s * k for s, k in zip(source_rgb, tint)]
+    tinted_luma, target_luma = luminance(tinted), luminance(target_rgb)
+    if tinted_luma <= 0 or target_luma <= 0:
+        raise ValueError("Both colours need light")
+    have = [c / tinted_luma - 1 for c in tinted]
+    want = [c / target_luma - 1 for c in target_rgb]
+    spread = sum(h * h for h in have)
+    if spread < 1e-12:
+        return 1.0
+    return round(min(1.0, max(0.0, sum(h * w for h, w in zip(have, want)) / spread)), 4)

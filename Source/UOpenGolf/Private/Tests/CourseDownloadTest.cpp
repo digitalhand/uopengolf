@@ -107,7 +107,9 @@ namespace
                 auto* Controller = Cast<AUOpenGolfPlayerController>(W.GetFirstPlayerController());
                 if (!Controller)
                     return false;
-                Controller->StartCourse(Course, RedTees);
+                OpenGolfPlay::FOpenGolfRoundSetup Setup;
+                Setup.TeeIndex = RedTees;
+                Controller->StartCourse(Course, Setup);
                 bStarted = true;
                 return false;
             }

@@ -44,6 +44,25 @@ class GroundGridTests(unittest.TestCase):
             self.assertIsNone(ground.height(50, 50))
             self.assertEqual(ground.slope(50, 50), float("inf"))
 
+    def test_course_elevation_is_the_median_ground_inside_the_boundary(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "ground.tif"
+            # A slope rising 1 m per metre east, with the origin 250 m up at the grid's south-west corner.
+            write_plane(path, 0, 100, 100, 1.0, lambda e, n: 250 + e)
+            ground = GroundGrid.open(path, [0, 0, 250])
+            # Local x 20-40 inside the boundary: heights 20-40 above the origin, so 280 m above sea level at the middle.
+            boundary = [[20, 10], [40, 10], [40, 90], [20, 90]]
+            self.assertAlmostEqual(ground.elevation_inside(boundary, [0, 0, 250], step_m=1.0), 280.0, delta=0.6)
+            # Ground beyond the boundary does not count.
+            self.assertAlmostEqual(ground.elevation_inside([[0, 0], [5, 0], [5, 5], [0, 5]], [0, 0, 250], step_m=1.0), 252.5, delta=0.6)
+
+    def test_a_boundary_off_the_grid_has_no_elevation(self):
+        with TemporaryDirectory() as folder:
+            path = Path(folder) / "ground.tif"
+            write_plane(path, 0, 10, 10, 1.0, lambda e, n: 0)
+            ground = GroundGrid.open(path, [0, 0, 0])
+            self.assertIsNone(ground.elevation_inside([[500, 500], [600, 500], [600, 600]], [0, 0, 0]))
+
 
 if __name__ == "__main__":
     unittest.main()

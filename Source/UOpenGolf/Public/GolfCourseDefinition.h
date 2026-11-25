@@ -113,19 +113,26 @@ public:
     UPROPERTY(EditDefaultsOnly, Category = "Course|Play")
     TArray<FGolfWaterArea> Water;
 
-    /** The penalty for a ball at rest at Location, judged from above: out of bounds first, then water. */
-    EGolfPenalty PenaltyAt(FVector Location) const;
+    /** The penalty for a ball at rest at BallLocation, judged from above: out of bounds first, then water. */
+    EGolfPenalty PenaltyAt(FVector BallLocation) const;
 
     /** Published yards for the round from set SetName, each hole's tee found as the round plays it (FindTee). */
     int32 TeeSetYards(FName SetName) const;
 
-    /** The round's wind, fixed for the whole round; Training keeps the player's own wind. */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Wind", meta = (ClampMin = "0", UIMax = "30"))
-    float WindMph = 0.0f;
+    /** Where the course is, such as "Paso Robles, California"; the round setup's Course information. Empty hides it. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Information")
+    FText Location;
 
-    /** Where the round's wind comes from, in degrees against the target line (90 is from the right). */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Wind", meta = (ClampMin = "0", ClampMax = "360"))
-    float WindFromDeg = 0.0f;
+    /** Who designed the course; the round setup's Course information. Empty hides it. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Information")
+    FText Designer;
+
+    /**
+     * The course's ground height above sea level, shown in the round setup's Course information. Information only:
+     * ball flight plays at sea level on every course.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Course|Information", meta = (Units = "m"))
+    float ElevationM = 0.0f;
 
     /**
      * How the round penalises shots from the rough, sand and other lies. Empty plays the standard (the class default of

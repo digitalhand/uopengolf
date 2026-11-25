@@ -23,7 +23,7 @@ class UCourseDownloads;
 class SCourseBrowser : public SCompoundWidget
 {
 public:
-    DECLARE_DELEGATE_TwoParams(FOnPlay, const UGolfCourseDefinition&, int32);
+    DECLARE_DELEGATE_OneParam(FOnPlay, const UGolfCourseDefinition&);
 
     // Pointer arguments need a default: SLATE_ARGUMENT leaves them uninitialized when a caller omits them.
     SLATE_BEGIN_ARGS(SCourseBrowser) : _Style(nullptr), _Courses(nullptr) {}
@@ -31,7 +31,7 @@ public:
     SLATE_ARGUMENT(const FOpenGolfAccountStyle*, Style)
     /** The installed courses; null shows none. */
     SLATE_ARGUMENT(UGolfCourseSubsystem*, Courses)
-    /** Play on the selected card. */
+    /** Play on the selected card: the menu opens the course's Round setup. */
     SLATE_EVENT(FOnPlay, OnPlay)
     SLATE_END_ARGS()
 
@@ -46,7 +46,7 @@ private:
     /** One card per course, with a fresh preview brush each; called when the course list has loaded. */
     void RebuildCards();
     TSharedRef<SWidget> MakeCard(const UGolfCourseDefinition& Course, const FSlateBrush& Preview);
-    /** A course's tee set picker and Play, then Update and Uninstall for a downloaded course. */
+    /** A course's Play, then Update and Uninstall for a downloaded course. */
     TSharedRef<SWidget> MakeCardActions(const UGolfCourseDefinition& Course);
     /** A card for a catalog course that is not installed: its name, size and Download. */
     TSharedRef<SWidget> MakeDownloadCard(const FString& Id, const FString& Name, const FString& Detail);

@@ -11,9 +11,9 @@ const UOpenGolfLieRules& UGolfCourseDefinition::GetLieRules() const
     return LieRules ? *LieRules : *GetDefault<UOpenGolfLieRules>();
 }
 
-EGolfPenalty UGolfCourseDefinition::PenaltyAt(FVector Location) const
+EGolfPenalty UGolfCourseDefinition::PenaltyAt(FVector BallLocation) const
 {
-    const FVector2D Point(Location);
+    const FVector2D Point(BallLocation);
     if (InBoundsCm.Num() >= 3 && !UOpenGolfTerrainDefinition::Contains(InBoundsCm, Point))
         return EGolfPenalty::OutOfBounds;
     for (const auto& Area : Water)
